@@ -9,7 +9,7 @@
 //! therefore **rules and not gates**: they were true, and nothing said
 //! so.
 //!
-//! This crate is the gate. It has five rules:
+//! This crate is the gate. It has six rules:
 //!
 //! 1. **The deny attribute is the house one.** Every crate root carries
 //!    the same six lints, in the same order, so that a deny list that
@@ -27,6 +27,12 @@
 //!    rule for its own tree (§71).
 //! 5. **A front end is thin.** It reads the engine's state and acts
 //!    through the registry, and it has no second path into the design.
+//! 6. **A battery is a table.** A battery declares its commands as rows of
+//!    a table — one `commands! { … }` per file, one row per command — and
+//!    the compiler writes the struct, the reader and the registration for
+//!    every row. A battery that declares a command the other way is a
+//!    battery that is half one spelling, and the half that is not a table
+//!    is the half a reader cannot see at a glance. §860–§869.
 //!
 //! # The rule that moved, and why
 //!
@@ -258,6 +264,28 @@ pub const FRONT_ENDS: &[&str] = &["craftkit-window"];
 /// string is not a call either.
 pub const FRONT_END_FORBIDDEN: &[&str] = &["document_mut", "evaluators", "Plan", "PlanItem", "undo", "redo"];
 
+/// The **batteries**: the crates whose commands are declared as a table.
+///
+/// A battery is a family of commands, and the tree writes a family as a
+/// **table** — one `commands! { … }` per file, one row per command, and the
+/// compiler writes the struct, the reader and the registration for every
+/// row (§858, §860–§869).
+///
+/// These are the nine the README counts. The other plugins — the picture,
+/// the shape, the typed value, the CLAP and the VST3 door — are **plugins**,
+/// and a plugin's own commands are a struct with `#[derive(Command)]`.
+pub const BATTERIES: &[&str] = &[
+    "craftkit-plugin-grid",
+    "craftkit-plugin-prose",
+    "craftkit-plugin-pdf",
+    "craftkit-plugin-film",
+    "craftkit-plugin-layout",
+    "craftkit-plugin-cad",
+    "craftkit-plugin-fx",
+    "craftkit-plugin-sound",
+    "craftkit-plugin-vector",
+];
+
 /// What the gate found.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Finding {
@@ -440,7 +468,44 @@ pub fn check(root: &Path) -> Vec<Finding> {
     // Rule 5: a front end is thin.
     front_ends_are_thin(root, &mut findings);
 
+    // Rule 6: a battery is a table.
+    batteries_are_tables(root, &mut findings);
+
     findings
+}
+
+/// Rule 6: **a battery is a table**.
+///
+/// A battery declares its commands as rows of a table, and the compiler
+/// writes the struct, the reader and the registration for every row. A
+/// battery that declares a command the **other** way — a struct with
+/// `#[derive(Command)]` — is a battery that is half one spelling, and the
+/// half that is not a table is the half a reader cannot see at a glance.
+///
+/// The check is against the **code**: a name in a comment is not a
+/// declaration, and a name in a string is not a declaration either — so a
+/// battery that *talks* about the derive is not a battery that uses it.
+fn batteries_are_tables(root: &Path, findings: &mut Vec<Finding>) {
+    for crate_ in crates(root) {
+        if !BATTERIES.contains(&crate_.name.as_str()) {
+            continue;
+        }
+        for file in rust_files(&crate_.dir) {
+            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+            if !code_only(&text).contains("derive(Command)") {
+                continue;
+            }
+            findings.push(Finding {
+                rule: "battery",
+                crate_: crate_.name.clone(),
+                message: format!(
+                    "{} declares a command with `#[derive(Command)]`: a battery declares its \
+                     commands as rows of a table",
+                    file.display()
+                ),
+            });
+        }
+    }
 }
 
 /// Rule 5: **a front end is thin**.
