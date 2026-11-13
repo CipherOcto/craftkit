@@ -133,6 +133,15 @@ pub const PORTS: &[Port] = &[
         test: "xtask/tests/example.rs",
         section: "§852",
     },
+    Port {
+        rule: "the counting of more than one condition",
+        from: "gridcraft/crates/functions/src/math/criteria.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/aggregates.rs",
+        command: "craftkit-plugin-grid::aggregates",
+        test: "crates/craftkit-plugin-grid/tests/aggregates.rs",
+        section: "§874",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

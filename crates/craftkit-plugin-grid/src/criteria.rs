@@ -139,6 +139,23 @@ impl Condition {
         Ok(Condition::parse(value))
     }
 
+    /// The criterion of an **argument** in a function that takes more
+    /// than one condition.
+    ///
+    /// The tree does not refuse a long criterion there: it **cuts** it
+    /// to its first two hundred and fifty-five characters and matches
+    /// that. So a criterion over the bound is a shorter condition and
+    /// not an error.
+    pub fn parse_argument_truncated(value: &Value) -> Condition {
+        match value {
+            Value::Text(text) if text.chars().count() > MAX_CRITERION_CHARS => {
+                let cut: String = text.chars().take(MAX_CRITERION_CHARS).collect();
+                Condition::parse_text(&cut)
+            }
+            other => Condition::parse(other),
+        }
+    }
+
     /// A criterion written out in **text**.
     fn parse_text(text: &str) -> Condition {
         if text.is_empty() {

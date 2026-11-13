@@ -122,6 +122,12 @@
 //! a value — a text condition is a condition written out, with the
 //! tree's wildcards in it (the module `criteria`).
 //!
+//! And a formula may **count with more than one condition**:
+//! `COUNTIFS`, `SUMIFS`, `AVERAGEIFS`, `MAXIFS` and `MINIFS` take a
+//! range of values and any number of ranges of conditions, and they
+//! gather the cells that meet **every** condition; `AVERAGEIF` takes
+//! one condition and averages what meets it (the module `aggregates`).
+//!
 //! And a formula may speak of a **table**: a database of records and a
 //! table of criteria, and the field it aggregates — `DSUM`,
 //! `DAVERAGE`, `DCOUNT`, `DCOUNTA`, `DGET`, `DMAX`, `DMIN`,
@@ -322,6 +328,7 @@
 #![forbid(unsafe_code)]
 
 mod advancedfilter;
+mod aggregates;
 mod align;
 mod arithmetic;
 mod autofit;

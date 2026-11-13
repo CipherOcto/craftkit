@@ -2146,6 +2146,9 @@ impl Book {
         if name == "SUMIF" {
             return self.sumif(sheet, arguments, being);
         }
+        if crate::aggregates::is_aggregate_function(name) {
+            return self.aggregates(sheet, name, arguments, being);
+        }
         if crate::texts::is_text_function(name) {
             return self.shaping(sheet, name, arguments, being);
         }
