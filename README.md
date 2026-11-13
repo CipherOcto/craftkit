@@ -4337,6 +4337,7 @@ so.
 | the **address** of a cell, and the **link** to it | **built.** ADDRESS writes the address of a cell in the tree's two styles, HYPERLINK writes the name of a link, VALUETOTEXT writes any value as text and ASC writes the full-width characters as half-width ones (§889) | §889 |
 | the **Bessel** and the **euro** | **built.** The four Bessel functions are here with the tree's four ways of working them out, and EUROCONVERT converts with the tree's table of the fixed rates (§890) | §890 |
 | the **forecast** of a line | **built.** FORECAST.LINEAR is the tree's FORECAST under its new name, and the two are one function (§891) | §891 |
+| the **odds and ends**, and the **weekend** of the tree's own | **built.** SUMPRODUCT, SERIESSUM, PROB and PERCENTOF are here, and NETWORKDAYS.INTL and WORKDAY.INTL take a weekend of the tree's own (§892) | §892 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58850,3 +58851,67 @@ The tree has a **new name** for the prediction of a line.
   of a series in time — a season, a trend and a level, worked out
   from the series itself — and it is a different thing from the line
   of this section.
+
+## 892. The odds and ends, and the weekend of the tree's own
+
+Four functions that do not belong to a family of their own, and two
+that are the tree's working days with a weekend of the tree's own.
+
+### What was built
+
+- **`SUMPRODUCT(array1, [array2], ...)`** — the sum of the products
+  of the sets, taken one place at a time. The tree's rules: the sets
+  must be of the **same size**, a **text** in a set of cells counts
+  as nothing, and a text that is an argument on its own is a value
+  error.
+- **`SERIESSUM(x, n, m, coefficients)`** — the sum of a **power
+  series**, and a coefficient that is not a number is a value error.
+- **`PROB(x_range, prob_range, [lower], [upper])`** — the probability
+  of a range of values: every probability must be **more than
+  nothing** and **not more than one**, and the probabilities must add
+  up to **one**.
+- **`PERCENTOF(data_subset, data_all)`** — the sum of a subset as a
+  fraction of the sum of all the values, and a total of nothing is a
+  division by nothing.
+- **`NETWORKDAYS.INTL(start_date, end_date, [weekend], [holidays])`**
+  and **`WORKDAY.INTL(start_date, days, [weekend], [holidays])`** —
+  the working days with a weekend of the tree's own:
+  - the weekend is a **text** of seven characters, one for each day
+    from Monday to Sunday, and a `1` is a day of the weekend;
+  - or it is a **number** from one to seven, which is a weekend of
+    two days that begin on that day of the week, and a number from
+    eleven to seventeen, which is a weekend of one day.
+
+### What the port found
+
+- **The tree's `SERIESSUM` has four arguments and the fourth is a
+  set of coefficients**, and the tree's power of a **negative** number
+  to a power that is not a whole number is a number error — the same
+  rule the tree's own `POWER` has.
+- **The tree's `SUMPRODUCT` treats a text in a set of cells and a
+  text on its own differently**: the first counts as nothing and the
+  second is a value error. The tree saw it in its own application and
+  wrote it down, and it is here.
+- **The tree's weekend has two spellings**: a text of seven
+  characters and a number. The text is from **Monday** to **Sunday**
+  and the number counts from the other end — a weekend of one day is
+  a number from eleven to seventeen, and the number says which day.
+- **The tree's `NETWORKDAYS.INTL` counts the working days of a
+  weekend of every day as none**, and its `WORKDAY.INTL` refuses to
+  move at all, because there is no working day to move to.
+
+### What it cost
+
+- **One module** — `odds` — with the four functions, and **two** more
+  functions in the dates.
+- **Eleven tests**: eight in the grid battery's odds test file and
+  three in its intervals test file.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's holidays are not here**: a list of holidays is an
+  array, and this tree has no arrays. The weekend argument is here,
+  and the holidays are refused with the reason.
