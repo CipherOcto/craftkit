@@ -1,39 +1,6 @@
-//! The **inflate**: DEFLATE, from RFC 1951.
-//!
-//! # Why it is here
-//!
-//! A PNG file's pixels are in a **zlib** stream, and a zlib stream is a
-//! DEFLATE stream. So a kit that reads PNG needs an inflate, and the
-//! kit had none: it wrote PNG (§67) and read a PNG's *header* (§68),
-//! and the pixels were out of reach.
-//!
-//! # What it is
-//!
-//! The three kinds of block DEFLATE has — stored, fixed Huffman and
-//! dynamic Huffman — and the zlib wrapper around them: the two header
-//! bytes and the Adler-32 checksum at the end.
-//!
-//! The Huffman decoding is the **canonical** one: the code lengths are
-//! counted, the codes are numbered in order, and the bits are read one
-//! at a time until a code is found. It is the slowest of the ways to do
-//! it and the one that is easiest to be sure of, and a decoder that is
-//! easy to be sure of is a decoder that can be checked.
-//!
-//! # What it does not do
-//!
-//! It does not check the checksum of a zlib stream that does not have
-//! one, and it does not decode a stream that is not DEFLATE: those are
-//! refusals with names, and they are made here.
-
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unimplemented,
-    clippy::todo,
-    clippy::unreachable
-)]
-#![forbid(unsafe_code)]
+//! The **inflate**: the three kinds of block DEFLATE has — stored, fixed
+//! Huffman and dynamic Huffman — and the zlib wrapper around them: the
+//! two header bytes and the Adler-32 checksum at the end.
 
 /// Why a stream could not be inflated.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -266,6 +233,12 @@ pub fn zlib(bytes: &[u8], limits: &Limits) -> Result<Vec<u8>, Error> {
         return Err(Error::Malformed("the stream's checksum does not match".to_string()));
     }
     Ok(out)
+}
+
+/// Inflate a **DEFLATE** stream, from the start of the bytes.
+pub(crate) fn deflate_bytes(bytes: &[u8], limits: &Limits) -> Result<Vec<u8>, Error> {
+    let mut bits = Bits::new(bytes);
+    deflate(&mut bits, limits)
 }
 
 /// Inflate a **DEFLATE** stream.

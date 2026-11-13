@@ -7,8 +7,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-# Nothing. The reader is RFC 1951 and RFC 2083, and both are written
-# out here.
+# The **inflate**: the reader is RFC 2083, and the compressed pixels in
+# it are RFC 1951, which is a library of its own (§901).
+craftkit-deflate = { workspace = true }
 
 [dev-dependencies]
 # An **encoder**, for the tests only: a decoder is tested against files

@@ -1,0 +1,17 @@
+[package]
+name = "craftkit-deflate"
+description = "The inflate: DEFLATE, from RFC 1951. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. A compressed stream is a stream of bits, and the reader is
+# arithmetic over bytes: it knows nothing about a document, a canvas or
+# the kit.
+
+[dev-dependencies]
+# A **compressor**, for the tests only: an inflate is tested against
+# streams that were compressed by somebody else.
+flate2 = "1.1"

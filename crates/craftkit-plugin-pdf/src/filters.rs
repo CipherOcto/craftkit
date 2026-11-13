@@ -146,8 +146,8 @@ pub fn filter_of(entries: &[(String, Json)]) -> Option<Vec<String>> {
 
 /// A zlib stream, undone with the PNG crate's inflate.
 fn flate(bytes: &[u8], limits: &Limits) -> Result<Vec<u8>, Error> {
-    let png_limits = craftkit_png::Limits { max_output: limits.max_output };
-    craftkit_png::inflate_bytes(bytes, &png_limits).map_err(|error| Error::Malformed(error.to_string()))
+    let inflate_limits = craftkit_deflate::Limits { max_output: limits.max_output };
+    craftkit_deflate::zlib(bytes, &inflate_limits).map_err(|error| Error::Malformed(error.to_string()))
 }
 
 /// The digits of a byte in hex, undone.

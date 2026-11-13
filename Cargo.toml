@@ -67,6 +67,11 @@ craftkit-mcp = { path = "crates/craftkit-mcp", version = "0.2.0" }
 # in. A **library**, not a plugin: it contributes nothing to the registry
 # and the linker does not wire it in.
 craftkit-png = { path = "crates/craftkit-png", version = "0.2.0" }
+# The **inflate**: DEFLATE, from RFC 1951. A **library**, not a plugin:
+# it contributes nothing to the registry and the linker does not wire it
+# in. The picture reader, a package reader and a PDF filter all want the
+# same thing, and they want it from one place.
+craftkit-deflate = { path = "crates/craftkit-deflate", version = "0.2.0" }
 # The **JPEG decoder**: the family's own, clean-room from ITU-T T.81. A
 # **library**, not a plugin: it contributes nothing to the registry and
 # the linker does not wire it in.

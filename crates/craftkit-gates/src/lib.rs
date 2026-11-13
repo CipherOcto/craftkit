@@ -128,8 +128,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-image", 0),
     // The JPEG decoder: the family's own, and it depends on nothing.
     ("craftkit-jpeg", 0),
-    // The PNG reader: RFC 1951 and RFC 2083, and it depends on nothing.
-    ("craftkit-png", 0),
+    // The **inflate**: DEFLATE, from RFC 1951. It is here because the
+    // half is where a stream of bytes is read, and the picture reader
+    // and the package reader both want it.
+    ("craftkit-deflate", 0),
     ("craftkit-payload", 0),
     ("craftkit-sound-time", 0),
     // The line breaker: arithmetic over the widths a caller brings. It
@@ -191,6 +193,9 @@ pub const LAYERS: &[(&str, u8)] = &[
     // host looks for. It is a fixture, and it is here because a host
     // that has never opened a real unit has not been tested.
     ("craftkit-au-fixture", 1),
+    // The **PNG reader**: RFC 2083, and the pixels of a picture come
+    // out of a zlib stream — which is the inflate, one layer down.
+    ("craftkit-png", 1),
     // L2 — the whole surface a plugin needs: the registry, the session,
     // the document and the format.
     ("craftkit-sdk", 2),

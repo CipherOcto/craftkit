@@ -37,9 +37,7 @@
 )]
 #![forbid(unsafe_code)]
 
-mod inflate;
-
-pub use inflate::{Error, Limits, adler32};
+pub use craftkit_deflate::{Error, Limits, adler32};
 
 /// The eight bytes every PNG begins with.
 const SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -50,7 +48,7 @@ const SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 /// picture's: the reader below is the only user of it, and the tests
 /// are its own.
 pub fn inflate_bytes(bytes: &[u8], limits: &Limits) -> Result<Vec<u8>, Error> {
-    inflate::zlib(bytes, limits)
+    craftkit_deflate::zlib(bytes, limits)
 }
 
 /// A picture, read from a PNG file.
@@ -187,7 +185,7 @@ pub fn read(bytes: &[u8], limits: &Limits) -> Result<Picture, Error> {
         return Err(Error::Malformed("the picture has a palette and no palette".to_string()));
     }
     let transparency = transparency_for(colour, depth, transparency, palette.len())?;
-    let raw = inflate::zlib(&data, limits)?;
+    let raw = craftkit_deflate::zlib(&data, limits)?;
     let stored = unfilter(&raw, width as usize, height as usize, channels, depth)?;
     let samples =
         compose(stored, width as usize, height as usize, depth, colour, &palette, transparency.as_ref())?;

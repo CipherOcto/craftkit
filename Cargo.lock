@@ -410,6 +410,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-deflate"
+version = "0.2.0"
+dependencies = [
+ "flate2",
+]
+
+[[package]]
 name = "craftkit-derive"
 version = "0.2.0"
 dependencies = [
@@ -607,8 +614,8 @@ dependencies = [
 name = "craftkit-plugin-pdf"
 version = "0.2.0"
 dependencies = [
+ "craftkit-deflate",
  "craftkit-derive",
- "craftkit-png",
  "craftkit-scratch",
  "craftkit-sdk",
 ]
@@ -691,6 +698,7 @@ version = "0.2.0"
 name = "craftkit-png"
 version = "0.2.0"
 dependencies = [
+ "craftkit-deflate",
  "craftkit-raster",
  "craftkit-sdk",
  "flate2",

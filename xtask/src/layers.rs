@@ -120,7 +120,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-link", Class::Layer(0)),
     ("craftkit-image", Class::Layer(0)),
     ("craftkit-jpeg", Class::Layer(0)),
-    ("craftkit-png", Class::Layer(0)),
+    ("craftkit-deflate", Class::Layer(0)),
     ("craftkit-payload", Class::Layer(0)),
     ("craftkit-sound-time", Class::Layer(0)),
     ("craftkit-text-layout", Class::Layer(0)),
@@ -141,6 +141,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-vst3-fixture", Class::Layer(1)),
     ("craftkit-au", Class::Layer(1)),
     ("craftkit-au-fixture", Class::Layer(1)),
+    ("craftkit-png", Class::Layer(1)),
     // L2 — the whole surface a plugin needs: the registry, the session, the
     // document and the format.
     ("craftkit-sdk", Class::Layer(2)),
