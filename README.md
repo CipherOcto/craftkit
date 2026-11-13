@@ -4339,6 +4339,7 @@ so.
 | the **forecast** of a line | **built.** FORECAST.LINEAR is the tree's FORECAST under its new name, and the two are one function (§891) | §891 |
 | the **odds and ends**, and the **weekend** of the tree's own | **built.** SUMPRODUCT, SERIESSUM, PROB and PERCENTOF are here, and NETWORKDAYS.INTL and WORKDAY.INTL take a weekend of the tree's own (§892) | §892 |
 | the **pattern** and the **cube** | **built.** The tree's regular expressions and its seven cube functions are refused, each with the reason it is not here, and the three matrix functions that give back a table are refused as an array (§893) | §893 |
+| the **model** of a series in time | **built.** The tree's four ETS functions are here with its additive state space, its rule for a timeline and its three errors: `#N/A`, `#VALUE!` and `#NUM!` (§894) | §894 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58967,3 +58968,81 @@ of them now **says why**.
 - **The tree's `ADD2` is not a function of the tree**: it is a name
   the tree's own machinery uses for a test of its own, and it is not
   in the tree's list of the functions a formula may call.
+
+## 894. The model of a series in time
+
+The tree's last family of functions is here: the four that fit a
+**model** to a series of values and forecast from it.
+
+### What was built
+
+- **`FORECAST.ETS(target_date, values, timeline, [seasonality],
+  [data_completion], [aggregation])`** — the value of the model at a
+  date.
+- **`FORECAST.ETS.CONFINT(target_date, values, timeline,
+  [confidence_level], [seasonality], [data_completion], [aggregation])`**
+  — the **half-width** of the confidence interval around it.
+- **`FORECAST.ETS.SEASONALITY(values, timeline, [data_completion],
+  [aggregation])`** — the **length of the season** the model found.
+- **`FORECAST.ETS.STAT(values, timeline, statistic_type, [seasonality],
+  [data_completion], [aggregation])`** — one of the eight statistics of
+  the model: the three smoothing parameters, the mean absolute scaled
+  error, the symmetric mean absolute percentage error, the mean
+  absolute error, the root mean square error, and the step of the
+  timeline.
+
+### What the port found
+
+- **The tree's model is the additive one** — additive error, additive
+  trend and additive seasonality, the state space of a book of
+  forecasting — and it is **fitted**, not computed: the three
+  smoothing parameters are found by a **coarse grid** of five steps and
+  then by the **simplex of Nelder and Mead** from the best point of the
+  grid. A fitted model is a model and not an answer, and the tree says
+  so itself: its own application does not say how it fits, so the tree's
+  numbers and this tree's numbers can differ in the last digits of a
+  **noisy** series — and they do not differ at all on an exact one, a
+  straight line or a season that repeats exactly.
+- **The tree's timeline is a rule and not a list**: a constant numeric
+  step, or — for whole-day dates — a constant number of calendar
+  months, all on the same day of the month or all at the end of their
+  month. A timeline that is neither is `#NUM!`, and so is one with
+  fewer than two points, or with more than a **third** of its points
+  missing.
+- **The tree's errors are three and not one**: two sets of numbers of
+  different lengths are `#N/A`, a value that is not a number is
+  `#VALUE!`, and everything else that cannot be a model is `#NUM!`. An
+  error in a cell is the error of that cell, carried through.
+- **A point that is missing is filled in** — with the straight line
+  between its known neighbours, or with zeros, when the completion says
+  so — and **two points of one time stamp are aggregated**: averaged
+  by default, and summed when the aggregation says sum.
+- **The season is found in the series**: the autocorrelation of the
+  series with its trend taken off, and the highest peak above the
+  white-noise bound.
+
+### What it cost
+
+- **One module** — `ets` — of about **950 lines**: the model, the
+  fit, the four functions and the three rules of the timeline.
+- **Eight tests** in the grid battery's new ETS test file: a straight
+  line is forecast exactly, a season is found and continued, the order
+  of the timeline does not matter, the months of a calendar are a
+  timeline too, a missing point is filled in, two points of one time
+  stamp are aggregated, the two sets of numbers must be of the same
+  length, and a value that is not a number is not a value.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `Timeline` is a type of its own** — it answers how many
+  steps after the last point a date is, and what the date of the step
+  after the last point is — and here that is one **number**, the
+  distance in steps, which is all that a formula needs.
+- **The tree's `MAX_SEASON` is 8 760** — a season of a minute, of an
+  hour, of a day — and a season of **one** cannot be asked for at all:
+  the number `1` means *find the season*, the number `0` means *there
+  is none*, and every other number from 2 to 8 760 is the length of the
+  season, said so.

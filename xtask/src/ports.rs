@@ -313,6 +313,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/refused.rs",
         section: "§893",
     },
+    Port {
+        rule: "the model of a series in time",
+        from: "gridcraft/crates/functions/src/ets.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/ets.rs",
+        command: "craftkit-plugin-grid::ets",
+        test: "crates/craftkit-plugin-grid/tests/ets.rs",
+        section: "§894",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
