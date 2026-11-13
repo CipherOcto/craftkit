@@ -25,6 +25,7 @@
 
 use craftkit_derive::commands;
 
+use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, Outcome, Text};
 
@@ -248,6 +249,34 @@ commands! {
                     node.data["names"] = names;
                 }
             }
+            // The **filters** of the sheets: the rows each sheet hides.
+            //
+            // A file's filter is over a **range** and its criteria are
+            // the **offsets** of their columns in that range; a filter
+            // here is over **one column** and the column is the column
+            // itself. So the offset is counted from the first column
+            // of the range, and a criterion this tree's filter cannot
+            // hold is not imported.
+            let mut imported_filters = 0u64;
+            let mut unread_filters = 0u64;
+            for (sheet_name, filter) in &workbook.filters {
+                let Some(filter) = filter_of(filter) else {
+                    unread_filters += 1;
+                    continue;
+                };
+                let Some(sheet_id) = session
+                    .document()
+                    .walk()
+                    .find(|node| node.kind == "grid.sheet" && node.name == *sheet_name)
+                    .map(|node| node.id)
+                else {
+                    continue;
+                };
+                if let Some(node) = session.document_mut()?.node_mut(sheet_id) {
+                    node.data["filter"] = filter;
+                }
+                imported_filters += 1;
+            }
             let mut summary = format!("imported {filled} cell(s) into the workbook `{name}`");
             if unread > 0 {
                 summary.push_str(&format!("; {unread} formula(s) could not be read and were not imported"));
@@ -262,6 +291,11 @@ commands! {
                     "; {unread_names} name(s) could not be read and were not imported"
                 ));
             }
+            if unread_filters > 0 {
+                summary.push_str(&format!(
+                    "; {unread_filters} filter(s) could not be read and were not imported"
+                ));
+            }
             Ok(Outcome::changed(summary).with_data(json!({
                 "id": workbook_id,
                 "name": name,
@@ -273,11 +307,73 @@ commands! {
                 "unread_formats": unread_formats,
                 "names": names,
                 "unread_names": unread_names,
+                "filters": imported_filters,
+                "unread_filters": unread_filters,
                 "system": system.name(),
                 "warnings": workbook.warnings,
             })))
 
         }
+    }
+}
+
+/// The **filter** of a sheet, as this tree's filter.
+///
+/// A file's filter is over a **range**, and the criteria it holds are
+/// the **offsets** of their columns in that range: the first column
+/// of the range is offset zero. A filter here is over **one column**,
+/// and the column is the column itself — so the offset is counted from
+/// the first column of the range.
+///
+/// A file's filter may hold criteria for several columns, and this
+/// tree's filter holds one. So a filter of several columns becomes a
+/// **group** of criteria, which is what this tree's filter calls the
+/// same thing: the rows that match the group are kept.
+fn filter_of(filter: &craftkit_xlsx::AutoFilter) -> Option<Json> {
+    let first = first_column(filter.range.as_deref())?;
+    let mut group: Vec<Json> = Vec::new();
+    for (offset, criterion) in &filter.criteria {
+        let column = first + offset;
+        match criterion {
+            craftkit_xlsx::FilterCriterion::Custom { first: (op, value), second, and } => {
+                let op = op_of(op);
+                if !crate::formula::Criterion::op_is_known(op) {
+                    return None;
+                }
+                group.push(json!({ "column": crate::formula::CellRef::column_text(column), "op": op, "value": value }));
+                if let Some((op, value)) = second {
+                    let op = op_of(op);
+                    if !crate::formula::Criterion::op_is_known(op) {
+                        return None;
+                    }
+                    group.push(json!({ "column": crate::formula::CellRef::column_text(column), "op": op, "value": value }));
+                }
+                if !and {
+                    // Two comparisons joined by **or**: this tree's
+                    // group joins by **and**, so two groups of one
+                    // criterion each are what an **or** is.
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+    }
+    if group.is_empty() { None } else { Some(json!({ "groups": [group] })) }
+}
+
+/// The **column** a range begins at, counted from zero.
+fn first_column(range: Option<&str>) -> Option<u32> {
+    let range = range?;
+    let first = range.split(':').next()?.trim();
+    let letters: String = first.chars().take_while(|character| character.is_ascii_alphabetic()).collect();
+    crate::formula::CellRef::column_index(&letters)
+}
+
+/// The **operation** a file's filter writes, as this tree writes it.
+fn op_of(op: &str) -> &str {
+    match op {
+        "<>" => "!=",
+        other => other,
     }
 }
 

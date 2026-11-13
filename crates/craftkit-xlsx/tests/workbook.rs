@@ -226,6 +226,50 @@ fn the_names_of_a_workbook_are_read() {
     assert_eq!(workbook.names[1].scope, Some("Two".to_string()), "and it belongs to a sheet");
 }
 
+/// The **filter** of a sheet is read: the range it is over, and the
+/// criterion of each of its columns.
+#[test]
+fn the_filter_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><autoFilter ref="B1:D10"><filterColumn colId="0"><filters blank="1"><filter val="ann"/></filters></filterColumn><filterColumn colId="1"><customFilters and="1"><customFilter operator="greaterThan" val="3"/></customFilters></filterColumn></autoFilter><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.filters.len(), 1, "one sheet has a filter");
+    let (_, filter) = &workbook.filters[0];
+    assert_eq!(filter.range, Some("B1:D10".to_string()), "the range of the filter");
+    assert_eq!(filter.criteria.len(), 2, "two columns have criteria");
+    assert_eq!(filter.criteria[0].0, 0, "the first column is the first of the range");
+    assert_eq!(
+        filter.criteria[0].1,
+        craftkit_xlsx::FilterCriterion::Values { values: vec!["ann".to_string()], blanks: true },
+        "and it keeps a list of values"
+    );
+    assert_eq!(
+        filter.criteria[1].1,
+        craftkit_xlsx::FilterCriterion::Custom {
+            first: (">".to_string(), "3".to_string()),
+            second: None,
+            and: true
+        },
+        "and the second compares"
+    );
+}
+
 /// A package with **no workbook** is refused.
 #[test]
 fn a_package_with_no_workbook_is_refused() {

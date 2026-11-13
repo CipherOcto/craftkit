@@ -165,6 +165,53 @@ pub enum DateSystem {
     Y1904,
 }
 
+/// A **criterion** of a filter: what the cells of a column are
+/// judged by.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FilterCriterion {
+    /// A **list** of the values that are kept, and whether an empty
+    /// cell is kept with them.
+    Values {
+        /// The values that are kept.
+        values: Vec<String>,
+        /// Whether an empty cell is kept.
+        blanks: bool,
+    },
+    /// One comparison, or two joined by **and** or by **or**.
+    Custom {
+        /// The first comparison: the operation and the value.
+        first: (String, String),
+        /// The second comparison, when there is one.
+        second: Option<(String, String)>,
+        /// Whether the two are joined by **and** and not by **or**.
+        and: bool,
+    },
+    /// The **top** rows of a column, or the bottom ones.
+    Top10 {
+        /// Whether they are the bottom ones and not the top ones.
+        bottom: bool,
+        /// Whether the count is a **percentage** and not a number of
+        /// rows.
+        percent: bool,
+        /// How many.
+        count: u32,
+    },
+    /// The rows **above** the average of the column, or below it.
+    AboveAverage(bool),
+}
+
+/// A **filter** of a sheet: the rows it hides.
+///
+/// The filter is over a **range**, and each of its columns has a
+/// criterion of its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AutoFilter {
+    /// The range the filter is over.
+    pub range: Option<String>,
+    /// The criteria, by the **offset** of their column in the range.
+    pub criteria: Vec<(u32, FilterCriterion)>,
+}
+
 /// A **name** of a workbook: a word that stands for a range of cells.
 ///
 /// The name is the file's own, and so is the text it stands for: a
@@ -193,6 +240,8 @@ pub struct Workbook {
     /// The **names** of the workbook: the words the formulas use for
     /// the ranges they name.
     pub names: Vec<Name>,
+    /// The **filter** of each sheet, by the name of the sheet.
+    pub filters: Vec<(String, AutoFilter)>,
     /// The date system the numbers of the cells are counted in.
     pub system: DateSystem,
     /// The **warnings**: what could not be read, and what was kept
@@ -274,8 +323,12 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             workbook.warnings.push(format!("the sheet \"{name}\" is a {} and was not read", relation.kind));
             continue;
         }
-        let mut sheet = read_sheet(&mut package, &relation.target, &strings, &styles, &mut workbook.warnings);
+        let (mut sheet, filter) =
+            read_sheet(&mut package, &relation.target, &strings, &styles, &mut workbook.warnings);
         sheet.name = name;
+        if let Some(filter) = filter {
+            workbook.filters.push((sheet.name.clone(), filter));
+        }
         workbook.sheets.push(sheet);
         let _ = index;
     }
@@ -354,14 +407,16 @@ fn read_sheet(
     strings: &[String],
     styles: &Styles,
     warnings: &mut Vec<String>,
-) -> Sheet {
+) -> (Sheet, Option<AutoFilter>) {
     let mut sheet = Sheet::default();
     let Some(root) = read_xml(package, part).ok().flatten() else {
         warnings.push(format!("the part {part} could not be read; the sheet is empty"));
-        return sheet;
+        return (sheet, None);
     };
+    // The **filter** of the sheet: the rows it hides.
+    let filter = root.child("autoFilter").map(read_filter);
     let Some(data) = root.child("sheetData") else {
-        return sheet;
+        return (sheet, filter);
     };
 
     // The row the reader is on: a row that does not say which row it is
@@ -414,7 +469,65 @@ fn read_sheet(
             "the sheet holds {dropped} cells or rows outside the {MAX_ROWS} × {MAX_COLS} grid; they were dropped"
         ));
     }
-    sheet
+    (sheet, filter)
+}
+
+/// Read the **filter** of a sheet: the range it is over, and the
+/// criterion of each of its columns.
+///
+/// A column of the filter may hold a criterion this reader does not
+/// know — a colour, an icon — and such a column is left out: a filter
+/// with a column missing is a filter that hides fewer rows, and a
+/// filter that hides rows for a reason nobody can see is worse.
+fn read_filter(element: &craftkit_xml::El) -> AutoFilter {
+    let mut criteria = Vec::new();
+    for column in element.kids("filterColumn") {
+        let Some(offset) = column.attr_u32("colId") else { continue };
+        let criterion = if let Some(filters) = column.child("filters") {
+            FilterCriterion::Values {
+                values: filters
+                    .kids("filter")
+                    .filter_map(|filter| filter.attr("val"))
+                    .map(|value| value.to_string())
+                    .collect(),
+                blanks: filters.flag("blank", false),
+            }
+        } else if let Some(custom) = column.child("customFilters") {
+            let mut comparisons = custom.kids("customFilter").map(|filter| {
+                (filter_op(filter.attr("operator")).to_string(), filter.attr("val").unwrap_or("").to_string())
+            });
+            let Some(first) = comparisons.next() else { continue };
+            FilterCriterion::Custom { first, second: comparisons.next(), and: custom.flag("and", false) }
+        } else if let Some(top) = column.child("top10") {
+            FilterCriterion::Top10 {
+                bottom: !top.flag("top", true),
+                percent: top.flag("percent", false),
+                count: top.attr_f64("val").unwrap_or(10.0).clamp(0.0, 1e9) as u32,
+            }
+        } else if let Some(dynamic) = column.child("dynamicFilter") {
+            match dynamic.attr("type") {
+                Some("aboveAverage") => FilterCriterion::AboveAverage(true),
+                Some("belowAverage") => FilterCriterion::AboveAverage(false),
+                _ => continue,
+            }
+        } else {
+            continue;
+        };
+        criteria.push((offset, criterion));
+    }
+    AutoFilter { range: element.attr("ref").map(|range| range.to_string()), criteria }
+}
+
+/// The **operation** a filter compares with.
+fn filter_op(operation: Option<&str>) -> &'static str {
+    match operation.unwrap_or("equal") {
+        "lessThan" => "<",
+        "lessThanOrEqual" => "<=",
+        "notEqual" => "<>",
+        "greaterThanOrEqual" => ">=",
+        "greaterThan" => ">",
+        _ => "=",
+    }
 }
 
 /// The **value** of a cell, as the file holds it.
