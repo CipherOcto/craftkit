@@ -11,10 +11,16 @@ license.workspace = true
 # symbol of this crate, and this crate never names a symbol of the
 # application.
 craftkit-image = { workspace = true }
+# The **workbook reader**: a workbook file, read as a workbook. A
+# **library**, and the linker does not wire it in.
+craftkit-xlsx = { workspace = true }
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
 
 [dev-dependencies]
+# The **package reader**, and only for the tests: it writes the
+# packages the tests read. Nothing that ships links it.
+craftkit-zip = { workspace = true }
 # The **scratch**: the file or the directory a test works in, taken
 # back when the thread that asked for it ends. A **dev** dependency:
 # nothing that ships links it.

@@ -489,6 +489,7 @@ mod view;
 mod whatifs;
 mod words;
 mod workbookreading;
+mod xlsximport;
 
 use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, commands};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
