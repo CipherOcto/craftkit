@@ -4354,6 +4354,7 @@ so.
 | the **styles part**: the number formats, so a date becomes a date | **built.** The number formats of a workbook are read, and a cell with a date format on it is a date (§906) | §906 |
 | the **defined names** of a workbook: the names the formulas use | **built.** The names of a workbook are read and imported, and a formula that uses one reads the range it stands for (§907) | §907 |
 | the **auto filter** of a sheet: the filter the file holds | **built.** The filter of a sheet is read and imported, and the column it judges is the column and not an offset in a range (§908) | §908 |
+| the **links** of a sheet: the places its cells go to | **built.** The links of a sheet are read and imported, and a link over a range is put on each of its cells (§909) | §909 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59917,6 +59918,55 @@ The rows a sheet hides.
   values, a comparison) and one in the import's test file (the filter
   is imported and it hides the row it should).
 - **No new command** and **no new dependency**: the filter is in the
+  sheet part, and the reader of §903 reads it.
+
+### What it does not settle
+
+- **The fonts, the fills and the borders are still not read.**
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 909. The links of a sheet: the places its cells go to
+
+A cell can go somewhere.
+
+### What was built
+
+- **The links of a sheet** are read: the **range** of cells they are
+  on, the place they go to, the **tooltip** that is shown when the
+  mouse rests on them, and whether the place is **outside** the
+  workbook.
+- **The import carries the links**: a link over a range of cells is
+  put on each of those cells.
+
+### What the port found
+
+- **A file's link names a relationship and this one's names a place.**
+  A file's link that goes outside the workbook says so by naming a
+  **relationship**, and the relationship is what says where; a link
+  that goes inside names a **location** — a place in this workbook.
+  So the reader reads the relationships of the sheet and follows the
+  link's own.
+- **The tree's flag says whether the target is outside and this one
+  derives it.** The tree reads the flag from the file it was written
+  in; here it is **derived**, because this tree knows the sheets it
+  has — a target that names a sheet of this workbook and a cell in it
+  is a place inside, and everything else is outside.
+- **The tree's bounds are the tree's own**: a sheet's links cover at
+  most **10 000** cells and their targets hold at most **8 MB** of
+  text. The same link is copied to every cell of its range, so the
+  length of a target times the cells it covers must stay bounded
+  whatever the file says.
+
+### What it cost
+
+- **One kind** in the reader — the link — and the reading of it: about
+  a hundred lines.
+- **Two tests**: one in the reader's test file (a link that goes
+  outside, a link that goes inside, and the range of the first) and
+  one in the import's test file (the link is on both cells of its
+  range).
+- **No new command** and **no new dependency**: the links are in the
   sheet part, and the reader of §903 reads it.
 
 ### What it does not settle
