@@ -174,6 +174,11 @@
 //! **after** it — with the tree's instance, its match mode and its
 //! match end (the module `texts`).
 //!
+//! And a formula may give back a **table** of values — the tree's
+//! twenty-eight array functions — and a formula here is a value and
+//! not a table, and so each of them is refused with the reason (the
+//! module `arrays`).
+//!
 //! And a formula may **find** a value in a range — `MATCH`, `VLOOKUP`
 //! and `INDEX` — and the search is the **exact** one; the tree's
 //! approximate search is not here, and a lookup that asks for it says
@@ -365,6 +370,7 @@ mod advancedfilter;
 mod aggregates;
 mod align;
 mod arithmetic;
+pub mod arrays;
 mod autofit;
 mod bonds;
 mod borders;

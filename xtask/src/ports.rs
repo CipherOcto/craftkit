@@ -232,6 +232,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/depreciation.rs",
         section: "§884",
     },
+    Port {
+        rule: "the tree's arrays",
+        from: "gridcraft/crates/functions/src/dynamic.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/arrays.rs",
+        command: "craftkit-plugin-grid::arrays",
+        test: "crates/craftkit-plugin-grid/tests/arrays.rs",
+        section: "§885",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

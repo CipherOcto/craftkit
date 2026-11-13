@@ -2212,6 +2212,11 @@ impl Book {
         if crate::textvalue::is_text_value_function(name) {
             return self.text_value(sheet, name, arguments, being);
         }
+        // The tree's **arrays**: a function that gives back a table,
+        // and a formula here is a value.
+        if crate::arrays::is_array_function(name) {
+            return Value::Error("not supported yet: an array".to_string());
+        }
         if crate::complex::is_complex_function(name) {
             return self.complex(sheet, name, arguments, being);
         }
