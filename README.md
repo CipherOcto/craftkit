@@ -4333,6 +4333,7 @@ so.
 | the tree's **arrays** | **built.** The twenty-eight functions of the tree that give back a table are listed and refused, each with the reason that a formula here is a value (§885) | §885 |
 | the **determinant** of a square | **built.** MDETERM is the number that multiplies a row of a square with another row to give nothing — with the tree's pivoting and its fifteen significant digits (§886) | §886 |
 | the tree's **other names** | **built.** CHIINV, FDIST, CRITBINOM, BETAINV and F.INV.RT are the tree's names for functions that are here, and the negative binomial and the range of the binomial are here too (§887) | §887 |
+| the **world outside** the workbook | **built.** The clock, the random number, the network, the XML reader and the environment of the program are the tree's seven functions that ask the world, and each is refused and says why (§888) | §888 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58622,3 +58623,66 @@ three functions of its own that are not here.
   tree's own.
 - **The tree's `FORECAST.ETS` family is not here**: it is a model of
   a series in time, and it is a different thing from the line of §867.
+
+## 888. The world outside the workbook
+
+The tree's spreadsheet has seven functions that ask the world
+something. None of them is here, and each of them says why.
+
+### What was built
+
+- **The clock**: `NOW()` and `TODAY()` are refused with *not supported
+  yet: the clock*.
+- **The random number**: `RAND()` and `RANDBETWEEN(bottom, top)` are
+  refused with *not supported yet: a random number*.
+- **The network**: `WEBSERVICE(url)` is refused with *not supported
+  yet: the network*.
+- **The XML reader**: `FILTERXML(xml, xpath)` is refused with *not
+  supported yet: an XML reader*.
+- **The environment of the program**: `INFO(type_text)` is refused
+  with *not supported yet: the environment of the program*.
+- The **table** of the seven is public, so the tree's own test walks
+  it and checks that every name in it is refused and says why.
+
+### What the port found
+
+- **The tree's own seven are seven and not one.** `NOW` and `TODAY`
+  are the clock, `RAND` and `RANDBETWEEN` are a random number,
+  `WEBSERVICE` is the network, `FILTERXML` is an XML reader and
+  `INFO` is the environment of the program — and the reasons are not
+  the same, so they are not one message either.
+- **The tree marks four of them as volatile** — `NOW`, `TODAY`,
+  `RAND` and `RANDBETWEEN` — and a volatile function is one whose
+  value changes every time it is read. That is the tree's own reason
+  for not having them in a document: a value that changes every time
+  it is read is not derived, and a formula here is derived. The tree
+  says the same about its own expressions and their randomness (§319).
+- **The tree's `WEBSERVICE` and `FILTERXML` are already errors in the
+  tree**: they give `#VALUE!` there, because the tree does not fetch
+  a page and does not read XML either. Here they are refused with a
+  reason, which says the same thing and says more.
+- **The tree's `INFO` is a small table of the tree's own
+  environment** — a directory, a number of files, an origin, an
+  operating system, a recalculation mode, a release and a system. It
+  is the tree's own surroundings, and there are no surroundings here
+  to report.
+
+### What it cost
+
+- **One module** — `outside` — and one table of seven names and the
+  reason each is refused.
+- **Two tests** in the grid battery's world-outside test file: every
+  function of the table is refused and says why, and the table and
+  the lookup agree.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `INFO` could be answered about this tree**: a program
+  has an environment too. That is a question about what the tree is
+  and where it runs, and it is not answered here.
+- **The tree's `NOW` and `TODAY` could be given a date**: a document
+  may carry a date of its own. That is a fact about the document, and
+  the tree has no such fact here.
