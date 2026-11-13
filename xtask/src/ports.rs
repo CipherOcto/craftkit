@@ -367,6 +367,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/subtotal.rs",
         section: "§900",
     },
+    Port {
+        rule: "the package: a ZIP archive, read",
+        from: "gridcraft/crates/xlsx/src/package.rs",
+        to: "craftkit-zip",
+        module: "src/lib.rs",
+        command: "craftkit-zip::Package",
+        test: "crates/craftkit-zip/tests/package.rs",
+        section: "§902",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

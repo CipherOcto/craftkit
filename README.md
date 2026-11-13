@@ -4347,6 +4347,7 @@ so.
 | the **survey**: the tree and this tree, side by side | **built.** The tree's function surface is closed — 514 names, 455 computed here and 60 answered with a reason — and the one domain the tree has and this tree has not is its file formats (§899) | §899 |
 | the tree's **subtotal**, and its **error** | **built.** An error in the range of a SUBTOTAL is the error of the whole subtotal, as the tree says (§900) | §900 |
 | the **inflate**, and the crate it belongs in | **built.** The RFC 1951 inflate is a library of its own now — the raw stream and the zlib wrapper — and the picture reader and the PDF filter both read it from there (§901) | §901 |
+| the **package**: a ZIP archive, read | **built.** The container of a workbook file is here — the directory, the parts, the stored and the compressed — with the tree's bounds and the tree's checksums (§902) | §902 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59507,3 +59508,61 @@ is compressed, and the inflate is the first thing it needs.
 - **The picture reader's own tests still live in the picture crate**,
   and the picture reader still re-exports the inflate under its old
   name: the move was a move, and nothing else was renamed.
+
+## 902. The package: a ZIP archive, read
+
+The container of a workbook file is here.
+
+### What was built
+
+- **`craftkit-zip`** — a library of its own: the **package**. It opens
+  a ZIP archive, it lists the parts, and it reads one — stored or
+  compressed — and it **checks** what it reads.
+- **The tree's own bounds**: **512 MB** for one part, **1 GB** for the
+  whole package, and **200 000** entries in the directory.
+
+### What the port found
+
+- **The tree's package reader is built on a crate from the registry**
+  (`zip`), and this tree's readers are its own code. So the container
+  is written here: the end of the directory, the directory itself, the
+  header of a part, and the two ways a part may be held — as it is, or
+  as a DEFLATE stream, which is the inflate of §901.
+- **The tree's names are normalised, and so are these.** A part may be
+  written `xl\workbook.xml` or `/xl/workbook.xml`, and it is the same
+  part: the slashes are slashes, the leading slash is nothing, and the
+  case is not the case.
+- **A part's checksum is in two places** — in the header of the part
+  and in the directory — and the two must be the same. A package whose
+  two numbers differ was written badly, and it is refused; and the
+  bytes themselves are checked against it, so a part that was damaged
+  is refused and not returned.
+- **The tree's package refuses a part that is too big, and spends its
+  allowance once**: a read that fails partway has already spent the
+  work, and a loop over many broken parts must not pay for the same
+  decompression again and again.
+
+### What it cost
+
+- **One crate** — `craftkit-zip` — of about 450 lines: the directory,
+  the parts, the checksum and the bounds.
+- **Ten tests** in its test file: a stored part, a compressed part, a
+  part that is not there, the names of the parts, the names
+  normalised, bytes that are not a package, a wrong checksum, a part
+  that is too big, a package with two parts, and the checksum itself.
+- **Three tables and the architecture document** know the new crate.
+- **No new command** and **no new dependency**: the compressor in the
+  tests is the one the tree's own tests already use.
+
+### What it does not settle
+
+- **A package that is ZIP64 is refused** — one with more than sixty-five
+  thousand parts, or with parts of more than four gigabytes, or a
+  whole package of more than four gigabytes. The tree's reader takes
+  those; this one does not, and it says so.
+- **An encrypted part is refused**: the tree's reader takes the
+  packages of a workbook that is locked with a password, and this one
+  does not.
+- **The package is not read as XML**, and the relationships between the
+  parts are not read: that is the next arc, and it is the XML reader
+  it needs.
