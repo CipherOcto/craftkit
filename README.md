@@ -4327,6 +4327,7 @@ so.
 | the **rounding** to a multiple | **built.** CEILING.MATH, CEILING.PRECISE, ISO.CEILING, FLOOR.MATH and FLOOR.PRECISE round a number to a multiple, and the mode says what a negative number does (§879) | §879 |
 | the **text** around a mark | **built.** TEXTBEFORE and TEXTAFTER take the text before a mark and the text after it — with the tree's instance, its match mode and its match end (§880) | §880 |
 | the **text** of a number | **built.** FIXED and DOLLAR write a number as text, and NUMBERVALUE reads a text with the separators of the text's own (§881) | §881 |
+| the **lookup** across | **built.** HLOOKUP finds the value of a row of the column that holds the needle, and the tree's LOOKUP — a bisection — is refused and says why (§882) | §882 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58284,3 +58285,61 @@ number with the separators of the text's own.
   write a value in a form meant to be read back, and a value here is
   not a thing that is read back.
 - **The tree's `TEXTSPLIT` is not here**, as §880 says.
+
+## 882. The lookup across
+
+The tree has a lookup that reads a table **across**, and one that
+reads a **vector**.
+
+### What was built
+
+- **Two functions** of the grid battery's formula language:
+  - `HLOOKUP(lookup_value, table_array, row_index_num, [range_lookup])`
+    — the value **across** a table;
+  - `LOOKUP(lookup_value, lookup_vector, [result_vector])` — the value
+    of a vector.
+- The **rule** of `HLOOKUP`:
+  - the **keys** are the first **row** of the table, and the index is
+    a **row** of it — it is the `VLOOKUP` of the table the other way
+    round;
+  - the search is the **exact** one, with the tree's wildcards in it;
+  - a row that is **not there** is `#REF!`;
+  - a lookup that does not say that it is exact is **refused**, as it
+    is for `VLOOKUP`: the tree's default is the approximate search.
+- `LOOKUP` is **refused**, and it says why: the tree's `LOOKUP` is a
+  **bisection** over a sorted vector, and a bisection is not a rule
+  that can be written down in a sentence.
+
+### What the port found
+
+- **The tree's `HLOOKUP` and its `VLOOKUP` are one function.** The
+  tree writes one lookup and gives it the direction: the keys are a
+  column and the index is a column, or the keys are a row and the
+  index is a row. Here the two are two functions with two rules, and
+  the rule of the exact search is the same in both.
+- **The tree's `LOOKUP` is the approximate search and nothing else.**
+  It is not a search that may be exact — it is a bisection over a
+  sorted vector — so it is refused here with the message that says
+  what is missing, as the approximate search of `MATCH` and `VLOOKUP`
+  is refused.
+- **The tree's exact search in `HLOOKUP` uses the wildcards.** The
+  tree's `HLOOKUP` and its `VLOOKUP` both match a text needle with
+  the tree's wildcards, and so does this tree's.
+
+### What it cost
+
+- **One function and one refusal** in the module `lookups`.
+- **Three tests** in the grid battery's lookups test file: the value
+  of a row of the column that holds the needle, a row that is not
+  there, and the lookup of a vector not being here.
+- **No new command**: the lookup across is a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `LOOKUP` over a wide array** — the one that searches
+  the first row of a table — is not here, and it is not here for the
+  same reason: it is a bisection.
+- **The tree's approximate search is not here** — in `MATCH`, in
+  `VLOOKUP`, in `HLOOKUP` or in `LOOKUP`.
