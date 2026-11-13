@@ -4321,6 +4321,7 @@ so.
 | the **cues** of an MCC file | **built.** An MCC file is read — the tree's abbreviations, its distribution packets and its field one (§696) | §696 |
 | the **counting** of more than one condition | **built.** COUNTIFS, SUMIFS, AVERAGEIFS, MAXIFS and MINIFS gather the cells that meet every condition, and AVERAGEIF averages what meets one — with the tree's cut criterion and its division by zero (§874) | §874 |
 | the **finding** of a value, the tree's way | **built.** XLOOKUP gives the value at the place of the needle and XMATCH gives the place — with the tree's match modes, its wildcards and the value given for a needle that is not there (§875) | §875 |
+| the **days** between two dates | **built.** DAYS360 counts them under the year of three hundred and sixty days, and DATEDIF counts the time between two dates in the unit that is asked for (§876) | §876 |
 
 ### The list of things that are honestly not there: empty
 
@@ -57870,3 +57871,82 @@ are a pair.
   and this tree has no arrays.
 - **The tree's `XLOOKUP` may take a needle that is a range**, and that
   is a spilled formula in the tree and is not a thing this tree has.
+
+## 876. The days between two dates
+
+A formula may ask how far apart two dates are.
+
+### What was built
+
+- **Two functions** of the grid battery's formula language:
+  - `DAYS360(start, end, [method])` — the **days** between two dates
+    under the year of three hundred and sixty days;
+  - `DATEDIF(start, end, unit)` — the **time** between two dates, in
+    the unit that is asked for.
+- The **method** of `DAYS360` is the tree's:
+  - the **American** one, which is the default: a start date of the
+    thirty-first of a month, or the last day of February, is the
+    thirtieth, and an end date of the thirty-first is the thirtieth
+    when the start date is the thirtieth or after it;
+  - the **European** one: any day after the thirtieth is the
+    thirtieth.
+- The **units** of `DATEDIF` are:
+  - `D` — the **days**;
+  - `M` — the **whole months**;
+  - `Y` — the **whole years**;
+  - `YM` — the whole months that are **left of the year**;
+  - `MD` — the days that are **left of the month**;
+  - `YD` — the days that are **left of the year**.
+- A **whole month** is a month when the day of the end is not before
+  the day of the start — so the fifteenth of January to the twentieth
+  of March, two years later, is twenty-six whole months and two of
+  them are left of the year.
+- A start date **after** the end date is `#NUM!`, and a unit that is
+  not one of the six is `#NUM!`.
+
+### What the port found
+
+- **The tree has two 30/360 rules, and they differ.** The tree's
+  spreadsheet `DAYS360` is not the tree's financial basis zero: at the
+  end of February they say different things — the financial one calls
+  the last day of February the thirtieth, and the spreadsheet one
+  leaves it alone. The spreadsheet one is the one that is ported here,
+  and the financial one is already in the tree (the module
+  `daycounts`), where the bonds and the securities use it.
+- **The tree's `DATEDIF` counts the days that are left of the year
+  from a moved date.** The start date is moved into the end date's
+  year — and into the year before it, when the month and the day of
+  the start are after the month and the day of the end — and the days
+  are counted from there.
+- **The tree's `DATEDIF` refuses a unit it does not know**, and so
+  does this one.
+- **A date argument is a serial, and a serial outside the calendar is
+  an error.** A serial of the tree's calendar is between the zero and
+  the last day the calendar has, and one that is not is `#NUM!`.
+
+### What it cost
+
+- **Two functions** in the module `datetimes`, a **serial argument**
+  of their own, and the tree's spreadsheet 30/360 — which is not the
+  one the tree's bonds use.
+- **One new test file** in the grid battery (`tests/intervals.rs`):
+  four tests — the days under the year of three hundred and sixty
+  days, the European method differing at the end of February, the six
+  units of the time between two dates, and a start date after the end
+  date and a unit that is not one of the six being errors.
+- **No new command**: the days are a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `YEARFRAC` is not here.** The fraction of a year under
+  a basis, and the tree's spreadsheet one is not the financial one
+  that is already in the tree — the two disagree at the end of the
+  year.
+- **The tree's `NETWORKDAYS` and `WORKDAY` are not here.** They take a
+  list of holidays, and a list is an array, and this tree has no
+  arrays.
+- **The tree's `NOW` and `TODAY` are not here.** They are the clock,
+  and a formula that reads the clock is a different thing from a
+  formula that reads the sheet.
