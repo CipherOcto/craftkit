@@ -166,7 +166,7 @@ fn the_index_of_the_tree_holds_every_command_of_every_battery() {
     assert!(index.commands.len() > 900, "the tree has {} commands", index.commands.len());
     // The grid battery's count, which the registry also says.
     let grid = index::commands_of(&index, "grid").len();
-    assert_eq!(grid, 188, "the grid battery carries 188 commands");
+    assert_eq!(grid, 189, "the grid battery carries 189 commands");
     // Every command knows where it is.
     for command in &index.commands {
         assert!(command.line > 0, "{} has no line", command.id);
@@ -193,7 +193,7 @@ fn an_area_holds_its_commands_and_nothing_else() {
     let index = index::build(&root()).expect("the index is built");
     let lines = answer(&index, &Question::Area("grid".to_string()));
     let header = lines.first().expect("there is a header").to_string();
-    assert!(header.starts_with("188 commands"), "the header says how many: {header}");
+    assert!(header.starts_with("189 commands"), "the header says how many: {header}");
     for line in lines.iter().skip(1) {
         assert!(line.contains("grid."), "every command of the area is in it: {line}");
     }
@@ -204,7 +204,7 @@ fn a_battery_answers_with_its_commands_modules_and_tests() {
     let index = index::build(&root()).expect("the index is built");
     let lines = answer(&index, &Question::Battery("grid".to_string()));
     let header = lines.first().expect("there is a header").to_string();
-    assert!(header.contains("188 commands"), "the header says how many: {header}");
+    assert!(header.contains("189 commands"), "the header says how many: {header}");
     assert!(header.contains("modules"), "the header says about the modules: {header}");
     assert!(header.contains("test files"), "the header says about the tests: {header}");
     assert!(
@@ -232,7 +232,7 @@ fn the_index_covers_every_battery_the_readme_counts() {
     // batteries the README counts, with the counts the README says.
     let index = index::build(&root()).expect("the index is built");
     for (battery, count) in [
-        ("grid", 188),
+        ("grid", 189),
         ("prose", 110),
         ("pdf", 119),
         ("film", 113),
