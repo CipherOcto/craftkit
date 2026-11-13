@@ -4330,6 +4330,7 @@ so.
 | the **lookup** across | **built.** HLOOKUP finds the value of a row of the column that holds the needle, and the tree's LOOKUP — a bisection — is refused and says why (§882) | §882 |
 | the **worth** today | **built.** NPV is the sum of what each payment of a series is worth today, and the first payment is discounted once (§883) | §883 |
 | a **thing** bought on a day | **built.** AMORLINC and AMORDEGRC are the straight line and the declining balance of a thing bought on a day, with the tree's first period and its coefficient (§884) | §884 |
+| the tree's **arrays** | **built.** The twenty-eight functions of the tree that give back a table are listed and refused, each with the reason that a formula here is a value (§885) | §885 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58460,3 +58461,51 @@ A thing that wears out may be bought on a day, and then it wears out
   `DATE(...)`.
 - **The tree's `AMORDEGRC` of a period of a million is an error**,
   and so is here.
+
+## 885. The tree's arrays
+
+The tree's spreadsheet has functions that give back a **table** of
+values, and a formula here is a **value**.
+
+### What was built
+
+- **A list of the tree's twenty-eight array functions**, and a
+  **refusal** for every one of them: each gives back a table, and so
+  each is refused with the message `not supported yet: an array` — the
+  same message the tree's own `INDEX` gives when it is asked for a
+  whole row.
+- The **list** is the tree's:
+  `ARRAYTOTEXT`, `CHOOSECOLS`, `CHOOSEROWS`, `DROP`, `EXPAND`,
+  `FILTER`, `FREQUENCY`, `GROUPBY`, `GROWTH`, `HSTACK`, `LINEST`,
+  `LOGEST`, `MODE.MULT`, `PIVOTBY`, `RANDARRAY`, `SEQUENCE`, `SORT`,
+  `SORTBY`, `TAKE`, `TEXTSPLIT`, `TOCOL`, `TOROW`, `TRANSPOSE`,
+  `TREND`, `UNIQUE`, `VSTACK`, `WRAPCOLS` and `WRAPROWS`.
+
+### What the port found
+
+- **A function that is refused with a reason is not missing.** The
+  tree's list of what it does not have is a list of **answers**, and
+  each answer says why — so a reader can look a name up and find out
+  what happens when it is called.
+- **The tree's arrays are the family that spills.** A cell of a
+  formula that gives back a table holds the **first** cell of it, and
+  the rest of it lies beside it — and this tree has no such thing, so
+  the whole family is refused at once.
+- **The tree's `TEXTSPLIT` is one of them**, and so is the tree's
+  `LINEST` and `LOGEST` and `TREND` and `GROWTH` — the ones that
+  give back the **coefficients** of a line.
+
+### What it cost
+
+- **One module** — `arrays` — with the list in it, one **dispatch**,
+  and **one test** that walks the whole list and checks that every
+  name in it is refused and says why.
+- **No new command**: the arrays are not a command either. The grid
+  battery still carries **188** commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `INDEX` of a whole row is refused** as well, and for
+  the same reason — and that is in the tree already (§370).
+- **The tree's `XLOOKUP` of a whole row is refused** for the same
+  reason, and that is §875.
