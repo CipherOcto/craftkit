@@ -196,3 +196,61 @@ fn a_needle_that_is_an_error_is_that_error() {
     let value = value_of(&mut session, sheet, "D1");
     assert_eq!(value["error"], Json::String("#DIV/0!".to_string()), "the error is the error");
 }
+
+/// A table with its **keys across** — the first row — and its values
+/// below.
+fn a_table_across(session: &mut Session, sheet: u64) {
+    value(session, sheet, "A1", json!(1));
+    value(session, sheet, "B1", json!(2));
+    value(session, sheet, "C1", json!(3));
+    value(session, sheet, "A2", json!(10));
+    value(session, sheet, "B2", json!(20));
+    value(session, sheet, "C2", json!(30));
+}
+
+/// The value of a **row** of the column that holds the needle is
+/// found.
+#[test]
+fn the_value_of_a_row_of_the_column_that_holds_the_needle_is_found() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_table_across(&mut session, sheet);
+    formula(&mut session, sheet, "D1", "=HLOOKUP(2,A1:C2,2,FALSE)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!(20.0), "the twenty");
+    formula(&mut session, sheet, "D2", "=HLOOKUP(3,A1:C2,2,FALSE)");
+    assert_eq!(value_of(&mut session, sheet, "D2"), json!(30.0), "and the thirty");
+}
+
+/// A row that is **not there** is an error, and a lookup that does not
+/// say that it is exact is refused — as it is for `VLOOKUP`.
+#[test]
+fn a_row_that_is_not_there_is_an_error() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_table_across(&mut session, sheet);
+    formula(&mut session, sheet, "D1", "=HLOOKUP(2,A1:C2,3,FALSE)");
+    let value = value_of(&mut session, sheet, "D1");
+    assert_eq!(value["error"], Json::String("#REF!".to_string()), "it is an error");
+    formula(&mut session, sheet, "D2", "=HLOOKUP(2,A1:C2,2)");
+    let value = value_of(&mut session, sheet, "D2");
+    assert!(
+        value["error"].as_str().is_some_and(|message| message.contains("not supported yet")),
+        "it says why: {value}"
+    );
+}
+
+/// The tree's `LOOKUP` is a **bisection** over a sorted vector, and
+/// that is not here.
+#[test]
+fn the_lookup_of_a_vector_is_not_here() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_table_across(&mut session, sheet);
+    formula(&mut session, sheet, "D1", "=LOOKUP(2,A1:C1,A1:C2)");
+    let value = value_of(&mut session, sheet, "D1");
+    assert_eq!(
+        value["error"],
+        Json::String("not supported yet: a bisection".to_string()),
+        "it says why: {value}"
+    );
+}

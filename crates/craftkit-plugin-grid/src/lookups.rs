@@ -62,7 +62,10 @@ use crate::formula::{Book, CellRef, Expr, Value};
 
 /// Whether a name is one of the **lookup functions**.
 pub fn is_lookup_function(name: &str) -> bool {
-    matches!(name, "MATCH" | "VLOOKUP" | "INDEX" | "ROWS" | "COLUMNS" | "XLOOKUP" | "XMATCH")
+    matches!(
+        name,
+        "MATCH" | "VLOOKUP" | "HLOOKUP" | "LOOKUP" | "INDEX" | "ROWS" | "COLUMNS" | "XLOOKUP" | "XMATCH"
+    )
 }
 
 /// The message of the search that is **not here**: the binary search.
@@ -260,6 +263,8 @@ impl Book {
         match name {
             "MATCH" => self.match_call(sheet, arguments, being),
             "VLOOKUP" => self.vlookup_call(sheet, arguments, being),
+            "HLOOKUP" => self.hlookup_call(sheet, arguments, being),
+            "LOOKUP" => Value::Error("not supported yet: a bisection".to_string()),
             "INDEX" => self.index_call(sheet, arguments, being),
             "ROWS" | "COLUMNS" => self.shape_call(sheet, name, arguments, being),
             "XLOOKUP" => self.xlookup_call(sheet, arguments, being),
@@ -435,6 +440,66 @@ impl Book {
         let cell =
             CellRef { col: area.start.col + (column - 1) as u32, row: area.start.row + (row - 1) as u32 };
         self.value_of_guarded(&name, cell, being)
+    }
+
+    /// The tree's `HLOOKUP`: the value **across** a table.
+    ///
+    /// The **keys** are the first **row** of the table, and the index
+    /// is a **row** of it — the tree's `HLOOKUP` is the `VLOOKUP` of
+    /// the table the other way round.
+    ///
+    /// The search is the **exact** one, with the tree's wildcards in
+    /// it, and the approximate search of the tree — which is the
+    /// default — is refused, as it is for `VLOOKUP`.
+    fn hlookup_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 3 || arguments.len() > 4 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let needle = self.evaluate(sheet, &arguments[0], being);
+        if let Value::Error(message) = &needle {
+            return Value::Error(message.clone());
+        }
+        // The **row** that is wanted: counted from one.
+        let row = self.evaluate(sheet, &arguments[2], being);
+        let Some(row) = row.as_number() else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        if row.is_nan() || row < 1.0 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let row = row.trunc() as usize - 1;
+        // The **range lookup**: the exact search, or the approximate
+        // one that is not here. The tree's default is the approximate
+        // one.
+        match arguments.get(3) {
+            Some(argument) => {
+                let value = self.evaluate(sheet, argument, being);
+                match crate::formula::truth_of(&value) {
+                    Ok(true) => return Value::Error(APPROXIMATE.to_string()),
+                    Ok(false) => {}
+                    Err(message) => return Value::Error(message),
+                }
+            }
+            None => return Value::Error(APPROXIMATE.to_string()),
+        }
+        let (name, area, values) = match self.values_of(sheet, &arguments[1], being) {
+            Ok(values) => values,
+            Err(message) => return Value::Error(message),
+        };
+        let columns = (area.end.col - area.start.col + 1) as usize;
+        let rows = (area.end.row - area.start.row + 1) as usize;
+        if row >= rows {
+            return Value::Error("#REF!".to_string());
+        }
+        // The **keys** are the first row of the table.
+        for (column, key) in values.iter().enumerate().take(columns) {
+            if !lookup_equal(&needle, key) {
+                continue;
+            }
+            let cell = CellRef { col: area.start.col + column as u32, row: area.start.row + row as u32 };
+            return self.value_of_guarded(&name, cell, being);
+        }
+        Value::Error("#N/A".to_string())
     }
 
     /// The tree's `XLOOKUP`: the value of the **return array** at the

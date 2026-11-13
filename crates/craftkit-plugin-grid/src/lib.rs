@@ -179,6 +179,10 @@
 //! so. And it may ask for the **shape** of a range — how many rows it
 //! has and how many columns (the module `lookups`).
 //!
+//! And a formula may **find a value across** a table — `HLOOKUP` —
+//! and it may look a value up in a **vector**: the tree's `LOOKUP` is
+//! a bisection, and that is not here either (the module `lookups`).
+//!
 //! And a formula may **find a value the tree's way** — `XLOOKUP` gives
 //! the value at the place of the needle, and `XMATCH` gives the place
 //! — and the **match mode** is how a value may meet the needle: the

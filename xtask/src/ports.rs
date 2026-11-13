@@ -205,6 +205,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/textvalue.rs",
         section: "§881",
     },
+    Port {
+        rule: "the lookup across",
+        from: "gridcraft/crates/functions/src/lookup.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/lookups.rs",
+        command: "craftkit-plugin-grid::lookups",
+        test: "crates/craftkit-plugin-grid/tests/lookups.rs",
+        section: "§882",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
