@@ -72,6 +72,13 @@ pub fn is_statistical_function(name: &str) -> bool {
             | "SUMX2MY2"
             | "SUMX2PY2"
             | "SUMXMY2"
+            | "AVERAGEA"
+            | "MAXA"
+            | "MINA"
+            | "VARA"
+            | "VARPA"
+            | "STDEVA"
+            | "STDEVPA"
     )
 }
 
@@ -496,6 +503,37 @@ impl Book {
                 },
                 Err(message) => Value::Error(message),
             },
+            "AVERAGEA" | "MAXA" | "MINA" | "VARA" | "VARPA" | "STDEVA" | "STDEVPA" => {
+                let numbers = match self.counted_numbers(sheet, arguments, being) {
+                    Ok(numbers) => numbers,
+                    Err(message) => return Value::Error(message),
+                };
+                match name {
+                    "AVERAGEA" => match mean(&numbers) {
+                        Ok(mean) => Value::Number(mean),
+                        Err(message) => Value::Error(message),
+                    },
+                    "MAXA" => Value::Number(numbers.iter().copied().reduce(f64::max).unwrap_or(0.0)),
+                    "MINA" => Value::Number(numbers.iter().copied().reduce(f64::min).unwrap_or(0.0)),
+                    "VARA" => match variance_of(&numbers, true) {
+                        Ok(variance) => Value::Number(variance),
+                        Err(message) => Value::Error(message),
+                    },
+                    "VARPA" => match variance_of(&numbers, false) {
+                        Ok(variance) => Value::Number(variance),
+                        Err(message) => Value::Error(message),
+                    },
+                    "STDEVA" => match variance_of(&numbers, true) {
+                        Ok(variance) => Value::Number(variance.sqrt()),
+                        Err(message) => Value::Error(message),
+                    },
+                    "STDEVPA" => match variance_of(&numbers, false) {
+                        Ok(variance) => Value::Number(variance.sqrt()),
+                        Err(message) => Value::Error(message),
+                    },
+                    other => Value::Error(format!("there is no function `{other}`")),
+                }
+            }
             _ => {
                 let mut numbers: Vec<f64> = Vec::new();
                 for index in 0..arguments.len() {
@@ -631,6 +669,68 @@ impl Book {
                 }
             }
         }
+    }
+
+    /// The **numbers** the arguments hold, counting the text as a zero
+    /// and the booleans as one or zero.
+    ///
+    /// The tree's rule for the `A` functions: the **cells** of a range
+    /// and the cell of a reference are counted — a number is itself, a
+    /// boolean is one or zero, the text is a zero, and an empty cell
+    /// is not counted at all — and a plain argument is the value
+    /// itself, so the text of a plain argument is the number it
+    /// writes, and a text that is not a number is an error.
+    fn counted_numbers(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<Vec<f64>, String> {
+        let mut numbers = Vec::new();
+        for argument in arguments {
+            match argument {
+                Expr::Range { .. } | Expr::Name(_) => {
+                    let (name, area) = self.area_of(sheet, argument)?;
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let value = self.value_of_guarded(&name, CellRef { col, row }, being);
+                            match value {
+                                Value::Number(number) => numbers.push(number),
+                                Value::Bool(flag) => numbers.push(if flag { 1.0 } else { 0.0 }),
+                                Value::Text(_) => numbers.push(0.0),
+                                Value::Error(message) => return Err(message),
+                                Value::Empty => {}
+                            }
+                        }
+                    }
+                }
+                Expr::Cell { sheet: named, anchor } => {
+                    let name = named.as_deref().unwrap_or(sheet);
+                    let value = self.value_of_guarded(name, anchor.cell, being);
+                    match value {
+                        Value::Number(number) => numbers.push(number),
+                        Value::Bool(flag) => numbers.push(if flag { 1.0 } else { 0.0 }),
+                        Value::Text(_) => numbers.push(0.0),
+                        Value::Error(message) => return Err(message),
+                        Value::Empty => {}
+                    }
+                }
+                other => {
+                    let value = self.evaluate(sheet, other, being);
+                    match value {
+                        Value::Number(number) => numbers.push(number),
+                        Value::Bool(flag) => numbers.push(if flag { 1.0 } else { 0.0 }),
+                        Value::Text(text) => match crate::criteria::number_text(&text) {
+                            Some(number) => numbers.push(number),
+                            None => return Err("#VALUE!".to_string()),
+                        },
+                        Value::Error(message) => return Err(message),
+                        Value::Empty => {}
+                    }
+                }
+            }
+        }
+        Ok(numbers)
     }
 
     /// The tree's `COUNTBLANK`: how many cells of the range hold

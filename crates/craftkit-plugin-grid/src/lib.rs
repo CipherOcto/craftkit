@@ -53,6 +53,10 @@
 //! sums of their squares, the difference of the squares and the
 //! squares of the differences (the module `statistics`).
 //!
+//! And a formula may gather a set of numbers in a way that **counts
+//! the text as a zero** and the booleans as one or zero — the tree's
+//! seven `A` functions (the module `statistics`).
+//!
 //! And a formula may ask the **words** of a number and the **letters**
 //! of a text: Roman numerals, another base, a character and its code,
 //! a text written for a URL, and an amount written in Thai words (the

@@ -169,6 +169,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/intervals.rs",
         section: "§877",
     },
+    Port {
+        rule: "the aggregates that count the text",
+        from: "gridcraft/crates/functions/src/stat.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/statistics.rs",
+        command: "craftkit-plugin-grid::statistics",
+        test: "crates/craftkit-plugin-grid/tests/counted.rs",
+        section: "§878",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
