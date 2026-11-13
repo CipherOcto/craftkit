@@ -441,6 +441,7 @@ mod moving;
 mod namereading;
 mod names;
 mod notes;
+mod odds;
 mod outline;
 pub mod outside;
 mod pictures;

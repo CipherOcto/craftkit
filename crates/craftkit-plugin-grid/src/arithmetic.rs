@@ -223,7 +223,7 @@ fn modulo(number: f64, divisor: f64) -> Result<f64, String> {
 }
 
 /// A number raised to a **power**.
-fn power_of(number: f64, exponent: f64) -> Result<f64, String> {
+pub(crate) fn power_of(number: f64, exponent: f64) -> Result<f64, String> {
     if number == 0.0 {
         if exponent == 0.0 {
             return Err("#NUM!".to_string());

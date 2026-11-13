@@ -71,7 +71,105 @@ pub fn is_date_function(name: &str) -> bool {
             | "YEARFRAC"
             | "NETWORKDAYS"
             | "WORKDAY"
+            | "NETWORKDAYS.INTL"
+            | "WORKDAY.INTL"
     )
+}
+
+/// The **weekend** of a week: the days that are not working days.
+///
+/// The mask is indexed by the day of the week, and zero is Sunday.
+type Mask = [bool; 7];
+
+/// The weekend the tree knows: the Saturday and the Sunday.
+const SATURDAY_AND_SUNDAY: Mask = [true, false, false, false, false, false, true];
+
+/// The **weekend** an argument names.
+///
+/// The tree's rule: a **text** of seven characters, one for each day
+/// from Monday to Sunday, and a `1` is a day of the weekend; a
+/// **number** from one to seven is a weekend of two days that begin
+/// on that day of the week, and a number from eleven to seventeen is
+/// a weekend of one day. A number that is not one of those is a
+/// number error, and a text that is not seven characters is a value
+/// error.
+fn weekend_mask(value: &Value) -> Result<Mask, String> {
+    match value {
+        Value::Empty => Ok(SATURDAY_AND_SUNDAY),
+        Value::Error(message) => Err(message.clone()),
+        Value::Text(text) => {
+            let bytes = text.as_bytes();
+            if bytes.len() != 7 || !bytes.iter().all(|byte| *byte == b'0' || *byte == b'1') {
+                return Err("#VALUE!".to_string());
+            }
+            // The text is from **Monday** to **Sunday**.
+            let mut mask = [false; 7];
+            for (index, byte) in bytes.iter().enumerate() {
+                mask[(index + 1) % 7] = *byte == b'1';
+            }
+            Ok(mask)
+        }
+        other => {
+            let Some(number) = other.as_number() else {
+                return Err("#VALUE!".to_string());
+            };
+            if !number.is_finite() {
+                return Err("#NUM!".to_string());
+            }
+            let code = number.trunc();
+            let mut mask = [false; 7];
+            match code as i64 {
+                1..=7 => {
+                    mask[((code as i64 + 5) % 7) as usize] = true;
+                    mask[((code as i64 + 6) % 7) as usize] = true;
+                }
+                11..=17 => mask[(code as i64 - 11) as usize] = true,
+                _ => return Err("#NUM!".to_string()),
+            }
+            Ok(mask)
+        }
+    }
+}
+
+/// The day of the week of a serial, and zero is Sunday.
+fn weekday_of(system: crate::dates::System, serial: f64) -> Option<usize> {
+    crate::dates::from_serial(serial, system).map(|date| date.weekday as usize)
+}
+
+/// The **working days** between two serials, both of them counted.
+fn working_days_between(system: crate::dates::System, low: f64, high: f64, mask: &Mask) -> Option<i64> {
+    let per_week = mask.iter().filter(|day| !**day).count() as i64;
+    let total = high - low + 1.0;
+    let weeks = (total / 7.0).floor() as i64;
+    let mut count = weeks * per_week;
+    let mut day = low + (weeks * 7) as f64;
+    while day <= high {
+        if !mask[weekday_of(system, day)?] {
+            count += 1;
+        }
+        day += 1.0;
+    }
+    Some(count)
+}
+
+/// The serial moved by `n` **working days**, with the weekend of the
+/// mask.
+fn add_working_days(system: crate::dates::System, start: f64, n: i64, mask: &Mask) -> Option<f64> {
+    let per_week = mask.iter().filter(|day| !**day).count() as i64;
+    if per_week == 0 {
+        return None;
+    }
+    let step = if n > 0 { 1.0 } else { -1.0 };
+    let weeks = (n - 1) / per_week;
+    let mut day = start + step * (weeks * 7) as f64;
+    let mut rest = n - weeks * per_week;
+    while rest > 0 {
+        day += step;
+        if !mask[weekday_of(system, day)?] {
+            rest -= 1;
+        }
+    }
+    Some(day)
 }
 
 impl Book {
@@ -97,6 +195,8 @@ impl Book {
             "YEARFRAC" => self.yearfrac_call(sheet, arguments, being),
             "NETWORKDAYS" => self.networkdays_call(sheet, arguments, being),
             "WORKDAY" => self.workday_call(sheet, arguments, being),
+            "NETWORKDAYS.INTL" => self.networkdays_intl_call(sheet, arguments, being),
+            "WORKDAY.INTL" => self.workday_intl_call(sheet, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
     }
@@ -631,6 +731,105 @@ impl Book {
             2 => Value::Number(days / 360.0),
             3 => Value::Number(days / 365.0),
             _ => Value::Error("#NUM!".to_string()),
+        }
+    }
+
+    /// The tree's `NETWORKDAYS.INTL`: the **working days** between
+    /// two dates, with a weekend of the tree's own.
+    ///
+    /// The **weekend** is the third argument: a text of seven
+    /// characters from Monday to Sunday, or a number that names the
+    /// days of the weekend. The **holidays** are the fourth, and a
+    /// list is an array, and this tree has no arrays.
+    fn networkdays_intl_call(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, crate::formula::CellRef)>,
+    ) -> Value {
+        if arguments.len() < 2 || arguments.len() > 4 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        if arguments.len() == 4 {
+            return Value::Error("not supported yet: an array".to_string());
+        }
+        let start = match self.day_argument(sheet, &arguments[0], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let end = match self.day_argument(sheet, &arguments[1], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let mask = match arguments.get(2) {
+            Some(argument) => {
+                let value = self.evaluate(sheet, argument, being);
+                match weekend_mask(&value) {
+                    Ok(mask) => mask,
+                    Err(message) => return Value::Error(message),
+                }
+            }
+            None => SATURDAY_AND_SUNDAY,
+        };
+        let (low, high, sign) = if start <= end { (start, end, 1) } else { (end, start, -1) };
+        let Some(count) = working_days_between(self.system(), low, high, &mask) else {
+            return Value::Error("#NUM!".to_string());
+        };
+        Value::Number((count * sign) as f64)
+    }
+
+    /// The tree's `WORKDAY.INTL`: the date that is **n working days**
+    /// after a date, with a weekend of the tree's own.
+    ///
+    /// The weekend is the third argument and the holidays are the
+    /// fourth, and a list is an array, and this tree has no arrays.
+    fn workday_intl_call(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, crate::formula::CellRef)>,
+    ) -> Value {
+        if arguments.len() < 2 || arguments.len() > 4 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        if arguments.len() == 4 {
+            return Value::Error("not supported yet: an array".to_string());
+        }
+        let start = match self.day_argument(sheet, &arguments[0], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let value = self.evaluate(sheet, &arguments[1], being);
+        let Some(number) = value.as_number() else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        if !number.is_finite() {
+            return Value::Error("#NUM!".to_string());
+        }
+        let days = number.trunc();
+        if days.abs() > 10_000_000.0 {
+            return Value::Error("#NUM!".to_string());
+        }
+        let mask = match arguments.get(2) {
+            Some(argument) => {
+                let value = self.evaluate(sheet, argument, being);
+                match weekend_mask(&value) {
+                    Ok(mask) => mask,
+                    Err(message) => return Value::Error(message),
+                }
+            }
+            None => SATURDAY_AND_SUNDAY,
+        };
+        if days == 0.0 {
+            return Value::Number(start);
+        }
+        // A weekend of **every** day leaves no working day at all.
+        if mask.iter().all(|day| *day) {
+            return Value::Error("#VALUE!".to_string());
+        }
+        match add_working_days(self.system(), start, days as i64, &mask) {
+            Some(serial) => Value::Number(serial),
+            None => Value::Error("#NUM!".to_string()),
         }
     }
 

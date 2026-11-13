@@ -202,3 +202,52 @@ fn the_holidays_are_not_here() {
     let value = value_of(&mut session, sheet, "B2");
     assert_eq!(value["error"].as_str(), Some("not supported yet: an array"), "it says why: {value}");
 }
+
+/// The **weekend** of the tree's own is the third argument of the
+/// international working days.
+#[test]
+fn the_weekend_of_the_trees_own_is_the_third_argument() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=NETWORKDAYS.INTL(DATE(2006,1,1),DATE(2006,1,31))");
+    assert_eq!(value_of(&mut session, sheet, "A1"), json!(22.0), "the ordinary weekend");
+    formula(&mut session, sheet, "A2", "=NETWORKDAYS.INTL(DATE(2006,1,1),DATE(2006,2,1),7)");
+    assert_eq!(value_of(&mut session, sheet, "A2"), json!(24.0), "a weekend of two days");
+    formula(&mut session, sheet, "A3", "=NETWORKDAYS.INTL(DATE(2006,1,1),DATE(2006,2,1),\"0000110\")");
+    assert_eq!(value_of(&mut session, sheet, "A3"), json!(24.0), "and the same weekend written as text");
+    formula(&mut session, sheet, "A4", "=NETWORKDAYS.INTL(DATE(2006,1,1),DATE(2006,1,31),11)");
+    assert_eq!(value_of(&mut session, sheet, "A4"), json!(26.0), "a weekend of one day");
+}
+
+/// A weekend of **every** day leaves no working day at all, and a
+/// weekend that is not a weekend is a number error.
+#[test]
+fn a_weekend_of_every_day_leaves_no_working_day() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=NETWORKDAYS.INTL(DATE(2006,1,1),DATE(2006,1,31),\"1111111\")");
+    assert_eq!(value_of(&mut session, sheet, "A1"), json!(0.0), "no working day");
+    formula(&mut session, sheet, "A2", "=WORKDAY.INTL(DATE(2012,1,1),10,\"1111111\")");
+    assert_eq!(
+        value_of(&mut session, sheet, "A2")["error"],
+        Json::String("#VALUE!".to_string()),
+        "no day to move to"
+    );
+    formula(&mut session, sheet, "A3", "=NETWORKDAYS.INTL(DATE(2006,1,1),DATE(2006,1,31),8)");
+    assert_eq!(
+        value_of(&mut session, sheet, "A3")["error"],
+        Json::String("#NUM!".to_string()),
+        "no such weekend"
+    );
+}
+
+/// The **working day** away with a weekend of the tree's own.
+#[test]
+fn the_working_day_away_with_a_weekend_of_the_trees_own() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=WORKDAY.INTL(DATE(2012,1,1),90,11)");
+    assert_eq!(value_of(&mut session, sheet, "A1"), json!(41013.0), "the tree's own day");
+    formula(&mut session, sheet, "A2", "=WORKDAY.INTL(DATE(2012,1,1),30,17)");
+    assert_eq!(value_of(&mut session, sheet, "A2"), json!(40944.0), "and the other one");
+}

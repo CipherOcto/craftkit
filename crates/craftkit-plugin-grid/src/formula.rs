@@ -2164,6 +2164,9 @@ impl Book {
         if crate::arithmetic::is_arithmetic_function(name) {
             return self.arithmetic(sheet, name, arguments, being);
         }
+        if crate::odds::is_odd_function(name) {
+            return self.odds(sheet, name, arguments, being);
+        }
         if crate::trigonometry::is_trigonometric_function(name) {
             return self.trigonometry(sheet, name, arguments, being);
         }
