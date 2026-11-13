@@ -132,6 +132,9 @@ pub const LAYERS: &[(&str, u8)] = &[
     // half is where a stream of bytes is read, and the picture reader
     // and the package reader both want it.
     ("craftkit-deflate", 0),
+    // The **XML reader**: a part of a file, read as elements. It is
+    // here because it depends on nothing and knows nothing.
+    ("craftkit-xml", 0),
     ("craftkit-payload", 0),
     ("craftkit-sound-time", 0),
     // The line breaker: arithmetic over the widths a caller brings. It

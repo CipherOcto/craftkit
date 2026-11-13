@@ -1,0 +1,12 @@
+[package]
+name = "craftkit-xml"
+description = "The XML reader: a part of a file, read as elements. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nothing. An XML part is elements and text, and the reader is
+# arithmetic over characters: it knows nothing about a document, a
+# canvas or the kit.

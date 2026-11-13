@@ -376,6 +376,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-zip/tests/package.rs",
         section: "§902",
     },
+    Port {
+        rule: "the XML reader: a part of a file, read as elements",
+        from: "gridcraft/crates/xlsx/src/xml.rs",
+        to: "craftkit-xml",
+        module: "src/lib.rs",
+        command: "craftkit-xml::parse",
+        test: "crates/craftkit-xml/tests/parts.rs",
+        section: "§903",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

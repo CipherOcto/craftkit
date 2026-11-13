@@ -834,6 +834,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-xml"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-zip"
 version = "0.2.0"
 dependencies = [

@@ -121,6 +121,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-image", Class::Layer(0)),
     ("craftkit-jpeg", Class::Layer(0)),
     ("craftkit-deflate", Class::Layer(0)),
+    ("craftkit-xml", Class::Layer(0)),
     ("craftkit-payload", Class::Layer(0)),
     ("craftkit-sound-time", Class::Layer(0)),
     ("craftkit-text-layout", Class::Layer(0)),

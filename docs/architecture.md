@@ -43,7 +43,7 @@ layering mistake has been made in a library.
 
 | layer | crates | what it may depend on |
 |---|---|---|
-| **L0** | `craftkit-alloc`, `craftkit-derive`, `craftkit-ffi-abi`, `craftkit-clap-abi`, `craftkit-vst3-abi`, `craftkit-au-abi`, `craftkit-gates`, `craftkit-link`, `craftkit-image`, `craftkit-jpeg`, `craftkit-deflate`, `craftkit-payload`, `craftkit-sound-time`, `craftkit-text-layout`, `craftkit-hyphen`, `craftkit-font`, `craftkit-wav`, `craftkit-audio`, `craftkit-midi`, `craftkit-plugins`, `craftkit-scratch` | nothing — the half that knows nothing about a document |
+| **L0** | `craftkit-alloc`, `craftkit-derive`, `craftkit-ffi-abi`, `craftkit-clap-abi`, `craftkit-vst3-abi`, `craftkit-au-abi`, `craftkit-gates`, `craftkit-link`, `craftkit-image`, `craftkit-jpeg`, `craftkit-deflate`, `craftkit-xml`, `craftkit-payload`, `craftkit-sound-time`, `craftkit-text-layout`, `craftkit-hyphen`, `craftkit-font`, `craftkit-wav`, `craftkit-audio`, `craftkit-midi`, `craftkit-plugins`, `craftkit-scratch` | nothing — the half that knows nothing about a document |
 | **L1** | `craftkit-ffi`, `craftkit-clap`, `craftkit-clap-fixture`, `craftkit-vst3`, `craftkit-vst3-fixture`, `craftkit-au`, `craftkit-au-fixture`, `craftkit-png`, `craftkit-zip` | L0 — the doors, their reference fixtures, and the readers that build on the half |
 | **L2** | `craftkit-sdk` | L0, L1 — the whole surface a plugin needs |
 | **L3** | `craftkit-control`, `craftkit-mcp`, `craftkit-numeric`, `craftkit-raster`, `craftkit-vector-geom` | L0–L2 — the things above the SDK that are not plugins |

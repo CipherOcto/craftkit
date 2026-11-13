@@ -76,6 +76,10 @@ craftkit-deflate = { path = "crates/craftkit-deflate", version = "0.2.0" }
 # plugin: it contributes nothing to the registry and the linker does
 # not wire it in.
 craftkit-zip = { path = "crates/craftkit-zip", version = "0.2.0" }
+# The **XML reader**: a part of a file, read as elements. A **library**,
+# not a plugin: it contributes nothing to the registry and the linker
+# does not wire it in.
+craftkit-xml = { path = "crates/craftkit-xml", version = "0.2.0" }
 # The **JPEG decoder**: the family's own, clean-room from ITU-T T.81. A
 # **library**, not a plugin: it contributes nothing to the registry and
 # the linker does not wire it in.
