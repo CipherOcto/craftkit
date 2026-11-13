@@ -27,11 +27,13 @@
 //! - **`SHEET`** is the number of a sheet, and **`SHEETS`** is the
 //!   number of sheets.
 
+use std::collections::BTreeMap;
+
 use crate::formula::{Book, CellRef, Expr, Value};
 
 /// The **names** of the host's functions.
 pub const NAMES: &[&str] =
-    &["ROW", "COLUMN", "AREAS", "ISREF", "ISFORMULA", "FORMULATEXT", "SHEET", "SHEETS"];
+    &["ROW", "COLUMN", "AREAS", "ISREF", "ISFORMULA", "FORMULATEXT", "SHEET", "SHEETS", "CELL", "AGGREGATE"];
 
 /// The host's names that are **answered with a reason**, and the
 /// reason each one is.
@@ -89,6 +91,8 @@ impl Book {
             "ISREF" => self.is_ref(arguments),
             "ISFORMULA" => self.is_formula(sheet, arguments),
             "FORMULATEXT" => self.formula_text(sheet, arguments),
+            "CELL" => self.cell_info(sheet, arguments, being),
+            "AGGREGATE" => self.aggregate(sheet, arguments, being),
             _ => self.sheet_or_sheets(sheet, name, arguments, being),
         }
     }
@@ -235,6 +239,291 @@ impl Book {
         match self.cell_at(&name, area.start) {
             Some(cell) => Ok(cell.clone()),
             None => Err(Value::Error("#N/A".to_string())),
+        }
+    }
+
+    /// The tree's **`CELL`**: what the tree asks about a cell.
+    ///
+    /// The tree's question is the first argument — `address`, `row`,
+    /// `col`, `contents`, `type`, `width`, `filename`, `sheetname`,
+    /// `protect`, `format`, `color`, `parentheses` or `prefix` — and
+    /// the cell is the second, or the cell the formula is in.
+    ///
+    /// The tree's `width` asks for the width of a column, and a cell
+    /// here has no width, and so the tree's `width` has no answer
+    /// here: it is refused with the reason it is not here.
+    fn cell_info(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        let Some(first) = arguments.first() else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        let kind = match self.evaluate(sheet, first, being) {
+            Value::Text(text) => text.to_ascii_lowercase(),
+            Value::Error(message) => return Value::Error(message),
+            _ => return Value::Error("#VALUE!".to_string()),
+        };
+        // The **cell**: the one the second argument names, or the one
+        // the formula is in.
+        let (name, cell) = match arguments.get(1) {
+            None => match being.last() {
+                Some((sheet, cell)) => (sheet.clone(), *cell),
+                None => return Value::Error("#REF!".to_string()),
+            },
+            Some(argument) => {
+                if !matches!(argument, Expr::Cell { .. } | Expr::Range { .. } | Expr::Name(_)) {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                match self.place_of(sheet, argument) {
+                    Ok((name, area)) => (name, area.start),
+                    Err(message) => return Value::Error(message),
+                }
+            }
+        };
+        let entry = self.cell_at(&name, cell);
+        match kind.as_str() {
+            "address" => Value::Text(format!("${}${}", CellRef::column_text(cell.col), cell.row + 1)),
+            "row" => Value::Number(f64::from(cell.row) + 1.0),
+            "col" => Value::Number(f64::from(cell.col) + 1.0),
+            "contents" => match entry {
+                Some(entry) => match entry.value.clone() {
+                    Some(value) => value,
+                    None => self.value_of_guarded(&name, cell, being),
+                },
+                None => Value::Empty,
+            },
+            "type" => {
+                let value = match entry {
+                    Some(entry) => entry.value.clone(),
+                    None => None,
+                };
+                Value::Text(match value {
+                    None => "b".to_string(),
+                    Some(Value::Text(_)) => "l".to_string(),
+                    Some(_) => "v".to_string(),
+                })
+            }
+            "sheetname" => Value::Text(name),
+            "protect" => {
+                // The tree's cell is locked by its style, and a cell
+                // that says nothing is locked.
+                let locked = entry.and_then(|entry| entry.locked).unwrap_or(true);
+                Value::Number(if locked { 1.0 } else { 0.0 })
+            }
+            "format" => {
+                let code = entry.and_then(|entry| entry.format.clone()).unwrap_or_default();
+                Value::Text(crate::format::cell_format_code(&code))
+            }
+            "filename" => Value::Text(String::new()),
+            "color" | "parentheses" => Value::Number(0.0),
+            "prefix" => Value::Text(String::new()),
+            "width" => Value::Error("not supported yet: the width of a column".to_string()),
+            _ => Value::Error("#VALUE!".to_string()),
+        }
+    }
+
+    /// The tree's **`AGGREGATE`**: the tree's `SUBTOTAL` with
+    /// nineteen functions and four options.
+    ///
+    /// The tree's rule: the first argument is the number of the
+    /// function, the second is the **options** — which say what is
+    /// left out (the rows a filter hides, the rows that are hidden by
+    /// hand, the errors, and the subtotals inside) — and the rest are
+    /// the ranges. The functions from fourteen on take a **k** after
+    /// the range.
+    fn aggregate(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let code = match self.number_of(sheet, &arguments[0], being) {
+            Some(number) => number.trunc() as i64,
+            None => return Value::Error("#VALUE!".to_string()),
+        };
+        let options = match self.number_of(sheet, &arguments[1], being) {
+            Some(number) => number.trunc() as i64,
+            None => return Value::Error("#VALUE!".to_string()),
+        };
+        if !(1..=19).contains(&code) {
+            return Value::Error(format!("the function number {code} is not one this tree has"));
+        }
+        if !(0..=7).contains(&options) {
+            return Value::Error(format!("the option number {options} is not one this tree has"));
+        }
+        // The tree's **options**: what is left out.
+        let skip_hidden = matches!(options, 1 | 3 | 5 | 7);
+        let skip_errors = matches!(options, 2 | 3 | 6 | 7);
+        let skip_nested = options <= 3;
+        // The **k** of the functions from fourteen on.
+        let k = if (14..=19).contains(&code) {
+            match arguments.get(3) {
+                Some(argument) => match self.number_of(sheet, argument, being) {
+                    Some(number) => number,
+                    None => return Value::Error("#VALUE!".to_string()),
+                },
+                None => return Value::Error("#VALUE!".to_string()),
+            }
+        } else {
+            0.0
+        };
+        // The **values**: the numbers of the ranges, and the values
+        // that are not numbers and not empty. The rows the options
+        // leave out are left out.
+        let ranges = if (14..=19).contains(&code) { &arguments[2..3] } else { &arguments[2..] };
+        let mut numbers: Vec<f64> = Vec::new();
+        let mut plain: Vec<Value> = Vec::new();
+        let mut filtered: BTreeMap<String, Vec<u64>> = BTreeMap::new();
+        for argument in ranges {
+            match argument {
+                Expr::Range { sheet: named, start, end } => {
+                    let name = named.as_deref().unwrap_or(sheet);
+                    if !self.has_sheet(name) {
+                        return Value::Error(format!("there is no sheet `{name}`"));
+                    }
+                    let area = crate::formula::Area::new(start.cell, end.cell);
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let cell = CellRef { col, row };
+                            let rows =
+                                filtered.entry(name.to_string()).or_insert_with(|| self.filtered_rows(name));
+                            if self.left_out(name, cell, false, skip_hidden, skip_nested, rows) {
+                                continue;
+                            }
+                            let value = self.value_of_guarded(name, cell, being);
+                            match value {
+                                Value::Error(message) => {
+                                    if skip_errors {
+                                        continue;
+                                    }
+                                    return Value::Error(message);
+                                }
+                                value => {
+                                    if let Some(number) = value.as_number() {
+                                        numbers.push(number);
+                                    } else if !matches!(value, Value::Empty) {
+                                        plain.push(value);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                Expr::Name(_) => {
+                    let (name, area) = match self.area_of(sheet, argument) {
+                        Ok(area) => area,
+                        Err(message) => return Value::Error(message),
+                    };
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let cell = CellRef { col, row };
+                            let rows =
+                                filtered.entry(name.clone()).or_insert_with(|| self.filtered_rows(&name));
+                            if self.left_out(&name, cell, false, skip_hidden, skip_nested, rows) {
+                                continue;
+                            }
+                            let value = self.value_of_guarded(&name, cell, being);
+                            match value {
+                                Value::Error(message) => {
+                                    if skip_errors {
+                                        continue;
+                                    }
+                                    return Value::Error(message);
+                                }
+                                value => {
+                                    if let Some(number) = value.as_number() {
+                                        numbers.push(number);
+                                    } else if !matches!(value, Value::Empty) {
+                                        plain.push(value);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                other => {
+                    let value = self.evaluate(sheet, other, being);
+                    match value {
+                        Value::Error(message) => {
+                            if skip_errors {
+                                continue;
+                            }
+                            return Value::Error(message);
+                        }
+                        value => {
+                            if let Some(number) = value.as_number() {
+                                numbers.push(number);
+                            } else if !matches!(value, Value::Empty) {
+                                plain.push(value);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        match code {
+            1 => {
+                if numbers.is_empty() {
+                    Value::Error("#DIV/0!".to_string())
+                } else {
+                    Value::Number(numbers.iter().sum::<f64>() / numbers.len() as f64)
+                }
+            }
+            2 => Value::Number(numbers.len() as f64),
+            3 => Value::Number((numbers.len() + plain.len()) as f64),
+            4 => Value::Number(numbers.iter().copied().fold(f64::NEG_INFINITY, f64::max)),
+            5 => Value::Number(numbers.iter().copied().fold(f64::INFINITY, f64::min)),
+            6 => {
+                if numbers.is_empty() {
+                    Value::Number(0.0)
+                } else {
+                    Value::Number(numbers.iter().product())
+                }
+            }
+            7 => match crate::statistics::variance(&numbers, true) {
+                Ok(variance) => Value::Number(variance.sqrt()),
+                Err(message) => Value::Error(message),
+            },
+            8 => match crate::statistics::variance(&numbers, false) {
+                Ok(variance) => Value::Number(variance.sqrt()),
+                Err(message) => Value::Error(message),
+            },
+            9 => Value::Number(numbers.iter().sum()),
+            10 => match crate::statistics::variance(&numbers, true) {
+                Ok(variance) => Value::Number(variance),
+                Err(message) => Value::Error(message),
+            },
+            11 => match crate::statistics::variance(&numbers, false) {
+                Ok(variance) => Value::Number(variance),
+                Err(message) => Value::Error(message),
+            },
+            12 => crate::statistics::median_of(numbers),
+            13 => match crate::statistics::mode_of(&numbers) {
+                Some(number) => Value::Number(number),
+                None => Value::Error("#N/A".to_string()),
+            },
+            14 => crate::statistics::kth_of(numbers, k, true),
+            15 => crate::statistics::kth_of(numbers, k, false),
+            16 => crate::statistics::percentile_of(numbers, k, false),
+            17 => {
+                let q = k.trunc();
+                if !(0.0..=4.0).contains(&q) {
+                    return Value::Error("#NUM!".to_string());
+                }
+                crate::statistics::percentile_of(numbers, q / 4.0, false)
+            }
+            18 => crate::statistics::percentile_of(numbers, k, true),
+            _ => {
+                let q = k.trunc();
+                if !(1.0..=3.0).contains(&q) {
+                    return Value::Error("#NUM!".to_string());
+                }
+                crate::statistics::percentile_of(numbers, q / 4.0, true)
+            }
+        }
+    }
+
+    /// The **number** an argument is, when it is one.
+    fn number_of(&self, sheet: &str, argument: &Expr, being: &mut Vec<(String, CellRef)>) -> Option<f64> {
+        match argument {
+            Expr::Number(number) => Some(*number),
+            other => self.evaluate(sheet, other, being).as_number(),
         }
     }
 

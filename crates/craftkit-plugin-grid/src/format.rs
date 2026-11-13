@@ -954,3 +954,42 @@ fn grouped(number: u64, thousands: bool) -> String {
     }
     out
 }
+
+/// The **code** of a number format, in the tree's own spelling.
+///
+/// The tree's `CELL("format")` asks for it, and the tree writes it
+/// this way: `G` for the general format, `P2` for two decimals of a
+/// percentage, `S3` for three decimals of a scientific form, `C2` for
+/// two decimals of a currency, `D1` for a date, `D9` for a time,
+/// `,2` for two decimals with a group separator, and `F2` for two
+/// decimals of anything else.
+pub fn cell_format_code(code: &str) -> String {
+    let lower = code.to_ascii_lowercase();
+    if lower == "general" {
+        return "G".to_string();
+    }
+    if lower.contains('%') {
+        return format!("P{}", decimals_of(&lower));
+    }
+    if lower.contains('e') && lower.contains('0') {
+        return format!("S{}", decimals_of(&lower));
+    }
+    if lower.contains('$') {
+        return format!("C{}", decimals_of(&lower));
+    }
+    if lower.contains('y') || lower.contains('d') {
+        return "D1".to_string();
+    }
+    if lower.contains('h') {
+        return "D9".to_string();
+    }
+    if lower.contains(',') {
+        return format!(",{}", decimals_of(&lower));
+    }
+    format!("F{}", decimals_of(&lower))
+}
+
+/// The **decimals** of a format code: the zeros after the point.
+fn decimals_of(code: &str) -> usize {
+    code.split_once('.').map_or(0, |(_, decimals)| decimals.chars().take_while(|ch| *ch == '0').count())
+}

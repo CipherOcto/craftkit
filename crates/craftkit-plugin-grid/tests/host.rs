@@ -209,3 +209,71 @@ fn the_trees_references_are_refused_as_references() {
         );
     }
 }
+
+/// The tree's **`CELL`**: what it says about a cell.
+#[test]
+fn the_trees_cell_says_what_it_says_about_a_cell() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "B2", json!("a word"));
+    formula(&mut session, sheet, "D1", "=CELL(\"address\", B2)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!("$B$2"), "the address of a cell");
+    formula(&mut session, sheet, "D2", "=CELL(\"row\", B2)");
+    assert_eq!(number_of(&mut session, sheet, "D2"), 2.0, "the row of a cell");
+    formula(&mut session, sheet, "D3", "=CELL(\"col\", B2)");
+    assert_eq!(number_of(&mut session, sheet, "D3"), 2.0, "the column of a cell");
+    formula(&mut session, sheet, "D4", "=CELL(\"contents\", B2)");
+    assert_eq!(value_of(&mut session, sheet, "D4"), json!("a word"), "the contents of a cell");
+    formula(&mut session, sheet, "D5", "=CELL(\"type\", B2)");
+    assert_eq!(value_of(&mut session, sheet, "D5"), json!("l"), "a cell of text");
+    formula(&mut session, sheet, "D6", "=CELL(\"type\", C2)");
+    assert_eq!(value_of(&mut session, sheet, "D6"), json!("b"), "an empty cell");
+    formula(&mut session, sheet, "D7", "=CELL(\"sheetname\")");
+    assert_eq!(value_of(&mut session, sheet, "D7"), json!("Sheet1"), "the name of the sheet");
+    formula(&mut session, sheet, "D8", "=CELL(\"protect\", B2)");
+    assert_eq!(number_of(&mut session, sheet, "D8"), 1.0, "a cell is locked by its style");
+    formula(&mut session, sheet, "D9", "=CELL(\"nonesuch\", B2)");
+    assert_eq!(error_of(&mut session, sheet, "D9"), "#VALUE!", "a question the tree does not know");
+}
+
+/// The tree's **`AGGREGATE`**: the tree's `SUBTOTAL` with nineteen
+/// functions and four options.
+#[test]
+fn the_trees_aggregate_sums_what_it_is_given() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for (index, number) in [1.0, 2.0, 3.0, 4.0].iter().enumerate() {
+        value(&mut session, sheet, &format!("A{}", index + 1), json!(number));
+    }
+    formula(&mut session, sheet, "D1", "=AGGREGATE(9,0,A1:A4)");
+    assert_eq!(number_of(&mut session, sheet, "D1"), 10.0, "the sum");
+    formula(&mut session, sheet, "D2", "=AGGREGATE(1,0,A1:A4)");
+    assert_eq!(number_of(&mut session, sheet, "D2"), 2.5, "the mean");
+    formula(&mut session, sheet, "D3", "=AGGREGATE(12,0,A1:A4)");
+    assert_eq!(number_of(&mut session, sheet, "D3"), 2.5, "the median");
+    formula(&mut session, sheet, "D4", "=AGGREGATE(14,0,A1:A4,2)");
+    assert_eq!(number_of(&mut session, sheet, "D4"), 3.0, "the second largest");
+    formula(&mut session, sheet, "D5", "=AGGREGATE(15,0,A1:A4,2)");
+    assert_eq!(number_of(&mut session, sheet, "D5"), 2.0, "the second smallest");
+    formula(&mut session, sheet, "D6", "=AGGREGATE(16,0,A1:A4,0.5)");
+    assert_eq!(number_of(&mut session, sheet, "D6"), 2.5, "the median as a percentile");
+    formula(&mut session, sheet, "D7", "=AGGREGATE(9,0,A1:A4,1)");
+    assert_eq!(number_of(&mut session, sheet, "D7"), 11.0, "the sum, and the extra argument is a value");
+    formula(&mut session, sheet, "D8", "=AGGREGATE(20,0,A1:A4)");
+    assert!(error_of(&mut session, sheet, "D8").contains("20"), "a function number that is not one");
+}
+
+/// The **errors** of an aggregate are left out when the options say
+/// so, and are the answer when they do not.
+#[test]
+fn the_errors_of_an_aggregate_are_left_out_when_the_options_say_so() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(1.0));
+    formula(&mut session, sheet, "A2", "=1/0");
+    value(&mut session, sheet, "A3", json!(3.0));
+    formula(&mut session, sheet, "D1", "=AGGREGATE(9,2,A1:A3)");
+    assert_eq!(number_of(&mut session, sheet, "D1"), 4.0, "the errors are left out");
+    formula(&mut session, sheet, "D2", "=AGGREGATE(9,0,A1:A3)");
+    assert_eq!(error_of(&mut session, sheet, "D2"), "#DIV/0!", "the error is the answer");
+}

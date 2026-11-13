@@ -106,7 +106,7 @@ fn variance_of(numbers: &[f64], sample: bool) -> Result<f64, String> {
 }
 
 /// The **k-th percentile**, the tree's two ways.
-fn percentile_of(numbers: Vec<f64>, k: f64, exclusive: bool) -> Value {
+pub(crate) fn percentile_of(numbers: Vec<f64>, k: f64, exclusive: bool) -> Value {
     if exclusive {
         let count = numbers.len() as f64;
         if numbers.is_empty() || !(k > 0.0 && k < 1.0) {
@@ -177,7 +177,7 @@ fn devsq(numbers: &[f64]) -> f64 {
 ///
 /// The tree's rule: the middle one when the count is odd, and the
 /// mean of the two middle ones when it is even.
-fn median(numbers: Vec<f64>) -> Value {
+pub(crate) fn median_of(numbers: Vec<f64>) -> Value {
     if numbers.is_empty() {
         return Value::Error("#NUM!".to_string());
     }
@@ -193,7 +193,7 @@ fn median(numbers: Vec<f64>) -> Value {
 
 /// The **modes** of the numbers: the values that occur at least twice,
 /// in the order they first occur.
-fn modes(numbers: &[f64]) -> Vec<f64> {
+pub(crate) fn modes(numbers: &[f64]) -> Vec<f64> {
     let mut counts: Vec<(f64, usize)> = Vec::new();
     for number in numbers {
         match counts.iter_mut().find(|entry| entry.0 == *number) {
@@ -208,11 +208,17 @@ fn modes(numbers: &[f64]) -> Vec<f64> {
     counts.into_iter().filter(|entry| entry.1 == best).map(|entry| entry.0).collect()
 }
 
+/// The **mode** of the numbers: the value that occurs most often, and
+/// none when no value occurs twice.
+pub(crate) fn mode_of(numbers: &[f64]) -> Option<f64> {
+    modes(numbers).first().copied()
+}
+
 /// The k-th **largest** or **smallest** of the numbers.
 ///
 /// The tree's rule: the k is rounded up, and a k that is not in the
 /// numbers is `#NUM!`.
-fn kth(numbers: Vec<f64>, k: f64, largest: bool) -> Value {
+pub(crate) fn kth_of(numbers: Vec<f64>, k: f64, largest: bool) -> Value {
     let k = k.ceil();
     if k.is_nan() || k < 1.0 || k > numbers.len() as f64 {
         return Value::Error("#NUM!".to_string());
@@ -323,14 +329,14 @@ impl Book {
             "RANK" => self.rank_call(sheet, arguments, being),
             "LARGE" => match self.numbers_of(sheet, arguments, 0, being) {
                 Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
-                    Ok(k) => kth(numbers, k, true),
+                    Ok(k) => kth_of(numbers, k, true),
                     Err(message) => Value::Error(message),
                 },
                 Err(message) => Value::Error(message),
             },
             "SMALL" => match self.numbers_of(sheet, arguments, 0, being) {
                 Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
-                    Ok(k) => kth(numbers, k, false),
+                    Ok(k) => kth_of(numbers, k, false),
                     Err(message) => Value::Error(message),
                 },
                 Err(message) => Value::Error(message),
@@ -538,7 +544,7 @@ impl Book {
                     }
                 }
                 match name {
-                    "MEDIAN" => median(numbers),
+                    "MEDIAN" => median_of(numbers),
                     "MODE" => match modes(&numbers).first() {
                         Some(mode) => Value::Number(*mode),
                         None => Value::Error("#N/A".to_string()),

@@ -3136,7 +3136,7 @@ impl Book {
                             let cell = CellRef { col, row };
                             let rows =
                                 filtered.entry(name.to_string()).or_insert_with(|| self.filtered_rows(name));
-                            if self.left_out(name, cell, skip_hidden, rows) {
+                            if self.left_out(name, cell, true, skip_hidden, true, rows) {
                                 continue;
                             }
                             let value = self.value_of_guarded(name, cell, being);
@@ -3159,7 +3159,7 @@ impl Book {
                             let rows = filtered
                                 .entry(name.sheet.clone())
                                 .or_insert_with(|| self.filtered_rows(&name.sheet));
-                            if self.left_out(&name.sheet, cell, skip_hidden, rows) {
+                            if self.left_out(&name.sheet, cell, true, skip_hidden, true, rows) {
                                 continue;
                             }
                             let value = self.value_of_guarded(&name.sheet, cell, being);
@@ -3236,22 +3236,34 @@ impl Book {
     /// Whether a cell is **left out** of a subtotal: a row a **filter**
     /// hides, a row hidden **by hand** and the subtotal is the
     /// hundred-and-more form, or a cell that holds a nested subtotal.
-    fn left_out(&self, sheet: &str, cell: CellRef, skip_hidden: bool, filtered: &[u64]) -> bool {
+    pub(crate) fn left_out(
+        &self,
+        sheet: &str,
+        cell: CellRef,
+        skip_filtered: bool,
+        skip_hidden: bool,
+        skip_nested: bool,
+        filtered: &[u64],
+    ) -> bool {
         // The rows of a sheet are counted from one and a cell's row is
         // counted from nothing.
         let row = cell.row as u64 + 1;
         // The rows a filter hides are left out whatever the function
         // number: that is the tree's rule.
-        if filtered.contains(&row) {
+        if skip_filtered && filtered.contains(&row) {
             return true;
         }
         if skip_hidden && self.row_is_hidden(sheet, row) {
             return true;
         }
+        if !skip_nested {
+            return false;
+        }
         let Some(cells) = self.sheets.get(sheet) else { return false };
         let Some(entry) = cells.get(cell) else { return false };
         let Some(formula) = entry.formula.as_deref() else { return false };
-        formula.to_ascii_uppercase().contains("SUBTOTAL(")
+        let upper = formula.to_ascii_uppercase();
+        upper.contains("SUBTOTAL(") || upper.contains("AGGREGATE(")
     }
 
     fn text_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
