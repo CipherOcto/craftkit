@@ -59367,15 +59367,17 @@ this one. This is that.
   tables, lambdas and places.
 - **The tree is one program and this tree is nine batteries.** The
   tree's engine declares **306** commands; this tree's batteries carry
-  **916** — grid 188, sound 144, pdf 119, film 113, prose 110, layout
+  **917** — grid 189, sound 144, pdf 119, film 113, prose 110, layout
   73, vector 67, cad 55 and fx 47 — and the MCP server carries
-  **1045**.
+  **1046**.
 - **The one domain the tree has and this tree has not is the file
   formats.** The tree's `xlsx` crate is **12 217 lines** and reads and
   writes XLSX in both of its spellings, XLSB, ODS and XLS (BIFF8),
   with encrypted workbooks, pivot tables, charts and drawings. This
   tree's grid battery reads and writes **CSV** — **565 lines** of
-  import and export — and has no XLSX at all.
+  import and export — and **the reading of XLSX** (§901–§905: the
+  inflate, the package, the XML, the workbook and the command that
+  imports one); it writes no workbook, and it reads no other format.
 - **The tree's desktop is not a port target.** Its `ui-egui` crate is
   **18 987 lines** of a desktop program; this tree has its own doors
   — the terminal, the agent, the browser, the window, the bridge and
@@ -59745,6 +59747,8 @@ A workbook file goes into the document.
   workbook, a formula is imported, a formula that cannot be read is not
   imported, a file that is not a workbook is refused, and the date
   system of the file is the date system of the workbook.
+- **One new command**: the grid battery now carries **189** commands
+  and the MCP server **1046** — one more than §902.
 - **One line** in the counted block of this README: the grid battery
   has one command more.
 - **No new dependency**: the reader is a crate that is already in the
