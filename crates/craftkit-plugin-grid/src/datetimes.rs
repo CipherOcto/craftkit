@@ -28,6 +28,23 @@
 //!
 //! A serial that is outside the calendar is an error, and so is a
 //! date that the calendar does not have.
+//!
+//! # The days between two dates
+//!
+//! Two functions ask how far apart two dates are:
+//!
+//! - `DAYS360(start, end, [method])` — the **days** under the year of
+//!   three hundred and sixty days;
+//! - `DATEDIF(start, end, unit)` — the **time** between them, in the
+//!   unit that is asked for.
+//!
+//! The **method** of `DAYS360` is the tree's: the American one, which
+//! is the default, and the European one.
+//!
+//! The **units** of `DATEDIF` are `D` — the days, `M` — the whole
+//! months, `Y` — the whole years, `YM` — the whole months that are
+//! left of the year, `MD` — the days that are left of the month, and
+//! `YD` — the days that are left of the year.
 
 use crate::formula::{Book, CellRef, Expr, Value};
 
@@ -49,6 +66,8 @@ pub fn is_date_function(name: &str) -> bool {
             | "DAYS"
             | "WEEKNUM"
             | "ISOWEEKNUM"
+            | "DAYS360"
+            | "DATEDIF"
     )
 }
 
@@ -70,6 +89,8 @@ impl Book {
             "EDATE" | "EOMONTH" => self.month_call(sheet, name, arguments, being),
             "DAYS" => self.days_call(sheet, arguments, being),
             "WEEKNUM" | "ISOWEEKNUM" => self.week_call(sheet, name, arguments, being),
+            "DAYS360" => self.days360_call(sheet, arguments, being),
+            "DATEDIF" => self.datedif_call(sheet, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
     }
@@ -349,5 +370,163 @@ impl Book {
             Some(week) => Value::Number(week),
             None => Value::Error("#NUM!".to_string()),
         }
+    }
+
+    /// The tree's `DAYS360`: the **days** between two dates under the
+    /// year of three hundred and sixty days.
+    ///
+    /// The **method** is the tree's: the American one, which is the
+    /// default, and the European one. The American one treats a start
+    /// date of the thirty-first of a month, or the last day of
+    /// February, as the thirtieth, and an end date of the thirty-first
+    /// as the thirtieth when the start date is the thirtieth or after
+    /// it; the European one treats any day after the thirtieth as the
+    /// thirtieth.
+    fn days360_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let first = match self.day_argument(sheet, &arguments[0], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let second = match self.day_argument(sheet, &arguments[1], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let european = match arguments.get(2) {
+            Some(argument) => {
+                let value = self.evaluate(sheet, argument, being);
+                match value {
+                    Value::Bool(flag) => flag,
+                    Value::Empty => false,
+                    other => match other.as_number() {
+                        Some(number) if number.is_finite() => number != 0.0,
+                        _ => return Value::Error("#VALUE!".to_string()),
+                    },
+                }
+            }
+            None => false,
+        };
+        let Some((year1, month1, day1)) = crate::daycounts::ymd(self.system(), first) else {
+            return Value::Error("#NUM!".to_string());
+        };
+        let Some((year2, month2, day2)) = crate::daycounts::ymd(self.system(), second) else {
+            return Value::Error("#NUM!".to_string());
+        };
+        let (mut start, mut end) = (i64::from(day1), i64::from(day2));
+        if european {
+            start = start.min(30);
+            end = end.min(30);
+        } else {
+            let last_of_february =
+                |year: i32, month: u32, day: u32| month == 2 && day >= crate::dates::days_in_month(year, 2);
+            if start == 31 || last_of_february(year1, month1, day1) {
+                start = 30;
+            }
+            if end == 31 && start >= 30 {
+                end = 30;
+            }
+        }
+        Value::Number(
+            f64::from(year2 - year1) * 360.0
+                + f64::from(month2 as i32 - month1 as i32) * 30.0
+                + (end - start) as f64,
+        )
+    }
+
+    /// The tree's `DATEDIF`: the **time** between two dates, in the
+    /// unit that is asked for.
+    ///
+    /// The units are `D` — the days, `M` — the whole months, `Y` — the
+    /// whole years, `YM` — the whole months that are left of the year,
+    /// `MD` — the days that are left of the month, and `YD` — the days
+    /// that are left of the year.
+    ///
+    /// The tree's rule: a start date **after** the end date is an
+    /// error, and a unit that is not one of the six is an error.
+    fn datedif_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() != 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let start = match self.day_argument(sheet, &arguments[0], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let end = match self.day_argument(sheet, &arguments[1], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let unit = self.evaluate(sheet, &arguments[2], being);
+        let Value::Text(unit) = unit else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        let unit = unit.to_ascii_uppercase();
+        if start > end {
+            return Value::Error("#NUM!".to_string());
+        }
+        let Some((year1, month1, day1)) = crate::daycounts::ymd(self.system(), start) else {
+            return Value::Error("#NUM!".to_string());
+        };
+        let Some((year2, month2, day2)) = crate::daycounts::ymd(self.system(), end) else {
+            return Value::Error("#NUM!".to_string());
+        };
+        // The **whole months** between the two dates: a month is whole
+        // when the day of the end is not before the day of the start.
+        let months =
+            i64::from(year2 - year1) * 12 + i64::from(month2) - i64::from(month1) - i64::from(day2 < day1);
+        let result = match unit.as_str() {
+            "D" => (end - start) as i64,
+            "M" => months,
+            "Y" => months / 12,
+            "YM" => months % 12,
+            "MD" => {
+                if day2 >= day1 {
+                    i64::from(day2 - day1)
+                } else {
+                    // The days of the month before the end date.
+                    let (year, month) = if month2 == 1 { (year2 - 1, 12) } else { (year2, month2 - 1) };
+                    i64::from(crate::dates::days_in_month(year, month)) - i64::from(day1) + i64::from(day2)
+                }
+            }
+            "YD" => {
+                // The days of the year that are left: the year is
+                // shortened by one when the month and the day of the
+                // start are after the month and the day of the end.
+                let later = (month1, day1) > (month2, day2);
+                let year = if later { year2 - 1 } else { year2 };
+                let day = day1.min(crate::dates::days_in_month(year, month1).max(1));
+                match crate::dates::to_serial(year, month1, day, self.system()) {
+                    Some(shifted) => (end - shifted) as i64,
+                    None => return Value::Error("#NUM!".to_string()),
+                }
+            }
+            _ => return Value::Error("#NUM!".to_string()),
+        };
+        Value::Number(result as f64)
+    }
+
+    /// The **serial** of a date argument.
+    ///
+    /// The tree's rule: the argument is a number, and a serial outside
+    /// the calendar is an error.
+    fn day_argument(
+        &self,
+        sheet: &str,
+        argument: &Expr,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<f64, String> {
+        let value = self.evaluate(sheet, argument, being);
+        let Some(number) = value.as_number() else {
+            return Err("#VALUE!".to_string());
+        };
+        if !number.is_finite() {
+            return Err("#NUM!".to_string());
+        }
+        let serial = number.floor();
+        if !(0.0..=self.system().max_serial() as f64).contains(&serial) {
+            return Err("#NUM!".to_string());
+        }
+        Ok(serial)
     }
 }

@@ -173,6 +173,11 @@
 //! and may ask for the **week** of a day in its year (the module
 //! `datetimes`).
 //!
+//! And a formula may ask how far apart two dates are — the **days**
+//! under the year of three hundred and sixty days, and the **time**
+//! between them in the unit that is asked for (the module
+//! `datetimes`).
+//!
 //! And a range may be **sorted**: the rows of it are put in order by
 //! the values of one of its columns, and what a row holds travels
 //! with it — the format, the style, the formula with its relative

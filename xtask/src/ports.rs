@@ -151,6 +151,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/xlookups.rs",
         section: "§875",
     },
+    Port {
+        rule: "the days between two dates",
+        from: "gridcraft/crates/functions/src/date.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/datetimes.rs",
+        command: "craftkit-plugin-grid::datetimes",
+        test: "crates/craftkit-plugin-grid/tests/intervals.rs",
+        section: "§876",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
