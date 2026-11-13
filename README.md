@@ -4345,6 +4345,7 @@ so.
 | the host's **tables**, **lambdas** and **places** | **built.** The tree's BYROW, BYCOL, MAKEARRAY, MAP and SCAN are refused as arrays, its LAMBDA, LET, ISOMITTED and REDUCE as lambdas, and its OFFSET, INDIRECT and TRIMRANGE as worked-out references (§897) | §897 |
 | the two **heavy** ones: the cell, and the aggregate | **built.** The tree's CELL asks its twelve questions and says the reason for the one it cannot answer, and the tree's AGGREGATE has its nineteen functions and its four options (§898) | §898 |
 | the **survey**: the tree and this tree, side by side | **built.** The tree's function surface is closed — 514 names, 455 computed here and 60 answered with a reason — and the one domain the tree has and this tree has not is its file formats (§899) | §899 |
+| the tree's **subtotal**, and its **error** | **built.** An error in the range of a SUBTOTAL is the error of the whole subtotal, as the tree says (§900) | §900 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59322,14 +59323,13 @@ The tree's **second list** is finished.
 
 ### What it does not settle
 
-- **The tree's `SUBTOTAL` and this tree's `SUBTOTAL` are not the same
-  function.** The tree's `SUBTOTAL` counts an **error** in a range as
-  an error of the whole subtotal, and this tree's counts it as a
-  value — and the tree's `SUBTOTAL` from 101 on leaves out the rows
-  that are hidden by hand and *not* the rows a filter hides, while
-  this tree's leaves out both. The tree's own comment says the
-  opposite of what its code does, and this tree follows the comment.
-  That is a difference and not a bug, and it is not settled here.
+- **The tree's `SUBTOTAL` and this tree's `SUBTOTAL` differ in one
+  thing: an error.** The tree's `SUBTOTAL` counts an **error** in a
+  range as an error of the whole subtotal, and this tree's counts it
+  as a value. The rows are the same — the rows a filter hides are left
+  out whatever the function number, and the numbers from 101 on leave
+  out the rows that are hidden by hand as well, in the tree and here.
+  That one difference is the next arc.
 - **The tree's `CELL("filename")` is empty until the workbook has a
   file of its own**, and a workbook here has no file either, so the
   answer is the tree's answer and is empty.
@@ -59402,3 +59402,49 @@ this one. This is that.
   case the tree answers another way — the tree's `SUBTOTAL` and this
   tree's `SUBTOTAL` are not the same function (§898), and that is one
   case of a kind the survey cannot count.
+
+## 900. The tree's subtotal, and its error
+
+The one difference the survey found between the tree's `SUBTOTAL` and
+this tree's is settled.
+
+### What was built
+
+- **The tree's rule for an error**: an **error** in the range of a
+  `SUBTOTAL` is the error of the whole subtotal.
+
+### What the port found
+
+- **The tree's `SUBTOTAL` and this tree's `SUBTOTAL` differed in one
+  thing, and the thing was an error.** The tree's `SUBTOTAL` over a
+  range with an error in it *is* that error; this tree's counted the
+  error as a value — so `SUBTOTAL(3, …)` counted it and `SUBTOTAL(9,
+  …)` did not, and a total row over a range with one bad cell said
+  something the tree would not say.
+- **The rows were the same all along.** A row that a filter hides is
+  also a hidden row — in the tree as well as here — so the tree's
+  `SUBTOTAL` from 101 on leaves out the rows a filter hides *and* the
+  rows that are hidden by hand, which is what this tree's has always
+  done. The rule was never in doubt; only the reading of it was.
+- **The tree's `AGGREGATE` can leave an error out and a `SUBTOTAL`
+  cannot**: the options of an `AGGREGATE` say so, and a `SUBTOTAL` has
+  no options. So the two are different in exactly the way the tree's
+  are different.
+
+### What it cost
+
+- **Three lines** in the subtotal's gathering, and one test in the
+  grid battery's subtotal test file: an error in the range is the
+  error of the subtotal.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `SUBTOTAL` leaves out the rows a filter hides and the
+  rows hidden by hand, and so does this tree's — but the tree's own
+  `SUBTOTAL` and this tree's `SUBTOTAL` are still two programs, and
+  a case the tree answers another way would still be a difference.**
+  The survey (§899) says a closed function surface says nothing about
+  the tree's behaviour, and this is the first case of it.

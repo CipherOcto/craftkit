@@ -358,6 +358,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/host.rs",
         section: "§898",
     },
+    Port {
+        rule: "the tree's subtotal, and its error",
+        from: "gridcraft/crates/calc/src/eval/reference_fns.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "craftkit-plugin-grid::subtotal",
+        test: "crates/craftkit-plugin-grid/tests/subtotal.rs",
+        section: "§900",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
