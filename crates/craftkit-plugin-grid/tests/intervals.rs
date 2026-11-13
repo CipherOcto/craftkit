@@ -110,3 +110,95 @@ fn a_start_date_after_the_end_date_is_an_error() {
     let value = value_of(&mut session, sheet, "A2");
     assert_eq!(value["error"].as_str(), Some("#NUM!"), "it says why: {value}");
 }
+
+/// The **fraction of a year** between two dates, under a basis.
+#[test]
+fn the_fraction_of_a_year_under_a_basis() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=YEARFRAC(DATE(2021,1,1),DATE(2022,1,1),3)");
+    assert_eq!(
+        value_of(&mut session, sheet, "A1"),
+        json!(1.0),
+        "three hundred and sixty-five over three hundred and sixty-five"
+    );
+    formula(&mut session, sheet, "A2", "=YEARFRAC(DATE(2021,1,1),DATE(2022,1,1),1)");
+    assert_eq!(
+        value_of(&mut session, sheet, "A2"),
+        json!(1.0),
+        "and the actual days over the actual days of the year"
+    );
+    formula(&mut session, sheet, "A3", "=YEARFRAC(DATE(2021,1,1),DATE(2021,7,1),0)");
+    assert_eq!(value_of(&mut session, sheet, "A3"), json!(0.5), "six months of thirty days are half a year");
+    formula(&mut session, sheet, "A4", "=YEARFRAC(DATE(2021,1,1),DATE(2021,7,1),4)");
+    assert_eq!(value_of(&mut session, sheet, "A4"), json!(0.5), "and the European one is the same here");
+    formula(&mut session, sheet, "A5", "=YEARFRAC(DATE(2021,1,1),DATE(2023,1,1),1)");
+    assert_eq!(value_of(&mut session, sheet, "A5"), json!(2.0), "two years over two years");
+}
+
+/// The two dates are put **in order**, and a basis that is not one of
+/// the five is an error.
+#[test]
+fn the_two_dates_are_put_in_order() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=YEARFRAC(DATE(2022,1,1),DATE(2021,1,1),3)");
+    assert_eq!(value_of(&mut session, sheet, "A1"), json!(1.0), "the order does not matter");
+    formula(&mut session, sheet, "A2", "=YEARFRAC(DATE(2021,1,1),DATE(2022,1,1),5)");
+    let value = value_of(&mut session, sheet, "A2");
+    assert_eq!(value["error"].as_str(), Some("#NUM!"), "it says why: {value}");
+}
+
+/// The **working days** between two dates.
+#[test]
+fn the_working_days_between_two_dates() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=NETWORKDAYS(DATE(2021,1,1),DATE(2021,1,31))");
+    assert_eq!(
+        value_of(&mut session, sheet, "A1"),
+        json!(21.0),
+        "January of twenty twenty-one has twenty-one working days"
+    );
+    formula(&mut session, sheet, "A2", "=NETWORKDAYS(DATE(2021,1,31),DATE(2021,1,1))");
+    assert_eq!(
+        value_of(&mut session, sheet, "A2"),
+        json!(-21.0),
+        "and the other way round is the other sign"
+    );
+}
+
+/// The date that is **n working days** after a date.
+#[test]
+fn the_date_that_is_n_working_days_after_a_date() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=WORKDAY(DATE(2021,1,1),5)");
+    formula(&mut session, sheet, "A2", "=DATE(2021,1,8)");
+    let workday = value_of(&mut session, sheet, "A1");
+    assert_eq!(
+        workday,
+        value_of(&mut session, sheet, "A2"),
+        "the fifth working day is the eighth: {workday}"
+    );
+    formula(&mut session, sheet, "A3", "=WORKDAY(DATE(2021,1,1),0)");
+    formula(&mut session, sheet, "A4", "=DATE(2021,1,1)");
+    assert_eq!(
+        value_of(&mut session, sheet, "A3"),
+        value_of(&mut session, sheet, "A4"),
+        "and zero is the start"
+    );
+}
+
+/// The tree's **holidays** are a list, and a list is an array.
+#[test]
+fn the_holidays_are_not_here() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "B1", "=NETWORKDAYS(DATE(2021,1,1),DATE(2021,1,31),A1:A2)");
+    let value = value_of(&mut session, sheet, "B1");
+    assert_eq!(value["error"].as_str(), Some("not supported yet: an array"), "it says why: {value}");
+    formula(&mut session, sheet, "B2", "=WORKDAY(DATE(2021,1,1),5,A1:A2)");
+    let value = value_of(&mut session, sheet, "B2");
+    assert_eq!(value["error"].as_str(), Some("not supported yet: an array"), "it says why: {value}");
+}

@@ -160,6 +160,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/intervals.rs",
         section: "§876",
     },
+    Port {
+        rule: "the fraction of a year, and the working days",
+        from: "gridcraft/crates/functions/src/date.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/datetimes.rs",
+        command: "craftkit-plugin-grid::datetimes",
+        test: "crates/craftkit-plugin-grid/tests/intervals.rs",
+        section: "§877",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

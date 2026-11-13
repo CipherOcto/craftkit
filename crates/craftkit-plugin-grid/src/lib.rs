@@ -175,8 +175,9 @@
 //!
 //! And a formula may ask how far apart two dates are — the **days**
 //! under the year of three hundred and sixty days, and the **time**
-//! between them in the unit that is asked for (the module
-//! `datetimes`).
+//! between them in the unit that is asked for — and it may ask the
+//! **fraction of a year** two dates make and which days are the
+//! **working days** (the module `datetimes`).
 //!
 //! And a range may be **sorted**: the rows of it are put in order by
 //! the values of one of its columns, and what a row holds travels

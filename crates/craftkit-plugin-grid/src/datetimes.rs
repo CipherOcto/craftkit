@@ -68,6 +68,9 @@ pub fn is_date_function(name: &str) -> bool {
             | "ISOWEEKNUM"
             | "DAYS360"
             | "DATEDIF"
+            | "YEARFRAC"
+            | "NETWORKDAYS"
+            | "WORKDAY"
     )
 }
 
@@ -91,6 +94,9 @@ impl Book {
             "WEEKNUM" | "ISOWEEKNUM" => self.week_call(sheet, name, arguments, being),
             "DAYS360" => self.days360_call(sheet, arguments, being),
             "DATEDIF" => self.datedif_call(sheet, arguments, being),
+            "YEARFRAC" => self.yearfrac_call(sheet, arguments, being),
+            "NETWORKDAYS" => self.networkdays_call(sheet, arguments, being),
+            "WORKDAY" => self.workday_call(sheet, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
     }
@@ -529,4 +535,196 @@ impl Book {
         }
         Ok(serial)
     }
+
+    /// The tree's `YEARFRAC`: the **fraction of a year** between two
+    /// dates, under a basis.
+    ///
+    /// The bases are the tree's:
+    ///
+    /// - zero — the 30/360;
+    /// - one — the actual days over the actual days of the year;
+    /// - two — the actual days over a year of three hundred and sixty
+    ///   days;
+    /// - three — the actual days over a year of three hundred and
+    ///   sixty-five days;
+    /// - four — the European 30/360.
+    ///
+    /// The tree's rule: the two dates are put in order, and a basis
+    /// that is not one of the five is an error.
+    fn yearfrac_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let first = match self.day_argument(sheet, &arguments[0], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let second = match self.day_argument(sheet, &arguments[1], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let basis = match arguments.get(2) {
+            Some(argument) => {
+                let value = self.evaluate(sheet, argument, being);
+                let Some(number) = value.as_number() else {
+                    return Value::Error("#VALUE!".to_string());
+                };
+                if !number.is_finite() {
+                    return Value::Error("#NUM!".to_string());
+                }
+                number.trunc() as i64
+            }
+            None => 0,
+        };
+        if !(0..=4).contains(&basis) {
+            return Value::Error("#NUM!".to_string());
+        }
+        let (start, end) = if first <= second { (first, second) } else { (second, first) };
+        let days = end - start;
+        match basis {
+            // The **30/360** of the tree's financial basis zero — not
+            // the one the tree's spreadsheet `DAYS360` uses.
+            0 => match crate::daycounts::days360(self.system(), start, end, true) {
+                Some(count) => Value::Number(count / 360.0),
+                None => Value::Error("#NUM!".to_string()),
+            },
+            // The **European 30/360**.
+            4 => match crate::daycounts::days360(self.system(), start, end, false) {
+                Some(count) => Value::Number(count / 360.0),
+                None => Value::Error("#NUM!".to_string()),
+            },
+            // The **actual days** over the actual days of the year.
+            1 => {
+                let Some((year1, month1, day1)) = crate::daycounts::ymd(self.system(), start) else {
+                    return Value::Error("#NUM!".to_string());
+                };
+                let Some((year2, month2, day2)) = crate::daycounts::ymd(self.system(), end) else {
+                    return Value::Error("#NUM!".to_string());
+                };
+                // The two dates are **within a year** when they are of
+                // the same year, or when they are of two years that
+                // touch and the start is not before the end.
+                let within = year1 == year2
+                    || (year2 == year1 + 1 && (month1 > month2 || (month1 == month2 && day1 >= day2)));
+                if within {
+                    // The **length of the year**: a year with a leap
+                    // day in it is three hundred and sixty-six days.
+                    let leap = (year1 == year2 && crate::dates::is_leap(year1))
+                        || feb29_between(self.system(), start, end)
+                        || (month2 == 2 && day2 == 29);
+                    Value::Number(days / if leap { 366.0 } else { 365.0 })
+                } else {
+                    // The **average** of the years the two dates are
+                    // between.
+                    let years = f64::from(year2 - year1 + 1);
+                    let Some(from) = crate::dates::to_serial(year1, 1, 1, self.system()) else {
+                        return Value::Error("#NUM!".to_string());
+                    };
+                    let Some(to) = crate::dates::to_serial(year2 + 1, 1, 1, self.system()) else {
+                        return Value::Error("#NUM!".to_string());
+                    };
+                    Value::Number(days / ((to - from) / years))
+                }
+            }
+            // The actual days over a year of three hundred and sixty
+            // days, and over a year of three hundred and sixty-five.
+            2 => Value::Number(days / 360.0),
+            3 => Value::Number(days / 365.0),
+            _ => Value::Error("#NUM!".to_string()),
+        }
+    }
+
+    /// The tree's `NETWORKDAYS`: the **working days** between two
+    /// dates.
+    ///
+    /// The Saturday and the Sunday are not working days, and the two
+    /// dates are **counted both ways**: the first day and the last
+    /// day are working days when they are one. A start date after the
+    /// end date gives the count with the other sign.
+    ///
+    /// The tree's `NETWORKDAYS` takes a list of **holidays**, and a
+    /// list is an array, and this tree has no arrays.
+    fn networkdays_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        if arguments.len() == 3 {
+            return Value::Error("not supported yet: an array".to_string());
+        }
+        let start = match self.day_argument(sheet, &arguments[0], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let end = match self.day_argument(sheet, &arguments[1], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let (low, high, sign) = if start <= end { (start, end, 1) } else { (end, start, -1) };
+        let Some(mut count) = crate::dates::weekdays_between(low, high, self.system()) else {
+            return Value::Error("#NUM!".to_string());
+        };
+        // The **first** day is a working day too, and the count the
+        // tree's helper gives does not hold it.
+        match crate::dates::is_weekday(low, self.system()) {
+            Some(true) => count += 1,
+            Some(false) => {}
+            None => return Value::Error("#NUM!".to_string()),
+        }
+        Value::Number((count * sign) as f64)
+    }
+
+    /// The tree's `WORKDAY`: the date that is **n working days** after
+    /// a date.
+    ///
+    /// The start date is not one of the days that are counted: the
+    /// first working day after it is the first step. A start date that
+    /// is a Saturday or a Sunday moves to the next working day first.
+    ///
+    /// The tree's `WORKDAY` takes a list of **holidays**, and a list
+    /// is an array, and this tree has no arrays.
+    fn workday_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        if arguments.len() == 3 {
+            return Value::Error("not supported yet: an array".to_string());
+        }
+        let start = match self.day_argument(sheet, &arguments[0], being) {
+            Ok(serial) => serial,
+            Err(message) => return Value::Error(message),
+        };
+        let value = self.evaluate(sheet, &arguments[1], being);
+        let Some(number) = value.as_number() else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        if !number.is_finite() {
+            return Value::Error("#NUM!".to_string());
+        }
+        let days = number.trunc();
+        // The tree's bound: ten million days is a year of twenty-seven
+        // thousand, and the tree refuses more.
+        if days.abs() > 10_000_000.0 {
+            return Value::Error("#NUM!".to_string());
+        }
+        match crate::dates::add_weekdays(start, days as i64, self.system()) {
+            Some(serial) => Value::Number(serial),
+            None => Value::Error("#NUM!".to_string()),
+        }
+    }
+}
+
+/// Whether a **leap day** lies between two dates.
+fn feb29_between(system: crate::dates::System, start: f64, end: f64) -> bool {
+    let Some((first_year, _, _)) = crate::daycounts::ymd(system, start) else { return false };
+    let Some((last_year, _, _)) = crate::daycounts::ymd(system, end) else { return false };
+    for year in first_year..=last_year {
+        if !crate::dates::is_leap(year) {
+            continue;
+        }
+        let Some(serial) = crate::dates::to_serial(year, 2, 29, system) else { continue };
+        if serial >= start && serial <= end {
+            return true;
+        }
+    }
+    false
 }
