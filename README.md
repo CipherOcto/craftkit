@@ -4341,6 +4341,8 @@ so.
 | the **pattern** and the **cube** | **built.** The tree's regular expressions and its seven cube functions are refused, each with the reason it is not here, and the three matrix functions that give back a table are refused as an array (§893) | §893 |
 | the **model** of a series in time | **built.** The tree's four ETS functions are here with its additive state space, its rule for a timeline and its three errors: `#N/A`, `#VALUE!` and `#NUM!` (§894) | §894 |
 | the **registry** of what the battery knows | **built.** Every family of the grid battery declares the names it carries, the engine dispatches through the registry, and `TRUE()` and `FALSE()` are functions as well as values (§895) | §895 |
+| the **host's** names, and the **places** they name | **built.** ROW, COLUMN, AREAS, ISREF, ISFORMULA, FORMULATEXT, SHEET and SHEETS are here, with the tree's rules and the order of the sheets (§896) | §896 |
+| the host's **tables**, **lambdas** and **places** | **built.** The tree's BYROW, BYCOL, MAKEARRAY, MAP and SCAN are refused as arrays, its LAMBDA, LET, ISOMITTED and REDUCE as lambdas, and its OFFSET, INDIRECT and TRIMRANGE as worked-out references (§897) | §897 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59127,3 +59129,129 @@ The last of the tree's functions is here, and now the tree can say
   The tree's registry says, and this one does not: the arity of a
   function is checked where the function is answered, and a registry
   that carried arity would be a second thing to keep true.
+
+## 896. The host's names, and the places they name
+
+The tree's **second list** is here: the names the tree's *program*
+carries and its registry does not.
+
+### What was built
+
+- **`ROW(reference)`** and **`COLUMN(reference)`** — the row and the
+  column of a place. With no argument, the row and the column of the
+  cell the formula is in.
+- **`AREAS(reference)`** — how many areas a reference has.
+- **`ISREF(value)`** — whether a thing is a reference at all.
+- **`ISFORMULA(reference)`** — whether a cell holds a formula — and
+  **`FORMULATEXT(reference)`**, which writes the formula of a cell
+  with its `=`.
+- **`SHEET(value)`** — the number of a sheet — and **`SHEETS`**, the
+  number of sheets in the book.
+- **The order of the sheets**: the book keeps its sheets in the order
+  they were added, because a number that changes when a sheet is
+  renamed is not a number.
+
+### What the port found
+
+- **The tree's registry is not all of the tree.** The registry holds
+  **490** names; the tree's *host* carries **24** more, and the
+  battery's registry (§895) now counts **501** and says which family
+  each name belongs to. The host's names are a family of their own.
+- **A reference that covers more than one row is a table.** The tree's
+  `ROW(A1:A5)` gives back a **column** of numbers, and a column of
+  numbers is a table — and a table is refused here as it is
+  everywhere (§885). The tree's `ROW(B7)` is a place of one cell, and
+  that is a number.
+- **The tree's `ISFORMULA` and `FORMULATEXT` ask for a *reference*.**
+  A thing that is not one is `#N/A`, and a cell that holds no formula
+  is `#N/A` too.
+- **The tree's `AREAS` counts the areas of a reference**, and a
+  reference in a formula names one place — so the answer is one, and a
+  thing that is not a reference is `#VALUE!`.
+- **The number of a sheet is the order of the book**, and a map of
+  sheets has no order. So the book keeps one, and `SHEET()` with no
+  argument is the number of the sheet the formula is in.
+
+### What it cost
+
+- **One module** — `host` — with the eight functions and the tree's
+  rules.
+- **The book** keeps the order of its sheets, and three small
+  accessors for the things other modules may read.
+- **Six tests** in the grid battery's new host test file: a formula
+  knows where it is, a reference names a place, a reference that
+  covers more than one row is a table, the areas of a reference and
+  whether a thing is one, the formula of a cell and whether there is
+  one, and the sheets of a book and the number of one of them.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The host's names that are tables** — `BYROW`, `BYCOL`,
+  `MAKEARRAY`, `MAP`, `SCAN`, `REDUCE`, `GROUPBY` and `PIVOTBY` — and
+  the ones that are **lambdas** — `LAMBDA`, `LET` and `ISOMITTED` —
+  are not here yet.
+- **The host's names that give back a reference** — `OFFSET`,
+  `INDIRECT` and `TRIMRANGE` — are not here: a formula in this tree
+  is a **value**, and a reference that is worked out is not a value.
+- **`CELL` and `AGGREGATE`** are the two heavy ones of the host's
+  list, and they are not here yet.
+
+## 897. The host's tables, and its lambdas, and its places
+
+The rest of the tree's **second list** is here — and every name of it
+says **why** it is not here.
+
+### What was built
+
+- **The tree's tables** — `BYROW`, `BYCOL`, `MAKEARRAY`, `MAP` and
+  `SCAN` — are refused with *not supported yet: an array*. (`GROUPBY`
+  and `PIVOTBY` are tables too, and they are refused with the
+  twenty-eight of §885.)
+- **The tree's lambdas** — `LAMBDA`, `LET`, `ISOMITTED` and `REDUCE`
+  — are refused with *not supported yet: a lambda*.
+- **The tree's places** — `OFFSET`, `INDIRECT` and `TRIMRANGE` — are
+  refused with *not supported yet: a reference that is worked out*.
+
+### What the port found
+
+- **The tree's three refusals are three different things.** A name
+  that gives back a **table** is a table; a name that needs a
+  **lambda** is a function; and a name that gives back a **reference**
+  is a place. The tree's own reason for refusing the arrays (§885) is
+  that a formula is a value — and the same reason refuses a lambda and
+  a worked-out place, for the same reason and not the same one.
+- **`REDUCE` gives back a number and is still refused**: the number is
+  the work of a lambda, and the lambda is what is not here.
+- **`GROUPBY` and `PIVOTBY` were already here** — refused with the
+  twenty-eight of §885 — and so they are not in this table. A name
+  that is in two places in the tree is in one place here, and the
+  registry says which: the tree's own test that no name is in two
+  families caught it.
+- **The tree's registry is now all here.** With these twelve names,
+  the battery's registry holds **513** names: the tree's **490**, the
+  three the tree's host carries and this tree's own `EXPON`, and the
+  **twenty** of the host's second list.
+
+### What it cost
+
+- **One table** — the host's refused names and the reason each one is
+  — and one branch in the host's own answering.
+- **Three tests** in the grid battery's host test file: the tree's
+  tables are refused as tables, the tree's lambdas as lambdas, and the
+  tree's places as places.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **`CELL` and `AGGREGATE`** are the two heavy ones of the host's
+  list, and they are not here yet: `CELL` asks the tree's question
+  about a cell — its address, its format, its width — and `AGGREGATE`
+  is the tree's `SUBTOTAL` with nineteen functions and four options.
+- **The tree's `CELL` has a width**, and this tree's cells have no
+  width to ask about; so `CELL("width")` has no answer here, and the
+  arc that brings `CELL` has to say what it does about it.
