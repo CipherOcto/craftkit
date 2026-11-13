@@ -441,6 +441,7 @@ mod namereading;
 mod names;
 mod notes;
 mod outline;
+pub mod outside;
 mod pictures;
 mod pivotfields;
 mod pivots;

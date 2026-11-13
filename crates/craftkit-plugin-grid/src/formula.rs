@@ -2217,6 +2217,11 @@ impl Book {
         if crate::arrays::is_array_function(name) {
             return Value::Error("not supported yet: an array".to_string());
         }
+        // The **world outside the workbook**: the clock, a random
+        // number, the network and the environment of the program.
+        if let Some(reason) = crate::outside::reason_for(name) {
+            return Value::Error(reason.to_string());
+        }
         if crate::matrices::is_matrix_function(name) {
             return self.matrices(sheet, name, arguments, being);
         }
