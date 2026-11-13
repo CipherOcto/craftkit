@@ -4344,6 +4344,7 @@ so.
 | the **host's** names, and the **places** they name | **built.** ROW, COLUMN, AREAS, ISREF, ISFORMULA, FORMULATEXT, SHEET and SHEETS are here, with the tree's rules and the order of the sheets (§896) | §896 |
 | the host's **tables**, **lambdas** and **places** | **built.** The tree's BYROW, BYCOL, MAKEARRAY, MAP and SCAN are refused as arrays, its LAMBDA, LET, ISOMITTED and REDUCE as lambdas, and its OFFSET, INDIRECT and TRIMRANGE as worked-out references (§897) | §897 |
 | the two **heavy** ones: the cell, and the aggregate | **built.** The tree's CELL asks its twelve questions and says the reason for the one it cannot answer, and the tree's AGGREGATE has its nineteen functions and its four options (§898) | §898 |
+| the **survey**: the tree and this tree, side by side | **built.** The tree's function surface is closed — 514 names, 455 computed here and 60 answered with a reason — and the one domain the tree has and this tree has not is its file formats (§899) | §899 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59332,3 +59333,72 @@ The tree's **second list** is finished.
 - **The tree's `CELL("filename")` is empty until the workbook has a
   file of its own**, and a workbook here has no file either, so the
   answer is the tree's answer and is empty.
+
+## 899. The survey: the tree and this tree, side by side
+
+§853 said the manifest does not say what a family tree has **not** been
+ported, and that the question needs the family trees side by side with
+this one. This is that.
+
+### What was built
+
+- **A survey**, measured and not remembered: the tree's **twelve**
+  crates and **three** apps against this tree's **fifty-two** crates
+  and **seven** apps; the tree's **196 230** lines of Rust against
+  this tree's **386 051**; and the two counts that matter — the
+  tree's function names and this tree's.
+- **A registry that holds every name of the tree's** (§895), and a
+  test that says so.
+
+### What the port found
+
+- **The tree's function surface is closed: 514 names.** The tree's
+  registry holds **490** and the tree's *host* carries **24** more
+  (§896–§898). This tree's registry holds **515**: every one of the
+  tree's, and one of its own (`EXPON`, an alias of `EXPONDIST`). Of
+  the 515, **455** are computed here and **60** are answered with the
+  reason they are not here — 31 arrays, 7 of the world outside the
+  workbook, 10 of the pattern and the cube, and 12 of the host's
+  tables, lambdas and places.
+- **The tree is one program and this tree is nine batteries.** The
+  tree's engine declares **306** commands; this tree's batteries carry
+  **916** — grid 188, sound 144, pdf 119, film 113, prose 110, layout
+  73, vector 67, cad 55 and fx 47 — and the MCP server carries
+  **1045**.
+- **The one domain the tree has and this tree has not is the file
+  formats.** The tree's `xlsx` crate is **12 217 lines** and reads and
+  writes XLSX in both of its spellings, XLSB, ODS and XLS (BIFF8),
+  with encrypted workbooks, pivot tables, charts and drawings. This
+  tree's grid battery reads and writes **CSV** — **565 lines** of
+  import and export — and has no XLSX at all.
+- **The tree's desktop is not a port target.** Its `ui-egui` crate is
+  **18 987 lines** of a desktop program; this tree has its own doors
+  — the terminal, the agent, the browser, the window, the bridge and
+  the studio — and they are a different design and not a port of that
+  one.
+- **The tree's engine is not a port target either.** Its **13 032**
+  lines are its own session, its own undo and its own recalculation;
+  this tree has its own — the SDK, the session, the plan, the undo.
+
+### What it cost
+
+- **A survey and no code**: the numbers are measured, and the gate
+  that checks them is the gate that was already there — the
+  registry's own test, and the port manifest's check.
+- **No new command**: a survey is not a command. The grid battery
+  still carries **188** commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The file formats are a project and not an arc.** XLSX is twelve
+  thousand lines in the tree, and a half-ported file format is worse
+  than no file format: a workbook that opens and loses half of
+  itself is a workbook that lies.
+- **A crate is not a battery**, and the survey compares the tree's
+  crates to this tree's batteries. The mapping is a judgement and
+  not a measurement.
+- **A closed function surface says nothing about the tree's
+  *behaviour*.** A function that is here may answer differently in a
+  case the tree answers another way — the tree's `SUBTOTAL` and this
+  tree's `SUBTOTAL` are not the same function (§898), and that is one
+  case of a kind the survey cannot count.
