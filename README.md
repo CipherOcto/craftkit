@@ -4336,6 +4336,7 @@ so.
 | the **world outside** the workbook | **built.** The clock, the random number, the network, the XML reader and the environment of the program are the tree's seven functions that ask the world, and each is refused and says why (§888) | §888 |
 | the **address** of a cell, and the **link** to it | **built.** ADDRESS writes the address of a cell in the tree's two styles, HYPERLINK writes the name of a link, VALUETOTEXT writes any value as text and ASC writes the full-width characters as half-width ones (§889) | §889 |
 | the **Bessel** and the **euro** | **built.** The four Bessel functions are here with the tree's four ways of working them out, and EUROCONVERT converts with the tree's table of the fixed rates (§890) | §890 |
+| the **forecast** of a line | **built.** FORECAST.LINEAR is the tree's FORECAST under its new name, and the two are one function (§891) | §891 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58811,3 +58812,41 @@ and the **euro**.
   the currencies were locked, and they have not changed since. A
   table of rates that changes with the day is a fact about the world
   and not a rule, and there is none here.
+
+## 891. The forecast of a line
+
+The tree has a **new name** for the prediction of a line.
+
+### What was built
+
+- **`FORECAST.LINEAR(x, known_ys, known_xs)`** — the prediction of
+  the line through the two sets of numbers at `x`, which is the
+  tree's `FORECAST` under its new name and the same function.
+
+### What the port found
+
+- **The tree's `FORECAST.LINEAR` is the tree's `FORECAST`**: the
+  same function, with a name that says what it does. The old name
+  stays and means the same thing.
+- **The tree's `FORECAST` and its `FORECAST.LINEAR` take the numbers
+  the other way round** from the rest of the regression family — the
+  **ys** come first and the **xs** second, and the `x` that is
+  predicted comes first of all. That is the tree's rule and it is
+  the rule here.
+
+### What it cost
+
+- **One name** in the regression, and the same function behind it.
+- **Two tests** in the grid battery's forecast test file: the two
+  names are one function, and a line that does not rise is a
+  division by nothing.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `FORECAST.ETS` family is not here**: it is a **model**
+  of a series in time — a season, a trend and a level, worked out
+  from the series itself — and it is a different thing from the line
+  of this section.
