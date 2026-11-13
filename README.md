@@ -4350,6 +4350,7 @@ so.
 | the **package**: a ZIP archive, read | **built.** The container of a workbook file is here — the directory, the parts, the stored and the compressed — with the tree's bounds and the tree's checksums (§902) | §902 |
 | the **XML reader**: a part of a file, read as elements | **built.** A part of a file is read as elements — the attributes, the children, the text, the entities — within the tree's own limits, and a part in UTF-16 as well (§903) | §903 |
 | the **workbook reader**: a workbook file, read as a workbook | **built.** A workbook file is read as a workbook — its sheets, their names, their cells, their values and their formulas — with the tree's grid bounds and the tree's date systems (§904) | §904 |
+| the **command** that imports a workbook file | **built.** `grid.import.xlsx` reads a workbook file into the document — a workbook, a sheet for each sheet of the file, and the cells — with the file's own date system (§905) | §905 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59696,3 +59697,64 @@ The file that comes in becomes a workbook.
   those and so does this one, in the battery.
 - **The workbook is not turned into a document here**: this crate gives
   back a workbook, and the battery is what puts one in a document.
+
+## 905. The command that imports a workbook file
+
+A workbook file goes into the document.
+
+### What was built
+
+- **One command** in the grid battery: `grid.import.xlsx`. It reads an
+  **XLSX** file and puts it in the document — a **workbook** node, a
+  **sheet** node for each sheet the file holds, and the cells of each
+  sheet in that sheet.
+- The **date system** of the file is the date system of the workbook:
+  the 1900 system or the 1904 one, and a number counted in one of them
+  is not a number counted in the other.
+- The **name** of the workbook is the name of the file, unless the
+  caller names it.
+
+### What the port found
+
+- **The tree's reader is a program, not a command**: it reads a file
+  into the tree's **model**, and the tree's model is not this tree's
+  model. Here the reader is a library (§904) and the battery is what
+  puts a workbook in a document — which is the tree's own rule that a
+  front end acts through the registry and not beside it.
+- **The tree's file may be a whole workbook and not a sheet**, and this
+  one is too: the command makes a **workbook** and a sheet for each
+  sheet of the file. The tree's `grid.import.csv` puts a sheet into a
+  workbook that is already there, because a CSV holds one sheet; a
+  workbook file holds a workbook.
+- **A file spells some formulas differently**: `_xlfn.` before a
+  function the file has and the tree has not heard of, and `_xlpm.`
+  before a parameter. The tree reads those with its own file-spelling
+  table; here the prefixes are dropped and the rest is the tree's own
+  text.
+- **A formula the tree cannot read is not imported as a formula**: the
+  cell keeps the value the file cached for it, and the import says how
+  many formulas were not read. The tree's reader keeps the formula
+  text it cannot parse as text, and here a formula that is quietly
+  wrong is worse than a formula that is missing.
+
+### What it cost
+
+- **One module** in the grid battery — `xlsximport` — of about 250
+  lines: the command and the file's formula text.
+- **Five tests** in a test file of its own: a workbook file becomes a
+  workbook, a formula is imported, a formula that cannot be read is not
+  imported, a file that is not a workbook is refused, and the date
+  system of the file is the date system of the workbook.
+- **One line** in the counted block of this README: the grid battery
+  has one command more.
+- **No new dependency**: the reader is a crate that is already in the
+  tree.
+
+### What it does not settle
+
+- **The styles are still not read**: a cell's number format is not
+  imported, and so a date is a number and not a date.
+- **A shared formula is still not filled in**: a cell that shares a
+  formula with another cell keeps its value and has no formula.
+- **The workbook is not written back**: a workbook that came from a file
+  is in the document, and there is no command that saves it.
