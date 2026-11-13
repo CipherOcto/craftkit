@@ -43,12 +43,27 @@ pub fn is_word_function(name: &str) -> bool {
             | "DBCS"
             | "JIS"
             | "PHONETIC"
+            | "ASC"
             | "BAHTTEXT"
     )
 }
 
 /// The most characters a text may hold: the tree's bound.
 const MAX_TEXT: usize = 32_767;
+
+/// A character written as its **half-width** form.
+///
+/// The tree's rule: the **full-width** letters, digits and marks of
+/// the `U+FF00` block are the half-width ones, and the **full-width
+/// space** is a space. A character that has no half-width form is the
+/// character itself.
+fn half_width(character: char) -> char {
+    match character {
+        '\u{FF01}'..='\u{FF5E}' => char::from_u32(character as u32 - 0xFF01 + 0x21).unwrap_or(character),
+        '\u{3000}' => ' ',
+        other => other,
+    }
+}
 
 /// The numerals of Rome and what they are worth.
 const NUMERALS: [(char, u32); 7] =
@@ -460,6 +475,16 @@ impl Book {
                     }
                 }
                 Value::Text(out)
+            }
+            "ASC" => {
+                // The tree's `ASC`: **full-width** characters written as
+                // **half-width** ones. A character that has no half-width
+                // form is the text itself.
+                let text = match self.text_at(sheet, arguments, 0, being) {
+                    Ok(text) => text,
+                    Err(message) => return Value::Error(message),
+                };
+                Value::Text(text.chars().map(half_width).collect())
             }
             _ => {
                 // `DBCS`, `JIS` and `PHONETIC`: the text itself.

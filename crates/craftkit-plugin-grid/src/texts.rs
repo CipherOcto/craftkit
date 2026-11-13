@@ -55,6 +55,8 @@ pub fn is_text_function(name: &str) -> bool {
             | "FIXED"
             | "DOLLAR"
             | "USDOLLAR"
+            | "VALUETOTEXT"
+            | "HYPERLINK"
     )
 }
 
@@ -463,6 +465,13 @@ impl Book {
             other => other,
         };
         let first = self.evaluate(sheet, &arguments[0], being);
+        // `VALUETOTEXT` takes **any** value, and `HYPERLINK` takes a
+        // link and a name: neither of them is a text to shape.
+        match name {
+            "VALUETOTEXT" => return self.value_to_text(sheet, &first, arguments, being),
+            "HYPERLINK" => return self.hyperlink(sheet, arguments, being),
+            _ => {}
+        }
         let text = match value_text(&first) {
             Ok(text) => text,
             Err(message) => return Value::Error(message),
@@ -515,6 +524,89 @@ impl Book {
             "TEXTBEFORE" | "TEXTAFTER" => self.around(sheet, name, arguments, being),
             "FIXED" | "DOLLAR" | "USDOLLAR" => self.fixed_of(sheet, name, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
+        }
+    }
+
+    /// The tree's `VALUETOTEXT`: **any** value written as text.
+    ///
+    /// The tree's rule: a text is the text, and in the **strict** form
+    /// it is written in quotes — and a quote in it is written twice. A
+    /// number is the number as it is written, an error is the error as
+    /// it is written, and nothing is nothing.
+    fn value_to_text(
+        &self,
+        sheet: &str,
+        value: &Value,
+        arguments: &[Expr],
+        being: &mut Vec<(String, crate::formula::CellRef)>,
+    ) -> Value {
+        // The **strict** form: the second argument says it, and it is
+        // the tree's `0` or `1`.
+        let strict = match arguments.get(1) {
+            Some(argument) => match self.evaluate(sheet, argument, being).as_number() {
+                Some(number) if number.is_finite() && (number.trunc() == 0.0 || number.trunc() == 1.0) => {
+                    number.trunc() == 1.0
+                }
+                _ => return Value::Error("#VALUE!".to_string()),
+            },
+            None => false,
+        };
+        let text = match value {
+            Value::Text(text) => {
+                if strict {
+                    format!("\"{}\"", text.replace('"', "\"\""))
+                } else {
+                    text.clone()
+                }
+            }
+            Value::Error(message) => message.clone(),
+            Value::Number(number) => crate::format::general(crate::arithmetic::clean(*number)),
+            Value::Bool(flag) => {
+                if *flag {
+                    "TRUE".to_string()
+                } else {
+                    "FALSE".to_string()
+                }
+            }
+            Value::Empty => String::new(),
+        };
+        text_val(text)
+    }
+
+    /// The tree's `HYPERLINK`: the **name** of a link, or the link
+    /// itself.
+    ///
+    /// The tree's rule: the **friendly name** is what the cell shows,
+    /// and when there is none the link itself is shown.
+    fn hyperlink(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, crate::formula::CellRef)>,
+    ) -> Value {
+        if arguments.is_empty() || arguments.len() > 2 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let link = self.evaluate(sheet, &arguments[0], being);
+        if let Value::Error(message) = &link {
+            return Value::Error(message.clone());
+        }
+        let Some(argument) = arguments.get(1) else {
+            // No **friendly name**: the link itself is what is shown.
+            return match crate::texts::value_text(&link) {
+                Ok(text) => Value::Text(text),
+                Err(message) => Value::Error(message),
+            };
+        };
+        let name = self.evaluate(sheet, argument, being);
+        match name {
+            // **Nothing** is nothing and not a zero: the tree's own
+            // friendly name that is empty is a zero.
+            Value::Empty => Value::Empty,
+            other => match crate::texts::value_text(&other) {
+                Ok(text) => Value::Text(text),
+                Err(message) => Value::Error(message),
+            },
         }
     }
 

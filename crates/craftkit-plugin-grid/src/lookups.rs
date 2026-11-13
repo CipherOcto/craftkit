@@ -64,7 +64,16 @@ use crate::formula::{Book, CellRef, Expr, Value};
 pub fn is_lookup_function(name: &str) -> bool {
     matches!(
         name,
-        "MATCH" | "VLOOKUP" | "HLOOKUP" | "LOOKUP" | "INDEX" | "ROWS" | "COLUMNS" | "XLOOKUP" | "XMATCH"
+        "MATCH"
+            | "VLOOKUP"
+            | "HLOOKUP"
+            | "LOOKUP"
+            | "INDEX"
+            | "ROWS"
+            | "COLUMNS"
+            | "XLOOKUP"
+            | "XMATCH"
+            | "ADDRESS"
     )
 }
 
@@ -269,6 +278,7 @@ impl Book {
             "ROWS" | "COLUMNS" => self.shape_call(sheet, name, arguments, being),
             "XLOOKUP" => self.xlookup_call(sheet, arguments, being),
             "XMATCH" => self.xmatch_call(sheet, arguments, being),
+            "ADDRESS" => self.address_call(sheet, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
     }
@@ -617,6 +627,89 @@ impl Book {
             Some(place) => Value::Number((place + 1) as f64),
             None => Value::Error("#N/A".to_string()),
         }
+    }
+
+    /// The tree's `ADDRESS`: the **address** of a cell, as text.
+    ///
+    /// The tree's rule:
+    ///
+    /// - the **row** is counted from one and the **column** from one,
+    ///   and a row or a column that is not there is a value error;
+    /// - the **absolute** argument says which part of the address is
+    ///   anchored: one for both, two for the row, three for the column
+    ///   and four for neither;
+    /// - the **style** argument says whether the address is written
+    ///   as `A1` or as `R1C1`, and `A1` is the default;
+    /// - the **sheet** argument puts the address in a sheet, and a
+    ///   sheet whose name needs quotes is quoted.
+    fn address_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 5 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let row = match self.number_at(sheet, arguments, 0, being) {
+            Ok(number) => number,
+            Err(message) => return Value::Error(message),
+        };
+        let column = match self.number_at(sheet, arguments, 1, being) {
+            Ok(number) => number,
+            Err(message) => return Value::Error(message),
+        };
+        let absolute = match self.optional_number(sheet, arguments, 2, being) {
+            Ok(Some(number)) => number.trunc() as i64,
+            Ok(None) => 1,
+            Err(message) => return Value::Error(message),
+        };
+        let style = match self.optional_number(sheet, arguments, 3, being) {
+            Ok(Some(number)) => number != 0.0,
+            Ok(None) => true,
+            Err(message) => return Value::Error(message),
+        };
+        let row = row.trunc();
+        let column = column.trunc();
+        if !(1.0..=crate::formula::MAX_ROWS as f64).contains(&row)
+            || !(1.0..=crate::formula::MAX_COLS as f64).contains(&column)
+            || !(1..=4).contains(&absolute)
+        {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let row = row as u64;
+        let column = column as u64;
+        let (row_anchored, column_anchored) = match absolute {
+            1 => (true, true),
+            2 => (true, false),
+            3 => (false, true),
+            _ => (false, false),
+        };
+        let cell = if style {
+            format!(
+                "{}{}{}{}",
+                if column_anchored { "$" } else { "" },
+                CellRef::column_text((column - 1) as u32),
+                if row_anchored { "$" } else { "" },
+                row
+            )
+        } else {
+            // The `R1C1` style: the row and the column, and the parts
+            // of them that are not anchored are in brackets.
+            format!(
+                "R{row_part}C{column_part}",
+                row_part = if row_anchored { row.to_string() } else { format!("[{row}]") },
+                column_part = if column_anchored { column.to_string() } else { format!("[{column}]") }
+            )
+        };
+        // The **sheet**: the name of one, quoted when it needs it.
+        let Some(argument) = arguments.get(4) else {
+            return Value::Text(cell);
+        };
+        let name = match self.text_at(sheet, arguments, 4, being) {
+            Ok(text) => text,
+            Err(message) => return Value::Error(message),
+        };
+        let _ = argument;
+        if name.is_empty() {
+            return Value::Text(format!("!{cell}"));
+        }
+        Value::Text(format!("{}!{cell}", crate::formula::quoted_sheet(&name)))
     }
 
     /// The **match mode** of a search: how a value may meet the

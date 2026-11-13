@@ -3690,10 +3690,19 @@ fn number_text(number: f64) -> String {
 /// The name of a sheet, and its `!` — quoted when the name needs it.
 fn sheet_prefix(sheet: &Option<String>) -> String {
     let Some(name) = sheet else { return String::new() };
+    format!("{}!", quoted_sheet(name))
+}
+
+/// The name of a sheet, **quoted** when the name needs it.
+///
+/// The tree's rule: a name of letters, digits and underscores that does
+/// not begin with a digit is written as it is, and any other name is
+/// written in single quotes — and a quote in the name is written twice.
+pub(crate) fn quoted_sheet(name: &str) -> String {
     let plain = !name.is_empty()
         && name.chars().all(|character| character.is_ascii_alphanumeric() || character == '_')
         && !name.chars().next().is_some_and(|character| character.is_ascii_digit());
-    if plain { format!("{name}!") } else { format!("'{}'!", name.replace('\'', "''")) }
+    if plain { name.to_string() } else { format!("'{}'", name.replace('\'', "''")) }
 }
 
 // ---------------------------------------------------------------------------

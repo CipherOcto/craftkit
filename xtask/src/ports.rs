@@ -268,6 +268,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/outside.rs",
         section: "§888",
     },
+    Port {
+        rule: "the address of a cell, and the link to it",
+        from: "gridcraft/crates/functions/src/lookup.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/lookups.rs",
+        command: "craftkit-plugin-grid::lookups",
+        test: "crates/craftkit-plugin-grid/tests/addresses.rs",
+        section: "§889",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
