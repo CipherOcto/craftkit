@@ -4322,6 +4322,7 @@ so.
 | the **counting** of more than one condition | **built.** COUNTIFS, SUMIFS, AVERAGEIFS, MAXIFS and MINIFS gather the cells that meet every condition, and AVERAGEIF averages what meets one — with the tree's cut criterion and its division by zero (§874) | §874 |
 | the **finding** of a value, the tree's way | **built.** XLOOKUP gives the value at the place of the needle and XMATCH gives the place — with the tree's match modes, its wildcards and the value given for a needle that is not there (§875) | §875 |
 | the **days** between two dates | **built.** DAYS360 counts them under the year of three hundred and sixty days, and DATEDIF counts the time between two dates in the unit that is asked for (§876) | §876 |
+| the **fraction** of a year, and the working days | **built.** YEARFRAC gives the fraction of a year under a basis, and NETWORKDAYS and WORKDAY count and step over the working days (§877) | §877 |
 
 ### The list of things that are honestly not there: empty
 
@@ -57947,6 +57948,85 @@ A formula may ask how far apart two dates are.
 - **The tree's `NETWORKDAYS` and `WORKDAY` are not here.** They take a
   list of holidays, and a list is an array, and this tree has no
   arrays.
+- **The tree's `NOW` and `TODAY` are not here.** They are the clock,
+  and a formula that reads the clock is a different thing from a
+  formula that reads the sheet.
+
+## 877. The fraction of a year, and the working days
+
+A formula may ask how much of a year two dates make, and it may ask
+which days are **working days**.
+
+### What was built
+
+- **Three functions** of the grid battery's formula language:
+  - `YEARFRAC(start, end, [basis])` — the **fraction of a year**
+    between two dates;
+  - `NETWORKDAYS(start, end)` — the **working days** between two
+    dates;
+  - `WORKDAY(start, days)` — the date that is **n working days** after
+    a date.
+- The **bases** of `YEARFRAC` are the tree's:
+  - zero — the 30/360;
+  - one — the actual days over the actual days of the year;
+  - two — the actual days over a year of three hundred and sixty
+    days;
+  - three — the actual days over a year of three hundred and
+    sixty-five days;
+  - four — the European 30/360.
+- The two dates are put **in order**, and a basis that is not one of
+  the five is `#NUM!`.
+- The **working days** are the days of the week that are not the
+  Saturday and the Sunday, and the two dates are **counted both
+  ways**: the first day and the last day are working days when they
+  are one. A start date after the end date gives the count with the
+  other sign.
+- The **start date of a `WORKDAY` is not one of the days that are
+  counted**: the first working day after it is the first step, and a
+  start date that is a Saturday or a Sunday moves to the next working
+  day first.
+
+### What the port found
+
+- **The tree's `YEARFRAC` counts under the *financial* 30/360, and
+  not under the one its `DAYS360` uses.** The basis zero of the tree's
+  `YEARFRAC` is the tree's financial basis zero — the one the bonds
+  use — while the tree's `DAYS360` is the other one (§876). So the
+  two are in the tree, and they differ, and this tree has both: the
+  financial one is in the module `daycounts` and the spreadsheet one
+  is in the module `datetimes`.
+- **The tree's `YEARFRAC` has one rule for the actual days of the
+  year.** When the two dates are within a year, the year they are
+  measured against is three hundred and sixty-six days when a leap
+  day lies between them, and three hundred and sixty-five otherwise;
+  when they are not, the year is the **average** of the years they
+  are between.
+- **The tree's `WORKDAY` refuses more than ten million days.** Ten
+  million days is a year of twenty-seven thousand, and the tree
+  refuses more than that.
+- **The tree's holidays are a list, and a list is an array.** The
+  tree's `NETWORKDAYS` and `WORKDAY` take a list of holidays, and
+  this tree has no arrays: a list of holidays is refused with a
+  message that says so.
+
+### What it cost
+
+- **Three functions** in the module `datetimes`, a **leap day** helper
+  of their own, and the tree's five bases.
+- **Five more tests** in the grid battery (`tests/intervals.rs`): the
+  fraction of a year under a basis, the two dates being put in order
+  and a basis that is not one of the five, the working days between
+  two dates, the date that is n working days after a date, and the
+  holidays not being here.
+- **No new command**: the time is a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `NETWORKDAYS.INTL` and `WORKDAY.INTL` are not here.**
+  They take a **weekend** of their own — a week of seven marks, or a
+  number — and a list of holidays, and a list is an array.
 - **The tree's `NOW` and `TODAY` are not here.** They are the clock,
   and a formula that reads the clock is a different thing from a
   formula that reads the sheet.
