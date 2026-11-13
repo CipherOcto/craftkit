@@ -147,6 +147,10 @@ pub const TABLE: &[(&str, Class)] = &[
     // L2 — the whole surface a plugin needs: the registry, the session, the
     // document and the format.
     ("craftkit-sdk", Class::Layer(2)),
+    // The workbook reader: an XLSX file, read as a workbook. It sits
+    // above the package reader and the XML reader, which are one layer
+    // down.
+    ("craftkit-xlsx", Class::Layer(2)),
     // L3 — the things above the SDK that are not plugins: the control channel,
     // the MCP door, and the libraries that speak the SDK's own types.
     ("craftkit-control", Class::Layer(3)),

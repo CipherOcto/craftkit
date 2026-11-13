@@ -1,0 +1,19 @@
+[package]
+name = "craftkit-xlsx"
+description = "The XLSX reader: a workbook file, read as a workbook. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The **package** and the **XML reader**: a workbook file is a ZIP
+# archive of XML parts, and the two crates below read them. Both are
+# libraries, and the linker does not wire them in.
+craftkit-zip = { workspace = true }
+craftkit-xml = { workspace = true }
+
+[dev-dependencies]
+# The **package reader**, and only for the tests: it writes the
+# packages the tests read. Nothing that ships links it.
+craftkit-zip = { workspace = true }

@@ -205,6 +205,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // L2 — the whole surface a plugin needs: the registry, the session,
     // the document and the format.
     ("craftkit-sdk", 2),
+    // The **workbook reader**: an XLSX file, read as a workbook. It is
+    // here and not at L1 because a workbook is a **package** — which is
+    // one layer down — and the package is a reader of its own.
+    ("craftkit-xlsx", 2),
     // L3 — the things that sit above the SDK and are not plugins: the
     // MCP server, the control channel, and the vector geometry library,
     // which speaks the SDK's own types.

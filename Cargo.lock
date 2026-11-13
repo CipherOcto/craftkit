@@ -570,6 +570,8 @@ dependencies = [
  "craftkit-raster",
  "craftkit-scratch",
  "craftkit-sdk",
+ "craftkit-xlsx",
+ "craftkit-zip",
 ]
 
 [[package]]
@@ -831,6 +833,14 @@ dependencies = [
  "craftkit-studio",
  "eframe",
  "egui",
+]
+
+[[package]]
+name = "craftkit-xlsx"
+version = "0.2.0"
+dependencies = [
+ "craftkit-xml",
+ "craftkit-zip",
 ]
 
 [[package]]
