@@ -122,6 +122,8 @@ commands! {
             let mut unread = 0u64;
             let mut formats = 0u64;
             let mut unread_formats = 0u64;
+            let mut names = 0u64;
+            let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
             for sheet in &workbook.sheets {
                 // The **name** of the sheet: the tree's rules, and the
@@ -200,6 +202,52 @@ commands! {
                     data,
                 );
             }
+            // The **names** of the workbook: the words its formulas use.
+            //
+            // A name here stands for a **range**, and so a name whose
+            // text is not a range — a number, a function — is not a
+            // name this tree has, and it is not imported.
+            let mut imported_names = craftkit_sdk::serde_json::Map::new();
+            let sheets: Vec<String> =
+                workbook.sheets.iter().map(|sheet| sheet.name.clone()).collect();
+            for defined in &workbook.names {
+                let text = defined.refers_to.trim().trim_start_matches('=').trim();
+                // A name of **one sheet** may say the sheet by its
+                // number instead of its name, and the scope says which
+                // sheet that is.
+                let text = match text.rsplit_once('!') {
+                    Some(_) => text.to_string(),
+                    None => match &defined.scope {
+                        Some(sheet) => format!("{sheet}!{text}"),
+                        None => text.to_string(),
+                    },
+                };
+                match crate::names::parse_refers_to(&text) {
+                    Ok((sheet, area)) => {
+                        // The **sheet** the name stands in must be one
+                        // of the sheets that came in.
+                        let Some(sheet) = sheets.iter().find(|name| name.eq_ignore_ascii_case(&sheet)) else {
+                            unread_names += 1;
+                            continue;
+                        };
+                        if let Some(reason) = crate::names::why_not(&defined.name) {
+                            unread_names += 1;
+                            let _ = reason;
+                            continue;
+                        }
+                        let refers_to = format!("{sheet}!{}", area_text(&area));
+                        imported_names.insert(defined.name.clone(), json!(refers_to));
+                        names += 1;
+                    }
+                    Err(_) => unread_names += 1,
+                }
+            }
+            if !imported_names.is_empty() {
+                let names = craftkit_sdk::serde_json::Value::Object(imported_names);
+                if let Some(node) = session.document_mut()?.node_mut(workbook_id) {
+                    node.data["names"] = names;
+                }
+            }
             let mut summary = format!("imported {filled} cell(s) into the workbook `{name}`");
             if unread > 0 {
                 summary.push_str(&format!("; {unread} formula(s) could not be read and were not imported"));
@@ -207,6 +255,11 @@ commands! {
             if unread_formats > 0 {
                 summary.push_str(&format!(
                     "; {unread_formats} format(s) could not be read and were not imported"
+                ));
+            }
+            if unread_names > 0 {
+                summary.push_str(&format!(
+                    "; {unread_names} name(s) could not be read and were not imported"
                 ));
             }
             Ok(Outcome::changed(summary).with_data(json!({
@@ -218,11 +271,22 @@ commands! {
                 "unread_formulas": unread,
                 "formats": formats,
                 "unread_formats": unread_formats,
+                "names": names,
+                "unread_names": unread_names,
                 "system": system.name(),
                 "warnings": workbook.warnings,
             })))
 
         }
+    }
+}
+
+/// The **area** of a range, written back the way it is written.
+fn area_text(area: &crate::formula::Area) -> String {
+    if area.start == area.end {
+        area.start.to_text()
+    } else {
+        format!("{}:{}", area.start.to_text(), area.end.to_text())
     }
 }
 

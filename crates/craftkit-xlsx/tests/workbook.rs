@@ -204,6 +204,28 @@ fn the_format_of_a_cell_is_read() {
     assert_eq!(cells[2].format, None, "and a cell with no style has no format");
 }
 
+/// The **names** of a workbook are read: the words its formulas use.
+#[test]
+fn the_names_of_a_workbook_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/><sheet name="Two" sheetId="2" r:id="rId2"/></sheets><definedNames><definedName name="Sales">One!$A$1:$B$4</definedName><definedName name="Local" localSheetId="1">$A$1</definedName><definedName name="_xlnm.Print_Area" localSheetId="0">One!$A$1:$B$2</definedName></definedNames></workbook>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.names.len(), 2, "two names: the built-in one is not read");
+    assert_eq!(workbook.names[0].name, "Sales", "the first name");
+    assert_eq!(workbook.names[0].refers_to, "One!$A$1:$B$4", "and what it stands for");
+    assert_eq!(workbook.names[0].scope, None, "and it belongs to the workbook");
+    assert_eq!(workbook.names[1].name, "Local", "the second name");
+    assert_eq!(workbook.names[1].scope, Some("Two".to_string()), "and it belongs to a sheet");
+}
+
 /// A package with **no workbook** is refused.
 #[test]
 fn a_package_with_no_workbook_is_refused() {

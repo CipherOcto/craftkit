@@ -412,6 +412,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§906",
     },
+    Port {
+        rule: "the defined names of a workbook: the names the formulas use",
+        from: "gridcraft/crates/xlsx/src/read.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "craftkit-xlsx::read",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§907",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

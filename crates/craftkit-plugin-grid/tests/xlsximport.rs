@@ -212,6 +212,37 @@ fn a_date_in_the_file_is_a_date() {
     assert!(text.contains("2023"), "the cell shows the date: {text}");
 }
 
+/// The **names** of a workbook are imported: the words its formulas
+/// use.
+#[test]
+fn the_names_of_a_workbook_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="Sales">One!$A$1:$B$4</definedName></definedNames></workbook>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["names"].as_u64(), Some(1), "one name was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let read = session
+        .execute("grid.name.get", &json!({ "workbook": workbook, "name": "Sales" }))
+        .expect("the name is read");
+    assert_eq!(read.data["refers_to"].as_str(), Some("One!A1:B4"), "and what it stands for");
+}
+
 /// A file that is **not a workbook** is refused.
 #[test]
 fn a_file_that_is_not_a_workbook_is_refused() {

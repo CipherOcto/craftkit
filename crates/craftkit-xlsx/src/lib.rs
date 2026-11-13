@@ -165,11 +165,34 @@ pub enum DateSystem {
     Y1904,
 }
 
+/// A **name** of a workbook: a word that stands for a range of cells.
+///
+/// The name is the file's own, and so is the text it stands for: a
+/// file writes that text as a formula, and what it names is read from
+/// the text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Name {
+    /// The name itself.
+    pub name: String,
+    /// The **scope** of the name: the sheet it belongs to, when it
+    /// belongs to one, and nothing when it belongs to the workbook.
+    ///
+    /// The scope is a sheet's **name**, and not a sheet's number: the
+    /// number in the file counts the sheets the file holds, and a file
+    /// may hold sheets this reader does not read.
+    pub scope: Option<String>,
+    /// The text the name stands for.
+    pub refers_to: String,
+}
+
 /// A **workbook**: its sheets and its date system.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Workbook {
     /// The sheets, in the order the file holds them.
     pub sheets: Vec<Sheet>,
+    /// The **names** of the workbook: the words the formulas use for
+    /// the ranges they name.
+    pub names: Vec<Name>,
     /// The date system the numbers of the cells are counted in.
     pub system: DateSystem,
     /// The **warnings**: what could not be read, and what was kept
@@ -217,6 +240,14 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
         workbook.system = DateSystem::Y1904;
     }
 
+    let sheet_names: Vec<String> = workbook_xml
+        .child("sheets")
+        .map(|sheets| {
+            sheets.kids("sheet").map(|sheet| sheet.attr("name").unwrap_or("").to_string()).collect()
+        })
+        .unwrap_or_default();
+    workbook.names = names_of(&workbook_xml, &sheet_names);
+
     let workbook_rels = rels_of(&mut package, &part)?;
     let strings = shared_strings(&mut package, &workbook_rels, &mut workbook.warnings)?;
     let styles = read_styles_of(&mut package, &workbook_rels, &mut workbook.warnings);
@@ -250,6 +281,35 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
     }
 
     Ok(workbook)
+}
+
+/// The **names** of a workbook: the words its formulas use.
+///
+/// The built-in names — the ones a file gives to the print area, the
+/// print titles and the filter — are not names a formula uses, and
+/// they are not read: this reader gives back the workbook's shape, and
+/// the shape is the sheets, the cells and the names.
+fn names_of(workbook_xml: &craftkit_xml::El, sheets: &[String]) -> Vec<Name> {
+    let Some(names) = workbook_xml.child("definedNames") else { return Vec::new() };
+    let mut out = Vec::new();
+    for element in names.kids("definedName") {
+        let Some(name) = element.attr("name") else { continue };
+        // A **built-in** name is not a name: it says something about
+        // the printing of a sheet or the filter of one.
+        if name.to_ascii_lowercase().starts_with("_xlnm.") {
+            continue;
+        }
+        let refers_to = element.text.trim().to_string();
+        if refers_to.is_empty() {
+            continue;
+        }
+        // The **scope**: the sheet the name belongs to, by the number
+        // the file gives it, and the number counts the sheets of the
+        // file and not the sheets this reader reads.
+        let scope = element.attr_u32("localSheetId").and_then(|number| sheets.get(number as usize).cloned());
+        out.push(Name { name: name.to_string(), scope, refers_to });
+    }
+    out
 }
 
 /// The **shared strings** of a workbook: the texts its cells share.
