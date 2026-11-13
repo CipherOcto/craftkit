@@ -2233,6 +2233,10 @@ impl Book {
         if let Some(reason) = crate::refused::reason_for(name) {
             return Value::Error(reason.to_string());
         }
+        // The **model of a series in time**.
+        if crate::ets::is_ets_function(name) {
+            return self.ets(sheet, name, arguments, being);
+        }
         if crate::matrices::is_matrix_function(name) {
             return self.matrices(sheet, name, arguments, being);
         }
