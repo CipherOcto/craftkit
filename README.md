@@ -4320,6 +4320,7 @@ so.
 | the **cues** of a track written as an SCC file | **built.** The cues of a track are written as an SCC file — the tree's pop-on load, its rows, its characters and its timecode (§695) | §695 |
 | the **cues** of an MCC file | **built.** An MCC file is read — the tree's abbreviations, its distribution packets and its field one (§696) | §696 |
 | the **counting** of more than one condition | **built.** COUNTIFS, SUMIFS, AVERAGEIFS, MAXIFS and MINIFS gather the cells that meet every condition, and AVERAGEIF averages what meets one — with the tree's cut criterion and its division by zero (§874) | §874 |
+| the **finding** of a value, the tree's way | **built.** XLOOKUP gives the value at the place of the needle and XMATCH gives the place — with the tree's match modes, its wildcards and the value given for a needle that is not there (§875) | §875 |
 
 ### The list of things that are honestly not there: empty
 
@@ -57783,3 +57784,89 @@ counts what meets **several**.
   first is `#VALUE!`, and so is this tree's** — but the tree's ranges
   may be **resized** by the evaluator before they are read, and this
   tree's may not.
+
+## 875. The finding of a value, the tree's way
+
+The tree has two lookups that `MATCH` and `VLOOKUP` are not, and they
+are a pair.
+
+### What was built
+
+- **Two functions** of the grid battery's formula language:
+  - `XLOOKUP(needle, lookup_array, return_array, [if_not_found],
+    [match_mode], [search_mode])` — the value of the **return array**
+    at the place of the needle;
+  - `XMATCH(needle, lookup_array, [match_mode], [search_mode])` — the
+    **place** of the needle, counted from one.
+- The **match mode** is how a value may meet the needle:
+  - `0` — the **same** value, without the wildcards (the default);
+  - `-1` — the **largest** value below the needle;
+  - `1` — the **smallest** value above the needle;
+  - `2` — the same text, with the **wildcards** in it.
+- The **search mode** is which way the search goes: `1` is from the
+  first to the last, and `-1` is from the last to the first.
+- The **lookup array** is a **vector** — a row or a column — and the
+  return array is of the same shape: a column lookup returns the **rows**
+  of the return array, and a row lookup returns its **columns**. A
+  lookup array of one cell takes the orientation of the return array.
+- The needle that is **not there** is the value that is given, and
+  `#N/A` when there is none.
+- The **next smaller** and the **next larger** try the exact search
+  first, so an exact match wins over both.
+
+### What the port found
+
+- **The tree's `XLOOKUP` may return a whole row, and this tree has no
+  arrays.** The tree's `XLOOKUP` gives back the row of the return
+  array that stands opposite the needle, and that is an array. Here the
+  result is one cell, and a return array that is wider than one cell
+  is refused with a message that says so.
+- **The tree's binary search is a bisection, and a bisection is not a
+  rule that can be written down in a sentence.** The tree's search mode
+  `2` and `-2` are that search, over data that is sorted. They are
+  refused here — the same way the approximate search of `MATCH` and
+  `VLOOKUP` is refused (§370).
+- **The tree's numbers are ordered exactly in a lookup, and not as the
+  fifteen digits of an equality.** The tree's `=` says that `0.1 + 0.2`
+  and `0.3` are the same number, and its lookups do not: they order
+  numbers as numbers they are. So the next smaller and the next larger
+  are ordered here the way the tree orders them, and not the way the
+  criteria of §365 compare them.
+- **The tree's exact search does not use the wildcards, and the
+  wildcards are a match mode of their own.** The tree's `XLOOKUP` with
+  the match mode `0` matches the text itself, and the mode `2` is the
+  one that holds the wildcards. This tree's `MATCH` and `VLOOKUP` use
+  the wildcards in their exact search — a difference from the tree that
+  §370 already recorded — so the two are told apart here as well.
+- **This tree's parser has no empty argument.** The tree's `XLOOKUP`
+  may leave the value that is given for a needle that is not there out,
+  and give the match mode instead. Here an argument list is a list of
+  values, so the value is asked for when a mode is used.
+
+### What it cost
+
+- **One new pair of functions** in the module `lookups`, with the
+  **match mode**, the **search mode**, the **place** of a needle and
+  the **values** of a vector.
+- **One new test file** in the grid battery (`tests/xlookups.rs`): ten
+  tests — the value at the place of the needle, the needle that is not
+  there, the wildcards being a match mode of their own, the next
+  smaller and the next larger and the exact match winning over both,
+  the search going from the last to the first, the binary search being
+  refused, the lookup array being a row or a column and the return
+  array being of the same shape, the return of a whole row being
+  refused, the place of a needle, and the modes of `XMATCH`.
+- **No new command**: the finding is a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `HLOOKUP` and `LOOKUP` are not here.** `HLOOKUP` is the
+  lookup across, and `LOOKUP` is the lookup of a vector — and the
+  tree's `LOOKUP` is the approximate search from end to end, so it is
+  the search that is not here.
+- **The tree's `LOOKUP` may search a wide array by its first row**,
+  and this tree has no arrays.
+- **The tree's `XLOOKUP` may take a needle that is a range**, and that
+  is a spilled formula in the tree and is not a thing this tree has.
