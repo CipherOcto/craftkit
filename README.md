@@ -4346,6 +4346,7 @@ so.
 | the two **heavy** ones: the cell, and the aggregate | **built.** The tree's CELL asks its twelve questions and says the reason for the one it cannot answer, and the tree's AGGREGATE has its nineteen functions and its four options (§898) | §898 |
 | the **survey**: the tree and this tree, side by side | **built.** The tree's function surface is closed — 514 names, 455 computed here and 60 answered with a reason — and the one domain the tree has and this tree has not is its file formats (§899) | §899 |
 | the tree's **subtotal**, and its **error** | **built.** An error in the range of a SUBTOTAL is the error of the whole subtotal, as the tree says (§900) | §900 |
+| the **inflate**, and the crate it belongs in | **built.** The RFC 1951 inflate is a library of its own now — the raw stream and the zlib wrapper — and the picture reader and the PDF filter both read it from there (§901) | §901 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59448,3 +59449,61 @@ this tree's is settled.
   a case the tree answers another way would still be a difference.**
   The survey (§899) says a closed function surface says nothing about
   the tree's behaviour, and this is the first case of it.
+
+## 901. The inflate, and the crate it belongs in
+
+The reading of a **workbook file** begins with a stream of bytes that
+is compressed, and the inflate is the first thing it needs.
+
+### What was built
+
+- **`craftkit-deflate`** — a library of its own: the **inflate**, from
+  RFC 1951, with the **raw** stream and the **zlib** wrapper.
+- The **picture reader** uses it, and so does the **PDF battery's**
+  FlateDecode filter — which was reaching into the *picture* crate for
+  a stream that has nothing to do with pictures.
+
+### What the port found
+
+- **The inflate was in the wrong crate.** It lived in the picture
+  reader, because a PNG's pixels are a zlib stream and the kit had
+  none (§67, §68). But two other things want the same thing: a
+  **package** reader — the tree's workbook file is a ZIP, and a ZIP
+  entry is a compressed stream — and the PDF battery's filter, which
+  asked the picture crate for it.
+- **The zlib wrapper and the raw stream are two things.** A PNG's
+  pixels and a PDF's filter are **zlib**: two bytes at the front and a
+  checksum at the end. A package entry is **raw DEFLATE**, with
+  neither. The library says both, and the picture reader keeps its own
+  name for the zlib one so that nothing else moves.
+- **The tree's own crate reaches for two crates from the registry** —
+  `zip` and `quick-xml` — and this tree's readers are its own code
+  (§67, §68). So the ZIP container and the XML reader are written here
+  too, and the inflate comes from here and not from the registry.
+- **Two crates of the same layer cannot share code.** The layering
+  says a crate depends only on **strictly lower** layers, and the
+  picture reader was in the half. So the picture reader is one layer
+  up now — it builds on the inflate, and a reader that builds on
+  another reader is not in the half.
+
+### What it cost
+
+- **One crate** — `craftkit-deflate` — with the inflate moved into it,
+  and the picture reader and the PDF battery pointing at it.
+- **Three tables and the architecture document** know the new crate,
+  and the picture reader's new layer.
+- **Eight tests** in the new crate's test file: the four about the
+  zlib stream, moved from the picture reader, and four about the raw
+  stream — which is the thing a package reader wants.
+- **No new dependency**: the tree's third-party set is unchanged, and
+  the compressor in the tests is the one the picture reader's tests
+  already used.
+
+### What it does not settle
+
+- **A compressor is not here.** The tree writes packages as well as
+  reads them, and this library only reads; a writer is a different
+  program, and the arcs that read a workbook do not need one.
+- **The picture reader's own tests still live in the picture crate**,
+  and the picture reader still re-exports the inflate under its old
+  name: the move was a move, and nothing else was renamed.
