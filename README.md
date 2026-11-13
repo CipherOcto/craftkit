@@ -4256,6 +4256,7 @@ so.
 | the **grid battery**, as a table | **built.** The last battery is a table in 69 files, and the tree's readers read a character literal — a quote, as a character — so the source and the registry agree again (§869) | §869 |
 | the **battery**, as a table, and the gate that says so | **built.** The tree's own gate has a sixth rule — a battery declares its commands as rows of a table, and one that uses the other spelling is a finding — and the house's rules, the architecture and the recipes name both spellings (§870) | §870 |
 | the **snapshot**, and what it pins | **built.** The battery snapshots now pin every field the registry carries that is data — the parameters' help, their other spelling, their unit, the journal and the example flags — and a new test says that every one of the tree's 2 719 parameters has a help (§871) | §871 |
+| the **tables**, and how they read | **built.** The nine batteries are written out again with the roughness gone — a parameter's help sits on its parameter, a body has no air around it, a row is a row — and the change is 3 203 blank lines and not one other character (§872) | §872 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57538,3 +57539,75 @@ This arc asks the question a claim should be asked: **was it all of it?**
 - **The snapshot is a file of 961 lines.** It is a **copy** of the
   registry, and a copy is a thing that can drift: the tree's own test is
   what says that it has not, and that test runs on every change.
+
+## 872. The tables read as tables
+
+§860–§871 made the batteries tables and proved the registry did not move.
+This arc is about the one thing a proof does not cover: **how the table
+reads** to the person who has to read it.
+
+### What was built
+
+- **The nine batteries are written out again, with the roughness gone.**
+  Three things changed, and they are all blank lines:
+  - **a parameter's doc comment sits on its parameter** — there is no
+    empty line between the help and the thing it is about;
+  - **a body has no air around it** — the `run: { … }` block starts on the
+    line after the brace and ends on the line before it;
+  - **a row is a row** — there is an empty line between the rows, so a
+    table reads as a list of commands.
+  ```rust
+      params: {
+          /// What to call the group.
+          name: Text,
+          /// The block the group stands in.
+          block: NodeRef,
+      },
+      run: {
+          let id = "cad.group.add".to_string();
+          …
+      }
+  ```
+- **Nothing else moved.** The change is **3 203 blank lines** and **not one
+  other character**: `git diff --ignore-blank-lines` says *zero insertions
+  and zero deletions* across 362 files. And the registry is unchanged —
+  the nine snapshots, which now pin the parameters' **help** as well
+  (§871), all pass.
+
+### What the port found
+
+- **Rustfmt does not format a macro's body.** A `commands! { … }` table is
+  a macro invocation, and the formatter leaves it exactly as it is — so
+  the whitespace of a converted battery is **the tree's**, and nobody
+  else is going to tidy it. The conversion wrote what it wrote.
+- **The roughness was in the writer, not in the table.** Three small
+  habits of the emitting code — an empty attributes group printed as an
+  empty line, a body pasted with its own newlines, rows joined with
+  nothing between them — and every one of them was invisible to the
+  compiler, to the registry and to the snapshots. **A proof of behaviour
+  is not a proof of form.**
+- **The registry was the only witness, and it said nothing about the
+  shape.** Nine snapshots, each holding a whole battery, and not one of
+  them could see a blank line — because a blank line is not a thing the
+  registry carries.
+
+### What it cost
+
+- **The nine batteries**: 362 files, 3 203 blank lines, and the emitter
+  that wrote them.
+- **No new test**: the snapshots are the test, and they were already
+  there.
+
+### What it does not settle
+
+- **The table is still not shorter than the struct.** This arc made the
+  table read better; it did not make it smaller, and the trade §858 named
+  is still the trade.
+- **The emitter is still a script in a temporary folder.** The tree holds
+  the result and the check; the rules the emitter followed are not
+  written down anywhere a reader can go — so the next conversion will
+  write its own emitter, and it will have its own habits.
+- **A table's readability is a judgement, and this arc only made one.**
+  The rows are one command each, the parameters are a list, and the body
+  is the programmer's own text. Whether a row reads as a **rule** is a
+  question a person answers, and the tree has no instrument for it.
