@@ -179,6 +179,10 @@
 //! not a table, and so each of them is refused with the reason (the
 //! module `arrays`).
 //!
+//! And a formula may ask for the **determinant** of a square of
+//! numbers — the one function of a matrix that gives back a number
+//! (the module `matrices`).
+//!
 //! And a formula may **find** a value in a range — `MATCH`, `VLOOKUP`
 //! and `INDEX` — and the search is the **exact** one; the tree's
 //! approximate search is not here, and a lookup that asks for it says
@@ -424,6 +428,7 @@ mod links;
 mod logic;
 mod lookups;
 mod marks;
+mod matrices;
 mod merges;
 mod moving;
 mod namereading;

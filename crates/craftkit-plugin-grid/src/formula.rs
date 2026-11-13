@@ -2217,6 +2217,9 @@ impl Book {
         if crate::arrays::is_array_function(name) {
             return Value::Error("not supported yet: an array".to_string());
         }
+        if crate::matrices::is_matrix_function(name) {
+            return self.matrices(sheet, name, arguments, being);
+        }
         if crate::complex::is_complex_function(name) {
             return self.complex(sheet, name, arguments, being);
         }

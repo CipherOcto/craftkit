@@ -94,7 +94,7 @@ fn ceil_floor_math(number: f64, significance: f64, up: bool, away: bool) -> Resu
 
 /// The number with **fifteen significant digits**: the binary noise
 /// is taken off, so that `0.1 + 0.2` is `0.3`.
-fn clean(number: f64) -> f64 {
+pub(crate) fn clean(number: f64) -> f64 {
     if !number.is_finite() || number == 0.0 {
         return number;
     }

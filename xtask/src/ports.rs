@@ -241,6 +241,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/arrays.rs",
         section: "§885",
     },
+    Port {
+        rule: "the determinant of a square",
+        from: "gridcraft/crates/functions/src/math/matrix.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/matrices.rs",
+        command: "craftkit-plugin-grid::matrices",
+        test: "crates/craftkit-plugin-grid/tests/matrices.rs",
+        section: "§886",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
