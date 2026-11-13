@@ -4349,6 +4349,7 @@ so.
 | the **inflate**, and the crate it belongs in | **built.** The RFC 1951 inflate is a library of its own now — the raw stream and the zlib wrapper — and the picture reader and the PDF filter both read it from there (§901) | §901 |
 | the **package**: a ZIP archive, read | **built.** The container of a workbook file is here — the directory, the parts, the stored and the compressed — with the tree's bounds and the tree's checksums (§902) | §902 |
 | the **XML reader**: a part of a file, read as elements | **built.** A part of a file is read as elements — the attributes, the children, the text, the entities — within the tree's own limits, and a part in UTF-16 as well (§903) | §903 |
+| the **workbook reader**: a workbook file, read as a workbook | **built.** A workbook file is read as a workbook — its sheets, their names, their cells, their values and their formulas — with the tree's grid bounds and the tree's date systems (§904) | §904 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55889,7 +55890,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 188 |
+| grid | 189 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -59629,3 +59630,69 @@ The last piece under the workbook reader is here.
 - **The package is still not read as a workbook**: the parts of a
   workbook are related to one another by a part of its own — the
   relationships — and that is the next arc.
+
+## 904. The workbook reader: a workbook file, read as a workbook
+
+The file that comes in becomes a workbook.
+
+### What was built
+
+- **`craftkit-xlsx`** — a library of its own: the **workbook reader**.
+  It reads a workbook file and gives back the **sheets** it holds, their
+  names, and the **cells** of each of them — their values and their
+  formulas.
+- **The relationships are read too**: the workbook part says which
+  sheets there are, and the relationships of that part say which part
+  each sheet is. A sheet's name is not its part.
+- **The date system** of the workbook is read: the 1900 system or the
+  1904 one, and every number of every sheet is counted in it.
+
+### What the port found
+
+- **The tree's reader is a whole model**, and it reads far more than a
+  workbook's shape: styles, themes, charts, pivots, tables, comments,
+  phonetic readings, conditional formats, protection, and the
+  relationships between all of them. That is the tree's **model**, and
+  this crate is a **reader**: it gives back the workbook's shape and
+  nothing else, and the battery that owns the spreadsheet model is
+  where a style becomes a format.
+- **The tree's file is read with three crates from the registry**
+  (`zip`, `quick-xml` and the tree's own formula crate), and this
+  tree's readers are its own code: the package (§902), the XML (§903)
+  and the formulas the battery owns.
+- **The tree's reader keeps the prefixes of the names**, and so does
+  the reader of §903 — which is enough, because a workbook part has
+  one prefix for its whole file.
+- **A shared string may be rich**: its own text and the
+  text of its runs, in order. The reader joins them, and a cell that
+  names a string that is not there is empty rather than wrong.
+- **The tree's reader drops what falls outside the grid** and says how
+  much it dropped. So does this one: a sheet may be **1 048 576** rows
+  and **16 384** columns, and a cell outside that is dropped with a
+  warning rather than kept.
+
+### What it cost
+
+- **One crate** — `craftkit-xlsx` — of about 500 lines: the workbook,
+  the sheets, the cells, the values and the relationships.
+- **Eleven tests** in its test file: a workbook, the kinds of a value,
+  an inline text, a rich text, a formula, the date system, a package
+  with no workbook, a sheet whose part is not there, a cell with a
+  missing string, a cell outside the grid, and a cell with an address
+  that is not an address.
+- **Three tables and the architecture document** know the new crate.
+- **No new command** and **no new dependency**: a workbook file is a
+  package of XML parts, and the two crates that read them are already
+  in the tree.
+
+### What it does not settle
+
+- **The styles are not read**: a cell's number format is not read
+  here, and so a date is a number and not a date. The battery that
+  owns the spreadsheet model reads the formats itself, and this is the
+  next arc.
+- **A shared formula is not filled in**: a cell that shares a formula
+  with another cell keeps its value and has no formula. The tree reads
+  those and so does this one, in the battery.
+- **The workbook is not turned into a document here**: this crate gives
+  back a workbook, and the battery is what puts one in a document.
