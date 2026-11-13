@@ -4323,6 +4323,7 @@ so.
 | the **finding** of a value, the tree's way | **built.** XLOOKUP gives the value at the place of the needle and XMATCH gives the place — with the tree's match modes, its wildcards and the value given for a needle that is not there (§875) | §875 |
 | the **days** between two dates | **built.** DAYS360 counts them under the year of three hundred and sixty days, and DATEDIF counts the time between two dates in the unit that is asked for (§876) | §876 |
 | the **fraction** of a year, and the working days | **built.** YEARFRAC gives the fraction of a year under a basis, and NETWORKDAYS and WORKDAY count and step over the working days (§877) | §877 |
+| the **aggregates** that count the text | **built.** AVERAGEA, MAXA, MINA, VARA, VARPA, STDEVA and STDEVPA count the text of a cell as a zero and a boolean as one or zero (§878) | §878 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58030,3 +58031,67 @@ which days are **working days**.
 - **The tree's `NOW` and `TODAY` are not here.** They are the clock,
   and a formula that reads the clock is a different thing from a
   formula that reads the sheet.
+
+## 878. The aggregates that count the text
+
+A formula may gather a set of numbers in a way that **counts the text
+as a zero**.
+
+### What was built
+
+- **Seven functions** of the grid battery's formula language:
+  - `AVERAGEA(value1, value2, ...)` — the **average** of the set;
+  - `MAXA(value1, value2, ...)` and `MINA(value1, value2, ...)` — the
+    **largest** and the **smallest** of it;
+  - `VARA(value1, value2, ...)` and `VARPA(value1, value2, ...)` — the
+    **variance** of a sample and of the whole set;
+  - `STDEVA(value1, value2, ...)` and `STDEVPA(value1, value2, ...)` —
+    the **deviation** that goes with each of them.
+- The **rule** of the seven:
+  - the **cells** of a range, and the cell of a reference, are
+    counted — a number is itself, a boolean is one or zero, the **text
+    is a zero**, and an empty cell is **not counted at all**;
+  - a **plain argument** is the value itself — so the text of a plain
+    argument is the number it writes, and a text that is not a number
+    is `#VALUE!`.
+- An **error** in the set is the error.
+- The **average of nothing** is `#DIV/0!`, and the **largest and the
+  smallest of nothing** are zero.
+
+### What the port found
+
+- **The tree's `A` functions count a cell and they do not count an
+  argument.** The two are different in the tree: a cell that holds the
+  text "5" is a **zero**, and a plain argument that is the text "5" is
+  the **five**. Here the two are told apart as well.
+- **The tree's `MINA` of a set with text in it is the zero of the
+  text.** The text is a zero and the smallest of the set is that
+  zero — not the smallest number of the set.
+- **An empty cell is not counted at all** — not even as a zero. So
+  the average of a range of one number and two empty cells is that
+  number, and not a third of it.
+- **The tree's `A` functions take several arguments**, and every one
+  of them is counted in the same way — a range, a reference or a plain
+  value.
+
+### What it cost
+
+- **Seven functions** in the module `statistics`, and a **counted
+  numbers** helper of their own: the rule of the `A` functions is not
+  the rule of the other aggregates, which skip the text.
+- **One new test file** in the grid battery (`tests/counted.rs`): five
+  tests — the text of a cell being a zero, the largest and the
+  smallest, the variance and the deviation, a plain argument being the
+  value itself, and an empty cell not being counted.
+- **No new command**: the aggregates are a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's database functions count the text in another way.**
+  `DCOUNT` and its family read the **criteria** of a table and count
+  the rows, and the text of a cell is a value there and not a zero.
+- **The tree's `A` functions have no array here.** The tree's
+  `AVERAGEA` may take a range that is a formula's **spilled** result,
+  and this tree has no arrays.
