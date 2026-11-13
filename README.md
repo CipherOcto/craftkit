@@ -4338,6 +4338,7 @@ so.
 | the **Bessel** and the **euro** | **built.** The four Bessel functions are here with the tree's four ways of working them out, and EUROCONVERT converts with the tree's table of the fixed rates (§890) | §890 |
 | the **forecast** of a line | **built.** FORECAST.LINEAR is the tree's FORECAST under its new name, and the two are one function (§891) | §891 |
 | the **odds and ends**, and the **weekend** of the tree's own | **built.** SUMPRODUCT, SERIESSUM, PROB and PERCENTOF are here, and NETWORKDAYS.INTL and WORKDAY.INTL take a weekend of the tree's own (§892) | §892 |
+| the **pattern** and the **cube** | **built.** The tree's regular expressions and its seven cube functions are refused, each with the reason it is not here, and the three matrix functions that give back a table are refused as an array (§893) | §893 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58915,3 +58916,54 @@ that are the tree's working days with a weekend of the tree's own.
 - **The tree's holidays are not here**: a list of holidays is an
   array, and this tree has no arrays. The weekend argument is here,
   and the holidays are refused with the reason.
+
+## 893. The pattern and the cube
+
+The last of the tree's functions that are **not here**, and every one
+of them now **says why**.
+
+### What was built
+
+- **The regular expressions** — `REGEXTEST(text, pattern,
+  [case_sensitivity])`, `REGEXEXTRACT(text, pattern, [return_mode],
+  [case_sensitivity])` and `REGEXREPLACE(text, pattern, replacement,
+  [occurrence], [case_sensitivity])` — are refused with *not supported
+  yet: a regular expression*.
+- **The cube** — `CUBEMEMBER`, `CUBEMEMBERPROPERTY`,
+  `CUBERANKEDMEMBER`, `CUBESET`, `CUBESETCOUNT`, `CUBEVALUE` and
+  `CUBEKPIMEMBER` — are refused with *not supported yet: a cube*.
+- **The matrix** functions that give back a table — `MMULT`,
+  `MINVERSE` and `MUNIT` — are refused as an **array**, like the
+  twenty-eight of §885.
+
+### What the port found
+
+- **The tree's own regular expressions need an engine**, and the tree
+  carries one — a whole engine for patterns, with its own syntax and
+  its own errors. A formula language in this tree has no engine in it,
+  and one that is written from scratch is a language of its own.
+- **The tree's cube needs a connection**: every one of its seven
+  functions names a **connection** as its first argument, and a
+  workbook here is a document and not a connection to a cube of data.
+  The tree's own application has no cube connections either, and gives
+  `#N/A` for all seven.
+- **The tree's `MMULT`, `MINVERSE` and `MUNIT` give back a table** —
+  a square of numbers is a table of numbers — and so they belong to
+  the twenty-eight of §885 and are refused with it.
+
+### What it cost
+
+- **One module** — `refused` — with the table of the ten functions
+  and the reason each one is refused.
+- **Three tests** in the grid battery's refused test file: every
+  refused function says why, the table and the lookup agree, and the
+  three matrix functions are refused as an array.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `ADD2` is not a function of the tree**: it is a name
+  the tree's own machinery uses for a test of its own, and it is not
+  in the tree's list of the functions a formula may call.
