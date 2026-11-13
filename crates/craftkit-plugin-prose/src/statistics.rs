@@ -48,11 +48,9 @@ commands! {
         icon: "list",
         params: {
             /// The document to measure.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.document.stats".to_string();
             let document = session.document();
             let Some(node) = document.node(self.document.0) else {

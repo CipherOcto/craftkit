@@ -50,14 +50,11 @@ commands! {
         undoable,
         params: {
             /// The paragraph.
-
             block: NodeRef,
             /// What it says now.
-
             text: Text,
         },
         run: {
-
             let id = "prose.block.paragraph.text".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -86,6 +83,7 @@ commands! {
 
         }
     }
+
     /// Take a **block** out of a document.
     ///
     /// The block's edges go with it: a block that was in a style is not in
@@ -98,11 +96,9 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.remove".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -136,6 +132,7 @@ commands! {
 
         }
     }
+
     /// **Move** a block to another place in its document.
     ///
     /// The place is counted from one among the blocks of the document, and
@@ -148,15 +145,12 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// Which place it goes to, counting from one among the blocks of
             /// the document.
-
             to: Number,
         },
         run: {
-
             let id = "prose.block.move".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -243,6 +237,7 @@ commands! {
 
         }
     }
+
     /// Say how a paragraph **stands**.
     ///
     /// The alignment is one of the tree's own: `left`, `center`, `right`,
@@ -256,15 +251,12 @@ commands! {
         undoable,
         params: {
             /// The paragraph.
-
             block: NodeRef,
             /// How it stands: `left`, `center`, `right`, `justify` or
             /// `distribute`.
-
             align: Text,
         },
         run: {
-
             let id = "prose.block.paragraph.align".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -297,6 +289,7 @@ commands! {
 
         }
     }
+
     /// Say how far a paragraph is **indented**, in points.
     ///
     /// Only what is named is changed. An indent outside the tree's own
@@ -309,21 +302,16 @@ commands! {
         undoable,
         params: {
             /// The paragraph.
-
             block: NodeRef,
             /// How far from the left edge, in points.
-
             left: Option<Number>,
             /// How far from the right edge, in points.
-
             right: Option<Number>,
             /// How far the first line is in from the left, in points. A
             /// negative number is a **hanging** indent.
-
             first_line: Option<Number>,
         },
         run: {
-
             let id = "prose.block.paragraph.indent".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -365,6 +353,7 @@ commands! {
 
         }
     }
+
     /// Say how much **space** is around a paragraph, in points.
     ///
     /// Only what is named is changed. A space outside the tree's own range
@@ -377,17 +366,13 @@ commands! {
         undoable,
         params: {
             /// The paragraph.
-
             block: NodeRef,
             /// How much space is above it, in points.
-
             before: Option<Number>,
             /// How much space is below it, in points.
-
             after: Option<Number>,
         },
         run: {
-
             let id = "prose.block.paragraph.spacing".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -424,6 +409,7 @@ commands! {
 
         }
     }
+
     /// Say how the **lines** of a paragraph are spaced.
     ///
     /// The tree's spacing is one of three things: a **multiple** of single
@@ -439,21 +425,16 @@ commands! {
         undoable,
         params: {
             /// The paragraph.
-
             block: NodeRef,
             /// A multiple of single spacing: `1` is single, `1.5` is one and a
             /// half, `2` is double.
-
             multiple: Option<Number>,
             /// At least this many points.
-
             at_least: Option<Number>,
             /// Exactly this many points.
-
             exactly: Option<Number>,
         },
         run: {
-
             let id = "prose.block.paragraph.linespacing".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {

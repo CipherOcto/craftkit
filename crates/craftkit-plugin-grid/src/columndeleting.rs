@@ -356,17 +356,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes from.
-
             sheet: NodeRef,
             /// The column that is deleted: `A`, `B`, `AA`.
-
             column: Text,
             /// How many columns are deleted. Without it, one column.
-
             count: Option<Number>,
         },
         run: {
-
             let id = "grid.column.delete".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {

@@ -210,26 +210,21 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// The **bookmark** it points at — or the **number** or the
             /// **text** of the caption it points at.
-
             target: Text,
             /// What it points at.
             ///
             /// `bookmark` — the default — `figure`, `table`, `equation`, or
             /// `label:<Name>` for a label of the person's own.
-
             to: Option<Text>,
             /// How it shows what it points at.
             ///
             /// `text` — the default — or `number`.
-
             show: Option<Text>,
         },
         run: {
-
             let id = "prose.block.reference.add".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {
@@ -295,6 +290,7 @@ commands! {
 
         }
     }
+
     /// **Point** a cross-reference at another bookmark.
     ///
     /// The text of the reference changes with the block it points at, and
@@ -307,26 +303,21 @@ commands! {
         undoable,
         params: {
             /// The reference.
-
             block: NodeRef,
             /// The **bookmark** it points at — or the **number** or the
             /// **text** of the caption it points at.
-
             target: Text,
             /// What it points at.
             ///
             /// `bookmark` — the default — `figure`, `table`, `equation`, or
             /// `label:<Name>` for a label of the person's own.
-
             to: Option<Text>,
             /// How it shows what it points at.
             ///
             /// `text` — the default — or `number`.
-
             show: Option<Text>,
         },
         run: {
-
             let id = "prose.block.reference.set".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block).cloned() else {
@@ -405,6 +396,7 @@ commands! {
 
         }
     }
+
     /// **Read** the text of a block: the text it shows, which for a
     /// reference is the text of the block it points at.
     prose.block.reference.read {
@@ -413,11 +405,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.reference.read".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block).cloned() else {

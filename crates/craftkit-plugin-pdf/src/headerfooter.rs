@@ -478,40 +478,29 @@ commands! {
         undoable,
         params: {
             /// The page the header is on.
-
             page: NodeRef,
             /// The text at the left of the header.
-
             left: Option<Text>,
             /// The text in the middle of the header.
-
             centre: Option<Text>,
             /// The text at the right of the header.
-
             right: Option<Text>,
             /// The size of the text: eight points is the tree's.
-
             size: Option<Number>,
             /// The colour of the text: black is the tree's.
-
             colour: Option<Text>,
             /// The text is **underlined**.
-
             underline: Option<Bool>,
             /// The margins: four numbers, the top, the bottom, the left and
             /// the right.
-
             margins: Option<Json>,
             /// The number the first page shows.
-
             start_number: Option<Number>,
             /// The date the header is stamped with: the year, the month and the
             /// day.
-
             date: Option<Json>,
         },
         run: {
-
             let slots = Slots {
                 left: self.left.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
                 centre: self.centre.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
@@ -529,6 +518,7 @@ commands! {
 
         }
     }
+
     /// **Draw** a footer on a page: the text at the bottom of it.
     ///
     /// The tree's own: three slots, the tokens of the page number and the
@@ -541,40 +531,29 @@ commands! {
         undoable,
         params: {
             /// The page the footer is on.
-
             page: NodeRef,
             /// The text at the left of the footer.
-
             left: Option<Text>,
             /// The text in the middle of the footer.
-
             centre: Option<Text>,
             /// The text at the right of the footer.
-
             right: Option<Text>,
             /// The size of the text: eight points is the tree's.
-
             size: Option<Number>,
             /// The colour of the text: black is the tree's.
-
             colour: Option<Text>,
             /// The text is **underlined**.
-
             underline: Option<Bool>,
             /// The margins: four numbers, the top, the bottom, the left and
             /// the right.
-
             margins: Option<Json>,
             /// The number the first page shows.
-
             start_number: Option<Number>,
             /// The date the footer is stamped with: the year, the month and the
             /// day.
-
             date: Option<Json>,
         },
         run: {
-
             let slots = Slots {
                 left: self.left.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
                 centre: self.centre.as_ref().map(|text| text.0.clone()).unwrap_or_default(),

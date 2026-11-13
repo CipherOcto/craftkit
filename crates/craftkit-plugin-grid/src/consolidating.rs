@@ -182,34 +182,27 @@ commands! {
         undoable,
         params: {
             /// The **sources**: a list of `{"sheet": id, "range": "A1:C3"}`.
-
             sources: Json,
             /// The **sheet** the result goes in.
-
             sheet: NodeRef,
             /// The **cell** the result goes at: its top left corner.
-
             destination: Text,
             /// The way the values are **added up**.
             ///
             /// `sum` — the default — `count`, `countNums`, `average`, `max`,
             /// `min` or `product`.
-
             function: Option<Text>,
             /// Whether the first row of each source is a **header**.
             ///
             /// It is not, without it being said.
-
             top_row: Option<Bool>,
             /// Whether the first column of each source holds the **labels** of
             /// the rows.
             ///
             /// It does not, without it being said.
-
             left_column: Option<Bool>,
         },
         run: {
-
             let id = "grid.data.consolidate".to_string();
             let way = self
                 .function

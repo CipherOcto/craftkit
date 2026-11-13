@@ -102,11 +102,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "cad.entity.list".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -124,6 +122,7 @@ commands! {
 
         }
     }
+
     /// **Bring** an entity to the **front**.
     cad.entity.front {
         area: "cad",
@@ -133,15 +132,14 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
         },
         run: {
-
             move_entity(session, "cad.entity.front", self.entity.0, "front")
 
         }
     }
+
     /// **Send** an entity to the **back**.
     cad.entity.back {
         area: "cad",
@@ -151,15 +149,14 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
         },
         run: {
-
             move_entity(session, "cad.entity.back", self.entity.0, "back")
 
         }
     }
+
     /// **Move** an entity **one step** towards the front.
     cad.entity.forward {
         area: "cad",
@@ -169,15 +166,14 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
         },
         run: {
-
             move_entity(session, "cad.entity.forward", self.entity.0, "forward")
 
         }
     }
+
     /// **Move** an entity **one step** towards the back.
     cad.entity.backward {
         area: "cad",
@@ -187,11 +183,9 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
         },
         run: {
-
             move_entity(session, "cad.entity.backward", self.entity.0, "backward")
 
         }

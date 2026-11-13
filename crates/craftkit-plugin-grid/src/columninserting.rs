@@ -358,17 +358,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes in.
-
             sheet: NodeRef,
             /// The column it is inserted at: `A`, `B`, `AA`.
-
             column: Text,
             /// How many columns are inserted. Without it, one column.
-
             count: Option<Number>,
         },
         run: {
-
             let id = "grid.column.insert".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {

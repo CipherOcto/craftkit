@@ -425,16 +425,13 @@ commands! {
         undoable,
         params: {
             /// The file to read.
-
             path: Text,
             /// What to call the sequence.
             ///
             /// Without it, the name of the file.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "film.import.otio".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {

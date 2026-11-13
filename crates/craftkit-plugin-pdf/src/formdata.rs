@@ -290,17 +290,13 @@ commands! {
         undoable,
         params: {
             /// The file to write.
-
             path: Text,
             /// The format of the file: `xfdf` when it is not given.
-
             format: Option<Text>,
             /// The file the data came from: it is written in the XFDF file.
-
             file: Option<Text>,
         },
         run: {
-
             let id = COMMAND.to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {
@@ -346,6 +342,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **data of a form** from a file, and write it into the
     /// form.
     ///
@@ -359,11 +356,9 @@ commands! {
         undoable,
         params: {
             /// The file to read.
-
             path: Text,
         },
         run: {
-
             let id = "pdf.form.data.import".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {

@@ -115,20 +115,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// Where it goes: a place in this workbook, or a place outside it.
-
             target: Text,
             /// The text that is shown when the mouse rests on it.
-
             tooltip: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.link.set".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -161,6 +156,7 @@ commands! {
 
         }
     }
+
     /// The **link** on a cell.
     grid.cell.link.get {
         area: "grid",
@@ -168,14 +164,11 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.link.get".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -209,6 +202,7 @@ commands! {
 
         }
     }
+
     /// Take the **link** away from a cell.
     ///
     /// A cell that holds no link is not refused: there is nothing to take
@@ -221,14 +215,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.link.delete".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

@@ -277,17 +277,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes from.
-
             sheet: NodeRef,
             /// The row that is deleted, counted from one.
-
             row: Number,
             /// How many rows are deleted. Without it, one row.
-
             count: Option<Number>,
         },
         run: {
-
             let id = "grid.row.delete".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {

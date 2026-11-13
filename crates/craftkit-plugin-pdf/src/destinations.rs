@@ -111,11 +111,9 @@ commands! {
             /// The entry to read.
             ///
             /// Leave it out and every destination is read.
-
             name: Option<craftkit_sdk::Text>,
         },
         run: {
-
             let id = "pdf.dests.read".to_string();
             let document = session.document();
             let all = destinations_of(document);

@@ -37,11 +37,9 @@ commands! {
         undoable,
         params: {
             /// The sheet to take away.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.sheet.remove".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

@@ -119,14 +119,11 @@ commands! {
         undoable,
         params: {
             /// The sheet to rename.
-
             sheet: NodeRef,
             /// Its new name.
-
             name: Text,
         },
         run: {
-
             let id = "grid.sheet.rename".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

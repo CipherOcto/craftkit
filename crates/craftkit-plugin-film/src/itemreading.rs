@@ -25,11 +25,9 @@ commands! {
         icon: "list",
         params: {
             /// The item to read.
-
             item: NodeRef,
         },
         run: {
-
             let id = "film.item.get".to_string();
             let item = self.item.0;
             let Some(node) = session.document().node(item) else {

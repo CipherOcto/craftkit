@@ -198,14 +198,11 @@ commands! {
         icon: "list",
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The title of the list. Without it, the name of the sequence.
-
             title: Option<Text>,
         },
         run: {
-
             let id = "film.export.edl".to_string();
             let sequence = self.sequence.0;
             let Some(node) = session.document().node(sequence) else {

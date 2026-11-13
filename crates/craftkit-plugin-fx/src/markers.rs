@@ -135,6 +135,7 @@ commands! {
 
         }
     }
+
     /// Change a **marker**: where it is, or what it says.
     fx.marker.set {
         area: "fx",

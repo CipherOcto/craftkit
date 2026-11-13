@@ -214,14 +214,11 @@ commands! {
         icon: "file",
         params: {
             /// Where to write the file.
-
             path: Text,
             /// The drawing to write.
-
             drawing: NodeRef,
         },
         run: {
-
             let path = self.path.0.trim().to_string();
             if path.is_empty() {
                 return Err(EngineError::Failed {

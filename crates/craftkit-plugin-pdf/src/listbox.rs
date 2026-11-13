@@ -188,37 +188,28 @@ commands! {
         undoable,
         params: {
             /// The page the list box is put on.
-
             page: NodeRef,
             /// The list box's object number in the file.
-
             object: Number,
             /// The rectangle the list box covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the list box.
             ///
             /// Leave it out and the list box is given the first free name of
             /// the tree: `List Box1`, `List Box2` and so on.
-
             name: Option<Text>,
             /// The **options** the list box shows: a list of texts, or of pairs
             /// of two texts — the **export value** and the **display text** of
             /// the option.
-
             options: serde_json::Value,
             /// Whether the reader may choose more than one option.
-
             multi: Option<Bool>,
             /// The option that is chosen.
-
             value: Option<Text>,
             /// Where the bytes of the field's drawing are written.
-
             appearance_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

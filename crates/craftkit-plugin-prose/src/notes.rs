@@ -48,14 +48,11 @@ commands! {
         undoable,
         params: {
             /// The document whose notes are converted.
-
             document: NodeRef,
             /// What the notes become: `endnote`, `footnote` or `swap`.
-
             to: craftkit_sdk::Text,
         },
         run: {
-
             let id = "prose.notes.convert".to_string();
             let document = self.document.0;
             let way = self.to.0.trim().to_lowercase();

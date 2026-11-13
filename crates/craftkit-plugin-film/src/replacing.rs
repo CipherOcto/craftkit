@@ -56,14 +56,11 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The media it plays now.
-
             item: NodeRef,
         },
         run: {
-
             let id = "film.clip.replace".to_string();
             let clip = self.clip.0;
             let item = self.item.0;

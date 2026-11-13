@@ -27,11 +27,9 @@ commands! {
         icon: "list",
         params: {
             /// The clip to read.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "film.clip.get".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

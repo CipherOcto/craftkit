@@ -67,14 +67,11 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The radius of the corners, in points.
-
             radius: Number,
         },
         run: {
-
             let id = "layout.item.radius".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;

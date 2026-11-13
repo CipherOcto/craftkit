@@ -597,11 +597,9 @@ commands! {
         example,
         params: {
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -621,6 +619,7 @@ commands! {
 
         }
     }
+
     /// Put a **style** in a document.
     prose.style.add {
         area: "prose",
@@ -630,21 +629,16 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// The style's name.
-
             name: Text,
             /// What the style applies to: `paragraph`, `character`, `table` or
             /// `numbering` — or anything else, because the list is open.
-
             style_kind: Option<Text>,
             /// The style it is based on.
-
             based_on: Option<NodeRef>,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -708,6 +702,7 @@ commands! {
 
         }
     }
+
     /// Put a **media** in a document: a file the document uses.
     ///
     /// The file is the node's **stream**, so the bytes travel beside the
@@ -720,17 +715,13 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// What to call it.
-
             name: Text,
             /// Where the file is, relative to the document.
-
             path: Text,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -771,6 +762,7 @@ commands! {
 
         }
     }
+
     /// Put a **paragraph** in a document.
     prose.block.paragraph.add {
         area: "prose",
@@ -780,14 +772,11 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// What it says.
-
             text: Text,
         },
         run: {
-
             add_block(
                 session,
                 self.document.0,
@@ -798,6 +787,7 @@ commands! {
 
         }
     }
+
     /// Put a **table** in a document.
     ///
     /// The rows are in the **payload**: a cell holds a value and not a
@@ -811,14 +801,11 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// The rows, each a list of cells.
-
             rows: Option<Json>,
         },
         run: {
-
             let rows = match &self.rows {
                 Some(rows) => rows.clone(),
                 None => Json::Array(Vec::new()),
@@ -861,6 +848,7 @@ commands! {
 
         }
     }
+
     /// Put a **style** on a block.
     ///
     /// The style is not the block's parent — the block is in the document —
@@ -874,14 +862,11 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The style.
-
             style: NodeRef,
         },
         run: {
-
             let block = self.block.0;
             let style = self.style.0;
             let Some(node) = session.document().node(style) else {
@@ -914,6 +899,7 @@ commands! {
 
         }
     }
+
     /// Set the **runs** of a block: the formatting of its text.
     ///
     /// A run is an **interval**: it says how many of the text's characters
@@ -928,15 +914,12 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The runs: a list of `{len, bold, italic, underline, colour,
             /// size}`.
-
             runs: Json,
         },
         run: {
-
             let block = self.block.0;
             let Some(runs) = self.runs.as_array() else {
                 return Err(EngineError::Failed {

@@ -36,14 +36,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell whose column is filled.
-
             at: Text,
         },
         run: {
-
             let id = "grid.flash.fill".to_string();
             let sheet = self.sheet.0;
             let at = crate::cell_at(&self.at.0, &id)?;

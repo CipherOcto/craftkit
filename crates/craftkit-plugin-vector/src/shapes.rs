@@ -54,34 +54,25 @@ commands! {
         menu: ("Create"),
         params: {
             /// Its centre, across.
-
             x: Number,
             /// Its centre, down.
-
             y: Number,
             /// How far its points are from the centre.
-
             radius: Number,
             /// How far its inner corners are from the centre.
             ///
             /// Without it, the inner radius is half the outer one.
-
             inner_radius: Option<Number>,
             /// How many points it has.
-
             points: Option<Number>,
             /// How far it is turned, in degrees.
-
             rotation: Option<Number>,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is filled with, as `#rrggbb`.
-
             fill: Option<Text>,
         },
         run: {
-
             let id = "vector.star".to_string();
             let radius = self.radius.0;
             if !radius.is_finite() || radius < 0.0 {
@@ -127,6 +118,7 @@ commands! {
 
         }
     }
+
     /// A **line**: a contour of two points.
     ///
     /// A line is stroked and not filled: there is nothing inside it. The
@@ -141,26 +133,19 @@ commands! {
         menu: ("Create"),
         params: {
             /// Where it starts, across.
-
             x1: Number,
             /// Where it starts, down.
-
             y1: Number,
             /// Where it ends, across.
-
             x2: Number,
             /// Where it ends, down.
-
             y2: Number,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is stroked with, as `#rrggbb`.
-
             stroke: Option<Text>,
         },
         run: {
-
             let id = "vector.line".to_string();
             for number in [self.x1.0, self.y1.0, self.x2.0, self.y2.0] {
                 if !number.is_finite() {
@@ -190,6 +175,7 @@ commands! {
 
         }
     }
+
     /// A **spiral**: quarter arcs that get smaller and smaller.
     ///
     /// The spiral winds **inward**: it starts at the outside and ends at
@@ -204,33 +190,24 @@ commands! {
         menu: ("Create"),
         params: {
             /// Its centre, across.
-
             x: Number,
             /// Its centre, down.
-
             y: Number,
             /// How far out it reaches.
-
             radius: Number,
             /// How much of the radius is left after each quarter turn, in
             /// percent.
-
             decay: Option<Number>,
             /// How many quarter turns it makes.
-
             segments: Option<Number>,
             /// Whether it winds clockwise.
-
             clockwise: Option<Bool>,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is filled with, as `#rrggbb`.
-
             fill: Option<Text>,
         },
         run: {
-
             let id = "vector.spiral".to_string();
             let radius = self.radius.0;
             if !radius.is_finite() || radius <= 0.0 {

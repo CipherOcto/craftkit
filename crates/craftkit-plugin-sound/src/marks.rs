@@ -69,14 +69,11 @@ commands! {
         menu: ("Clip", "Rating"),
         params: {
             /// The clip to rate.
-
             clip: NodeRef,
             /// The rating, from none (zero) to five stars.
-
             rating: Number,
         },
         run: {
-
             let id = "sound.clip.rating".to_string();
             let clip = self.clip.0;
             let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {

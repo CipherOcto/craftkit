@@ -66,16 +66,13 @@ commands! {
         undoable,
         params: {
             /// The picture.
-
             media: NodeRef,
             /// Whether the picture is decorative.
             ///
             /// Leave it out and the picture keeps the fact it has.
-
             decorative: Option<Bool>,
         },
         run: {
-
             let id = "prose.media.decorative".to_string();
             let media = self.media.0;
             let Some(node) = session.document().node(media).cloned() else {
@@ -117,6 +114,7 @@ commands! {
 
         }
     }
+
     /// **Say** where a picture **sits**.
     ///
     /// A picture is either **inline** — in the line of the text, so a
@@ -137,16 +135,13 @@ commands! {
         undoable,
         params: {
             /// The picture.
-
             media: NodeRef,
             /// Where the picture sits: `inline` or `floating`.
             ///
             /// Leave it out and the picture keeps the placement it has.
-
             placement: Option<Text>,
         },
         run: {
-
             let id = "prose.media.placement".to_string();
             let media = self.media.0;
             let Some(node) = session.document().node(media).cloned() else {
@@ -185,6 +180,7 @@ commands! {
 
         }
     }
+
     /// **Say** what a picture is.
     prose.media.alt {
         area: "prose",
@@ -194,16 +190,13 @@ commands! {
         undoable,
         params: {
             /// The picture.
-
             media: NodeRef,
             /// The text that stands for it.
             ///
             /// An empty text takes the alt text away.
-
             alt: Text,
         },
         run: {
-
             let id = "prose.media.alt".to_string();
             let media = self.media.0;
             let Some(node) = session.document().node(media).cloned() else {

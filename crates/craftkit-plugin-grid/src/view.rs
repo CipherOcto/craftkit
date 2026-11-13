@@ -135,30 +135,22 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// Whether the gridlines are drawn.
-
             gridlines: Option<Bool>,
             /// Whether the headings are drawn.
-
             headings: Option<Bool>,
             /// Whether the zeros are shown.
-
             zeros: Option<Bool>,
             /// Whether the sheet runs right to left.
-
             right_to_left: Option<Bool>,
             /// Whether the **outline symbols** are drawn.
-
             outline_symbols: Option<Bool>,
             /// Whether the **formulas** are shown: a cell that holds a formula
             /// shows the formula and not its value.
-
             show_formulas: Option<Bool>,
         },
         run: {
-
             let id = "grid.sheet.view".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -205,6 +197,7 @@ commands! {
 
         }
     }
+
     /// **Freeze** the panes of a sheet at a cell.
     ///
     /// The rows above the cell and the columns to its left are frozen, and
@@ -219,15 +212,12 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell the panes freeze at: `B2` freezes the row above it and
             /// the column to its left.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.sheet.freeze".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -263,6 +253,7 @@ commands! {
 
         }
     }
+
     /// **Unfreeze** the panes of a sheet.
     ///
     /// A sheet with no frozen panes scrolls as a whole, and that is the
@@ -275,11 +266,9 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.sheet.freeze.delete".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -309,6 +298,7 @@ commands! {
 
         }
     }
+
     /// The **zoom** of a sheet, as a percentage.
     ///
     /// The tree's zoom runs from ten to four hundred, and a zoom outside
@@ -322,14 +312,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The zoom, as a percentage: from ten to four hundred.
-
             percent: Number,
         },
         run: {
-
             let id = "grid.sheet.zoom".to_string();
             let sheet = self.sheet.0;
             let percent = self.percent.0;

@@ -384,35 +384,27 @@ commands! {
         undoable,
         params: {
             /// The page the field is put on.
-
             page: NodeRef,
             /// The field's object number in the file.
-
             object: Number,
             /// The rectangle the field covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the field.
             ///
             /// Leave it out and the field is given the first free name of the
             /// tree: `Text1`, `Text2` and so on.
-
             name: Option<Text>,
             /// Whether the field holds more than one line of text.
-
             multiline: Option<Bool>,
             /// The text the field holds.
-
             value: Option<Text>,
             /// Where the bytes of the field's drawing are written.
             ///
             /// Leave it out and the field is put on the page with no drawing
             /// of its own.
-
             appearance_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

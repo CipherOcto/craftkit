@@ -133,17 +133,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// How many decimals to move: one more, or one less.
-
             delta: Number,
         },
         run: {
-
             let id = "grid.cell.format.decimals".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

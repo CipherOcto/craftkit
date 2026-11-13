@@ -30,14 +30,11 @@ commands! {
         menu: ("Track", "Render Clip"),
         params: {
             /// The clip to render.
-
             clip: NodeRef,
             /// The directory the file is written into.
-
             directory: Text,
         },
         run: {
-
             let id = "sound.clip.render".to_string();
             let clip = self.clip.0;
             let document = session.document().clone();

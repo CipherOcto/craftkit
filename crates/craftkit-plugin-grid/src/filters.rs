@@ -66,21 +66,16 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which column it filters: `A`, `B`, `AA`.
-
             column: Text,
             /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
-
             op: Text,
             /// The value it compares with. A comparison operation needs a
             /// **number**, and the value may hold the tree's `*`.
-
             value: Text,
         },
         run: {
-
             let id = "grid.filter.set".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -132,6 +127,7 @@ commands! {
 
         }
     }
+
     /// Take the **filter** away from a sheet.
     grid.filter.clear {
         area: "grid",
@@ -141,11 +137,9 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.filter.clear".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -175,6 +169,7 @@ commands! {
 
         }
     }
+
     /// **Filter** a sheet by **groups** of criteria.
     ///
     /// The columns of a group are judged **together** — a row matches the
@@ -193,15 +188,12 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The **groups** of criteria: a list of lists of
             /// `{"column": "B", "op": ">", "value": "10"}`.
-
             groups: craftkit_sdk::serde_json::Value,
         },
         run: {
-
             let id = "grid.filter.groups.set".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -291,6 +283,7 @@ commands! {
 
         }
     }
+
     /// The **rows** a sheet's filter hides.
     ///
     /// The rows are **derived**: they are worked out from the cells each
@@ -301,11 +294,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.filter.rows".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -331,6 +322,7 @@ commands! {
 
         }
     }
+
     /// **Filter** a sheet by a **list of values**.
     ///
     /// The tree's own list filter: the rows whose cell shows one of the
@@ -348,20 +340,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which column it filters: `A`, `B`, `AA`.
-
             column: Text,
             /// The **values** that are kept: a list of texts.
-
             values: craftkit_sdk::serde_json::Value,
             /// Whether an empty cell is kept.
-
             blanks: Option<Bool>,
         },
         run: {
-
             let id = "grid.filter.values".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

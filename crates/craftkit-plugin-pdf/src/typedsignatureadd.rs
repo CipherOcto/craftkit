@@ -108,23 +108,17 @@ commands! {
         undoable,
         params: {
             /// The page the signature is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The rectangle the signature covers: four numbers.
-
             rect: Json,
             /// The contours of the signature: each one a list of points.
-
             contours: Json,
             /// The colour of the signature: three numbers.
-
             colour: Option<Json>,
         },
         run: {
-
             // The **rectangle**: four numbers, and the corners may come in
             // any order.
             let numbers = numbers_of(&self.rect);

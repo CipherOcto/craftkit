@@ -186,17 +186,13 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The entry.
-
             entry: Text,
             /// The subentry under the entry.
-
             subentry: Option<Text>,
         },
         run: {
-
             let id = "prose.index.mark".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -260,6 +256,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **index** of a document.
     ///
     /// The index is **derived**: it is the marks of the blocks of the
@@ -270,11 +267,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.index.read".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

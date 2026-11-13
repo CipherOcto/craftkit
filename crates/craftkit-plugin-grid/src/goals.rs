@@ -43,26 +43,19 @@ commands! {
         icon: "list",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell whose value is **varied**.
-
             input: Text,
             /// The cell whose value is **read**.
-
             result: Text,
             /// The result to reach.
-
             target: Number,
             /// Where the search **starts**.
-
             from: Number,
             /// Where the search **ends**.
-
             to: Number,
         },
         run: {
-
             let id = "grid.goal".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -175,6 +168,7 @@ commands! {
 
         }
     }
+
     /// The **crossings** of a sheet: every place the result goes past the
     /// target.
     ///
@@ -189,29 +183,21 @@ commands! {
         icon: "list",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell whose value is **varied**.
-
             input: Text,
             /// The cell whose value is **read**.
-
             result: Text,
             /// The result to reach.
-
             target: Number,
             /// Where the scan **starts**.
-
             from: Number,
             /// Where the scan **ends**.
-
             to: Number,
             /// How far the scan steps. The default is one.
-
             step: Option<Number>,
         },
         run: {
-
             let id = "grid.goal.scan".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

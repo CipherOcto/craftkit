@@ -131,14 +131,11 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
             /// The page it follows.
-
             parent: NodeRef,
         },
         run: {
-
             let id = "layout.page.parent".to_string();
             let page = self.page.0;
             let parent = self.parent.0;
@@ -167,6 +164,7 @@ commands! {
 
         }
     }
+
     /// Take the **parent** of a page away.
     layout.page.parent.clear {
         area: "layout",
@@ -176,11 +174,9 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
         },
         run: {
-
             let id = "layout.page.parent.clear".to_string();
             let page = self.page.0;
             let node = page_of(session, page, &id)?;

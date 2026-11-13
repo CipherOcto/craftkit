@@ -167,17 +167,13 @@ commands! {
         undoable,
         params: {
             /// The workbook.
-
             workbook: NodeRef,
             /// The name.
-
             name: Text,
             /// The range it stands for: `Sheet1!A1:B4`.
-
             refers_to: Text,
         },
         run: {
-
             let id = "grid.name.set".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {
@@ -232,6 +228,7 @@ commands! {
 
         }
     }
+
     /// Take a **name** away from a workbook.
     grid.name.delete {
         area: "grid",
@@ -241,14 +238,11 @@ commands! {
         undoable,
         params: {
             /// The workbook.
-
             workbook: NodeRef,
             /// The name.
-
             name: Text,
         },
         run: {
-
             let id = "grid.name.delete".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {

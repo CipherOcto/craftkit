@@ -531,11 +531,9 @@ commands! {
             /// The field to read.
             ///
             /// Leave it out and every field of the document is read.
-
             field: Option<NodeRef>,
         },
         run: {
-
             let id = "pdf.field.read".to_string();
             let document = session.document();
             let mut fields = fields_of(document);
@@ -577,6 +575,7 @@ commands! {
 
         }
     }
+
     /// **Fill** a field of a form.
     ///
     /// The tree's own rules for a **choice**:
@@ -599,21 +598,17 @@ commands! {
         undoable,
         params: {
             /// The field.
-
             field: NodeRef,
             /// What it holds now.
             ///
             /// An empty text takes the value away.
-
             value: Option<Text>,
             /// What it holds now, when it holds **more than one** thing.
             ///
             /// Only a list that may hold more than one option takes this.
-
             values: Option<Json>,
         },
         run: {
-
             let id = "pdf.field.set".to_string();
             let field = self.field.0;
             let Some(node) = session.document().node(field).cloned() else {
@@ -819,6 +814,7 @@ commands! {
 
         }
     }
+
     /// **Say** what a field **inherits** from its parents.
     ///
     /// A field that does not say what it is takes the kind of its parent,
@@ -838,11 +834,9 @@ commands! {
         icon: "link",
         params: {
             /// The field.
-
             field: NodeRef,
         },
         run: {
-
             let id = "pdf.field.inherit".to_string();
             let field = self.field.0;
             let document = session.document();
@@ -888,6 +882,7 @@ commands! {
 
         }
     }
+
     /// **Put** a field in a field.
     ///
     /// A field may have a **parent**: the field it belongs to. The name
@@ -911,16 +906,13 @@ commands! {
         undoable,
         params: {
             /// The field.
-
             field: NodeRef,
             /// The field it belongs to.
             ///
             /// Leave it out and the field has no parent.
-
             parent: Option<NodeRef>,
         },
         run: {
-
             let id = "pdf.field.parent".to_string();
             let field = self.field.0;
             let Some(node) = session.document().node(field).cloned() else {
@@ -1056,6 +1048,7 @@ commands! {
 
         }
     }
+
     /// **Say** the **children** of a field.
     ///
     /// A field may hold **children**: the fields it is a group of. The
@@ -1074,11 +1067,9 @@ commands! {
         icon: "list",
         params: {
             /// The field.
-
             field: NodeRef,
         },
         run: {
-
             let id = "pdf.field.children".to_string();
             let field = self.field.0;
             let document = session.document();
@@ -1125,6 +1116,7 @@ commands! {
 
         }
     }
+
     /// **Say** the **widgets** of a field.
     ///
     /// A widget is the field's appearance on a page: a kid of the field
@@ -1147,11 +1139,9 @@ commands! {
         icon: "list",
         params: {
             /// The field.
-
             field: NodeRef,
         },
         run: {
-
             let id = "pdf.field.widgets".to_string();
             let field = self.field.0;
             let document = session.document();
@@ -1220,6 +1210,7 @@ commands! {
 
         }
     }
+
     /// **Say** how a field behaves.
     ///
     /// The flags of a field are a number, and two of them are the ones a
@@ -1234,17 +1225,13 @@ commands! {
         undoable,
         params: {
             /// The field.
-
             field: NodeRef,
             /// Whether the field is read only.
-
             read_only: Option<Bool>,
             /// Whether the field must be filled in.
-
             required: Option<Bool>,
         },
         run: {
-
             let id = "pdf.field.flags".to_string();
             let field = self.field.0;
             let Some(node) = session.document().node(field).cloned() else {

@@ -108,14 +108,11 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
             /// The degrees, clockwise. A multiple of ninety.
-
             degrees: Number,
         },
         run: {
-
             let id = "pdf.page.rotate".to_string();
             let page = self.page.0;
             let degrees = self.degrees.0;
@@ -156,6 +153,7 @@ commands! {
 
         }
     }
+
     /// The **rotation** of a page, as it stands.
     ///
     /// The number the page has, or the one it inherits, and the circle it
@@ -166,11 +164,9 @@ commands! {
         icon: "rotate",
         params: {
             /// The page.
-
             page: NodeRef,
         },
         run: {
-
             let id = "pdf.page.rotation".to_string();
             let page = self.page.0;
             let Some(node) = session.document().node(page) else {

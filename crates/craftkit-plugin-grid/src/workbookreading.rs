@@ -24,11 +24,9 @@ commands! {
         icon: "list",
         params: {
             /// The workbook to read.
-
             workbook: NodeRef,
         },
         run: {
-
             let id = "grid.workbook.get".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {

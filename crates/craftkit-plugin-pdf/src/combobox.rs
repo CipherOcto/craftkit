@@ -167,38 +167,29 @@ commands! {
         undoable,
         params: {
             /// The page the drop-down is put on.
-
             page: NodeRef,
             /// The drop-down's object number in the file.
-
             object: Number,
             /// The rectangle the drop-down covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the drop-down.
             ///
             /// Leave it out and the drop-down is given the first free name of
             /// the tree: `Dropdown1`, `Dropdown2` and so on.
-
             name: Option<Text>,
             /// The **options** the drop-down offers: a list of texts, or of
             /// pairs of two texts — the **export value** and the **display
             /// text** of the option.
-
             options: serde_json::Value,
             /// Whether the reader may write something that is not one of the
             /// options.
-
             editable: Option<Bool>,
             /// The text the drop-down holds.
-
             value: Option<Text>,
             /// Where the bytes of the field's drawing are written.
-
             appearance_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

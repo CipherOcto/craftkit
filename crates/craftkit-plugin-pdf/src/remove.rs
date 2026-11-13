@@ -61,11 +61,9 @@ commands! {
         undoable,
         params: {
             /// The object.
-
             object: NodeRef,
         },
         run: {
-
             let id = "pdf.object.remove".to_string();
             let object = self.object.0;
             let Some(node) = session.document().node(object) else {

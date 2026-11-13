@@ -163,11 +163,9 @@ commands! {
         icon: "list",
         params: {
             /// The field to read.
-
             field: NodeRef,
         },
         run: {
-
             let id = "pdf.field.appearance".to_string();
             let document = session.document();
             let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
@@ -198,6 +196,7 @@ commands! {
 
         }
     }
+
     /// **Write** the **appearance** of a field.
     ///
     /// The appearance is a **form XObject** — a little drawing — and the
@@ -229,14 +228,11 @@ commands! {
         undoable,
         params: {
             /// The widget the appearance is written for.
-
             widget: NodeRef,
             /// Where the bytes of the appearance are written.
-
             to: Text,
         },
         run: {
-
             let id = "pdf.field.appearance.write".to_string();
             let widget = self.widget.0;
             let Some(node) = session.document().node(widget) else {

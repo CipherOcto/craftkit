@@ -57,18 +57,16 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// Whether the gridlines are printed.
-
             on: Bool,
         },
         run: {
-
             set(session, "grid.print.gridlines", "print_gridlines", self.sheet.0, self.on.0)
 
         }
     }
+
     /// **Print** the headings of a sheet, or do not.
     ///
     /// The headings take room from the page, so the pages of a sheet with
@@ -81,14 +79,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// Whether the headings are printed.
-
             on: Bool,
         },
         run: {
-
             set(session, "grid.print.headings", "print_headings", self.sheet.0, self.on.0)
 
         }

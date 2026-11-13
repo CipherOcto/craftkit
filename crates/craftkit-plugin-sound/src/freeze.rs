@@ -33,14 +33,11 @@ commands! {
         menu: ("Track", "Freeze"),
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether it is frozen.
-
             frozen: Bool,
         },
         run: {
-
             let id = "sound.track.freeze".to_string();
             let track = self.track.0;
             let frozen = self.frozen.0;

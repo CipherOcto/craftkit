@@ -126,33 +126,25 @@ commands! {
         undoable,
         params: {
             /// The block it goes in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// Its centre.
-
             center: Json,
             /// Its **major axis**: a vector from the centre to the end of the
             /// major axis.
-
             major: Json,
             /// The **ratio** of the minor axis to the major one: above nothing
             /// and at most one.
-
             ratio: Number,
             /// The angle the arc runs from. The whole ellipse when it is not
             /// said.
-
             start: Option<Number>,
             /// The angle the arc runs to. The whole ellipse when it is not
             /// said.
-
             end: Option<Number>,
         },
         run: {
-
             let id = "cad.entity.ellipse.add".to_string();
             let center = point_of(&self.center, &id, "the centre")?;
             let major = point_of(&self.major, &id, "the major axis")?;
@@ -196,6 +188,7 @@ commands! {
 
         }
     }
+
     /// Put a **polyline** in a block.
     cad.entity.polyline.add {
         area: "cad",
@@ -205,20 +198,15 @@ commands! {
         undoable,
         params: {
             /// The block it goes in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// Its **points**: `[{ "x": …, "y": … }, …]`.
-
             points: Json,
             /// Whether the polyline is **closed**.
-
             closed: Option<Bool>,
         },
         run: {
-
             let id = "cad.entity.polyline.add".to_string();
             let Some(list) = self.points.as_array() else {
                 return Err(EngineError::Failed {

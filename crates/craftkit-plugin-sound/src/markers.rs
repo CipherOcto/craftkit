@@ -60,7 +60,6 @@ commands! {
             marker: Either<NodeRef, Text>,
         },
         run: {
-
             let id = "sound.marker.recall".to_string();
             let (marker, name) = marker_of(session, &self.marker, &id)?;
             let start = start_of(session, marker, &id)?;
@@ -71,6 +70,7 @@ commands! {
 
         }
     }
+
     /// **Step** to the next marker.
     ///
     /// The tree's own `markers.next`: the marker that starts after where the
@@ -85,11 +85,11 @@ commands! {
         params: {
         },
         run: {
-
             step(session, true)
 
         }
     }
+
     /// **Step** to the previous marker.
     ///
     /// The tree's own `markers.previous`: the marker that starts before
@@ -104,7 +104,6 @@ commands! {
         params: {
         },
         run: {
-
             step(session, false)
 
         }

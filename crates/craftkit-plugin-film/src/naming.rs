@@ -49,14 +49,11 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let id = "film.clip.rename".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

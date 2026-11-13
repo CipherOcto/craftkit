@@ -269,11 +269,9 @@ commands! {
         icon: "ruler",
         params: {
             /// The entity.
-
             entity: NodeRef,
         },
         run: {
-
             let id = "cad.measure.length".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;
@@ -290,6 +288,7 @@ commands! {
 
         }
     }
+
     /// The **area** an entity encloses.
     cad.measure.area {
         area: "cad",
@@ -297,11 +296,9 @@ commands! {
         icon: "rect",
         params: {
             /// The entity.
-
             entity: NodeRef,
         },
         run: {
-
             let id = "cad.measure.area".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;
@@ -318,6 +315,7 @@ commands! {
 
         }
     }
+
     /// The **radius** of an entity.
     cad.measure.radius {
         area: "cad",
@@ -325,11 +323,9 @@ commands! {
         icon: "circle",
         params: {
             /// The entity.
-
             entity: NodeRef,
         },
         run: {
-
             let id = "cad.measure.radius".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;
@@ -346,6 +342,7 @@ commands! {
 
         }
     }
+
     /// The **angle** at a point, between two directions.
     cad.measure.angle {
         area: "cad",
@@ -353,17 +350,13 @@ commands! {
         icon: "rotate",
         params: {
             /// The point the angle is at.
-
             vertex: Json,
             /// The first direction: the point it points at.
-
             first: Json,
             /// The second direction: the point it points at.
-
             second: Json,
         },
         run: {
-
             let id = "cad.measure.angle".to_string();
             let vertex = point_of(&self.vertex, &id, "the vertex")?;
             let first = point_of(&self.first, &id, "the first direction")?;

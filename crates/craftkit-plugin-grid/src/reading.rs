@@ -67,17 +67,13 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range: `A1:D10`. Without it, the used range is read.
-
             range: Option<Text>,
             /// Whether the **formulas** are given instead of the values.
-
             formulas: Option<Bool>,
         },
         run: {
-
             let id = "grid.range.read".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

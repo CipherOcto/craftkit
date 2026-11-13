@@ -120,18 +120,14 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The clip it lines up with.
-
             reference: NodeRef,
             /// Which point of the reference lines up: `in` or `out`. The
             /// default is `in`.
-
             method: Option<Text>,
         },
         run: {
-
             let id = "film.clip.synchronise".to_string();
             let clip = self.clip.0;
             let reference = self.reference.0;

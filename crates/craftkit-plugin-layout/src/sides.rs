@@ -85,14 +85,11 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
             /// The side it is on: `single`, `left` or `right`.
-
             side: Text,
         },
         run: {
-
             let id = "layout.page.side".to_string();
             let page = self.page.0;
             let Some(node) = session.document().node(page).cloned() else {

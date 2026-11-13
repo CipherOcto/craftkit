@@ -358,26 +358,19 @@ commands! {
         menu: ("Create"),
         params: {
             /// Where it starts, across.
-
             x: Number,
             /// Where it starts, down.
-
             y: Number,
             /// How wide it is.
-
             width: Number,
             /// How tall it is.
-
             height: Number,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is filled with, as `#rrggbb`.
-
             fill: Option<Text>,
         },
         run: {
-
             let rect = Rect::new(self.x.0, self.y.0, self.width.0, self.height.0);
             let path = Path::polygon(&[
                 Point::new(rect.x, rect.y),
@@ -394,6 +387,7 @@ commands! {
 
         }
     }
+
     /// Put an ellipse in the document.
     ///
     /// The ellipse is four cubic curves, the way a circle has always been
@@ -408,26 +402,19 @@ commands! {
         menu: ("Create"),
         params: {
             /// Its centre, across.
-
             x: Number,
             /// Its centre, down.
-
             y: Number,
             /// How wide it is, across the centre.
-
             width: Number,
             /// How tall it is, down the centre.
-
             height: Number,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is filled with, as `#rrggbb`.
-
             fill: Option<Text>,
         },
         run: {
-
             let path = ellipse(self.x.0, self.y.0, self.width.0, self.height.0);
             let name = match &self.name {
                 Some(name) => name.0.clone(),
@@ -438,6 +425,7 @@ commands! {
 
         }
     }
+
     /// Put a regular polygon in the document.
     vector.polygon {
         area: "vector",
@@ -448,26 +436,19 @@ commands! {
         menu: ("Create"),
         params: {
             /// Its centre, across.
-
             x: Number,
             /// Its centre, down.
-
             y: Number,
             /// How far its corners are from the centre.
-
             radius: Number,
             /// How many corners it has.
-
             sides: Number,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is filled with, as `#rrggbb`.
-
             fill: Option<Text>,
         },
         run: {
-
             let sides = self.sides.0;
             if !sides.is_finite() || !(3.0..=64.0).contains(&sides) {
                 return Err(EngineError::Failed {
@@ -485,6 +466,7 @@ commands! {
 
         }
     }
+
     /// Combine two paths into one.
     ///
     /// The **union**: everything either path covers. The result is one node,
@@ -500,21 +482,19 @@ commands! {
             /// The first path.
             ///
             /// Leave it out and the **selection** is used instead.
-
             first: Option<NodeRef>,
             /// The second path.
             ///
             /// Leave it out and the **selection** is used instead.
-
             second: Option<NodeRef>,
         },
         run: {
-
             let (first, second) = two_of(session, self.first, self.second)?;
             combine(session, "vector.path.unite", first, second, geom::BoolOp::Union)
 
         }
     }
+
     /// Take one path from another.
     ///
     /// The **difference**: what the first path covers and the second does not.
@@ -530,21 +510,19 @@ commands! {
             /// The path to take from.
             ///
             /// Leave it out and the **selection** is used instead.
-
             first: Option<NodeRef>,
             /// The path to take away.
             ///
             /// Leave it out and the **selection** is used instead.
-
             second: Option<NodeRef>,
         },
         run: {
-
             let (first, second) = two_of(session, self.first, self.second)?;
             combine(session, "vector.path.subtract", first, second, geom::BoolOp::Difference)
 
         }
     }
+
     /// Keep what both paths cover.
     ///
     /// The **intersection**: what the two paths share.
@@ -559,21 +537,19 @@ commands! {
             /// The first path.
             ///
             /// Leave it out and the **selection** is used instead.
-
             first: Option<NodeRef>,
             /// The second path.
             ///
             /// Leave it out and the **selection** is used instead.
-
             second: Option<NodeRef>,
         },
         run: {
-
             let (first, second) = two_of(session, self.first, self.second)?;
             combine(session, "vector.path.intersect", first, second, geom::BoolOp::Intersect)
 
         }
     }
+
     /// Take the points a path does not need.
     ///
     /// The path is simplified: the points that a flat line would serve are
@@ -587,14 +563,11 @@ commands! {
         menu: ("Path"),
         params: {
             /// The path.
-
             node: NodeRef,
             /// How far the result may be from the original.
-
             tolerance: Option<Number>,
         },
         run: {
-
             let tolerance = match &self.tolerance {
                 Some(tolerance) => tolerance.0,
                 None => 0.05,
@@ -612,6 +585,7 @@ commands! {
 
         }
     }
+
     /// **Close** a path: its last open contour is closed.
     ///
     /// A contour that is open has a loose end, and a loose end is a place
@@ -629,11 +603,9 @@ commands! {
         menu: ("Path"),
         params: {
             /// The path.
-
             node: NodeRef,
         },
         run: {
-
             let mut vector = vector_of(session, self.node.0)?;
             let Some(subpath) = vector.path.subpaths.iter_mut().rev().find(|subpath| !subpath.closed) else {
                 return Err(EngineError::Failed {
@@ -647,6 +619,7 @@ commands! {
 
         }
     }
+
     /// **Turn** a path the other way round.
     ///
     /// The contour runs backwards: it starts where it ended, and every
@@ -663,11 +636,9 @@ commands! {
         menu: ("Path"),
         params: {
             /// The path.
-
             node: NodeRef,
         },
         run: {
-
             let mut vector = vector_of(session, self.node.0)?;
             let subpaths: Vec<SubPath> = vector.path.subpaths.iter().map(reverse_subpath).collect();
             vector.path.subpaths = subpaths;
@@ -676,6 +647,7 @@ commands! {
 
         }
     }
+
     /// **Add an anchor** to a path: a segment of a contour is split in two.
     ///
     /// The anchor goes in at a place along the segment — `t`, from zero at
@@ -691,20 +663,15 @@ commands! {
         menu: ("Path"),
         params: {
             /// The path.
-
             node: NodeRef,
             /// Which contour of the path.
-
             subpath: Option<Number>,
             /// Which segment of the contour.
-
             segment: Number,
             /// Where along the segment the anchor goes: from zero to one.
-
             t: Option<Number>,
         },
         run: {
-
             let id = "vector.path.anchor.add".to_string();
             let index = self.segment.0;
             if !index.is_finite() || index < 0.0 {
@@ -744,6 +711,7 @@ commands! {
 
         }
     }
+
     /// Take an **anchor** away.
     ///
     /// The tree's rule: the segments that touch the anchor go with it, and
@@ -763,17 +731,13 @@ commands! {
         menu: ("Path"),
         params: {
             /// The path.
-
             node: NodeRef,
             /// Which contour of the path.
-
             subpath: Option<Number>,
             /// Which anchor of the contour.
-
             anchor: Number,
         },
         run: {
-
             let id = "vector.path.anchor.remove".to_string();
             let index = self.anchor.0;
             if !index.is_finite() || index < 0.0 || index.fract() != 0.0 {
@@ -824,6 +788,7 @@ commands! {
 
         }
     }
+
     /// Push a path out, or in.
     ///
     /// The path is offset by a distance: out for a positive one, in for a
@@ -837,14 +802,11 @@ commands! {
         menu: ("Path"),
         params: {
             /// The path.
-
             node: NodeRef,
             /// How far to push it.
-
             distance: Number,
         },
         run: {
-
             let mut vector = vector_of(session, self.node.0)?;
             vector.path = geom::offset(&vector.path, self.distance.0).map_err(|error| EngineError::Failed {
                 id: "vector.path.offset".to_string(),
@@ -855,6 +817,7 @@ commands! {
 
         }
     }
+
     /// The **outline** of a path's line.
     ///
     /// The line of a path covers an area, and the outline is that area as
@@ -870,20 +833,16 @@ commands! {
         menu: ("Path"),
         params: {
             /// The path whose line is outlined.
-
             path: NodeRef,
             /// What to call the new path.
-
             name: Option<Text>,
             /// The colour of the new path, as `#rrggbb`.
             ///
             /// Leave it out and the new path is filled with the colour of the
             /// line it came from.
-
             fill: Option<Text>,
         },
         run: {
-
             let vector = vector_of(session, self.path.0)?;
             let Some(stroke) = vector.stroke else {
                 return Err(EngineError::Failed {
@@ -915,6 +874,7 @@ commands! {
 
         }
     }
+
     ///
     /// The points of a contour are the point it starts at and the point
     /// each segment ends at, counting from zero. The handles of the curves
@@ -929,21 +889,16 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Which contour of the path, counting from zero. The first one if
             /// it is left out.
-
             contour: Option<Number>,
             /// Which point of the contour, counting from zero.
-
             point: Number,
             /// Where the point goes: a point, `{"x": …, "y": …}`.
-
             to: Json,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let contour = index_of(self.contour, "the contour")
                 .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
@@ -961,6 +916,7 @@ commands! {
 
         }
     }
+
     /// **Average** the points of a path.
     ///
     /// The points that are averaged are given **one per line**, as
@@ -984,18 +940,14 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The points to average, one per line, each `contour:point`.
-
             points: Text,
             /// The axis: `horizontal`, `vertical` or `both`. The default is
             /// `both`.
-
             axis: Option<Text>,
         },
         run: {
-
             let id = "vector.path.average".to_string();
             let mut vector = vector_of(session, self.path.0)?;
             let axis = match &self.axis {
@@ -1081,6 +1033,7 @@ commands! {
 
         }
     }
+
     /// Set the **handles** of a point.
     ///
     /// The two handles of a point are the one the curve leaves by and the
@@ -1096,24 +1049,18 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Which contour of the path, counting from zero. The first one if
             /// it is left out.
-
             contour: Option<Number>,
             /// Which point of the contour, counting from zero.
-
             point: Number,
             /// The handle the curve leaves the point by.
-
             c1: Option<Json>,
             /// The handle the curve arrives at the point by.
-
             c2: Option<Json>,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let contour = index_of(self.contour, "the contour").map_err(|reason| EngineError::Failed {
                 id: "vector.path.handle".to_string(),
@@ -1153,6 +1100,7 @@ commands! {
 
         }
     }
+
     /// Set the **fill** of a path.
     ///
     /// The fill is what is inside the path, and the rule that says what is
@@ -1166,17 +1114,13 @@ commands! {
         menu: ("Path", "Paint"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The colour, as `#rrggbb`.
-
             colour: Option<Text>,
             /// Take the fill away instead: the tree's **None** paint.
-
             none: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             // The tree's **None** paint: the path is filled with nothing,
             // and the fill is there and paints nothing. It is the same
@@ -1201,6 +1145,7 @@ commands! {
 
         }
     }
+
     /// Put a path **in front** of the others, or **behind** them.
     ///
     /// The order the paths are drawn in is the order they are in the
@@ -1219,14 +1164,11 @@ commands! {
         menu: ("Path", "Order"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// `front` or `back`.
-
             place: Text,
         },
         run: {
-
             let id = "vector.path.order".to_string();
             let node = session.document().node(self.path.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
@@ -1260,6 +1202,7 @@ commands! {
 
         }
     }
+
     /// Make a **grid** of copies of a path.
     ///
     /// The tree's repeat tool makes a grid of copies, and the shape is the
@@ -1278,23 +1221,17 @@ commands! {
         menu: ("Path", "Grid"),
         params: {
             /// The path to copy.
-
             path: NodeRef,
             /// How many copies across, the original among them.
-
             columns: Number,
             /// How many copies down, the original among them.
-
             rows: Number,
             /// How far apart they are, across.
-
             step_x: Number,
             /// How far apart they are, down.
-
             step_y: Number,
         },
         run: {
-
             let id = "vector.path.grid".to_string();
             let vector = vector_of(session, self.path.0)?;
             let columns = the_count(self.columns.0, "columns", &id)?;
@@ -1331,6 +1268,7 @@ commands! {
 
         }
     }
+
     /// Make a **mirrored** copy of a path.
     ///
     /// The copy is the path turned over a **line**: the two points say
@@ -1345,23 +1283,17 @@ commands! {
         menu: ("Path", "Mirror"),
         params: {
             /// The path to copy.
-
             path: NodeRef,
             /// Where the line starts, across.
-
             from_x: Number,
             /// Where the line starts, down.
-
             from_y: Number,
             /// Where the line ends, across.
-
             to_x: Number,
             /// Where the line ends, down.
-
             to_y: Number,
         },
         run: {
-
             let id = "vector.path.mirror".to_string();
             let vector = vector_of(session, self.path.0)?;
             let from = Point::new(self.from_x.0, self.from_y.0);
@@ -1388,6 +1320,7 @@ commands! {
 
         }
     }
+
     /// Make a **ring** of copies of a path.
     ///
     /// The copies are the path turned about a **centre**: each one by its
@@ -1402,20 +1335,15 @@ commands! {
         menu: ("Path", "Radial"),
         params: {
             /// The path to copy.
-
             path: NodeRef,
             /// How many copies there are, the original among them.
-
             count: Number,
             /// Where the centre is, across.
-
             centre_x: Number,
             /// Where the centre is, down.
-
             centre_y: Number,
         },
         run: {
-
             let id = "vector.path.radial".to_string();
             let vector = vector_of(session, self.path.0)?;
             let count = the_count(self.count.0, "copies", &id)?;
@@ -1442,6 +1370,7 @@ commands! {
 
         }
     }
+
     /// Set the **blend mode** of a path.
     ///
     /// The mode says how the path mixes with what is under it: the plain
@@ -1460,15 +1389,12 @@ commands! {
         menu: ("Path", "Paint"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The mode: `Normal`, `Multiply`, `Screen`, `Overlay` and the
             /// rest.
-
             mode: Text,
         },
         run: {
-
             let id = "vector.path.blend".to_string();
             let mut vector = vector_of(session, self.path.0)?;
             let mode = BlendMode::parse(self.mode.0.trim()).ok_or_else(|| EngineError::Failed {
@@ -1482,6 +1408,7 @@ commands! {
 
         }
     }
+
     /// Fill a path with a **gradient**.
     ///
     /// The gradient is the **kit's own** — the colours, the stops they are
@@ -1504,29 +1431,21 @@ commands! {
         menu: ("Path", "Paint"),
         params: {
             /// The path to fill with the gradient.
-
             path: NodeRef,
             /// `linear` — along a line — or `radial` — out from a centre.
-
             kind: Text,
             /// The stops: a list of `{"offset": 0, "colour": "#rrggbb"}`.
-
             stops: serde_json::Value,
             /// Where a **linear** gradient starts: `{"x": 0, "y": 0}`.
-
             from: Option<serde_json::Value>,
             /// Where a **linear** gradient ends.
-
             to: Option<serde_json::Value>,
             /// Where a **radial** gradient is centred.
-
             centre: Option<serde_json::Value>,
             /// How far a **radial** gradient reaches.
-
             radius: Option<Number>,
         },
         run: {
-
             let id = "vector.path.gradient".to_string();
             let mut vector = vector_of(session, self.path.0)?;
             // The **kind**: a line or a centre.
@@ -1617,6 +1536,7 @@ commands! {
 
         }
     }
+
     /// Set the **stroke** of a path, or take it away.
     ///
     /// The stroke is the line on the path's outline, and it has a colour
@@ -1630,20 +1550,15 @@ commands! {
         menu: ("Path", "Paint"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The colour of the line, as `#rrggbb`.
-
             colour: Text,
             /// How wide the line is.
-
             width: Number,
             /// Take the line away instead.
-
             none: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             if self.none.map(|none| none.0).unwrap_or(false) {
                 vector.stroke = None;
@@ -1666,6 +1581,7 @@ commands! {
 
         }
     }
+
     /// Say how the **corners** of a path's line meet.
     ///
     /// The join is `miter` — a pointed corner — `round` or `bevel`, which
@@ -1679,14 +1595,11 @@ commands! {
         menu: ("Path", "Paint"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The join: `miter`, `round` or `bevel`.
-
             join: Text,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let Some(mut stroke) = vector.stroke else {
                 return Err(EngineError::Failed {
@@ -1713,6 +1626,7 @@ commands! {
 
         }
     }
+
     /// Say how the **ends** of a path's line are finished.
     ///
     /// The cap is `butt` — a flush end — `round` or `square`.
@@ -1725,14 +1639,11 @@ commands! {
         menu: ("Path", "Paint"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The cap: `butt`, `round` or `square`.
-
             cap: Text,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let Some(mut stroke) = vector.stroke else {
                 return Err(EngineError::Failed {
@@ -1759,6 +1670,7 @@ commands! {
 
         }
     }
+
     /// Place a path with a **transform**.
     ///
     /// The transform is the six numbers of an affine matrix — `a b c d e f`
@@ -1774,14 +1686,11 @@ commands! {
         menu: ("Path", "Transform"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The six numbers of the matrix.
-
             matrix: Option<serde_json::Value>,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let transform = match &self.matrix {
                 Some(matrix) => geom::Matrix::from_json(matrix).map_err(|reason| EngineError::Failed {
@@ -1805,6 +1714,7 @@ commands! {
 
         }
     }
+
     /// Make a point of a path **smooth**.
     ///
     /// A smooth point's two handles are in line: the curve passes through
@@ -1819,18 +1729,14 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Which contour of the path, counting from zero. The first one if
             /// it is left out.
-
             contour: Option<Number>,
             /// Which point of the contour, counting from zero.
-
             point: Number,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
             let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
@@ -1845,6 +1751,7 @@ commands! {
 
         }
     }
+
     /// Make a point of a path a **corner**.
     ///
     /// The **handles** at the point are pulled back to it, so the two sides
@@ -1866,18 +1773,14 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Which contour of the path, counting from zero. The first one if
             /// it is left out.
-
             contour: Option<Number>,
             /// Which point of the contour, counting from zero.
-
             point: Number,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
             let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
@@ -1892,6 +1795,7 @@ commands! {
 
         }
     }
+
     /// **Reshape** a path: grab it at a point and drag it.
     ///
     /// The anchors around the grab follow with a **smooth falloff** over a
@@ -1910,32 +1814,24 @@ commands! {
         menu: ("Path", "Reshape"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Where the path is grabbed: the x of the point.
-
             x: Number,
             /// Where the path is grabbed: the y of the point.
-
             y: Number,
             /// How far the grab is dragged: the x.
-
             dx: Number,
             /// How far the grab is dragged: the y.
-
             dy: Number,
             /// How near an anchor must be for it to be the one that is grabbed.
             /// The tree's own default is three.
-
             tol: Option<Number>,
             /// How far the anchors around follow, measured along the path. The
             /// default is half the size of the contour, and it is never less
             /// than one.
-
             radius: Option<Number>,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let at = Point::new(self.x.0, self.y.0);
             let delta = Point::new(self.dx.0, self.dy.0);
@@ -2027,6 +1923,7 @@ commands! {
 
         }
     }
+
     /// Say which parts of a path are **inside**.
     ///
     /// The rule is `nonzero` — the default, and the rule that makes a
@@ -2042,14 +1939,11 @@ commands! {
         menu: ("Path", "Rule"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The rule: `nonzero` or `evenodd`.
-
             rule: Text,
         },
         run: {
-
             let mut vector = vector_of(session, self.path.0)?;
             let rule = match self.rule.0.trim().to_ascii_lowercase().as_str() {
                 "nonzero" | "non-zero" => FillRule::NonZero,
@@ -2067,6 +1961,7 @@ commands! {
 
         }
     }
+
     /// Keep what is in one path and not in the other.
     ///
     /// The **exclusion**: what the two paths do not share. It is the
@@ -2083,16 +1978,13 @@ commands! {
             /// The first path.
             ///
             /// Leave it out and the **selection** is used instead.
-
             first: Option<NodeRef>,
             /// The second path.
             ///
             /// Leave it out and the **selection** is used instead.
-
             second: Option<NodeRef>,
         },
         run: {
-
             let (first, second) = two_of(session, self.first, self.second)?;
             combine(session, "vector.path.exclude", first, second, geom::BoolOp::Xor)
 

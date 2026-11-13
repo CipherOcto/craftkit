@@ -124,18 +124,14 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
             /// The label of the captions: `Figure` when it is not given.
-
             label: Option<Text>,
             /// Whether the entries carry the label: yes, unless it is said
             /// no.
-
             include_label: Option<Bool>,
         },
         run: {
-
             let id = "prose.document.figures".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

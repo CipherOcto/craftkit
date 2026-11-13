@@ -83,23 +83,17 @@ commands! {
         undoable,
         params: {
             /// The page the mark is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The rectangle the mark covers: four numbers.
-
             rect: Json,
             /// The mark: `check`, `cross`, `dot` or `line`.
-
             mark: Text,
             /// The colour of the mark: three numbers.
-
             colour: Option<Json>,
         },
         run: {
-
             // The **mark**: one of the tree's own four.
             let Some(mark) = mark_of(&self.mark.0) else {
                 return Err(EngineError::Failed {

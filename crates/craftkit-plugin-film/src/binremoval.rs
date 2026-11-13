@@ -27,11 +27,9 @@ commands! {
         undoable,
         params: {
             /// The bin.
-
             bin: NodeRef,
         },
         run: {
-
             let id = "film.bin.remove".to_string();
             let bin = self.bin.0;
             let Some(node) = session.document().node(bin) else {

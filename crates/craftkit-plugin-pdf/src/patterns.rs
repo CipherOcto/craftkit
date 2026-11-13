@@ -318,7 +318,6 @@ commands! {
         params: {
         },
         run: {
-
             let patterns: Vec<Json> = PATTERNS
                 .iter()
                 .filter_map(|pattern| label_of(pattern).map(|label| json!({ "id": pattern, "label": label })))
@@ -330,6 +329,7 @@ commands! {
 
         }
     }
+
     /// The **text** that matches a pattern: the ranges of it, and the text
     /// of each range.
     pdf.redact.pattern.find {
@@ -338,14 +338,11 @@ commands! {
         icon: "find",
         params: {
             /// The text to look in.
-
             text: Text,
             /// The pattern: `phone`, `email`, `credit-card`, `ssn` or `date`.
-
             pattern: Text,
         },
         run: {
-
             let command = "pdf.redact.pattern.find";
             let pattern = self.pattern.0.trim().to_ascii_lowercase();
             if !PATTERNS.contains(&pattern.as_str()) {

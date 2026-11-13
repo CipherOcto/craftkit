@@ -194,11 +194,9 @@ commands! {
             /// The entry to read.
             ///
             /// Leave it out and everything the encryption says is read.
-
             key: Option<Text>,
         },
         run: {
-
             let id = "pdf.encrypt.read".to_string();
             let document = session.document();
             let Some(value) = crate::trailer::entry_of(document, "Encrypt") else {
@@ -262,6 +260,7 @@ commands! {
 
         }
     }
+
     /// **Encrypt** a file with a password, and **write** it out.
     ///
     /// A query of the document, and a file is written: the document itself
@@ -278,25 +277,20 @@ commands! {
         icon: "file",
         params: {
             /// The password that opens the file.
-
             password: Text,
             /// Where to write the encrypted file.
-
             path: Text,
             /// The password of the **owner**.
             ///
             /// Leave it out and the owner is the user: the one password opens
             /// the file and owns it.
-
             owner: Option<Text>,
             /// How the file is scrambled: `rc4` or `aes`.
             ///
             /// Leave it out and the streams are scrambled with RC4.
-
             cipher: Option<Text>,
         },
         run: {
-
             let id = "pdf.file.encrypt".to_string();
             let path = self.path.0.clone();
             if path.trim().is_empty() {

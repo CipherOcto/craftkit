@@ -110,29 +110,21 @@ commands! {
         undoable,
         params: {
             /// The style.
-
             style: NodeRef,
             /// The **font** of the text.
-
             font: Option<Text>,
             /// The **size** of the text.
-
             size: Option<Number>,
             /// The **colour** of the text, as `#rrggbb`.
-
             colour: Option<Text>,
             /// Whether the text is **bold**.
-
             bold: Option<Bool>,
             /// Whether the text is **italic**.
-
             italic: Option<Bool>,
             /// Whether the text is **underlined**.
-
             underline: Option<Bool>,
         },
         run: {
-
             let id = "prose.style.character".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style) else {
@@ -202,6 +194,7 @@ commands! {
 
         }
     }
+
     /// **Read** the character of a style, with the character of its base
     /// under it.
     prose.style.character.read {
@@ -210,11 +203,9 @@ commands! {
         icon: "list",
         params: {
             /// The style.
-
             style: NodeRef,
         },
         run: {
-
             let id = "prose.style.character.read".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style) else {
@@ -238,6 +229,7 @@ commands! {
 
         }
     }
+
     /// **Read** the character of a block: the character of the style it is
     /// on.
     prose.block.character {
@@ -246,11 +238,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.character".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -281,6 +271,7 @@ commands! {
 
         }
     }
+
     /// **Delete** a **style**.
     ///
     /// A style is a name and what it applies to, and a style that is not
@@ -305,11 +296,9 @@ commands! {
         undoable,
         params: {
             /// The style to delete.
-
             style: NodeRef,
         },
         run: {
-
             let id = "prose.style.delete".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style) else {
@@ -365,6 +354,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **styles** of a document.
     ///
     /// A query: it does not change the document. Each style is given with
@@ -376,11 +366,9 @@ commands! {
         icon: "list",
         params: {
             /// The document to look in.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.style.list".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

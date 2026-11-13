@@ -122,15 +122,12 @@ commands! {
         undoable,
         params: {
             /// The pages: the object that holds them.
-
             pages: NodeRef,
             /// The labels: a list of `{"page": 1, "style": "D", "prefix": "A-",
             /// "start": 1}`.
-
             labels: serde_json::Value,
         },
         run: {
-
             let id = "pdf.page.labels".to_string();
             let pages = self.pages.0;
             let Some(node) = session.document().node(pages) else {

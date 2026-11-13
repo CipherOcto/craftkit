@@ -149,22 +149,17 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// How many columns the page has, from one to twelve.
-
             count: Number,
             /// The space between the columns, in points.
             ///
             /// It is thirty-six points when it is not given.
-
             space: Option<Number>,
             /// Whether a line is drawn between the columns.
-
             separator: Option<Bool>,
         },
         run: {
-
             let id = "prose.page.columns".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;

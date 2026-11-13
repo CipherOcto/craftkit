@@ -104,26 +104,19 @@ commands! {
         undoable,
         params: {
             /// The block it goes in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// Its centre.
-
             center: Json,
             /// Its radius: above nothing.
-
             radius: Number,
             /// The angle it starts at, in radians.
-
             start: Number,
             /// The angle it ends at, in radians.
-
             end: Number,
         },
         run: {
-
             let id = "cad.entity.arc.add".to_string();
             let (cx, cy) = point_of(&self.center, &id, "the centre")?;
             let radius = self.radius.0;

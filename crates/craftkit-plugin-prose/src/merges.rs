@@ -210,25 +210,19 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// The row the merge begins at, counting from nothing.
-
             row: Number,
             /// The column the merge begins at, counting from nothing.
-
             column: Number,
             /// How many rows it reaches down. It is one unless the file says
             /// another.
-
             rows: Option<Number>,
             /// How many columns it reaches across. It is one unless the file
             /// says another.
-
             columns: Option<Number>,
         },
         run: {
-
             let id = "prose.table.merge".to_string();
             let table = self.table.0;
             let row = index_of(&id, self.row, "row")?;
@@ -303,6 +297,7 @@ commands! {
 
         }
     }
+
     /// **Split** a merged cell of a table.
     ///
     /// A change: the merge is taken away. The cells it covered stay
@@ -315,17 +310,13 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// The row the cell is in, counting from nothing.
-
             row: Number,
             /// The column the cell is in, counting from nothing.
-
             column: Number,
         },
         run: {
-
             let id = "prose.table.split".to_string();
             let table = self.table.0;
             let row = index_of(&id, self.row, "row")?;
@@ -354,6 +345,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **merged cells** of a table.
     ///
     /// A query: it does not change the document.
@@ -363,11 +355,9 @@ commands! {
         icon: "list",
         params: {
             /// The table.
-
             table: NodeRef,
         },
         run: {
-
             let id = "prose.table.merges".to_string();
             let table = self.table.0;
             let node = the_table(session, &id, table)?;

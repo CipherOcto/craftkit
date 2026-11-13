@@ -159,14 +159,11 @@ commands! {
         undoable,
         params: {
             /// Where the packet's **bytes** are written.
-
             path: Text,
             /// The level the file is: `a2b` or `a3b`.
-
             level: Text,
         },
         run: {
-
             let id = "pdf.metadata.write".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {

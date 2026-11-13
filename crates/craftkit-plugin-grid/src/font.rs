@@ -98,28 +98,21 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The **name** of the face.
-
             name: Option<Text>,
             /// The **size** of the text.
-
             size: Option<Number>,
             /// The **underline**: none, single, double, single accounting or
             /// double accounting.
-
             underline: Option<Text>,
             /// Where the text sits **above or below** its line: baseline,
             /// superscript or subscript.
-
             vert: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.font".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -143,6 +136,7 @@ commands! {
 
         }
     }
+
     /// **Bold** the text of a cell, or take the bold away.
     ///
     /// The tree's Bold: a button, and a button pressed twice does the
@@ -155,18 +149,14 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// Whether the text is bold: the opposite of what it is when this
             /// is not named.
-
             on: Option<Bool>,
         },
         run: {
-
             let id = "grid.cell.font.bold".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -179,6 +169,7 @@ commands! {
 
         }
     }
+
     /// **Italic** the text of a cell, or take the italic away.
     ///
     /// The tree's Italic: a button, and a button pressed twice does the
@@ -191,18 +182,14 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// Whether the text is italic: the opposite of what it is when
             /// this is not named.
-
             on: Option<Bool>,
         },
         run: {
-
             let id = "grid.cell.font.italic".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -215,6 +202,7 @@ commands! {
 
         }
     }
+
     /// **Strike** the text of a cell through, or take the strike away.
     ///
     /// The tree's Strikethrough: a button, and a button pressed twice does
@@ -227,18 +215,14 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// Whether the text is struck through: the opposite of what it is
             /// when this is not named.
-
             on: Option<Bool>,
         },
         run: {
-
             let id = "grid.cell.font.strike".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

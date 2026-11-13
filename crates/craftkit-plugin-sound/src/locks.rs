@@ -54,19 +54,17 @@ commands! {
         menu: ("Clip", "Edit Lock"),
         params: {
             /// The clip to lock.
-
             clip: NodeRef,
             /// Whether the clip is locked. Without it, the lock is toggled.
-
             locked: Option<Bool>,
         },
         run: {
-
             let locked = self.locked.map(|locked| locked.0);
             set_lock(session, self.clip.0, Lock::Edit, locked)
 
         }
     }
+
     /// Lock a clip's **place**, or take the lock off.
     ///
     /// The clip stays where it is: it may not be spaced or snapped. The
@@ -83,14 +81,11 @@ commands! {
         menu: ("Clip", "Time Lock"),
         params: {
             /// The clip to lock.
-
             clip: NodeRef,
             /// Whether the clip is locked. Without it, the lock is toggled.
-
             locked: Option<Bool>,
         },
         run: {
-
             let locked = self.locked.map(|locked| locked.0);
             set_lock(session, self.clip.0, Lock::Time, locked)
 

@@ -97,6 +97,7 @@ commands! {
 
         }
     }
+
     /// **Move** a layer in the stack.
     fx.layer.arrange {
         area: "fx",
@@ -154,6 +155,7 @@ commands! {
 
         }
     }
+
     /// **Rename** a layer.
     fx.layer.rename {
         area: "fx",

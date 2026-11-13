@@ -47,30 +47,23 @@ commands! {
         menu: ("Create"),
         params: {
             /// The samples of the stroke: `[[x, y], …]` or `[{x, y}, …]`.
-
             points: Json,
             /// The **fidelity** the stroke is fitted at: how far the stroke may
             /// be from the samples. 1.5 if it is not given.
-
             fidelity: Option<Number>,
             /// Whether the stroke is fitted at all.
             ///
             /// It is, unless this says otherwise: a stroke that is not fitted
             /// is the samples joined by straight sides.
-
             fit: Option<Bool>,
             /// Whether the stroke is closed.
-
             closed: Option<Bool>,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is filled with, as `#rrggbb`.
-
             fill: Option<Text>,
         },
         run: {
-
             let id = "vector.path.freehand".to_string();
             let fidelity = self.fidelity.as_ref().map(|fidelity| fidelity.0).unwrap_or(DEFAULT_FIDELITY);
             if !fidelity.is_finite() || !(MIN_FIDELITY..=MAX_FIDELITY).contains(&fidelity) {

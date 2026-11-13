@@ -156,15 +156,12 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The target: `https://example.com` or `mailto:ann@example.com`.
             /// Without it, the link is taken away.
-
             target: Text,
         },
         run: {
-
             let id = "layout.item.link".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;
@@ -196,6 +193,7 @@ commands! {
 
         }
     }
+
     /// **Set** the link of an item to a **page** of the document.
     ///
     /// The page must be a page of the **same document**: a page of another
@@ -209,15 +207,12 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The page it points at. Without it, the link to a page is taken
             /// away.
-
             page: Option<NodeRef>,
         },
         run: {
-
             let id = "layout.item.page.link".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;
@@ -286,6 +281,7 @@ commands! {
 
         }
     }
+
     /// **Read** the links of a document.
     ///
     /// The answer is every item that carries a link: the target it points
@@ -297,11 +293,9 @@ commands! {
         icon: "link",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "layout.links".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

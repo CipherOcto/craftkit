@@ -143,14 +143,11 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The run the revision is on: its number, counting from nothing.
-
             run: Number,
         },
         run: {
-
             let id = "prose.revision.accept".to_string();
             let block = self.block.0;
             let node = the_block(session, &id, block)?;
@@ -164,6 +161,7 @@ commands! {
 
         }
     }
+
     /// **Reject** a revision.
     prose.revision.reject {
         area: "prose",
@@ -173,14 +171,11 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The run the revision is on: its number, counting from nothing.
-
             run: Number,
         },
         run: {
-
             let id = "prose.revision.reject".to_string();
             let block = self.block.0;
             let node = the_block(session, &id, block)?;
@@ -194,6 +189,7 @@ commands! {
 
         }
     }
+
     /// **Accept** every revision of a block.
     prose.revision.accept.all {
         area: "prose",
@@ -203,11 +199,9 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.revision.accept.all".to_string();
             let block = self.block.0;
             let node = the_block(session, &id, block)?;
@@ -218,6 +212,7 @@ commands! {
 
         }
     }
+
     /// **Reject** every revision of a block.
     prose.revision.reject.all {
         area: "prose",
@@ -227,11 +222,9 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.revision.reject.all".to_string();
             let block = self.block.0;
             let node = the_block(session, &id, block)?;

@@ -45,14 +45,11 @@ commands! {
         undoable,
         params: {
             /// The sheet to move.
-
             sheet: NodeRef,
             /// The place it takes, counted from one.
-
             to: craftkit_sdk::Number,
         },
         run: {
-
             let id = "grid.sheet.move".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

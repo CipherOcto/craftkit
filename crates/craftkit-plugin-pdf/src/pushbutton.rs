@@ -99,29 +99,22 @@ commands! {
         undoable,
         params: {
             /// The page the button is put on.
-
             page: NodeRef,
             /// The button's object number in the file.
-
             object: Number,
             /// The rectangle the button covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the button.
             ///
             /// Leave it out and the button is given the first free name of the
             /// tree: `Button1`, `Button2` and so on.
-
             name: Option<Text>,
             /// The **caption** of the button: the text it shows.
-
             caption: Text,
             /// Where the bytes of the button's drawing are written.
-
             appearance_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

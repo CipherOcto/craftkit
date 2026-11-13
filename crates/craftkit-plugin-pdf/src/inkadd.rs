@@ -77,23 +77,17 @@ commands! {
         undoable,
         params: {
             /// The page the ink is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The strokes of the ink: lists of points of two numbers.
-
             strokes: Json,
             /// The colour of the ink: three numbers.
-
             colour: Option<Json>,
             /// The width of the ink, in points.
-
             width: Option<Number>,
         },
         run: {
-
             // The **page**: a page of the document.
             let Some(page) = session.document().node(self.page.0) else {
                 return Err(EngineError::Failed {

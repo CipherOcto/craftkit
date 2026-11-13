@@ -86,32 +86,25 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The column the text is in — the letters of it, such as `A`.
-
             column: Text,
             /// The text the parts are separated by.
             ///
             /// It is a tab unless the file says otherwise.
-
             delimiter: Option<Text>,
             /// The character that marks a part that holds the delimiter.
             ///
             /// It is a double quote unless the file says otherwise.
-
             qualifier: Option<Text>,
             /// Whether a run of delimiters is one delimiter.
-
             treat_consecutive: Option<Bool>,
             /// The column the parts are written into.
             ///
             /// It is the column they came from unless the file says otherwise.
-
             destination: Option<Text>,
         },
         run: {
-
             let id = "grid.text.columns".to_string();
             let sheet = self.sheet.0;
             // The **locks** the styles of the workbook carry: they are

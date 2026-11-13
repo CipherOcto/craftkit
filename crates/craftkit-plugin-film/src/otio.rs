@@ -335,11 +335,9 @@ commands! {
         icon: "list",
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.export.otio".to_string();
             let sequence = self.sequence.0;
             let Some(node) = session.document().node(sequence).cloned() else {

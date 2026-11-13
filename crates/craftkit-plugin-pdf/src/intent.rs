@@ -164,11 +164,9 @@ commands! {
         undoable,
         params: {
             /// Where the profile's **bytes** are written.
-
             path: Text,
         },
         run: {
-
             let id = "pdf.intent.write".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {

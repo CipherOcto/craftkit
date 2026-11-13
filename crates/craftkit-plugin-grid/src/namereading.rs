@@ -22,14 +22,11 @@ commands! {
         icon: "list",
         params: {
             /// The workbook the name is in.
-
             workbook: NodeRef,
             /// The name.
-
             name: Text,
         },
         run: {
-
             let id = "grid.name.get".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {

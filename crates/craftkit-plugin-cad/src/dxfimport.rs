@@ -396,16 +396,13 @@ commands! {
         undoable,
         params: {
             /// The file to read.
-
             path: Text,
             /// What to call the drawing.
             ///
             /// Without it, the name of the file.
-
             name: Option<Text>,
         },
         run: {
-
             let path = self.path.0.trim().to_string();
             if path.is_empty() {
                 return Err(EngineError::Failed {

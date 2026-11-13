@@ -138,14 +138,11 @@ commands! {
         undoable,
         params: {
             /// The clips that are nested.
-
             clips: Json,
             /// What to call the clip that holds them.
-
             name: Text,
         },
         run: {
-
             let id = "film.clip.nest".to_string();
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
@@ -322,6 +319,7 @@ commands! {
 
         }
     }
+
     /// **Take a nested clip apart** and put its clips back where they were.
     ///
     /// The clips go back to the tracks they came from, at the places they
@@ -335,11 +333,9 @@ commands! {
         undoable,
         params: {
             /// The nested clip.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "film.clip.ungroup".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

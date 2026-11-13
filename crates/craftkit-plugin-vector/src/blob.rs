@@ -42,22 +42,17 @@ commands! {
         menu: ("Path", "Paint"),
         params: {
             /// The path the brush paints on.
-
             path: NodeRef,
             /// The brush's stroke: a run of points, `[[x, y], …]`.
-
             points: Json,
             /// How wide the brush is. 10 if it is not given.
-
             size: Option<Number>,
             /// The fidelity the brush's stroke is fitted at.
             ///
             /// Without one the brush follows every point.
-
             fidelity: Option<Number>,
         },
         run: {
-
             let id = "vector.path.blob".to_string();
             let size = self.size.as_ref().map(|size| size.0).unwrap_or(DEFAULT_SIZE);
             if !size.is_finite() || size <= 0.0 {

@@ -192,11 +192,9 @@ commands! {
         icon: "list",
         params: {
             /// The page.
-
             page: NodeRef,
         },
         run: {
-
             let id = "pdf.page.boxes".to_string();
             let page = self.page.0;
             let Some(node) = session.document().node(page) else {
@@ -234,6 +232,7 @@ commands! {
 
         }
     }
+
     /// Set a **box** of a page.
     ///
     /// The box is a rectangle in points: four numbers, the lower left
@@ -252,17 +251,13 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
             /// The box: `MediaBox`, `CropBox`, `BleedBox`, `TrimBox`, `ArtBox`.
-
             which: Text,
             /// The rectangle: four numbers, the lower left corner first.
-
             rect: serde_json::Value,
         },
         run: {
-
             let id = "pdf.page.box".to_string();
             let page = self.page.0;
             let wanted = self.which.0.clone();

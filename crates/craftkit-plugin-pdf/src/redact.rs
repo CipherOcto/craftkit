@@ -753,15 +753,12 @@ commands! {
         undoable,
         params: {
             /// The page whose drawings are taken away.
-
             page: NodeRef,
             /// The region: four numbers, the left, the bottom, the right and
             /// the top of it.
-
             rect: Json,
         },
         run: {
-
             let page = self.page.0;
             let document = session.document();
             if document.node(page).is_none() {
@@ -1080,6 +1077,7 @@ commands! {
 
         }
     }
+
     /// The **annotations under a region are taken away**.
     ///
     /// A change: the annotations the region overlaps are gone from the
@@ -1092,15 +1090,12 @@ commands! {
         undoable,
         params: {
             /// The page whose annotations are taken away.
-
             page: NodeRef,
             /// The region: four numbers, the left, the bottom, the right and
             /// the top of it.
-
             rect: Json,
         },
         run: {
-
             let page = self.page.0;
             let document = session.document();
             let Some(node) = document.node(page) else {
@@ -1173,6 +1168,7 @@ commands! {
 
         }
     }
+
     /// The **box** of a redaction is drawn into the page.
     ///
     /// The tree's own rule: the mark of a redaction is gone when it is
@@ -1191,20 +1187,16 @@ commands! {
         undoable,
         params: {
             /// The page the box goes on.
-
             page: NodeRef,
             /// The region: four numbers, the left, the bottom, the right and
             /// the top of it.
-
             rect: Json,
             /// The colour of the box: three numbers, red, green and blue.
             ///
             /// The tree's default is black.
-
             color: Option<Json>,
         },
         run: {
-
             let id = "pdf.redact.box".to_string();
             let page = self.page.0;
             let document = session.document();
@@ -1263,6 +1255,7 @@ commands! {
 
         }
     }
+
     /// The **text under a region is removed**.
     ///
     /// A change: the content of the page is written again without the
@@ -1275,15 +1268,12 @@ commands! {
         undoable,
         params: {
             /// The page whose text is removed.
-
             page: NodeRef,
             /// The region: four numbers, the left, the bottom, the right and
             /// the top of it.
-
             rect: Json,
         },
         run: {
-
             let page = self.page.0;
             let document = session.document();
             let Some(node) = document.node(page) else {

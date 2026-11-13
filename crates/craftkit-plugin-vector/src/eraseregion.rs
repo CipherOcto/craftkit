@@ -55,28 +55,21 @@ commands! {
         menu: ("Path", "Erase"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The drag: a run of points, `[[x, y], …]`.
-
             points: Json,
             /// How long the tip's long axis is. 10 if it is not given.
-
             size: Option<Number>,
             /// The angle of the tip's long axis, in degrees. 0 if it is not
             /// given.
-
             angle: Option<Number>,
             /// How round the tip is, in percent of its long axis. 100 if it is
             /// not given.
-
             roundness: Option<Number>,
             /// What to call the paths that are left.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "vector.path.erase.region".to_string();
             let drag =
                 read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;

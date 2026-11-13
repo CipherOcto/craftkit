@@ -122,14 +122,11 @@ commands! {
         undoable,
         params: {
             /// The page the marks are taken away from.
-
             page: NodeRef,
             /// The kind of mark: `headerfooter`, `watermark` or `background`.
-
             kind: Text,
         },
         run: {
-
             let Some(mark) = mark_of(&self.kind.0) else {
                 return Err(EngineError::Failed {
                     id: COMMAND.to_string(),

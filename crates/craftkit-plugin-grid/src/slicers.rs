@@ -205,18 +205,14 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The **table** it is bound to.
-
             table: Text,
             /// The **column** of the table: the first one when it is not
             /// named.
-
             column: Option<Text>,
         },
         run: {
-
             let id = "grid.slicer.add".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -275,6 +271,7 @@ commands! {
 
         }
     }
+
     /// **Read** a slicer: its values, and which of them are kept.
     grid.slicer.read {
         area: "grid",
@@ -282,14 +279,11 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which slicer: the last one when it is not named.
-
             slicer: Option<Number>,
         },
         run: {
-
             let id = "grid.slicer.read".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -321,6 +315,7 @@ commands! {
 
         }
     }
+
     /// **Toggle** a value of a slicer.
     ///
     /// The value is kept, and the rows that do not show it are hidden. A
@@ -335,20 +330,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which slicer: the last one when it is not named.
-
             slicer: Option<Number>,
             /// The value.
-
             value: Text,
             /// Whether the value is added to the ones that are kept.
-
             multi: Option<Bool>,
         },
         run: {
-
             let id = "grid.slicer.toggle".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -431,6 +421,7 @@ commands! {
 
         }
     }
+
     /// **Clear** a slicer: every value is kept, and the filter is taken
     /// away.
     grid.slicer.clear {
@@ -441,14 +432,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which slicer: the last one when it is not named.
-
             slicer: Option<Number>,
         },
         run: {
-
             let id = "grid.slicer.clear".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -475,6 +463,7 @@ commands! {
 
         }
     }
+
     /// **Remove** a slicer, and the filter it wrote.
     grid.slicer.remove {
         area: "grid",
@@ -484,14 +473,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which slicer: the last one when it is not named.
-
             slicer: Option<Number>,
         },
         run: {
-
             let id = "grid.slicer.remove".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;

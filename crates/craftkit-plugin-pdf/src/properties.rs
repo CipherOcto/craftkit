@@ -133,44 +133,34 @@ commands! {
         undoable,
         params: {
             /// The field.
-
             field: NodeRef,
             /// The **name** of the field: the part it has of its own.
-
             name: Option<Text>,
             /// The **text** shown when the reader rests on the field.
             ///
             /// An empty text takes the tooltip away.
-
             tooltip: Option<Text>,
             /// The **most characters** the field holds.
             ///
             /// Zero means that there is no limit.
-
             max_len: Option<Number>,
             /// The **options** the field offers: a list of texts.
-
             options: Option<serde_json::Value>,
             /// Where the **text** of the field sits: 0 (left), 1 (centre) or 2
             /// (right).
-
             quadding: Option<Number>,
             /// The **value** the reset of the form restores.
             ///
             /// An empty text takes it away.
-
             default_value: Option<Text>,
             /// Whether the **properties** of the field may be changed.
-
             locked: Option<Bool>,
             /// Whether the field holds **more than one line** of text.
             ///
             /// A field that is not a text field refuses it.
-
             multiline: Option<Bool>,
         },
         run: {
-
             let field = self.field.0;
             let Some(node) = session.document().node(field).cloned() else {
                 return Err(EngineError::Failed {

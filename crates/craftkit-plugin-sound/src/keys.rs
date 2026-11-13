@@ -146,16 +146,13 @@ commands! {
         menu: ("Event", "Key"),
         params: {
             /// The key, by name: "C major", "G major", "E flat minor".
-
             key: Text,
             /// Where the key changes, in ticks.
             ///
             /// Without it, the key changes at the beginning of the session.
-
             tick: Option<Number>,
         },
         run: {
-
             let id = "sound.key.set".to_string();
             let Some((sharps, minor)) = craftkit_midi::names::key_from_name(&self.key.0) else {
                 return Err(EngineError::Failed {
@@ -191,6 +188,7 @@ commands! {
 
         }
     }
+
     /// Read the **keys** of the session.
     ///
     /// The read gives every key change the session has, in the order they
@@ -208,11 +206,9 @@ commands! {
             /// The place to read the key at, in ticks.
             ///
             /// Without it, every key change is read and no key is singled out.
-
             tick: Option<Number>,
         },
         run: {
-
             let mut keys: Vec<(i64, i8, bool, u64)> = session
                 .document()
                 .walk()

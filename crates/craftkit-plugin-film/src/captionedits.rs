@@ -99,17 +99,13 @@ commands! {
         undoable,
         params: {
             /// The cue.
-
             caption: NodeRef,
             /// Its new text.
-
             text: Option<Text>,
             /// Its new speaker. An empty speaker takes it away.
-
             speaker: Option<Text>,
         },
         run: {
-
             let command = "film.caption.set";
             let caption = self.caption.0;
             let (node, _track) = the_caption(session, command, caption)?;
@@ -154,6 +150,7 @@ commands! {
 
         }
     }
+
     /// **Set** the times of a cue.
     ///
     /// The times that are not given keep the ones the cue has, and a cue
@@ -166,17 +163,13 @@ commands! {
         undoable,
         params: {
             /// The cue.
-
             caption: NodeRef,
             /// The frame it starts at.
-
             start: Option<Number>,
             /// The frame it ends at.
-
             end: Option<Number>,
         },
         run: {
-
             let command = "film.caption.times";
             let caption = self.caption.0;
             let (node, track) = the_caption(session, command, caption)?;

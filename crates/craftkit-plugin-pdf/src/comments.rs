@@ -237,33 +237,24 @@ commands! {
         undoable,
         params: {
             /// The page the note is on.
-
             page: NodeRef,
             /// The point the note is put at: two numbers.
-
             at: serde_json::Value,
             /// The text of the note.
-
             contents: Option<Text>,
             /// The author of the note.
-
             author: Option<Text>,
             /// The icon of the note: `Comment`, `Note`, `Help`, `Insert`,
             /// `Key`, `NewParagraph` or `Paragraph`.
-
             icon: Option<Text>,
             /// The colour of the note: a hex text.
-
             colour: Option<Text>,
             /// The day the note was written: `D:YYYYMMDDHHmmSS`.
-
             date: Option<Text>,
             /// Where the bytes of the icon are written.
-
             to: Text,
         },
         run: {
-
             let id = "pdf.comment.add".to_string();
             // The **page**.
             let Some(page_node) = session.document().node(self.page.0).cloned() else {
@@ -434,6 +425,7 @@ commands! {
 
         }
     }
+
     /// **Change** the **author**, the **subject** and the **icon** of a
     /// comment.
     ///
@@ -462,24 +454,18 @@ commands! {
         undoable,
         params: {
             /// The comment.
-
             comment: NodeRef,
             /// The author of the comment.
-
             author: Option<Text>,
             /// The subject of the comment.
-
             subject: Option<Text>,
             /// The icon of the comment: `Comment`, `Note`, `Help`, `Insert`,
             /// `Key`, `NewParagraph` or `Paragraph`.
-
             icon: Option<Text>,
             /// Where the bytes of the icon are written, when the icon changes.
-
             to: Option<Text>,
         },
         run: {
-
             let id = "pdf.comment.info".to_string();
             let comment = self.comment.0;
             let Some(node) = session.document().node(comment).cloned() else {
@@ -619,6 +605,7 @@ commands! {
 
         }
     }
+
     /// **Read** the comments of a file.
     ///
     /// The tree's own: the comments are the annotations that are none of a
@@ -631,11 +618,9 @@ commands! {
         params: {
             /// The page whose comments are read; every page of the file when
             /// it is not said.
-
             page: Option<craftkit_sdk::NodeRef>,
         },
         run: {
-
             let document = session.document();
             let pages = pages_of(document);
             // The **pages** that are asked for.

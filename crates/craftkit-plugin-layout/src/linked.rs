@@ -84,14 +84,11 @@ commands! {
         undoable,
         params: {
             /// The story.
-
             story: NodeRef,
             /// Its text.
-
             text: Text,
         },
         run: {
-
             let command = "layout.story.set";
             let story = self.story.0;
             the_story(session, command, story)?;
@@ -109,6 +106,7 @@ commands! {
 
         }
     }
+
     /// **Link** a story to another story.
     ///
     /// The story takes the content of its parent and stays linked to it.
@@ -120,14 +118,11 @@ commands! {
         undoable,
         params: {
             /// The story.
-
             story: NodeRef,
             /// The story it takes its content from.
-
             parent: NodeRef,
         },
         run: {
-
             let command = "layout.story.link";
             let story = self.story.0;
             let parent = self.parent.0;
@@ -156,6 +151,7 @@ commands! {
 
         }
     }
+
     /// **Unlink** a story.
     ///
     /// The content of the story stays as it is.
@@ -167,11 +163,9 @@ commands! {
         undoable,
         params: {
             /// The story.
-
             story: NodeRef,
         },
         run: {
-
             let command = "layout.story.unlink";
             let story = self.story.0;
             the_story(session, command, story)?;
@@ -183,6 +177,7 @@ commands! {
 
         }
     }
+
     /// **Update** the links of the stories: a story takes the content of
     /// its parent again, and its own edits are replaced.
     ///
@@ -196,11 +191,9 @@ commands! {
         undoable,
         params: {
             /// The story, when it is not every link that is out of date.
-
             story: Option<NodeRef>,
         },
         run: {
-
             let command = "layout.story.update";
             // The **stories** of the document that are linked.
             let document =
@@ -251,6 +244,7 @@ commands! {
 
         }
     }
+
     /// The **links** of the stories of a document, and which of them are
     /// out of date.
     layout.document.links {
@@ -259,11 +253,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let command = "layout.document.links";
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

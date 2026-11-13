@@ -1416,14 +1416,11 @@ commands! {
         undoable,
         params: {
             /// The annotation.
-
             annotation: NodeRef,
             /// Where the bytes of the drawing are written.
-
             to: Text,
         },
         run: {
-
             let annotation = self.annotation.0;
             let Some(node) = session.document().node(annotation).cloned() else {
                 return Err(EngineError::Failed {

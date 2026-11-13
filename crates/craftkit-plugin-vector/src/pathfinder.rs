@@ -129,16 +129,13 @@ commands! {
             /// The path in front.
             ///
             /// Leave it out and the **selection** is used instead.
-
             front: Option<NodeRef>,
             /// The path behind.
             ///
             /// Leave it out and the **selection** is used instead.
-
             back: Option<NodeRef>,
         },
         run: {
-
             let id = "vector.path.crop".to_string();
             let paths = the_paths(session, &id, self.front, self.back)?;
             let front = paths[0];
@@ -195,6 +192,7 @@ commands! {
 
         }
     }
+
     /// **Trim** two paths: the path behind loses the part the path in
     /// front was covering.
     ///
@@ -211,16 +209,13 @@ commands! {
             /// The path in front.
             ///
             /// Leave it out and the **selection** is used instead.
-
             front: Option<NodeRef>,
             /// The path behind.
             ///
             /// Leave it out and the **selection** is used instead.
-
             back: Option<NodeRef>,
         },
         run: {
-
             let id = "vector.path.trim".to_string();
             let paths = the_paths(session, &id, self.front, self.back)?;
             // The paths in front of each path, one at a time: the hidden
@@ -273,6 +268,7 @@ commands! {
 
         }
     }
+
     /// **Divide** two paths: every **face** of them.
     ///
     /// The paths are cut at the places where they meet, and what is left
@@ -292,16 +288,13 @@ commands! {
             /// The path in front.
             ///
             /// Leave it out and the **selection** is used instead.
-
             front: Option<NodeRef>,
             /// The path behind.
             ///
             /// Leave it out and the **selection** is used instead.
-
             back: Option<NodeRef>,
         },
         run: {
-
             let id = "vector.path.divide".to_string();
             let (front, back) = front_and_back(session, &id, self.front, self.back)?;
             let one = crate::vector_of(session, front)?;
@@ -341,6 +334,7 @@ commands! {
 
         }
     }
+
     /// **Merge** two paths: the parts that are the same are joined.
     ///
     /// The tree's merge is the trim and then a join: the parts that are
@@ -357,16 +351,13 @@ commands! {
             /// The path in front.
             ///
             /// Leave it out and the **selection** is used instead.
-
             front: Option<NodeRef>,
             /// The path behind.
             ///
             /// Leave it out and the **selection** is used instead.
-
             back: Option<NodeRef>,
         },
         run: {
-
             let id = "vector.path.merge".to_string();
             let (front, back) = front_and_back(session, &id, self.front, self.back)?;
             let one = crate::vector_of(session, front)?;

@@ -207,27 +207,20 @@ commands! {
         undoable,
         params: {
             /// The track the transition is on.
-
             track: NodeRef,
             /// The outgoing clip.
-
             from: NodeRef,
             /// The incoming clip.
-
             to: NodeRef,
             /// How long the transition is, in frames.
-
             duration: Number,
             /// Where it sits on the cut: `center`, `start` or `end`. The
             /// default is `center`.
-
             align: Option<Text>,
             /// The kind of transition: `cross_dissolve`. The default is that.
-
             effect: Option<Text>,
         },
         run: {
-
             let id = "film.transition.add".to_string();
             let track = self.track.0;
             let from = self.from.0;
@@ -351,6 +344,7 @@ commands! {
 
         }
     }
+
     /// **Change** a transition: its duration and its alignment.
     ///
     /// The start of the transition follows from its alignment, so a
@@ -365,18 +359,14 @@ commands! {
         undoable,
         params: {
             /// The transition.
-
             transition: NodeRef,
             /// How long it is, in frames. The default is the duration it has.
-
             duration: Option<Number>,
             /// Where it sits on the cut: `center`, `start` or `end`. The
             /// default is the alignment it has.
-
             align: Option<Text>,
         },
         run: {
-
             let id = "film.transition.set".to_string();
             let transition = self.transition.0;
             let Some(node) = session.document().node(transition) else {
@@ -465,6 +455,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a transition.
     ///
     /// The clips it joins are not touched: a transition goes and the cut
@@ -477,11 +468,9 @@ commands! {
         undoable,
         params: {
             /// The transition.
-
             transition: NodeRef,
         },
         run: {
-
             let id = "film.transition.remove".to_string();
             let transition = self.transition.0;
             let Some(node) = session.document().node(transition) else {

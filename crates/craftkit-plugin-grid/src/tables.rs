@@ -336,17 +336,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the table.
-
             name: Text,
             /// The range it reaches: `A1:C5`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.table.create".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -407,6 +403,7 @@ commands! {
 
         }
     }
+
     /// **Read** the tables of a sheet.
     grid.table.read {
         area: "grid",
@@ -414,11 +411,9 @@ commands! {
         icon: "grid",
         params: {
             /// The sheet they are in.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.table.read".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -430,6 +425,7 @@ commands! {
 
         }
     }
+
     /// **Read** the fields of a table.
     ///
     /// The fields are the text of the header cells, and a header cell that
@@ -441,14 +437,11 @@ commands! {
         icon: "grid",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the table.
-
             name: Text,
         },
         run: {
-
             let id = "grid.table.fields".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -482,6 +475,7 @@ commands! {
 
         }
     }
+
     /// **Say** whether a table has a **total row**.
     ///
     /// The total row is the row at the bottom of the table that holds the
@@ -504,26 +498,21 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the table.
-
             name: Text,
             /// Whether the table has a total row.
             ///
             /// Leave it out and the table keeps the total row it has.
-
             totals: Option<Bool>,
             /// The **way** the columns are totalled in: `sum`, `average`,
             /// `count`, `count-numbers`, `max`, `min`, `standard-deviation`,
             /// `variance` or `none`.
             ///
             /// Leave it out and the table keeps the way it has.
-
             way: Option<Text>,
         },
         run: {
-
             let id = "grid.table.totals".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -574,6 +563,7 @@ commands! {
 
         }
     }
+
     /// **Say** the way a **column** of a table is totalled in.
     ///
     /// A column may be totalled in a way of its own, and the way of the
@@ -596,24 +586,19 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the table.
-
             name: Text,
             /// The **column** of the table: the name of its field.
-
             column: Text,
             /// The way the column is totalled in: `sum`, `average`, `count`,
             /// `count-numbers`, `max`, `min`, `standard-deviation`, `variance`
             /// or `none`.
             ///
             /// An empty way takes the column's own way away.
-
             way: Text,
         },
         run: {
-
             let id = "grid.table.way".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -682,6 +667,7 @@ commands! {
 
         }
     }
+
     /// **Rename** a table of a sheet.
     grid.table.rename {
         area: "grid",
@@ -691,17 +677,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name it has now.
-
             name: Text,
             /// The name it is given.
-
             to: Text,
         },
         run: {
-
             let id = "grid.table.rename".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -737,6 +719,7 @@ commands! {
 
         }
     }
+
     /// **Resize** a table of a sheet.
     ///
     /// The new range must name its fields the same way: a row of text.
@@ -748,17 +731,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the table.
-
             name: Text,
             /// The range it reaches now: `A1:C5`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.table.resize".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -825,6 +804,7 @@ commands! {
 
         }
     }
+
     /// **Remove** a table of a sheet.
     ///
     /// The cells of the table stay where they are: a table is a fact of
@@ -837,14 +817,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the table.
-
             name: Text,
         },
         run: {
-
             let id = "grid.table.remove".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -863,6 +840,7 @@ commands! {
 
         }
     }
+
     /// **Say** the **label** of the **total row** of a table.
     ///
     /// The label is the text the total row shows in its first cell — the
@@ -884,20 +862,16 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the table.
-
             name: Text,
             /// The label of the total row.
             ///
             /// Leave it out and the label is read. An empty label takes the
             /// label away.
-
             label: Option<Text>,
         },
         run: {
-
             let id = "grid.table.label".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;

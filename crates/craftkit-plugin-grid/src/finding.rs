@@ -89,23 +89,17 @@ commands! {
         params: {
             /// The sheet to look in. Without it, the whole workbook is looked
             /// in.
-
             sheet: Option<NodeRef>,
             /// What to look for.
-
             what: Text,
             /// Whether the **case** matters.
-
             match_case: Option<Bool>,
             /// Whether the **whole cell** must match.
-
             whole_cell: Option<Bool>,
             /// Whether to look in the **formulas** rather than in the values.
-
             formulas: Option<Bool>,
         },
         run: {
-
             let id = "grid.find".to_string();
             let what = self.what.0.clone();
             if what.is_empty() {

@@ -119,24 +119,18 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range to sort. Without it, the used range is sorted.
-
             range: Option<Text>,
             /// The column to sort by, as `B`. Without it, the first column of
             /// the range.
-
             column: Option<Text>,
             /// Whether the order is **descending**.
-
             descending: Option<Bool>,
             /// Whether the first row is a **header** and stays where it is.
-
             header: Option<Bool>,
         },
         run: {
-
             let id = "grid.sort".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

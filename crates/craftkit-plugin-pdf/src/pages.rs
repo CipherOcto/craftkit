@@ -53,11 +53,9 @@ commands! {
         undoable,
         params: {
             /// The page that is taken away.
-
             page: NodeRef,
         },
         run: {
-
             let id = "pdf.page.remove".to_string();
             let page = self.page.0;
             let Some(node) = session.document().node(page) else {

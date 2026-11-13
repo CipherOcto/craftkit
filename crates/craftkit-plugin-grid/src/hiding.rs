@@ -89,14 +89,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which row, counting from one.
-
             row: Number,
         },
         run: {
-
             let id = "grid.row.hide".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -131,6 +128,7 @@ commands! {
 
         }
     }
+
     /// **Show** a row that was hidden.
     grid.row.show {
         area: "grid",
@@ -140,14 +138,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which row, counting from one.
-
             row: Number,
         },
         run: {
-
             let id = "grid.row.show".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -181,6 +176,7 @@ commands! {
 
         }
     }
+
     /// **Hide** a column.
     grid.column.hide {
         area: "grid",
@@ -190,14 +186,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which column: `A`, `B`, `AA`.
-
             column: Text,
         },
         run: {
-
             let id = "grid.column.hide".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -232,6 +225,7 @@ commands! {
 
         }
     }
+
     /// **Show** a column that was hidden.
     grid.column.show {
         area: "grid",
@@ -241,14 +235,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which column: `A`, `B`, `AA`.
-
             column: Text,
         },
         run: {
-
             let id = "grid.column.show".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

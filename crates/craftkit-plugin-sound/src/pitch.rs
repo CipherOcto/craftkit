@@ -42,17 +42,13 @@ commands! {
         icon: "list",
         params: {
             /// The clip to listen to.
-
             clip: NodeRef,
             /// The lowest note to look for, in hertz.
-
             min_hz: Option<Number>,
             /// The highest note to look for, in hertz.
-
             max_hz: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.pitch.read".to_string();
             let clip_id = self.clip.0;
             let (channels, rate) = crate::planar_of(&id, session, clip_id)?;

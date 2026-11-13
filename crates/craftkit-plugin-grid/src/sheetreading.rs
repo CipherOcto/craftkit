@@ -26,11 +26,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet to read.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.sheet.get".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

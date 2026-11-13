@@ -73,26 +73,20 @@ commands! {
         undoable,
         params: {
             /// The page the image field is put on.
-
             page: NodeRef,
             /// The image field's object number in the file.
-
             object: Number,
             /// The rectangle the image field covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the image field.
             ///
             /// Leave it out and the image field is given the first free name
             /// of the tree: `Image1`, `Image2` and so on.
-
             name: Option<Text>,
             /// Where the bytes of the field's drawing are written.
-
             appearance_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

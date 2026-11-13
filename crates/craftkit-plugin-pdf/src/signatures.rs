@@ -119,11 +119,9 @@ commands! {
             /// The signature to read.
             ///
             /// Leave it out and every signature is read.
-
             field: Option<craftkit_sdk::Text>,
         },
         run: {
-
             let id = "pdf.signatures.read".to_string();
             let document = session.document();
             let all = signatures_of(document);

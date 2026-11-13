@@ -350,11 +350,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.accessibility".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {

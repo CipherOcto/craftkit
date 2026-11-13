@@ -46,14 +46,11 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.get".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

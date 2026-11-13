@@ -66,17 +66,13 @@ commands! {
         menu: ("Grid", "Set Grid"),
         params: {
             /// The note value the grid divides the bar into.
-
             value: Text,
             /// Whether the step is dotted. Without it, it is not.
-
             dotted: Option<Bool>,
             /// Whether the step is a triplet. Without it, it is not.
-
             triplet: Option<Bool>,
         },
         run: {
-
             let id = "sound.grid.set".to_string();
             let value = NoteValue::parse(&self.value.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
@@ -101,6 +97,7 @@ commands! {
 
         }
     }
+
     /// **Read the grid** of the session.
     ///
     /// The grid is read and the **step** of it is worked out: the step in
@@ -115,11 +112,9 @@ commands! {
             /// The place to read the lines from, in samples.
             ///
             /// Without it, the lines from the beginning of the document.
-
             at: Option<craftkit_sdk::Number>,
         },
         run: {
-
             let settings = session_of(session.document());
             let map = tempo_map(session.document());
             let rate = settings.sample_rate;
@@ -156,6 +151,7 @@ commands! {
 
         }
     }
+
     /// **Put clips on the grid**.
     ///
     /// The clip's **beat** is put on the nearest grid line, and the clip
@@ -178,11 +174,9 @@ commands! {
         menu: ("Clip", "Quantize to Grid"),
         params: {
             /// The clips to put on the grid: their ids.
-
             clips: serde_json::Value,
         },
         run: {
-
             let id = "sound.clip.quantize".to_string();
             let clips = crate::clip_ids_of(&self.clips, &id)?;
             let settings = session_of(session.document());

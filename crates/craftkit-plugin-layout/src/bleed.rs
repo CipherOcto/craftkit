@@ -107,23 +107,17 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The room at the top of the page.
-
             top: Option<Number>,
             /// The room at the bottom of the page.
-
             bottom: Option<Number>,
             /// The room at the left of the page.
-
             left: Option<Number>,
             /// The room at the right of the page.
-
             right: Option<Number>,
         },
         run: {
-
             let id = "layout.document.bleed".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

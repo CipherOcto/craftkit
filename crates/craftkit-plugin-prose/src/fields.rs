@@ -167,23 +167,17 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// Where the field begins, in characters.
-
             start: Number,
             /// Where the field ends, in characters.
-
             end: Number,
             /// The instruction of the field.
-
             code: Text,
             /// Whether the field is locked against change.
-
             locked: Option<Bool>,
         },
         run: {
-
             let id = "prose.block.field.add".to_string();
             let block = self.block.0;
             the_block(session, &id, block)?;
@@ -248,6 +242,7 @@ commands! {
 
         }
     }
+
     /// **Change** a **field** of a block.
     ///
     /// The field is named by **where it begins**, and a locked field is
@@ -260,20 +255,15 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The field: the character it begins at.
-
             field: Number,
             /// The instruction of the field.
-
             code: Option<Text>,
             /// Whether the field is locked against change.
-
             locked: Option<Bool>,
         },
         run: {
-
             let id = "prose.block.field.set".to_string();
             let block = self.block.0;
             the_block(session, &id, block)?;
@@ -327,6 +317,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **fields** of a block, each with the **result** it
     /// covers.
     prose.block.field.read {
@@ -335,11 +326,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.field.read".to_string();
             let block = self.block.0;
             the_block(session, &id, block)?;
@@ -358,6 +347,7 @@ commands! {
 
         }
     }
+
     /// **Unlink** a **field** of a block.
     ///
     /// The field is taken away and its **words stay**: they were ordinary
@@ -370,14 +360,11 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The field: the character it begins at.
-
             field: Number,
         },
         run: {
-
             let id = "prose.block.field.unlink".to_string();
             let block = self.block.0;
             the_block(session, &id, block)?;

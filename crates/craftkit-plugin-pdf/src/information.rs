@@ -73,11 +73,9 @@ commands! {
         undoable,
         params: {
             /// The object that is the information dictionary.
-
             object: NodeRef,
         },
         run: {
-
             let id = "pdf.info.set".to_string();
             let object = self.object.0;
             let Some(node) = session.document().node(object) else {
@@ -120,6 +118,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **information** of a PDF file.
     ///
     /// A query: it does not change the document. A file that has no
@@ -132,11 +131,9 @@ commands! {
             /// The entry to read.
             ///
             /// Leave it out and everything the information says is read.
-
             key: Option<craftkit_sdk::Text>,
         },
         run: {
-
             let id = "pdf.info.read".to_string();
             let document = session.document();
             let Some(information) = crate::information::the_information(document) else {

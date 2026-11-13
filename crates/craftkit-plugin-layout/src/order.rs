@@ -138,11 +138,9 @@ commands! {
         icon: "list",
         params: {
             /// The spread.
-
             spread: NodeRef,
         },
         run: {
-
             let id = "layout.item.list".to_string();
             let spread = self.spread.0;
             let Some(node) = session.document().node(spread) else {
@@ -160,6 +158,7 @@ commands! {
 
         }
     }
+
     /// **Bring** an item to the **front**.
     layout.item.front {
         area: "layout",
@@ -169,15 +168,14 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             move_item(session, "layout.item.front", self.item.0, "front")
 
         }
     }
+
     /// **Send** an item to the **back**.
     layout.item.back {
         area: "layout",
@@ -187,15 +185,14 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             move_item(session, "layout.item.back", self.item.0, "back")
 
         }
     }
+
     /// **Move** an item **one step** towards the front.
     layout.item.forward {
         area: "layout",
@@ -205,15 +202,14 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             move_item(session, "layout.item.forward", self.item.0, "forward")
 
         }
     }
+
     /// **Move** an item **one step** towards the back.
     layout.item.backward {
         area: "layout",
@@ -223,11 +219,9 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             move_item(session, "layout.item.backward", self.item.0, "backward")
 
         }

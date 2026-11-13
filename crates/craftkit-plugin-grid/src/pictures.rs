@@ -71,21 +71,16 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell the picture is drawn in.
-
             cell: Text,
             /// The **file** the bytes are in.
-
             path: Text,
             /// The **alt text**: what a reader says when it cannot show the
             /// picture.
-
             alt: Option<Text>,
         },
         run: {
-
             let id = "grid.picture.set".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {
@@ -137,6 +132,7 @@ commands! {
 
         }
     }
+
     /// **Read** the picture of a cell: where its bytes are and how big it
     /// is.
     ///
@@ -149,14 +145,11 @@ commands! {
         icon: "image",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell. Without it, every picture of the sheet is read.
-
             cell: Option<Text>,
         },
         run: {
-
             let id = "grid.picture.read".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {
@@ -217,6 +210,7 @@ commands! {
 
         }
     }
+
     /// **Take** the picture of a cell away.
     grid.picture.remove {
         area: "grid",
@@ -226,14 +220,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.picture.remove".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {

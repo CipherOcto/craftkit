@@ -675,11 +675,9 @@ commands! {
         example,
         params: {
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let name = self.name.0.clone();
             if name.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -694,6 +692,7 @@ commands! {
 
         }
     }
+
     /// Put a **layer** in a drawing.
     cad.layer.add {
         area: "cad",
@@ -703,24 +702,19 @@ commands! {
         undoable,
         params: {
             /// The drawing it goes in.
-
             drawing: NodeRef,
             /// The layer's name.
-
             name: Text,
             /// Its colour, as an index or a name.
-
             color: Option<Text>,
             /// The colour it is drawn in, as `#rrggbb`.
             ///
             /// It is the kit's own **appearance**, and the entities on the
             /// layer are drawn in it. A layer that says nothing is drawn in
             /// black.
-
             fill: Option<Text>,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -762,6 +756,7 @@ commands! {
 
         }
     }
+
     /// Put a **block** in a drawing.
     cad.block.add {
         area: "cad",
@@ -771,14 +766,11 @@ commands! {
         undoable,
         params: {
             /// The drawing it goes in.
-
             drawing: NodeRef,
             /// The block's name.
-
             name: Text,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -804,6 +796,7 @@ commands! {
 
         }
     }
+
     /// Put a **line** in a block.
     cad.entity.line.add {
         area: "cad",
@@ -813,20 +806,15 @@ commands! {
         undoable,
         params: {
             /// The block it goes in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// Where it starts.
-
             from: Json,
             /// Where it ends.
-
             to: Json,
         },
         run: {
-
             let geometry = json!({
                 "from": { "x": point(&self.from, "cad.entity.line.add", "the start")?.0, "y": point(&self.from, "cad.entity.line.add", "the start")?.1 },
                 "to": { "x": point(&self.to, "cad.entity.line.add", "the end")?.0, "y": point(&self.to, "cad.entity.line.add", "the end")?.1 },
@@ -844,6 +832,7 @@ commands! {
 
         }
     }
+
     /// Put a **circle** in a block.
     cad.entity.circle.add {
         area: "cad",
@@ -853,20 +842,15 @@ commands! {
         undoable,
         params: {
             /// The block it goes in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// Its centre.
-
             center: Json,
             /// Its radius.
-
             radius: Number,
         },
         run: {
-
             let (x, y) = point(&self.center, "cad.entity.circle.add", "the centre")?;
             let radius = self.radius.0;
             if !radius.is_finite() || radius <= 0.0 {
@@ -889,6 +873,7 @@ commands! {
 
         }
     }
+
     /// Put a **text** in a block.
     cad.entity.text.add {
         area: "cad",
@@ -898,23 +883,17 @@ commands! {
         undoable,
         params: {
             /// The block it goes in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// What it says.
-
             text: Text,
             /// Where it is written.
-
             at: Json,
             /// How big it is.
-
             height: Option<Number>,
         },
         run: {
-
             let (x, y) = point(&self.at, "cad.entity.text.add", "the insertion point")?;
             let height = match &self.height {
                 Some(height) if height.0.is_finite() && height.0 > 0.0 => height.0,
@@ -940,6 +919,7 @@ commands! {
 
         }
     }
+
     /// Put an **insert** in a block: an instance of another block.
     ///
     /// The insert **references** the block it inserts, and the reference is
@@ -953,20 +933,15 @@ commands! {
         undoable,
         params: {
             /// The block the instance goes in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// The block it inserts.
-
             inserts: NodeRef,
             /// Where it is put.
-
             at: Json,
         },
         run: {
-
             let inserts = self.inserts.0;
             let block_name = {
                 let Some(block) = session.document().node(inserts) else {
@@ -1004,6 +979,7 @@ commands! {
 
         }
     }
+
     /// Put an entity on a **layer**.
     ///
     /// The layer is **not** the entity's parent: the entity is in a block,
@@ -1017,14 +993,11 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
             /// The layer.
-
             layer: NodeRef,
         },
         run: {
-
             let entity = self.entity.0;
             let layer = self.layer.0;
             let Some(node) = session.document().node(layer) else {

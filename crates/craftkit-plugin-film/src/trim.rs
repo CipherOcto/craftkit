@@ -94,18 +94,14 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The edge that is trimmed: `in` or `out`.
-
             edge: Text,
             /// How much it is trimmed, in frames. A negative number trims the
             /// other way.
-
             delta: Number,
         },
         run: {
-
             let id = "film.clip.trim".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

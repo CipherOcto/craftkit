@@ -78,16 +78,13 @@ commands! {
             /// The clip to set the beat in.
             ///
             /// Without it, the clip that is selected.
-
             clip: Option<NodeRef>,
             /// Where the beat falls, in samples on the timeline.
             ///
             /// Without it, where the selection starts.
-
             at: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.sync.set".to_string();
             let (clip, span) = match (self.clip, crate::selection_span(session)) {
                 (Some(clip), span) => (clip.0, span.map(|(_, span)| span)),
@@ -147,6 +144,7 @@ commands! {
 
         }
     }
+
     /// Take the **beat** out of a clip.
     ///
     /// A clip with no beat is not changed, and a command that changes
@@ -163,11 +161,9 @@ commands! {
             /// The clip to take the beat out of.
             ///
             /// Without it, the clip that is selected.
-
             clip: Option<NodeRef>,
         },
         run: {
-
             let id = "sound.clip.sync.remove".to_string();
             let clip = match (self.clip, crate::selection_span(session)) {
                 (Some(clip), _) => clip.0,
@@ -201,6 +197,7 @@ commands! {
 
         }
     }
+
     /// Read the **beat** of a clip.
     ///
     /// The beat is in the clip's payload and the **place** of it is
@@ -215,11 +212,9 @@ commands! {
             /// The clip to read.
             ///
             /// Without it, the clip that is selected.
-
             clip: Option<NodeRef>,
         },
         run: {
-
             let id = "sound.clip.sync.read".to_string();
             let clip = match (self.clip, crate::selection_span(session)) {
                 (Some(clip), _) => clip.0,

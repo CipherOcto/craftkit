@@ -619,11 +619,9 @@ commands! {
         params: {
             /// The page that is flattened; every page of the file when it is
             /// not said.
-
             page: Option<NodeRef>,
         },
         run: {
-
             let pages = the_pages(session, self.page)?;
             let report = flatten_pages(session, &pages, What::Fields)?;
             Ok(Outcome::changed(format!("{} appearance(s) drawn", report.drawn)).with_data(json!({
@@ -636,6 +634,7 @@ commands! {
 
         }
     }
+
     /// **Flatten** the comments of a file: they are drawn into the pages
     /// they are on, and taken away.
     ///
@@ -651,11 +650,9 @@ commands! {
         params: {
             /// The page that is flattened; every page of the file when it is
             /// not said.
-
             page: Option<NodeRef>,
         },
         run: {
-
             let pages = the_pages(session, self.page)?;
             let report = flatten_pages(session, &pages, What::Comments)?;
             Ok(Outcome::changed(format!("{} appearance(s) drawn", report.drawn)).with_data(json!({

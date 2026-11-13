@@ -204,46 +204,33 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The tag that names the source.
             ///
             /// A source that is not named by a tag is given one.
-
             tag: Option<Text>,
             /// The kind of the source.
-
             kind: Option<Text>,
             /// Who wrote it.
-
             author: Option<Text>,
             /// What it is called.
-
             title: Option<Text>,
             /// When it was made.
-
             year: Option<Text>,
             /// Who published it.
-
             publisher: Option<Text>,
             /// Where it was made.
-
             city: Option<Text>,
             /// The journal it is in.
-
             journal: Option<Text>,
             /// The volume of the journal it is in.
-
             volume: Option<Text>,
             /// The pages of it.
-
             pages: Option<Text>,
             /// Where it may be found.
-
             url: Option<Text>,
         },
         run: {
-
             let id = "prose.document.source.set".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;
@@ -389,6 +376,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a **source** of a document.
     prose.document.source.remove {
         area: "prose",
@@ -398,14 +386,11 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The tag that names the source.
-
             tag: Text,
         },
         run: {
-
             let id = "prose.document.source.remove".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;
@@ -439,6 +424,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **sources** of a document.
     prose.document.source.read {
         area: "prose",
@@ -446,11 +432,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.document.source.read".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;
@@ -460,6 +444,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **bibliography** of a document: the sources that are
     /// cited, written in the style of the document.
     ///
@@ -474,11 +459,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.document.bibliography".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;

@@ -174,17 +174,14 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
             /// The order the page's annotations are reached in: `rows`,
             /// `columns`, `structure` or `annotations`.
             ///
             /// Leave it out and the page keeps the order it has.
-
             tabs: Option<Text>,
         },
         run: {
-
             let id = "pdf.page.tabs".to_string();
             let page = self.page.0;
             let Some(node) = session.document().node(page).cloned() else {
@@ -235,6 +232,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **tab order** of a form.
     ///
     /// The order in which the fields of a form are reached: the
@@ -248,11 +246,9 @@ commands! {
             /// The page whose order is read.
             ///
             /// Leave it out and the whole document is read.
-
             page: Option<NodeRef>,
         },
         run: {
-
             let id = "pdf.tab.order".to_string();
             let document = session.document();
             let only = match self.page {

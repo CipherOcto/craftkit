@@ -158,20 +158,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The text of the comment.
-
             text: Text,
             /// Who wrote it.
-
             author: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.comment.set".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -217,6 +212,7 @@ commands! {
 
         }
     }
+
     /// **Reply** to the comment of a cell.
     ///
     /// The reply joins the thread of the cell. A cell that has no comment
@@ -229,20 +225,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The text of the reply.
-
             text: Text,
             /// Who wrote it.
-
             author: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.comment.reply".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -279,6 +270,7 @@ commands! {
 
         }
     }
+
     /// **Resolve** the comment of a cell, or leave it unresolved again.
     grid.cell.comment.resolve {
         area: "grid",
@@ -288,17 +280,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// Whether the thread is resolved: yes, unless it is said no.
-
             resolved: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             let id = "grid.cell.comment.resolve".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -328,6 +316,7 @@ commands! {
 
         }
     }
+
     /// The **comment** of a cell: the thread and its replies.
     grid.cell.comment.get {
         area: "grid",
@@ -335,14 +324,11 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.comment.get".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -371,6 +357,7 @@ commands! {
 
         }
     }
+
     /// Take the **comment** away from a cell.
     ///
     /// A cell that holds no comment is not refused: there is nothing to
@@ -383,14 +370,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.comment.delete".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

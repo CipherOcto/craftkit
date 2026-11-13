@@ -302,35 +302,25 @@ commands! {
         undoable,
         params: {
             /// The page it goes on.
-
             page: Option<NodeRef>,
             /// The spread it goes on, when the page is not named.
-
             spread: Option<NodeRef>,
             /// `horizontal`, `vertical` or `both`.
-
             orientation: Text,
             /// Where it stands.
-
             position: Option<Number>,
             /// The x of a guide in **both** directions.
-
             x: Option<Number>,
             /// The y of a guide in **both** directions.
-
             y: Option<Number>,
             /// The x of a horizontal guide, which is where the page is found.
-
             at: Option<Number>,
             /// Whether it crosses the pasteboard.
-
             spread_guide: Option<Bool>,
             /// Whether it is a liquid guide.
-
             liquid: Option<Bool>,
         },
         run: {
-
             let command = "layout.guide.add";
             let spread_guide = self.spread_guide.map(|flag| flag.0).unwrap_or(false);
             let liquid = self.liquid.map(|flag| flag.0).unwrap_or(false);
@@ -446,6 +436,7 @@ commands! {
 
         }
     }
+
     /// **Create** the guides of a page: a grid of them, across the page
     /// or across its margins.
     ///
@@ -463,32 +454,23 @@ commands! {
         undoable,
         params: {
             /// The spread the pages are in.
-
             spread: NodeRef,
             /// The page, when it is not every page of the spread.
-
             page: Option<NodeRef>,
             /// The rows the page is cut into.
-
             rows: Option<Number>,
             /// The columns the page is cut into.
-
             columns: Option<Number>,
             /// The room between the rows.
-
             row_gutter: Option<Number>,
             /// The room between the columns.
-
             column_gutter: Option<Number>,
             /// `margins` — the default — or `page`.
-
             fit_to: Option<Text>,
             /// Whether the guides that are there are cleared first.
-
             remove_existing: Option<Bool>,
         },
         run: {
-
             let command = "layout.guide.create";
             let rows = divisions_of(command, "rows", self.rows)?;
             let columns = divisions_of(command, "columns", self.columns)?;
@@ -594,6 +576,7 @@ commands! {
 
         }
     }
+
     /// **Move** a guide to another place.
     layout.guide.move {
         area: "layout",
@@ -603,14 +586,11 @@ commands! {
         undoable,
         params: {
             /// The guide.
-
             guide: NodeRef,
             /// Where it stands now.
-
             position: Number,
         },
         run: {
-
             let command = "layout.guide.move";
             let guide = self.guide.0;
             the_guide(session, command, guide)?;
@@ -628,6 +608,7 @@ commands! {
 
         }
     }
+
     /// **Delete** a guide.
     layout.guide.delete {
         area: "layout",
@@ -637,11 +618,9 @@ commands! {
         undoable,
         params: {
             /// The guide.
-
             guide: NodeRef,
         },
         run: {
-
             let command = "layout.guide.delete";
             let guide = self.guide.0;
             let node = the_guide(session, command, guide)?.clone();
@@ -651,6 +630,7 @@ commands! {
 
         }
     }
+
     /// **Delete** every guide of a spread.
     layout.guide.delete.all {
         area: "layout",
@@ -660,11 +640,9 @@ commands! {
         undoable,
         params: {
             /// The spread.
-
             spread: NodeRef,
         },
         run: {
-
             let command = "layout.guide.delete.all";
             let spread = self.spread.0;
             let node = the_spread(session, command, spread)?.clone();
@@ -683,6 +661,7 @@ commands! {
 
         }
     }
+
     /// The **guides** of a page: what they are and where they stand.
     layout.page.guides {
         area: "layout",
@@ -690,11 +669,9 @@ commands! {
         icon: "list",
         params: {
             /// The page.
-
             page: NodeRef,
         },
         run: {
-
             let command = "layout.page.guides";
             let page = self.page.0;
             let node = the_page(session, command, page)?;

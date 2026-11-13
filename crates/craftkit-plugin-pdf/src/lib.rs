@@ -422,14 +422,11 @@ commands! {
         example,
         params: {
             /// The object's number in the file.
-
             object: Number,
             /// The dictionary: a list of `[key, value]` pairs, in order.
-
             entries: serde_json::Value,
         },
         run: {
-
             let object = self.object.0;
             if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
                 return Err(EngineError::Failed {
@@ -468,6 +465,7 @@ commands! {
 
         }
     }
+
     /// **Set** a key of an object's dictionary.
     ///
     /// The dictionary is the payload, and a payload that cannot be changed
@@ -486,17 +484,13 @@ commands! {
         undoable,
         params: {
             /// The object.
-
             object: NodeRef,
             /// The key.
-
             key: Text,
             /// The value.
-
             value: serde_json::Value,
         },
         run: {
-
             let id = "pdf.entry.set".to_string();
             let object = self.object.0;
             let Some(node) = session.document().node(object) else {
@@ -540,6 +534,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a key of an object's dictionary.
     ///
     /// A key that is **not there** is refused: a key that was never there
@@ -552,14 +547,11 @@ commands! {
         undoable,
         params: {
             /// The object.
-
             object: NodeRef,
             /// The key.
-
             key: Text,
         },
         run: {
-
             let id = "pdf.entry.remove".to_string();
             let object = self.object.0;
             let Some(node) = session.document().node(object) else {
@@ -603,6 +595,7 @@ commands! {
 
         }
     }
+
     /// Put an indirect object that has a **stream** in the document.
     ///
     /// The bytes are not in the document: they are in the file beside it, and
@@ -615,17 +608,13 @@ commands! {
         undoable,
         params: {
             /// The object's number in the file.
-
             object: Number,
             /// The dictionary: a list of `[key, value]` pairs, in order.
-
             entries: serde_json::Value,
             /// Where the bytes are, relative to the document.
-
             stream: Text,
         },
         run: {
-
             let object = self.object.0;
             if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
                 return Err(EngineError::Failed {
@@ -665,6 +654,7 @@ commands! {
 
         }
     }
+
     /// **Decode** a stream's bytes.
     ///
     /// A PDF's stream may be **encoded**: the `/Filter` entry names the way
@@ -682,14 +672,12 @@ commands! {
         menu: ("PDF", "Streams"),
         params: {
             /// The stream whose bytes are decoded.
-
             stream: NodeRef,
             /// The filter to undo: `FlateDecode`, `LZWDecode`,
             /// `ASCIIHexDecode`, `ASCII85Decode` or `RunLengthDecode`.
             ///
             /// Leave it out and the **dictionary** names it, which is where a
             /// PDF file says which filter a stream is in.
-
             filter: Option<Text>,
             /// The **predictor** to undo: the number the PDF gives it — `1` is
             /// none, `2` is the TIFF one and `10` to `15` are the PNG ones.
@@ -698,14 +686,11 @@ commands! {
             /// `/DecodeParms`. The other parameters of the predictor — the
             /// columns, the colours and the bits — come from the dictionary
             /// whatever this says.
-
             predictor: Option<Number>,
             /// Where to write the decoded bytes.
-
             to: Text,
         },
         run: {
-
             let id = self.stream.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -750,6 +735,7 @@ commands! {
 
         }
     }
+
     /// Read the **operators** of a content stream.
     ///
     /// A page's content is a stream of operands and operators, and the
@@ -761,14 +747,11 @@ commands! {
         icon: "list",
         params: {
             /// The stream whose bytes are read.
-
             stream: NodeRef,
             /// The filter to undo, when the dictionary does not name one.
-
             filter: Option<Text>,
         },
         run: {
-
             let id = self.stream.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -800,6 +783,7 @@ commands! {
 
         }
     }
+
     /// Write the **content** of a stream back.
     ///
     /// The content of a stream is read and written again in the kit's own
@@ -817,11 +801,9 @@ commands! {
         undoable,
         params: {
             /// The stream whose content is written.
-
             stream: NodeRef,
         },
         run: {
-
             let id = self.stream.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -873,6 +855,7 @@ commands! {
 
         }
     }
+
     /// Put a **page** in the document.
     ///
     /// A page is an indirect object whose dictionary says `/Type /Page`, and
@@ -886,18 +869,14 @@ commands! {
         undoable,
         params: {
             /// The object's number in the file.
-
             object: Number,
             /// The page's own dictionary: a list of `[key, value]` pairs, in
             /// order.
-
             entries: Option<serde_json::Value>,
             /// The page's parent, if it has one.
-
             parent: Option<NodeRef>,
         },
         run: {
-
             let object = self.object.0;
             if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
                 return Err(EngineError::Failed {
@@ -988,6 +967,7 @@ commands! {
 
         }
     }
+
     /// The **attributes** of a page, and the ones it inherits.
     ///
     /// A page may leave out what a page does not have to say: the **media
@@ -1000,11 +980,9 @@ commands! {
         icon: "list",
         params: {
             /// The page.
-
             page: NodeRef,
         },
         run: {
-
             let id = self.page.0;
             let node = session.document().node(id).ok_or_else(|| EngineError::Failed {
                 id: "pdf.page.attributes".to_string(),
@@ -1048,6 +1026,7 @@ commands! {
 
         }
     }
+
     /// Put an **annotation** on a page.
     ///
     /// An annotation is an object of its own: a dictionary with a type, a
@@ -1071,30 +1050,22 @@ commands! {
         undoable,
         params: {
             /// The page the annotation is on.
-
             page: NodeRef,
             /// The annotation's object number in the file.
-
             object: Number,
             /// The annotation's kind: `Link`, `Text`, `FreeText`, `Square`,
             /// `Circle`, `Highlight`, `Popup`, `Widget` or `Stamp`.
-
             subtype: Text,
             /// The rectangle the annotation covers: four numbers.
-
             rect: serde_json::Value,
             /// The annotation's text.
-
             contents: Option<Text>,
             /// The page a link goes to.
-
             destination: Option<NodeRef>,
             /// Where a link goes that is not in this document.
-
             uri: Option<Text>,
         },
         run: {
-
             let id = "pdf.annot.add".to_string();
             // The **page**: an object whose type is `Page`.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
@@ -1273,6 +1244,7 @@ commands! {
 
         }
     }
+
     /// The **annotations** of a page.
     ///
     /// A query: it does not change the document. The page's `/Annots` are
@@ -1283,11 +1255,9 @@ commands! {
         icon: "list",
         params: {
             /// The page.
-
             page: NodeRef,
         },
         run: {
-
             let id = "pdf.page.annotations".to_string();
             if session.document().node(self.page.0).is_none() {
                 return Err(EngineError::Failed {
@@ -1333,6 +1303,7 @@ commands! {
 
         }
     }
+
     /// Read the **objects** of an object stream.
     ///
     /// An object stream is a stream that holds a file's objects, so that
@@ -1344,11 +1315,9 @@ commands! {
         icon: "list",
         params: {
             /// The stream whose objects are read.
-
             stream: NodeRef,
         },
         run: {
-
             let id = self.stream.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -1400,6 +1369,7 @@ commands! {
 
         }
     }
+
     /// Read the **cross-reference table** of a file.
     ///
     /// The table is the file's own index of itself: it says where each
@@ -1411,11 +1381,9 @@ commands! {
         icon: "list",
         params: {
             /// The file to read.
-
             path: Text,
         },
         run: {
-
             let path = self.path.0.clone();
             if path.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -1457,6 +1425,7 @@ commands! {
 
         }
     }
+
     /// Load a PDF **file** into the document.
     ///
     /// The file's own index says where its objects are, and the loader
@@ -1472,14 +1441,11 @@ commands! {
         undoable,
         params: {
             /// The file to read.
-
             path: Text,
             /// Where the **streams' bytes** go: a directory of this file's own.
-
             into: Text,
         },
         run: {
-
             let path = self.path.0.clone();
             if path.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -1589,6 +1555,7 @@ commands! {
 
         }
     }
+
     /// Write the document out as a PDF **file**.
     ///
     /// The objects of the document become the objects of a file, and the
@@ -1601,16 +1568,13 @@ commands! {
         undoable,
         params: {
             /// Where to write the file.
-
             path: Text,
             /// The number of the object that is the file's **root**.
             ///
             /// Leave it out and the object whose type is `Catalog` is the root.
-
             root: Option<Number>,
         },
         run: {
-
             let path = self.path.0.clone();
             if path.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -1707,6 +1671,7 @@ commands! {
 
         }
     }
+
     /// The **free numbers** of the file.
     ///
     /// A number that is not in use is **free**, and a free number is not
@@ -1723,11 +1688,9 @@ commands! {
             /// The number to start from: the next number is past this one as
             /// well as past the free ones. Leave it out and the next number
             /// is past the file's own numbers.
-
             after: Option<Number>,
         },
         run: {
-
             let id = "pdf.file.free".to_string();
             let mut after = 0_u64;
             if let Some(number) = &self.after {
@@ -1750,6 +1713,7 @@ commands! {
 
         }
     }
+
     /// Say that one object refers to another.
     ///
     /// The reference says which **key** it is under and which **generation**
@@ -1762,26 +1726,20 @@ commands! {
         undoable,
         params: {
             /// The object the reference is in.
-
             from: NodeRef,
             /// The key the reference is under.
-
             key: Text,
             /// The object the reference names.
-
             to: NodeRef,
             /// The generation of the object it names, if it is not the first.
-
             generation: Option<Number>,
             /// Whether the key holds a **list** of references that grows, rather
             /// than one reference that is set.
             ///
             /// A page tree's `/Kids` is a list and a page's `/Parent` is not.
-
             list: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             let from = self.from.0;
             let to = self.to.0;
             for id in [from, to] {
@@ -1834,6 +1792,7 @@ commands! {
 
         }
     }
+
     /// The references of the document.
     ///
     /// A query: it does not change the document.
@@ -1844,7 +1803,6 @@ commands! {
         params: {
         },
         run: {
-
             let refs: Vec<serde_json::Value> = session
                 .document()
                 .relations

@@ -32,14 +32,11 @@ commands! {
         menu: ("Track", "Make Inactive"),
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether the track is inactive.
-
             inactive: Bool,
         },
         run: {
-
             let id = self.track.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {

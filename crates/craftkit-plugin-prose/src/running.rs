@@ -60,20 +60,18 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The header's text.
             ///
             /// An empty text takes the header away.
-
             header: Text,
         },
         run: {
-
             set_running(session, self.document.0, "header", self.header.0.trim())
 
         }
     }
+
     /// **Say** what a document carries at the bottom of every page.
     prose.document.footer {
         area: "prose",
@@ -83,20 +81,18 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The footer's text.
             ///
             /// An empty text takes the footer away.
-
             footer: Text,
         },
         run: {
-
             set_running(session, self.document.0, "footer", self.footer.0.trim())
 
         }
     }
+
     /// **Read** the **header** of a document.
     prose.document.header.read {
         area: "prose",
@@ -104,15 +100,14 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             read_running(session, self.document.0, "header")
 
         }
     }
+
     /// **Read** the **footer** of a document.
     prose.document.footer.read {
         area: "prose",
@@ -120,11 +115,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             read_running(session, self.document.0, "footer")
 
         }

@@ -103,14 +103,11 @@ commands! {
         menu: ("Track", "VCA"),
         params: {
             /// The track to put under the master.
-
             track: NodeRef,
             /// The VCA master.
-
             vca: NodeRef,
         },
         run: {
-
             let id = "sound.track.vca".to_string();
             let track = self.track.0;
             let vca = self.vca.0;
@@ -166,6 +163,7 @@ commands! {
 
         }
     }
+
     /// Take a track out of its **VCA master**.
     ///
     /// A track with no master is heard at its own level, and that is the
@@ -179,11 +177,9 @@ commands! {
         menu: ("Track", "VCA"),
         params: {
             /// The track to take out.
-
             track: NodeRef,
         },
         run: {
-
             let id = "sound.track.vca.delete".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {

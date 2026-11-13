@@ -185,11 +185,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.numbers.stored.as.text".to_string();
             let (sheet, _) = sheet_of(session, self.sheet.0, &id)?;
             let Some(node) = session.document().node(sheet) else {
@@ -216,6 +214,7 @@ commands! {
 
         }
     }
+
     /// **Turn** the numbers stored as text of a sheet into numbers.
     ///
     /// A change: the cell holds the number it stood for, and it keeps its
@@ -228,11 +227,9 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.numbers.convert".to_string();
             let (sheet, _) = sheet_of(session, self.sheet.0, &id)?;
             let Some(node) = session.document().node(sheet) else {

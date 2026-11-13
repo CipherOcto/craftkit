@@ -148,33 +148,26 @@ commands! {
         undoable,
         params: {
             /// The sheet the rows are in.
-
             sheet: NodeRef,
             /// The range of the rows: `A1:B4`.
-
             range: Text,
             /// The column the rows are grouped by: `A`.
-
             group_by: Text,
             /// The way the rows are totalled in.
             ///
             /// `sum` — the default — `count`, `average`, `max`, `min` or
             /// `product`.
-
             function: Option<Text>,
             /// The columns that are totalled.
             ///
             /// Without it, the last column of the range.
-
             columns: Option<Json>,
             /// Whether the first row of the range is a **header**.
             ///
             /// It is, without it being said.
-
             header: Option<Bool>,
         },
         run: {
-
             let id = "grid.data.subtotal".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {

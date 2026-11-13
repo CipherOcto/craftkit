@@ -95,14 +95,11 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The citation of the authority.
-
             entry: Text,
         },
         run: {
-
             let id = "prose.authority.mark".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -149,6 +146,7 @@ commands! {
 
         }
     }
+
     /// The **table of authorities** of a document: the entries it has been
     /// marked with, and the blocks they are on.
     prose.document.authorities {
@@ -157,11 +155,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let command = "prose.document.authorities";
             let document = self.document.0;
             if session.document().node(document).is_none() {

@@ -64,26 +64,20 @@ commands! {
         undoable,
         params: {
             /// The page the signature field is put on.
-
             page: NodeRef,
             /// The signature field's object number in the file.
-
             object: Number,
             /// The rectangle the signature field covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the signature field.
             ///
             /// Leave it out and the signature field is given the first free
             /// name of the tree: `Signature1`, `Signature2` and so on.
-
             name: Option<Text>,
             /// Where the bytes of the field's drawing are written.
-
             appearance_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

@@ -43,17 +43,13 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range to export. Without it, the used range is exported.
-
             range: Option<Text>,
             /// The **delimiter**: one character. The default is a comma.
-
             delimiter: Option<Text>,
         },
         run: {
-
             let id = "grid.export.csv".to_string();
             let sheet = self.sheet.0;
             let delimiter = match &self.delimiter {

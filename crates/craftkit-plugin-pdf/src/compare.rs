@@ -590,14 +590,11 @@ commands! {
         icon: "git-compare",
         params: {
             /// The file that was there before.
-
             old: Text,
             /// The file that is there now.
-
             new: Text,
         },
         run: {
-
             let old_path = self.old.0.trim().to_string();
             let new_path = self.new.0.trim().to_string();
             if old_path.is_empty() || new_path.is_empty() {
@@ -641,6 +638,7 @@ commands! {
 
         }
     }
+
     /// **Mark** the differences between two files: the highlights over the
     /// text that changed, and the notes where text was deleted.
     ///
@@ -656,11 +654,9 @@ commands! {
         undoable,
         params: {
             /// The file that was there before.
-
             old: Text,
         },
         run: {
-
             let old_path = self.old.0.trim().to_string();
             if old_path.is_empty() {
                 return Err(EngineError::Failed {

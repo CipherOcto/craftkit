@@ -139,30 +139,22 @@ commands! {
         undoable,
         params: {
             /// The caption track.
-
             track: NodeRef,
             /// Its new name.
-
             name: Option<Text>,
             /// Its format: `subtitle`, `cea608`, `cea708` or `teletext`.
-
             format: Option<Text>,
             /// Its language: a tag such as `en` or `fr-CA`.
-
             language: Option<Text>,
             /// Whether it is shown in the monitor.
-
             enabled: Option<Bool>,
             /// Whether it may be changed.
-
             locked: Option<Bool>,
             /// Whether it follows the inserts and the extracts of the other
             /// tracks.
-
             sync_lock: Option<Bool>,
         },
         run: {
-
             let command = "film.caption.track.set";
             let track = self.track.0;
             the_track(session, command, track)?;
@@ -239,6 +231,7 @@ commands! {
 
         }
     }
+
     /// **Set** the style of a caption track.
     ///
     /// A number outside its range is refused, and a **reset** puts the
@@ -251,48 +244,34 @@ commands! {
         undoable,
         params: {
             /// The caption track.
-
             track: NodeRef,
             /// The font the cues are written in.
-
             font: Option<Text>,
             /// The size of the cues, in the tree's pixels.
-
             size: Option<Number>,
             /// The colour of the cues.
-
             colour: Option<Text>,
             /// Whether a box is drawn behind the cues.
-
             background: Option<Bool>,
             /// The colour of the box.
-
             background_colour: Option<Text>,
             /// `left`, `center` or `right`.
-
             align: Option<Text>,
             /// `top`, `middle` or `bottom`.
-
             anchor: Option<Text>,
             /// The room from the edge, as a fraction of the height of the
             /// frame.
-
             margin: Option<Number>,
             /// The line spacing, as a multiple of the size.
-
             line_spacing: Option<Number>,
             /// The width of the outline, in the tree's pixels.
-
             outline: Option<Number>,
             /// The colour of the outline.
-
             outline_colour: Option<Text>,
             /// Whether the style is put back as it was.
-
             reset: Option<Bool>,
         },
         run: {
-
             let command = "film.caption.track.style";
             let track = self.track.0;
             let node = the_track(session, command, track)?;

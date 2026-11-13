@@ -41,16 +41,13 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The title.
             ///
             /// An empty title takes the title away.
-
             title: Text,
         },
         run: {
-
             let id = "prose.document.title".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {

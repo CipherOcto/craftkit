@@ -40,24 +40,19 @@ commands! {
         undoable,
         params: {
             /// The sheet it is on.
-
             sheet: NodeRef,
             /// The range of the table: `D2:E10`. The corner holds the
             /// formulas, the first row or the first column holds the inputs,
             /// and the body is written with the results.
-
             range: Text,
             /// The cell the **row** of inputs is tried in: the values across
             /// the top of the table go into it.
-
             row_input: Option<Text>,
             /// The cell the **column** of inputs is tried in: the values down
             /// the side of the table go into it.
-
             column_input: Option<Text>,
         },
         run: {
-
             let id = "grid.data.table".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

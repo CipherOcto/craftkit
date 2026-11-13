@@ -83,21 +83,17 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The format the numbers are written in.
             ///
             /// It is `decimal` when it is not given.
-
             format: Option<Text>,
             /// The number the first page has.
             ///
             /// It is from one to a hundred thousand.
-
             start: Option<Number>,
         },
         run: {
-
             let id = "prose.page.numbers".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {

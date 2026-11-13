@@ -30,14 +30,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range of cells, `A1:A5`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.formula.values".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

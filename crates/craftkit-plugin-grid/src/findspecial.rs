@@ -210,25 +210,20 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is on.
-
             sheet: NodeRef,
             /// The kind of cell that is looked for: `blanks`, `constants`,
             /// `formulas`, `comments`, `notes`, `errors`, `numbers`, `text`,
             /// `visible`, `conditionalFormats`, `dataValidation`, `lastCell` or
             /// `currentRegion`.
-
             kind: Text,
             /// The range to look in. Without it, the **used range** of the
             /// sheet is looked in.
-
             range: Option<Text>,
             /// The cell the **current region** is worked out from: `A1` when
             /// it is not given.
-
             cell: Option<Text>,
         },
         run: {
-
             let id = "grid.find.special".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

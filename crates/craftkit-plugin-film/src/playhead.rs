@@ -86,14 +86,11 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The frame.
-
             frame: Number,
         },
         run: {
-
             let id = "film.playhead.set".to_string();
             let sequence = self.sequence.0;
             the_sequence(session, &id, sequence)?;
@@ -127,6 +124,7 @@ commands! {
 
         }
     }
+
     /// **Read** the playhead of a sequence.
     film.playhead.get {
         area: "film",
@@ -134,11 +132,9 @@ commands! {
         icon: "list",
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.playhead.get".to_string();
             let sequence = self.sequence.0;
             let node = the_sequence(session, &id, sequence)?;
@@ -152,6 +148,7 @@ commands! {
 
         }
     }
+
     /// **Go to** the start of a sequence.
     film.playhead.start {
         area: "film",
@@ -161,11 +158,9 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.playhead.start".to_string();
             let sequence = self.sequence.0;
             the_sequence(session, &id, sequence)?;
@@ -180,6 +175,7 @@ commands! {
 
         }
     }
+
     /// **Go to** the end of a sequence.
     film.playhead.end {
         area: "film",
@@ -189,11 +185,9 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.playhead.end".to_string();
             let sequence = self.sequence.0;
             let node = the_sequence(session, &id, sequence)?;
@@ -210,6 +204,7 @@ commands! {
 
         }
     }
+
     /// **Go to** the **mark** of a sequence: the mark in or the mark out.
     ///
     /// The tree's own rules — the tree's `goToIn` and its `goToOut`:
@@ -226,14 +221,11 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// Which mark the playhead goes to: `in` or `out`.
-
             which: Text,
         },
         run: {
-
             let id = "film.playhead.goto.mark".to_string();
             let sequence = self.sequence.0;
             let node = the_sequence(session, &id, sequence)?;
@@ -261,6 +253,7 @@ commands! {
 
         }
     }
+
     /// **Step** the playhead of a sequence.
     film.playhead.step {
         area: "film",
@@ -270,14 +263,11 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The frames: a negative number steps back.
-
             frames: Number,
         },
         run: {
-
             let id = "film.playhead.step".to_string();
             let sequence = self.sequence.0;
             let node = the_sequence(session, &id, sequence)?;

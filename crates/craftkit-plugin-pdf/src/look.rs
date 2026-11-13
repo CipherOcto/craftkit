@@ -313,40 +313,29 @@ commands! {
         undoable,
         params: {
             /// The field.
-
             field: NodeRef,
             /// The **colour of the border**. Say `none` to take it away.
-
             border: Option<serde_json::Value>,
             /// The **colour of the background**. Say `none` to take it away.
-
             fill: Option<serde_json::Value>,
             /// The **width of the line**, in points.
-
             width: Option<Number>,
             /// The **style of the line**: `Solid`, `Dashed`, `Beveled`,
             /// `Inset` or `Underline`.
-
             style: Option<Text>,
             /// The **colour of the text**.
-
             text_colour: Option<serde_json::Value>,
             /// The **font of the text**: `Helvetica`, `Times` or `Courier`.
-
             font: Option<Text>,
             /// The **size of the text**, in points.
-
             font_size: Option<Number>,
             /// The **mark** of a check box or of a radio button: `Check`,
             /// `Circle`, `Cross`, `Diamond`, `Square` or `Star`.
-
             check_style: Option<Text>,
             /// The **rectangle** the field covers on the page: four numbers.
-
             rect: Option<serde_json::Value>,
         },
         run: {
-
             let field = self.field.0;
             let Some(node) = session.document().node(field).cloned() else {
                 return Err(EngineError::Failed {

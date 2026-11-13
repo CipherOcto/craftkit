@@ -38,14 +38,11 @@ commands! {
         menu: ("Track", "Split into Mono"),
         params: {
             /// The track to split.
-
             track: NodeRef,
             /// The directory the mono files are written into.
-
             directory: Text,
         },
         run: {
-
             let id = "sound.track.split.mono".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {

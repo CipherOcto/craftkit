@@ -201,19 +201,15 @@ commands! {
         undoable,
         params: {
             /// The first entity.
-
             first: NodeRef,
             /// The second entity.
-
             second: NodeRef,
             /// The kind of constraint: `coincident`, `parallel`,
             /// `perpendicular`, `horizontal`, `vertical`, `tangent`,
             /// `concentric` or `equal`.
-
             kind: Text,
         },
         run: {
-
             let id = "cad.constraint.add".to_string();
             let first = self.first.0;
             let second = self.second.0;
@@ -268,6 +264,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **constraints** of a drawing.
     ///
     /// Whether each constraint holds is **derived**: it is worked out from
@@ -279,11 +276,9 @@ commands! {
         icon: "list",
         params: {
             /// The drawing.
-
             drawing: NodeRef,
         },
         run: {
-
             let id = "cad.constraint.list".to_string();
             let drawing = self.drawing.0;
             let Some(node) = session.document().node(drawing) else {

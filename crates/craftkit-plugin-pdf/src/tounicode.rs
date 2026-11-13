@@ -258,11 +258,9 @@ commands! {
         icon: "list",
         params: {
             /// The font to read.
-
             font: craftkit_sdk::NodeRef,
         },
         run: {
-
             let font = self.font.0;
             let Some(node) = session.document().node(font) else {
                 return Err(EngineError::Failed {

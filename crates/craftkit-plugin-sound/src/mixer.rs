@@ -401,14 +401,11 @@ commands! {
         menu: ("Track", "New"),
         params: {
             /// What to call it.
-
             name: Text,
             /// How many channels it has.
-
             channels: Option<Number>,
         },
         run: {
-
             let name = self.name.0.clone();
             let channels = match &self.channels {
                 Some(channels) => channels.0 as u32,
@@ -421,6 +418,7 @@ commands! {
 
         }
     }
+
     /// Send a track to a bus.
     ///
     /// This is a **relation**: the track keeps the bus in its routing, and the
@@ -434,14 +432,11 @@ commands! {
         menu: ("Track", "Route"),
         params: {
             /// The track that feeds the bus.
-
             track: NodeRef,
             /// The bus it feeds.
-
             bus: NodeRef,
         },
         run: {
-
             let track = self.track.0;
             let bus = self.bus.0;
             for (id, what) in [(track, "track"), (bus, "bus")] {
@@ -464,6 +459,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a route: the track stops feeding the bus.
     ///
     /// A route is a **relation** and not a node, and a relation that
@@ -481,14 +477,11 @@ commands! {
         menu: ("Track", "Route"),
         params: {
             /// The track that fed the bus.
-
             track: NodeRef,
             /// The bus it fed.
-
             bus: NodeRef,
         },
         run: {
-
             let id = "sound.route.remove".to_string();
             let track = self.track.0;
             let bus = self.bus.0;
@@ -514,6 +507,7 @@ commands! {
 
         }
     }
+
     /// Make a track **read** a bus.
     ///
     /// A bus is a **destination**: sound collects there and is not heard
@@ -531,14 +525,11 @@ commands! {
         menu: ("Track", "Input"),
         params: {
             /// The track that reads the bus.
-
             track: NodeRef,
             /// The bus it reads.
-
             bus: NodeRef,
         },
         run: {
-
             let track = self.track.0;
             let bus = self.bus.0;
             match session.document().node(track) {
@@ -593,6 +584,7 @@ commands! {
 
         }
     }
+
     /// Put a plugin in a slot on a track.
     sound.insert.add {
         area: "sound",
@@ -605,23 +597,18 @@ commands! {
             /// The track the insert is on.
             ///
             /// An insert is on **one** thing: a track or a clip, and not both.
-
             track: Option<NodeRef>,
             /// The clip the insert is on.
             ///
             /// A clip may carry effects of its own: the tree's clip effects are
             /// an equaliser and a compressor on one clip and not on the track.
-
             clip: Option<NodeRef>,
             /// Which plugin it is.
-
             plugin: Text,
             /// Whether it is bypassed.
-
             bypass: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             // An insert is on **one** thing: a track or a clip.
             let (owner, owner_id, kind) = match (self.track, self.clip) {
                 (Some(track), None) => ("track", track.0, "sound.track"),
@@ -676,6 +663,7 @@ commands! {
 
         }
     }
+
     /// Change an **insert**: its parameters, or whether it is bypassed.
     ///
     /// An insert's parameters are how a plugin is told what to do, and a
@@ -690,17 +678,13 @@ commands! {
         menu: ("Track", "Inserts"),
         params: {
             /// The insert to change.
-
             insert: NodeRef,
             /// Its parameters, by name: a table of parameter to number.
-
             parameters: Option<Json>,
             /// Whether it is bypassed.
-
             bypass: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             let id = self.insert.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -750,6 +734,7 @@ commands! {
 
         }
     }
+
     /// **Take away** an insert: the plugin is not on the thing any more.
     ///
     /// The tree's insert lives in a **slot** on the track, and taking it
@@ -767,11 +752,9 @@ commands! {
         menu: ("Track", "Inserts"),
         params: {
             /// The insert to take away.
-
             insert: NodeRef,
         },
         run: {
-
             let id = self.insert.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -792,6 +775,7 @@ commands! {
 
         }
     }
+
     /// **Move** an insert: it and another one swap their places in the
     /// chain.
     ///
@@ -811,14 +795,11 @@ commands! {
         menu: ("Track", "Inserts"),
         params: {
             /// The insert to move.
-
             insert: NodeRef,
             /// The insert it swaps places with.
-
             other: NodeRef,
         },
         run: {
-
             let id = "sound.insert.move".to_string();
             let (insert, other) = (self.insert.0, self.other.0);
             for node_id in [insert, other] {
@@ -878,6 +859,7 @@ commands! {
 
         }
     }
+
     /// Send a track to a bus at a level.
     ///
     /// The send is a node under the track, and the bus it goes to is a
@@ -892,26 +874,19 @@ commands! {
         menu: ("Track", "Sends"),
         params: {
             /// The track the send is on.
-
             track: NodeRef,
             /// The bus it goes to.
-
             bus: NodeRef,
             /// Its level, in decibels.
-
             level_db: Option<Number>,
             /// Its pan, from minus one to one.
-
             pan: Option<Number>,
             /// Whether the send is silent.
-
             mute: Option<Bool>,
             /// Whether the send is taken before the track's fader.
-
             pre_fader: Option<Bool>,
         },
         run: {
-
             let track = self.track.0;
             let bus = self.bus.0;
             for (id, what) in [(track, "track"), (bus, "bus")] {
@@ -967,6 +942,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the reading of a bus: the track stops reading it.
     ///
     /// A bus is silent on its own: something must read it and take it into
@@ -981,14 +957,11 @@ commands! {
         menu: ("Track", "Input"),
         params: {
             /// The track that read the bus.
-
             track: NodeRef,
             /// The bus it read.
-
             bus: NodeRef,
         },
         run: {
-
             let id = "sound.track.input.remove".to_string();
             let track = self.track.0;
             let bus = self.bus.0;
@@ -1014,6 +987,7 @@ commands! {
 
         }
     }
+
     /// **Change** a send: its level, its pan, whether it is silent, and
     /// whether it is taken before the track's fader.
     ///
@@ -1032,24 +1006,18 @@ commands! {
         menu: ("Track", "Send"),
         params: {
             /// The send to change.
-
             send: NodeRef,
             /// Its level, in decibels: from minus one hundred and forty-four to
             /// twelve.
-
             level_db: Option<Number>,
             /// Its pan, from minus one to one.
-
             pan: Option<Number>,
             /// Whether the send is silent.
-
             mute: Option<craftkit_sdk::Bool>,
             /// Whether the send is taken before the track's fader.
-
             pre_fader: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             let id = "sound.send.set".to_string();
             let send = self.send.0;
             let Some(node) = session.document().node(send) else {
@@ -1111,6 +1079,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a send.
     ///
     /// The send is a **node** under the track, and it goes with its link
@@ -1125,11 +1094,9 @@ commands! {
         menu: ("Track", "Send"),
         params: {
             /// The send to take away.
-
             send: NodeRef,
         },
         run: {
-
             let id = "sound.send.remove".to_string();
             let send = self.send.0;
             let node = session.document().node(send).ok_or_else(|| EngineError::Failed {
@@ -1148,6 +1115,7 @@ commands! {
 
         }
     }
+
     /// Automate a parameter of a track.
     ///
     /// The lane says which parameter it moves, and the parameter is a
@@ -1163,21 +1131,16 @@ commands! {
         params: {
             /// The track whose parameter is automated. A lane automates **one**
             /// thing: a track or a clip, and not both.
-
             track: Option<NodeRef>,
             /// The clip whose parameter is automated.
-
             clip: Option<NodeRef>,
             /// Which parameter: `volume`, `pan`, `mute`, …
-
             param: Text,
             /// The breakpoints: a list of `[at, value]`, where `at` is a time in
             /// samples.
-
             points: Option<Json>,
         },
         run: {
-
             // A lane automates **one** thing: a track or a clip. The
             // family's clip carries a curve of its own, and the tree's
             // lane is that curve when it is under a clip.
@@ -1245,6 +1208,7 @@ commands! {
 
         }
     }
+
     /// **Set a breakpoint** on a lane.
     ///
     /// A breakpoint that is already there takes the new value, and a
@@ -1260,17 +1224,13 @@ commands! {
         menu: ("Track", "Automation"),
         params: {
             /// The lane the breakpoint goes on.
-
             lane: NodeRef,
             /// Where the breakpoint is, in the owner's samples.
-
             at: Number,
             /// The value at that time.
-
             value: Number,
         },
         run: {
-
             let id = "sound.lane.point.set".to_string();
             let lane = self.lane.0;
             let mut payload = lane_of(session, &id, lane)?;
@@ -1287,6 +1247,7 @@ commands! {
 
         }
     }
+
     /// **Take a breakpoint** off a lane.
     ///
     /// A time that has no breakpoint on it is **refused**: a breakpoint
@@ -1300,14 +1261,11 @@ commands! {
         menu: ("Track", "Automation"),
         params: {
             /// The lane the breakpoint is on.
-
             lane: NodeRef,
             /// Where the breakpoint is, in the owner's samples.
-
             at: Number,
         },
         run: {
-
             let id = "sound.lane.point.remove".to_string();
             let lane = self.lane.0;
             let mut payload = lane_of(session, &id, lane)?;
@@ -1326,6 +1284,7 @@ commands! {
 
         }
     }
+
     /// **Clear** the breakpoints of a lane.
     ///
     /// Without a range every breakpoint goes, and with one the breakpoints
@@ -1340,18 +1299,14 @@ commands! {
         menu: ("Track", "Automation"),
         params: {
             /// The lane to clear.
-
             lane: NodeRef,
             /// The start of the range, in the owner's samples. The whole lane
             /// without it.
-
             start: Option<Number>,
             /// The end of the range, in the owner's samples.
-
             end: Option<Number>,
         },
         run: {
-
             let id = "sound.lane.clear".to_string();
             let lane = self.lane.0;
             let mut payload = lane_of(session, &id, lane)?;
@@ -1378,6 +1333,7 @@ commands! {
 
         }
     }
+
     /// **Write** a value over a range of a lane.
     ///
     /// The lane is **flat** over the range: a breakpoint at each end of it
@@ -1393,20 +1349,15 @@ commands! {
         menu: ("Track", "Automation"),
         params: {
             /// The lane to write on.
-
             lane: NodeRef,
             /// Where the range starts, in the owner's samples.
-
             start: Number,
             /// Where the range ends, in the owner's samples.
-
             end: Number,
             /// The value over the range.
-
             value: Number,
         },
         run: {
-
             let id = "sound.lane.write".to_string();
             let lane = self.lane.0;
             let mut payload = lane_of(session, &id, lane)?;
@@ -1447,6 +1398,7 @@ commands! {
 
         }
     }
+
     /// **Thin** a lane: take away the breakpoints the curve does not need.
     ///
     /// A breakpoint is taken away when the curve through the ones that
@@ -1462,14 +1414,11 @@ commands! {
         menu: ("Track", "Automation"),
         params: {
             /// The lane to thin.
-
             lane: NodeRef,
             /// How much the curve may change, in the value of the parameter.
-
             tolerance: Option<Number>,
         },
         run: {
-
             let id = "sound.lane.thin".to_string();
             let lane = self.lane.0;
             let mut payload = lane_of(session, &id, lane)?;
@@ -1487,6 +1436,7 @@ commands! {
 
         }
     }
+
     /// **Thin** every lane of a track: take away the breakpoints the curves
     /// do not need.
     ///
@@ -1502,14 +1452,11 @@ commands! {
         menu: ("Track", "Automation"),
         params: {
             /// The track whose lanes are thinned.
-
             track: NodeRef,
             /// How much the curve may change, in the value of the parameter.
-
             tolerance: Option<Number>,
         },
         run: {
-
             let id = "sound.lane.thin.all".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
@@ -1540,6 +1487,7 @@ commands! {
 
         }
     }
+
     /// **Write** the static value of every lane of a track over a range.
     ///
     /// The tree's editor has a "Write to Current": it takes the **static**
@@ -1560,17 +1508,13 @@ commands! {
         menu: ("Track", "Automation"),
         params: {
             /// The track whose lanes are written.
-
             track: NodeRef,
             /// Where the range starts, in the owner's samples.
-
             start: Number,
             /// Where the range ends, in the owner's samples.
-
             end: Number,
         },
         run: {
-
             let id = "sound.lane.write.all".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
@@ -1638,6 +1582,7 @@ commands! {
 
         }
     }
+
     /// The **mutes** of every track cleared.
     ///
     /// The tree's Clear Mutes: every track of the document is unmuted at
@@ -1654,7 +1599,6 @@ commands! {
         params: {
         },
         run: {
-
             let tracks: Vec<u64> =
                 session.document().walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
             let mut cleared = 0usize;
@@ -1706,6 +1650,7 @@ commands! {
 
         }
     }
+
     /// The **solos** of every track cleared.
     ///
     /// The tree's Clear Solos: every track of the document is unsoloed at
@@ -1725,7 +1670,6 @@ commands! {
         params: {
         },
         run: {
-
             let tracks: Vec<u64> =
                 session.document().walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
             let mut cleared = 0usize;
@@ -1755,6 +1699,7 @@ commands! {
 
         }
     }
+
     /// **Mute** the sends of a track, or let them be heard.
     ///
     /// The tree's Mute Sends: every send of the track is muted at once.
@@ -1771,14 +1716,11 @@ commands! {
         menu: ("Track", "Sends"),
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether the sends are silent.
-
             muted: Bool,
         },
         run: {
-
             let id = "sound.track.sends.mute".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track).cloned() else {

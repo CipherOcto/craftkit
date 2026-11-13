@@ -47,23 +47,17 @@ commands! {
         undoable,
         params: {
             /// The page the caret is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The rectangle the caret covers: four numbers.
-
             rect: Json,
             /// The colour of the caret: three numbers.
-
             colour: Option<Json>,
             /// The text that was inserted.
-
             contents: Option<Text>,
         },
         run: {
-
             // The **page**: a page of the document.
             let Some(page) = session.document().node(self.page.0) else {
                 return Err(EngineError::Failed {

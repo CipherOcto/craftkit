@@ -41,11 +41,9 @@ commands! {
         icon: "list",
         params: {
             /// The clip to measure.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.loudness.read".to_string();
             let clip_id = self.clip.0;
             let (channels, rate) = crate::planar_of(&id, session, clip_id)?;

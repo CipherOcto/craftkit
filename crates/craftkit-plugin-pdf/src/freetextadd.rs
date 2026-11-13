@@ -82,35 +82,25 @@ commands! {
         undoable,
         params: {
             /// The page the text box is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The rectangle the box covers: four numbers.
-
             rect: Json,
             /// The text of the box.
-
             contents: Text,
             /// The size of the text, in points.
-
             size: Option<Number>,
             /// The colour of the text: three numbers.
-
             colour: Option<Json>,
             /// The colour of the background: three numbers.
-
             background: Option<Json>,
             /// The width of the border, in points.
-
             width: Option<Number>,
             /// The alignment of the text: `0` left, `1` centre, `2` right.
-
             align: Option<Number>,
         },
         run: {
-
             // The **page**: a page of the document.
             let Some(page) = session.document().node(self.page.0) else {
                 return Err(EngineError::Failed {

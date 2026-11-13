@@ -99,30 +99,22 @@ commands! {
         undoable,
         params: {
             /// The sequence the marker goes on.
-
             sequence: NodeRef,
             /// Where it starts, in frames.
-
             start: Number,
             /// How long it is, in frames.
-
             duration: Option<Number>,
             /// What to call it.
-
             name: Option<Text>,
             /// What to say about it.
-
             comment: Option<Text>,
             /// Its colour: one of the tree's own sixteen labels.
-
             color: Option<Text>,
             /// What kind of marker it is: `Comment`, `Chapter`, `Segmentation`,
             /// `WebLink` or `FlashCue`.
-
             kind: Option<Text>,
         },
         run: {
-
             let id = "film.marker.add".to_string();
             let sequence = self.sequence.0;
             let Some(node) = session.document().node(sequence) else {
@@ -182,6 +174,7 @@ commands! {
 
         }
     }
+
     /// **Change** a marker.
     ///
     /// Only what is named is changed: the name, the comment, the colour,
@@ -195,26 +188,19 @@ commands! {
         undoable,
         params: {
             /// The marker.
-
             marker: NodeRef,
             /// What to call it.
-
             name: Option<Text>,
             /// What to say about it.
-
             comment: Option<Text>,
             /// Its colour: one of the tree's own sixteen labels.
-
             color: Option<Text>,
             /// What kind of marker it is.
-
             kind: Option<Text>,
             /// How long it is, in frames.
-
             duration: Option<Number>,
         },
         run: {
-
             let id = "film.marker.set".to_string();
             let marker = self.marker.0;
             let Some(node) = session.document().node(marker) else {
@@ -280,6 +266,7 @@ commands! {
 
         }
     }
+
     /// **Take** a marker away.
     film.marker.remove {
         area: "film",
@@ -289,11 +276,9 @@ commands! {
         undoable,
         params: {
             /// The marker.
-
             marker: NodeRef,
         },
         run: {
-
             let id = "film.marker.remove".to_string();
             let marker = self.marker.0;
             let Some(node) = session.document().node(marker) else {
@@ -320,6 +305,7 @@ commands! {
 
         }
     }
+
     /// **Take away** every marker of a sequence.
     film.marker.clear {
         area: "film",
@@ -329,11 +315,9 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.marker.clear".to_string();
             let sequence = self.sequence.0;
             let Some(node) = session.document().node(sequence) else {
@@ -363,6 +347,7 @@ commands! {
 
         }
     }
+
     /// **Move the playhead to the next marker** of a sequence.
     ///
     /// The markers are facts of the sequence and the playhead is a fact of
@@ -376,11 +361,9 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.marker.next".to_string();
             let sequence = self.sequence.0;
             let Some(node) = session.document().node(sequence) else {
@@ -412,6 +395,7 @@ commands! {
 
         }
     }
+
     /// **Move the playhead to the marker before** the one it is at.
     ///
     /// The marker before the playhead is the last one that is before it,
@@ -424,11 +408,9 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.marker.previous".to_string();
             let sequence = self.sequence.0;
             let Some(node) = session.document().node(sequence) else {

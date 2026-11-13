@@ -351,14 +351,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The paper: `Letter`, `A4`, `Tabloid` and the rest.
-
             paper: Text,
         },
         run: {
-
             let id = "grid.print.paper".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -384,6 +381,7 @@ commands! {
 
         }
     }
+
     /// **Set** the orientation of a sheet.
     grid.print.orientation {
         area: "grid",
@@ -393,14 +391,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The orientation: `portrait` or `landscape`.
-
             orientation: Text,
         },
         run: {
-
             let id = "grid.print.orientation".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -423,6 +418,7 @@ commands! {
 
         }
     }
+
     /// **Set** the margins of a sheet.
     ///
     /// The margins are in **inches**, the way the tree's dialogue asks for
@@ -436,26 +432,19 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The preset: `normal`, `wide` or `narrow`.
-
             preset: Option<Text>,
             /// The **left** margin, in inches.
-
             left: Option<Number>,
             /// The **right** margin, in inches.
-
             right: Option<Number>,
             /// The **top** margin, in inches.
-
             top: Option<Number>,
             /// The **bottom** margin, in inches.
-
             bottom: Option<Number>,
         },
         run: {
-
             let id = "grid.print.margins".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -500,6 +489,7 @@ commands! {
 
         }
     }
+
     /// **Read** the setup of a sheet.
     grid.print.read {
         area: "grid",
@@ -507,11 +497,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.print.read".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -554,6 +542,7 @@ commands! {
 
         }
     }
+
     /// **Read** the pages of a sheet.
     ///
     /// The pages are **derived**: they are worked out from the paper, the
@@ -564,11 +553,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.print.pages".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -674,6 +661,7 @@ commands! {
 
         }
     }
+
     /// **Set** the area a sheet prints.
     ///
     /// Without a range the area is taken away, and the sheet prints the
@@ -686,15 +674,12 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The range that is printed: `A1:F50`. Without it, the sheet
             /// prints the range it uses.
-
             range: Option<Text>,
         },
         run: {
-
             let id = "grid.print.area".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, &id, sheet)?;
@@ -726,6 +711,7 @@ commands! {
 
         }
     }
+
     /// **Put** a break in a sheet, or take it away.
     ///
     /// A break is a place where a page **begins**, put there by hand. The
@@ -739,20 +725,15 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The row the page begins at. Without it, the column is meant.
-
             row: Option<Number>,
             /// The column the page begins at, as `A`.
-
             column: Option<Text>,
             /// Whether the break is **taken away**.
-
             clear: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             let id = "grid.print.break".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -807,6 +788,7 @@ commands! {
 
         }
     }
+
     /// **Set** the titles of a sheet: the rows and the columns that are
     /// printed on **every** page.
     ///
@@ -820,19 +802,15 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The rows that are printed on every page, counted from one. The
             /// first row is the first title.
-
             rows: Option<Text>,
             /// The columns that are printed on every page, as `A`. The first
             /// column is the first title.
-
             columns: Option<Text>,
         },
         run: {
-
             let id = "grid.print.titles".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, &id, sheet)?;

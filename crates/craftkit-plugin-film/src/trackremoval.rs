@@ -38,11 +38,9 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
         },
         run: {
-
             let id = "film.track.remove".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {

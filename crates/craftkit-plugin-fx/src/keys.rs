@@ -361,6 +361,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a keyframe of a property.
     ///
     /// A frame that has **no keyframe** is refused: a keyframe that was
@@ -440,6 +441,7 @@ commands! {
 
         }
     }
+
     /// **Lock** the two sides of a keyframe together: a **continuous**
     /// keyframe.
     ///
@@ -594,6 +596,7 @@ commands! {
 
         }
     }
+
     /// **Set** or **clear** the **auto bezier** of a keyframe.
     ///
     /// An auto keyframe's ease is not written down: it is the **slope** to
@@ -681,6 +684,7 @@ commands! {
 
         }
     }
+
     /// The **interpolation** of a keyframe.
     ///
     /// The tree's keyframe has an interpolation on the side it leaves on,
@@ -850,6 +854,7 @@ commands! {
 
         }
     }
+
     /// The **value** of a property at a frame.
     ///
     /// A property that is not animated has the same value at every frame,

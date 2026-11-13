@@ -36,20 +36,15 @@ commands! {
         menu: ("Track", "Fade"),
         params: {
             /// The track the clips are on.
-
             track: NodeRef,
             /// Where the range starts, in samples.
-
             from: Number,
             /// Where the range ends, in samples.
-
             to: Number,
             /// The shape of the curve: linear, equal_power, s_curve, exponential or logarithmic.
-
             shape: Option<Text>,
         },
         run: {
-
             let id = "sound.track.fade".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
@@ -158,6 +153,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the fades of a range of a track.
     ///
     /// The tree's `delete_fades`: every clip that touches the range loses
@@ -171,17 +167,13 @@ commands! {
         menu: ("Track", "Fade"),
         params: {
             /// The track the clips are on.
-
             track: NodeRef,
             /// Where the range starts, in samples.
-
             from: Number,
             /// Where the range ends, in samples.
-
             to: Number,
         },
         run: {
-
             let id = "sound.track.fade.delete".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {

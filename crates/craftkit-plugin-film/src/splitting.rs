@@ -46,14 +46,11 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// Where it is divided, in frames.
-
             at: Number,
         },
         run: {
-
             let id = "film.clip.split".to_string();
             split_at(session, &id, self.clip.0, self.at.0)
 

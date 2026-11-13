@@ -92,20 +92,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The text of the note.
-
             text: Text,
             /// Who wrote it.
-
             author: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.note.set".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -144,6 +139,7 @@ commands! {
 
         }
     }
+
     /// The **note** on a cell.
     grid.cell.note.get {
         area: "grid",
@@ -151,14 +147,11 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.note.get".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -191,6 +184,7 @@ commands! {
 
         }
     }
+
     /// Take the **note** away from a cell.
     ///
     /// A cell that holds no note is not refused: there is nothing to take
@@ -203,14 +197,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.note.delete".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

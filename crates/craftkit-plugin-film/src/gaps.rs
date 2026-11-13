@@ -43,14 +43,11 @@ commands! {
         undoable,
         params: {
             /// The track the gap is on.
-
             track: NodeRef,
             /// The place in the gap, in frames.
-
             time: Number,
         },
         run: {
-
             let id = "film.timeline.closegap".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {

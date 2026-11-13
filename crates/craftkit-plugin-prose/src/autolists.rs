@@ -104,11 +104,9 @@ commands! {
         undoable,
         params: {
             /// The paragraph.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.list".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block).cloned() else {

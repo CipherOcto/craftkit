@@ -39,21 +39,16 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Which contour of the path, counting from zero. The first one if
             /// it is left out.
-
             contour: Option<Number>,
             /// The points, counting from zero: a list of whole numbers.
-
             points: Json,
             /// What the points become: `smooth` or `corner`.
-
             to: Text,
         },
         run: {
-
             let id = "vector.path.anchors.convert".to_string();
             let smooth = match self.to.0.as_str() {
                 "smooth" => true,

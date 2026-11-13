@@ -60,14 +60,11 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// What it says.
-
             text: Text,
         },
         run: {
-
             let id = "prose.footnote.add".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {
@@ -101,6 +98,7 @@ commands! {
 
         }
     }
+
     /// **Read** the footnotes of a block.
     ///
     /// The answer is every run that points at a footnote, with the
@@ -111,11 +109,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.footnotes".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {

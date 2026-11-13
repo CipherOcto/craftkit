@@ -86,11 +86,9 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
         },
         run: {
-
             let command = "layout.page.delete";
             let page = self.page.0;
             let spread = page_of(session, command, page)?;
@@ -148,6 +146,7 @@ commands! {
 
         }
     }
+
     /// **Move** a page to another place among the pages of its spread.
     ///
     /// The place is counted in the order of the pages, and a place that is
@@ -160,14 +159,11 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
             /// The place it goes: the first of the pages is 0.
-
             to: Number,
         },
         run: {
-
             let command = "layout.page.move";
             let page = self.page.0;
             let spread = page_of(session, command, page)?;

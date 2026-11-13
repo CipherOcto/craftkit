@@ -75,15 +75,12 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The colour of the fill. An empty colour takes the fill away;
             /// without one, the fill stays as it is.
-
             colour: Option<Text>,
         },
         run: {
-
             let id = "layout.item.fill".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;
@@ -115,6 +112,7 @@ commands! {
 
         }
     }
+
     /// **Stroke** an item with a colour — or take the stroke away.
     ///
     /// The colour is written `#rrggbb` and the weight is in points. An
@@ -129,19 +127,15 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The colour of the stroke. An empty colour takes the stroke
             /// away; without one, the stroke stays as it is.
-
             colour: Option<Text>,
             /// The **weight** of the stroke, in points. Without one, the
             /// weight stays as it is.
-
             weight: Option<Number>,
         },
         run: {
-
             let id = "layout.item.stroke".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;

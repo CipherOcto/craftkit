@@ -528,22 +528,17 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes in.
-
             sheet: NodeRef,
             /// The cell — or the range of cells — the fill comes from.
-
             from: Text,
             /// The range the fill goes into, `A1:A10`.
-
             to: Text,
             /// `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`,
             /// `months`, `years`, `formats` or `values`. The tree's default is
             /// the series, and so is this one.
-
             mode: Option<Text>,
         },
         run: {
-
             let id = "grid.range.fill".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

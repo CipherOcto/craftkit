@@ -336,14 +336,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The rows that are grouped: `5:8`.
-
             rows: Text,
         },
         run: {
-
             let id = "grid.row.group".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -378,6 +375,7 @@ commands! {
 
         }
     }
+
     /// **Ungroup** a range of rows.
     ///
     /// Every row of the range comes one level up, and a row that is in no
@@ -390,14 +388,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The rows that are ungrouped: `5:8`.
-
             rows: Text,
         },
         run: {
-
             let id = "grid.row.ungroup".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -433,6 +428,7 @@ commands! {
 
         }
     }
+
     /// **Read** the groups of a sheet.
     grid.row.groups {
         area: "grid",
@@ -440,11 +436,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.row.groups".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -460,6 +454,7 @@ commands! {
 
         }
     }
+
     /// **Say** where the summary rows of a sheet sit.
     ///
     /// The tree's own setting: the summaries sit below their detail, or
@@ -473,17 +468,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Whether the summary rows sit **below** their detail.
-
             below: Option<Bool>,
             /// Whether the summary columns sit **right** of their detail.
-
             right: Option<Bool>,
         },
         run: {
-
             let id = "grid.sheet.summary".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -508,6 +499,7 @@ commands! {
 
         }
     }
+
     /// **Group** a range of columns.
     ///
     /// Every column of the range goes one level deeper, and a group that
@@ -520,14 +512,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The columns that are grouped: `C:E`.
-
             columns: Text,
         },
         run: {
-
             let id = "grid.column.group".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -571,6 +560,7 @@ commands! {
 
         }
     }
+
     /// **Ungroup** a range of columns.
     ///
     /// Every column of the range comes one level up, and a column that is
@@ -583,14 +573,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The columns that are ungrouped: `C:E`.
-
             columns: Text,
         },
         run: {
-
             let id = "grid.column.ungroup".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -637,6 +624,7 @@ commands! {
 
         }
     }
+
     /// **Read** the groups of the columns of a sheet.
     grid.column.groups {
         area: "grid",
@@ -644,11 +632,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.column.groups".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -669,6 +655,7 @@ commands! {
 
         }
     }
+
     /// **Show** the rows or the columns down to an outline level.
     ///
     /// The tree's level buttons: a level of **one** shows the top-level
@@ -687,18 +674,14 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The level of the rows to show: one is only the top-level
             /// summaries.
-
             rows: Option<Number>,
             /// The level of the columns to show.
-
             cols: Option<Number>,
         },
         run: {
-
             let id = "grid.outline.levels".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -766,6 +749,7 @@ commands! {
 
         }
     }
+
     /// **Hide** the **detail** of a group of rows.
     ///
     /// The tree's Hide Detail: the rows of the group are hidden, and the
@@ -778,17 +762,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The rows of the group: `5:8`.
-
             rows: Text,
             /// The level of the group, when the rows are in more than one.
-
             level: Option<Number>,
         },
         run: {
-
             let id = "grid.row.detail.hide".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -833,6 +813,7 @@ commands! {
 
         }
     }
+
     /// **Show** the **detail** of a group of rows.
     ///
     /// The tree's Show Detail: the rows of the group are shown, and the
@@ -851,17 +832,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The rows of the group: `5:8`.
-
             rows: Text,
             /// The level of the group, when the rows are in more than one.
-
             level: Option<Number>,
         },
         run: {
-
             let id = "grid.row.detail.show".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -906,6 +883,7 @@ commands! {
 
         }
     }
+
     /// **Hide** the **detail** of a group of columns.
     ///
     /// The tree's Hide Detail, on the columns: the columns of the group
@@ -919,17 +897,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The columns of the group: `B:E`.
-
             columns: Text,
             /// The level of the group, when the columns are in more than one.
-
             level: Option<Number>,
         },
         run: {
-
             let id = "grid.column.detail.hide".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -985,6 +959,7 @@ commands! {
 
         }
     }
+
     /// **Show** the **detail** of a group of columns.
     ///
     /// The tree's Show Detail, on the columns: the columns of the group
@@ -998,17 +973,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The columns of the group: `B:E`.
-
             columns: Text,
             /// The level of the group, when the columns are in more than one.
-
             level: Option<Number>,
         },
         run: {
-
             let id = "grid.column.detail.show".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;

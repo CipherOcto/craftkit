@@ -61,6 +61,7 @@ commands! {
 
         }
     }
+
     /// **Take** layers **out** of the selection.
     fx.layer.deselect {
         area: "fx",
@@ -92,6 +93,7 @@ commands! {
 
         }
     }
+
     /// **Read** the selection.
     fx.selection.get {
         area: "fx",

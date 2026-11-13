@@ -82,40 +82,31 @@ commands! {
         undoable,
         params: {
             /// The page the radio button is put on.
-
             page: NodeRef,
             /// The radio button's object number in the file.
-
             object: Number,
             /// The rectangle the radio button covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the **group** the button belongs to.
             ///
             /// Leave it out and the group is given the first free name of the
             /// tree: `Group1`, `Group2` and so on.
-
             group: Option<Text>,
             /// The **export value**: what the button holds when it is on.
-
             export: Text,
             /// The **style** of the mark: `Check`, `Circle`, `Cross`,
             /// `Diamond`, `Square` or `Star`.
             ///
             /// Leave it out and the mark is a circle, as the tree's is.
-
             style: Option<Text>,
             /// Where the bytes of the drawing that says the button is **on**
             /// are written.
-
             on_to: Option<Text>,
             /// Where the bytes of the drawing that says the button is **off**
             /// are written.
-
             off_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

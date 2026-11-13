@@ -67,15 +67,12 @@ commands! {
         undoable,
         params: {
             /// The style.
-
             style: NodeRef,
             /// The level: a whole number from 1 to 9. Without it, the style
             /// has no level of its own.
-
             level: Option<Number>,
         },
         run: {
-
             let id = "prose.style.level".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style) else {
@@ -126,6 +123,7 @@ commands! {
 
         }
     }
+
     /// **Read** the level of a style, with the level of its base under
     /// it.
     prose.style.level.read {
@@ -134,11 +132,9 @@ commands! {
         icon: "list",
         params: {
             /// The style.
-
             style: NodeRef,
         },
         run: {
-
             let id = "prose.style.level.read".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style) else {
@@ -164,6 +160,7 @@ commands! {
 
         }
     }
+
     /// **Read** the outline of a document: its headings, in the order
     /// they stand.
     ///
@@ -175,11 +172,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.document.outline".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {

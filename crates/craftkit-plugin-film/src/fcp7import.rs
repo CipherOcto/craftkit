@@ -136,16 +136,13 @@ commands! {
         undoable,
         params: {
             /// The file to read.
-
             path: Text,
             /// What to call the sequence.
             ///
             /// Without it, the name of the sequence in the document.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "film.import.fcp7".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {

@@ -313,22 +313,19 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The kind of page: `odd`, `even` or `first`. Without it, the odd
             /// pages are meant.
-
             page: Option<Text>,
             /// The text of the header.
-
             text: Text,
         },
         run: {
-
             set(session, "grid.print.header", "print_header", self.sheet.0, &self.page, &self.text.0)
 
         }
     }
+
     /// **Set** the footer of a sheet — or take it away.
     ///
     /// The codes are the codes of the header: `&P` is the page number,
@@ -342,18 +339,14 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The kind of page: `odd`, `even` or `first`. Without it, the odd
             /// pages are meant.
-
             page: Option<Text>,
             /// The text of the footer.
-
             text: Text,
         },
         run: {
-
             set(session, "grid.print.footer", "print_footer", self.sheet.0, &self.page, &self.text.0)
 
         }

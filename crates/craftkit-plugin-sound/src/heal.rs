@@ -57,11 +57,9 @@ commands! {
         menu: ("Clip", "Heal"),
         params: {
             /// The track to heal.
-
             track: NodeRef,
         },
         run: {
-
             let id = "sound.clip.heal".to_string();
             let track_id = self.track.0;
             let node = session.document().node(track_id).ok_or_else(|| EngineError::Failed {

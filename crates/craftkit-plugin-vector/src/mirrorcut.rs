@@ -44,19 +44,14 @@ commands! {
         menu: ("Path", "Mirror and cut"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The axis: `vertical` (the default), `horizontal` or `free`.
-
             axis: Option<Text>,
             /// A point on the axis — where a vertical or horizontal axis runs.
-
             from: Option<Json>,
             /// The other point of the axis, when it is `free`.
-
             to: Option<Json>,
             /// The side that is kept: `left`, `right`, `top` or `bottom`.
-
             keep: Option<Text>,
         },
         methods: {
@@ -75,7 +70,6 @@ commands! {
 
         },
         run: {
-
             let id = "vector.path.cut.mirror".to_string();
             let vector = vector_of(session, self.path.0)?;
             if vector.path.subpaths.iter().any(|contour| !contour.closed) {

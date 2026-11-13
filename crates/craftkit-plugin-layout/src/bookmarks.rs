@@ -83,17 +83,13 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The name of the bookmark.
-
             name: Option<Text>,
             /// The page it names, counted from one.
-
             page: Option<Number>,
         },
         run: {
-
             let command = "layout.bookmark.add";
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {
@@ -160,6 +156,7 @@ commands! {
 
         }
     }
+
     /// **Rename** a bookmark.
     layout.bookmark.rename {
         area: "layout",
@@ -169,14 +166,11 @@ commands! {
         undoable,
         params: {
             /// The bookmark.
-
             bookmark: NodeRef,
             /// Its new name.
-
             name: Text,
         },
         run: {
-
             let command = "layout.bookmark.rename";
             let bookmark = self.bookmark.0;
             the_bookmark(session, command, bookmark)?;
@@ -202,6 +196,7 @@ commands! {
 
         }
     }
+
     /// **Delete** a bookmark.
     layout.bookmark.delete {
         area: "layout",
@@ -211,11 +206,9 @@ commands! {
         undoable,
         params: {
             /// The bookmark.
-
             bookmark: NodeRef,
         },
         run: {
-
             let command = "layout.bookmark.delete";
             let bookmark = self.bookmark.0;
             the_bookmark(session, command, bookmark)?;
@@ -225,6 +218,7 @@ commands! {
 
         }
     }
+
     /// The **bookmarks** of a document: the names and the pages they name.
     layout.document.bookmarks {
         area: "layout",
@@ -232,11 +226,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let command = "layout.document.bookmarks";
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

@@ -45,17 +45,13 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The track it goes on. The track it is on, if it stays there.
-
             track: NodeRef,
             /// Where it starts on that track, in frames.
-
             start: Number,
         },
         run: {
-
             let id = "film.clip.move".to_string();
             let clip = self.clip.0;
             let track = self.track.0;

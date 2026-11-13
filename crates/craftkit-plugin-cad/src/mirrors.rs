@@ -167,17 +167,13 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
             /// A point on the line the entity is turned over.
-
             from: Json,
             /// Another point on that line.
-
             to: Json,
         },
         run: {
-
             let id = "cad.entity.mirror".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;

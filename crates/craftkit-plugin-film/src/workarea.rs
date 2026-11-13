@@ -96,17 +96,13 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The in point, in frames.
-
             start: Number,
             /// The out point, in frames.
-
             end: Number,
         },
         run: {
-
             let id = "film.workarea.set".to_string();
             let sequence = self.sequence.0;
             the_sequence(session, &id, sequence)?;
@@ -128,6 +124,7 @@ commands! {
 
         }
     }
+
     /// **Read** the work area of a sequence.
     film.workarea.get {
         area: "film",
@@ -135,11 +132,9 @@ commands! {
         icon: "list",
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.workarea.get".to_string();
             let sequence = self.sequence.0;
             let node = the_sequence(session, &id, sequence)?;
@@ -154,6 +149,7 @@ commands! {
 
         }
     }
+
     /// **Take the work area away** from a sequence.
     film.workarea.clear {
         area: "film",
@@ -163,11 +159,9 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.workarea.clear".to_string();
             let sequence = self.sequence.0;
             the_sequence(session, &id, sequence)?;

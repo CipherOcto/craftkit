@@ -47,17 +47,13 @@ commands! {
         undoable,
         params: {
             /// The track the range is on.
-
             track: NodeRef,
             /// Where the range starts, in frames.
-
             from: Number,
             /// Where the range ends, in frames.
-
             to: Number,
         },
         run: {
-
             let id = "film.clip.lift".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {
@@ -108,6 +104,7 @@ commands! {
 
         }
     }
+
     /// **Extract** a range of a track: take the clips that are in it away
     /// and close the gap.
     ///
@@ -123,17 +120,13 @@ commands! {
         undoable,
         params: {
             /// The track the range is on.
-
             track: NodeRef,
             /// Where the range starts, in frames.
-
             from: Number,
             /// Where the range ends, in frames.
-
             to: Number,
         },
         run: {
-
             let id = "film.clip.extract".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {

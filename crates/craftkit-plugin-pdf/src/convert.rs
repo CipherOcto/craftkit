@@ -96,11 +96,9 @@ commands! {
             /// The level to check against: `2b` or `3b`.
             ///
             /// Without it, the rules that need a level are not checked.
-
             level: Option<Text>,
         },
         run: {
-
             let id = "pdf.convert".to_string();
             let level = match &self.level {
                 None => None,

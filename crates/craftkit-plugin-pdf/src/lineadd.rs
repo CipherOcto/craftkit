@@ -78,29 +78,21 @@ commands! {
         undoable,
         params: {
             /// The page the line is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The point the line starts at: two numbers.
-
             from: Json,
             /// The point the line ends at: two numbers.
-
             to: Json,
             /// Whether the line has an **arrow** at the end of it.
-
             arrow: Option<Bool>,
             /// The colour of the line: three numbers.
-
             colour: Option<Json>,
             /// The width of the line, in points.
-
             width: Option<Number>,
         },
         run: {
-
             // The **page**: a page of the document.
             let Some(page) = session.document().node(self.page.0) else {
                 return Err(EngineError::Failed {

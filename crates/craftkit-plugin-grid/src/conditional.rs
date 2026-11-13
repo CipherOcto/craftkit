@@ -200,36 +200,27 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range it is about: `A1:A10`.
-
             range: Text,
             /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
-
             op: Text,
             /// The value it compares with.
-
             value: Text,
             /// The format the matching cells are written with. A rule may
             /// carry the format, the fill, or both.
-
             format: Option<Text>,
             /// The fill the matching cells are filled with: `#rrggbb`. A rule
             /// may carry the fill and no format.
-
             fill: Option<Text>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
-
             stop: Option<Bool>,
             /// The **priority** of the rule: the lower the number, the earlier
             /// the rule is tried.
-
             priority: Option<Number>,
         },
         run: {
-
             let id = "grid.conditional.set".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -381,6 +372,7 @@ commands! {
 
         }
     }
+
     /// Take a **conditional format** away.
     grid.conditional.clear {
         area: "grid",
@@ -390,14 +382,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range it was about: `A1:A10`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.conditional.clear".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -450,6 +439,7 @@ commands! {
 
         }
     }
+
     /// The **cells** of a range that a conditional format holds for.
     ///
     /// The cells are **derived**: they are worked out from the cells each
@@ -460,14 +450,11 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range it is about: `A1:A10`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.conditional.check".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

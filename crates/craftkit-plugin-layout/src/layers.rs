@@ -86,14 +86,11 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// Its new name.
-
             name: Text,
         },
         run: {
-
             let command = "layout.layer.rename";
             let layer = self.layer.0;
             let document = layer_of(session, command, layer)?;
@@ -128,6 +125,7 @@ commands! {
 
         }
     }
+
     /// **Delete** a layer.
     ///
     /// The items on the layer go with it, and a document needs at least one
@@ -140,11 +138,9 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
         },
         run: {
-
             let command = "layout.layer.delete";
             let layer = self.layer.0;
             let document = layer_of(session, command, layer)?;
@@ -173,6 +169,7 @@ commands! {
 
         }
     }
+
     /// **Delete** the layers of a document that have **nothing on them**.
     ///
     /// One layer always stays.
@@ -184,11 +181,9 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let command = "layout.layer.unused.delete";
             let document = self.document.0;
             if session.document().node(document).is_none() {
@@ -222,6 +217,7 @@ commands! {
 
         }
     }
+
     /// **Move** a layer in the order of the layers.
     ///
     /// The order is the tree's: the first is the frontmost.
@@ -233,14 +229,11 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// The place it goes: the first is the frontmost.
-
             to: craftkit_sdk::Number,
         },
         run: {
-
             let command = "layout.layer.move";
             let layer = self.layer.0;
             let document = layer_of(session, command, layer)?;
@@ -298,6 +291,7 @@ commands! {
 
         }
     }
+
     /// **Merge** layers: the items of them move to one, and the others are
     /// gone.
     ///
@@ -311,15 +305,12 @@ commands! {
         undoable,
         params: {
             /// The layers to merge: at least one.
-
             layers: Json,
             /// The layer the items go to: the first of them when it is not
             /// named.
-
             into: Option<NodeRef>,
         },
         run: {
-
             let command = "layout.layer.merge";
             let Some(list) = self.layers.as_array() else {
                 return Err(EngineError::Failed {
@@ -404,6 +395,7 @@ commands! {
 
         }
     }
+
     /// **Lock** a layer: what is on it may not be edited.
     ///
     /// The kit's own rule: a locked layer locks everything on it.
@@ -415,15 +407,14 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
         },
         run: {
-
             set_flag(session, "layout.layer.lock", self.layer.0, true)
 
         }
     }
+
     /// **Unlock** a layer: what is on it may be edited again.
     layout.layer.unlock {
         area: "layout",
@@ -433,15 +424,14 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
         },
         run: {
-
             set_flag(session, "layout.layer.unlock", self.layer.0, false)
 
         }
     }
+
     /// **Hide** a layer: what is on it is not drawn.
     layout.layer.hide {
         area: "layout",
@@ -451,15 +441,14 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
         },
         run: {
-
             set_flag(session, "layout.layer.hide", self.layer.0, true)
 
         }
     }
+
     /// **Show** a layer: what is on it is drawn again.
     layout.layer.show {
         area: "layout",
@@ -469,11 +458,9 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
         },
         run: {
-
             set_flag(session, "layout.layer.show", self.layer.0, false)
 
         }

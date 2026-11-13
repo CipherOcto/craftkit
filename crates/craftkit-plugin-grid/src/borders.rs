@@ -168,27 +168,21 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The **edge**: `top`, `right`, `bottom` or `left`.
-
             edge: Text,
             /// The **style** of the line: `thin`, `medium`, `thick`, `dashed`,
             /// `dotted`, `double`, `hair`, `mediumDashed`, `dashDot`,
             /// `mediumDashDot`, `dashDotDot`, `mediumDashDotDot` or
             /// `slantDashDot` — and `none`, which takes the border away.
-
             style: Text,
             /// The **colour** of the line, as `#rrggbb`. Without it the line
             /// is black.
-
             colour: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.border.set".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -278,6 +272,7 @@ commands! {
 
         }
     }
+
     /// **Read** the borders of a cell, or of the whole sheet.
     ///
     /// Without a cell, every border of the sheet is read.
@@ -287,15 +282,12 @@ commands! {
         icon: "grid",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address. Without it, every border of the sheet is
             /// read.
-
             cell: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.border.get".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;
@@ -340,6 +332,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the border of one edge of a cell.
     ///
     /// The other edges of the cell stay.
@@ -351,17 +344,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The **edge**: `top`, `right`, `bottom` or `left`.
-
             edge: Text,
         },
         run: {
-
             let id = "grid.cell.border.clear".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, sheet, &id)?;

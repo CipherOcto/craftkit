@@ -252,37 +252,29 @@ commands! {
         undoable,
         params: {
             /// The page the check box is put on.
-
             page: NodeRef,
             /// The check box's object number in the file.
-
             object: Number,
             /// The rectangle the check box covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the check box.
             ///
             /// Leave it out and the check box is given the first free name of
             /// the tree: `Check Box1`, `Check Box2` and so on.
-
             name: Option<Text>,
             /// The **style** of the mark: `Check`, `Circle`, `Cross`,
             /// `Diamond`, `Square` or `Star`.
             ///
             /// Leave it out and the mark is a check.
-
             style: Option<Text>,
             /// Where the bytes of the drawing that says the box is **on** are
             /// written.
-
             on_to: Option<Text>,
             /// Where the bytes of the drawing that says the box is **off** are
             /// written.
-
             off_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

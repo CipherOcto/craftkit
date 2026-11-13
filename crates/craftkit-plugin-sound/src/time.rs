@@ -70,14 +70,11 @@ commands! {
         menu: ("Event", "Time"),
         params: {
             /// Where the silence goes, in samples.
-
             at: Number,
             /// How much silence there is, in samples.
-
             length: Number,
         },
         run: {
-
             let id = "sound.time.insert".to_string();
             let at = crate::samples(self.at.0, "where the silence goes")?;
             let length = crate::samples(self.length.0, "how much silence there is")?;
@@ -166,6 +163,7 @@ commands! {
 
         }
     }
+
     /// **Cut time** out of the session: a range of the timeline is thrown
     /// away and everything after it moves earlier.
     ///
@@ -187,14 +185,11 @@ commands! {
         menu: ("Event", "Time"),
         params: {
             /// Where the range starts, in samples.
-
             start: Number,
             /// Where the range ends, in samples.
-
             end: Number,
         },
         run: {
-
             let id = "sound.time.cut".to_string();
             let start = crate::samples(self.start.0, "where the range starts")?;
             let end = crate::samples(self.end.0, "where the range ends")?;

@@ -99,23 +99,17 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
             /// The room at the top of the page.
-
             top: Option<Number>,
             /// The room at the bottom of the page.
-
             bottom: Option<Number>,
             /// The room at the left of the page.
-
             left: Option<Number>,
             /// The room at the right of the page.
-
             right: Option<Number>,
         },
         run: {
-
             let id = "layout.page.margin".to_string();
             let page = self.page.0;
             let Some(node) = session.document().node(page).cloned() else {

@@ -219,14 +219,11 @@ commands! {
         icon: "list",
         params: {
             /// The number to write.
-
             value: Number,
             /// The form: `roman`, `letters`, `ordinal` or `cardinal`.
-
             format: Text,
         },
         run: {
-
             let id = "prose.number.format".to_string();
             let number = self.value.0;
             if !number.is_finite() || number.fract() != 0.0 {

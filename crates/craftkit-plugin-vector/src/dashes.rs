@@ -89,18 +89,14 @@ commands! {
         menu: ("Path", "Paint"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The pattern: a dash, a gap, a dash, a gap — the lengths in the
             /// world's units. Without it the line is whole.
-
             pattern: Option<Json>,
             /// Where in the pattern the line starts.
-
             offset: Option<Number>,
         },
         run: {
-
             let id = "vector.path.dash".to_string();
             let mut lengths = Vec::new();
             if let Some(pattern) = &self.pattern {

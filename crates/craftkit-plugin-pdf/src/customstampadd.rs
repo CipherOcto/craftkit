@@ -55,29 +55,21 @@ commands! {
         undoable,
         params: {
             /// The page the stamp is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The rectangle the stamp covers: four numbers.
-
             rect: Json,
             /// The name of the stamp.
-
             name: Text,
             /// The picture the stamp is: an object of the document.
-
             picture: NodeRef,
             /// Whether the picture is an **image** and not a form.
-
             image: Option<Bool>,
             /// The size of the picture: two numbers.
-
             size: Option<Json>,
         },
         run: {
-
             // The **rectangle**: four numbers, and the corners may come in
             // any order.
             let numbers = numbers_of(&self.rect);

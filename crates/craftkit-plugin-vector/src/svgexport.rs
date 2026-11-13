@@ -315,11 +315,9 @@ commands! {
         icon: "file",
         params: {
             /// Where to write the file.
-
             path: Text,
         },
         run: {
-
             let path = self.path.0.clone();
             if path.trim().is_empty() {
                 return Err(EngineError::Failed {

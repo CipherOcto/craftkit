@@ -140,11 +140,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let command = "layout.document.articles";
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {
@@ -164,6 +162,7 @@ commands! {
 
         }
     }
+
     /// **New** article in a document.
     ///
     /// The name is `Article N` when it is not given, and a name that is
@@ -176,17 +175,13 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The name of the article.
-
             name: Option<Text>,
             /// The items it holds, in the order they are in.
-
             items: Option<Json>,
         },
         run: {
-
             let command = "layout.article.new";
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {
@@ -253,6 +248,7 @@ commands! {
 
         }
     }
+
     /// **Add** items to an article, in the order they are given.
     ///
     /// An item that is already in the article is not in it twice, and an
@@ -265,14 +261,11 @@ commands! {
         undoable,
         params: {
             /// The article.
-
             article: NodeRef,
             /// The items.
-
             items: Option<Json>,
         },
         run: {
-
             let command = "layout.article.add";
             let article = self.article.0;
             the_article(session, command, article)?;
@@ -297,6 +290,7 @@ commands! {
 
         }
     }
+
     /// **Take** items out of an article.
     layout.article.remove {
         area: "layout",
@@ -306,14 +300,11 @@ commands! {
         undoable,
         params: {
             /// The article.
-
             article: NodeRef,
             /// The items.
-
             items: Option<Json>,
         },
         run: {
-
             let command = "layout.article.remove";
             let article = self.article.0;
             the_article(session, command, article)?;
@@ -335,6 +326,7 @@ commands! {
 
         }
     }
+
     /// The **options** of an article: its name, whether it is exported and
     /// the order of its items.
     layout.article.options {
@@ -345,20 +337,15 @@ commands! {
         undoable,
         params: {
             /// The article.
-
             article: NodeRef,
             /// Its new name.
-
             to: Option<Text>,
             /// Whether it is exported.
-
             export: Option<Bool>,
             /// The order of its items: these come first, and the rest follow.
-
             order: Option<Json>,
         },
         run: {
-
             let command = "layout.article.options";
             let article = self.article.0;
             the_article(session, command, article)?;
@@ -407,6 +394,7 @@ commands! {
 
         }
     }
+
     /// **Delete** an article.
     layout.article.delete {
         area: "layout",
@@ -416,11 +404,9 @@ commands! {
         undoable,
         params: {
             /// The article.
-
             article: NodeRef,
         },
         run: {
-
             let command = "layout.article.delete";
             let article = self.article.0;
             the_article(session, command, article)?;

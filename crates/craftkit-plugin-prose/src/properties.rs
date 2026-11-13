@@ -110,44 +110,34 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// Who wrote it.
             ///
             /// An empty author takes the author away.
-
             author: Option<Text>,
             /// What it is about.
-
             subject: Option<Text>,
             /// The words a search looks for.
-
             keywords: Option<Text>,
             /// What a reader may say about it.
-
             comments: Option<Text>,
             /// The category it is in.
-
             category: Option<Text>,
             /// Who touched it last.
             ///
             /// An empty name takes the name away.
-
             last_modified_by: Option<Text>,
             /// How many times it has been revised.
             ///
             /// A whole number, and a revision of zero takes the revision away.
-
             revision: Option<Number>,
             /// The **custom** properties: a list of pairs, each a name and a
             /// value.
             ///
             /// A null or an empty value takes the property away.
-
             custom: Option<Json>,
         },
         run: {
-
             let id = "prose.document.properties".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {

@@ -82,29 +82,22 @@ commands! {
         undoable,
         params: {
             /// The page the date field is put on.
-
             page: NodeRef,
             /// The date field's object number in the file.
-
             object: Number,
             /// The rectangle the date field covers: four numbers.
-
             rect: serde_json::Value,
             /// The name of the date field.
             ///
             /// Leave it out and the date field is given the first free name of
             /// the tree: `Date1`, `Date2` and so on.
-
             name: Option<Text>,
             /// The day the field holds.
-
             value: Option<Text>,
             /// Where the bytes of the field's drawing are written.
-
             appearance_to: Option<Text>,
         },
         run: {
-
             // The **page**.
             let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),

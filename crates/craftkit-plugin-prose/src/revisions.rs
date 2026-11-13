@@ -92,11 +92,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.revisions".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {

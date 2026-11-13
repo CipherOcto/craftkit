@@ -202,6 +202,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a mask of a layer.
     fx.mask.remove {
         area: "fx",
@@ -231,6 +232,7 @@ commands! {
 
         }
     }
+
     /// **Set** the **mode** of a mask.
     fx.mask.mode {
         area: "fx",
@@ -269,6 +271,7 @@ commands! {
 
         }
     }
+
     /// **Invert** a mask, or **uninvert** it.
     ///
     /// The value says what to do; when it is not said the mask is
@@ -292,6 +295,7 @@ commands! {
 
         }
     }
+
     /// **Lock** a mask, or **unlock** it.
     ///
     /// The value says what to do; when it is not said the mask is
@@ -315,6 +319,7 @@ commands! {
 
         }
     }
+
     /// **Read** the masks of a layer.
     fx.mask.list {
         area: "fx",

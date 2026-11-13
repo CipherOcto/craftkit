@@ -148,11 +148,9 @@ commands! {
             /// The script to read.
             ///
             /// Leave it out and every script is read.
-
             name: Option<craftkit_sdk::Text>,
         },
         run: {
-
             let id = COMMAND.to_string();
             let (all, skipped) = scripts_of(session.document());
             let listed: Vec<Json> = match &self.name {

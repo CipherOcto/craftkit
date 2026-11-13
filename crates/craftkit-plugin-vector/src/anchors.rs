@@ -152,15 +152,12 @@ commands! {
         menu: ("Path", "Anchors"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The contours of the path: each a list of anchors and whether it
             /// is closed.
-
             subpaths: Json,
         },
         run: {
-
             let id = "vector.path.anchors.set".to_string();
             let Some(list) = self.subpaths.as_array() else {
                 return Err(EngineError::Failed { id, message: "the subpaths are not a list".to_string() });
@@ -188,6 +185,7 @@ commands! {
 
         }
     }
+
     /// Put a point in the **middle of every side** of a path.
     ///
     /// The tree's own command: an anchor is added at the middle of each
@@ -203,11 +201,9 @@ commands! {
         menu: ("Path", "Anchors"),
         params: {
             /// The path.
-
             path: NodeRef,
         },
         run: {
-
             let id = "vector.path.anchors.middle".to_string();
             let mut vector = vector_of(session, self.path.0)?;
             let mut subpaths: Vec<SubPath> = Vec::with_capacity(vector.path.subpaths.len());

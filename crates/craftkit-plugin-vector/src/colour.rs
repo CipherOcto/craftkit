@@ -404,17 +404,13 @@ commands! {
         icon: "list",
         params: {
             /// The colour: a hex text, `#rrggbb`.
-
             colour: Text,
             /// The space the colour is in.
-
             from: Text,
             /// The space the colour is put into.
-
             to: Text,
         },
         run: {
-
             let _ = session;
             let from = space_of(&self.from.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),
@@ -452,6 +448,7 @@ commands! {
 
         }
     }
+
     /// **Say** whether a colour is inside the **gamut** of a space.
     ///
     /// The tree's own: the colour is sent to the space and clipped there,
@@ -464,20 +461,15 @@ commands! {
         icon: "list",
         params: {
             /// The colour: a hex text, `#rrggbb`.
-
             colour: Text,
             /// The space the colour is in.
-
             from: Text,
             /// The space whose gamut is tested.
-
             to: Text,
             /// The threshold of the measure: the tree's own is four.
-
             threshold: Option<Number>,
         },
         run: {
-
             let _ = session;
             let from = space_of(&self.from.0).ok_or_else(|| EngineError::Failed {
                 id: GAMUT_COMMAND.to_string(),

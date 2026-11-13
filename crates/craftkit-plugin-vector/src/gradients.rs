@@ -133,11 +133,9 @@ commands! {
         icon: "paint",
         params: {
             /// The path.
-
             path: NodeRef,
         },
         run: {
-
             let id = "vector.gradient.read".to_string();
             let gradient = gradient_of(session, &id, self.path.0)?;
             let stops = stops_of(&gradient);
@@ -151,6 +149,7 @@ commands! {
 
         }
     }
+
     /// **Add** a stop to a gradient.
     vector.gradient.stop.add {
         area: "vector",
@@ -160,20 +159,15 @@ commands! {
         undoable,
         params: {
             /// The path.
-
             path: NodeRef,
             /// Where the stop is along the gradient: from zero to one.
-
             offset: Number,
             /// The colour of the stop.
-
             colour: Text,
             /// How solid the stop is: from zero to one. The default is one.
-
             opacity: Option<Number>,
         },
         run: {
-
             let id = "vector.gradient.stop.add".to_string();
             let offset = offset_of(&id, self.offset)?;
             let opacity = opacity_of(&id, self.opacity)?;
@@ -199,6 +193,7 @@ commands! {
 
         }
     }
+
     /// **Change** a stop of a gradient.
     vector.gradient.stop.set {
         area: "vector",
@@ -208,26 +203,20 @@ commands! {
         undoable,
         params: {
             /// The path.
-
             path: NodeRef,
             /// The stop to change: its number in the list.
-
             stop: Number,
             /// Where the stop is along the gradient: from zero to one. It stays
             /// where it is when it is not said.
-
             offset: Option<Number>,
             /// The colour of the stop. It stays what it is when it is not
             /// said.
-
             colour: Option<Text>,
             /// How solid the stop is: from zero to one. It stays what it is
             /// when it is not said.
-
             opacity: Option<Number>,
         },
         run: {
-
             let id = "vector.gradient.stop.set".to_string();
             let index = index_of(&id, self.stop)?;
             let offset = match &self.offset {
@@ -271,6 +260,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a stop of a gradient.
     vector.gradient.stop.remove {
         area: "vector",
@@ -280,14 +270,11 @@ commands! {
         undoable,
         params: {
             /// The path.
-
             path: NodeRef,
             /// The stop that goes: its number in the list.
-
             stop: Number,
         },
         run: {
-
             let id = "vector.gradient.stop.remove".to_string();
             let index = index_of(&id, self.stop)?;
             let mut gradient = gradient_of(session, &id, self.path.0)?;

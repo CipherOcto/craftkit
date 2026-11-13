@@ -310,6 +310,7 @@ commands! {
 
         }
     }
+
     /// Put the parameters of an effect back to their **defaults**.
     ///
     /// The tree's `effect.reset`. An effect whose parameters carry
@@ -399,6 +400,7 @@ commands! {
 
         }
     }
+
     /// **Copy** an effect of a layer.
     ///
     /// The copy goes **right after** the one it is a copy of, and it holds
@@ -467,6 +469,7 @@ commands! {
 
         }
     }
+
     /// **Move** an effect to another place in the stack of a layer.
     ///
     /// The tree's `effect.reorder`. The effect is addressed by its
@@ -566,6 +569,7 @@ commands! {
 
         }
     }
+
     /// Say what an **effect** is.
     fx.effect.list {
         area: "fx",
@@ -614,6 +618,7 @@ commands! {
 
         }
     }
+
     /// Put an **effect** on a layer.
     ///
     /// The instance holds the parameters of the effect at their defaults,
@@ -694,6 +699,7 @@ commands! {
 
         }
     }
+
     /// Take an **effect** away from a layer.
     ///
     /// The effect is named by its **number** in the stack, counting from

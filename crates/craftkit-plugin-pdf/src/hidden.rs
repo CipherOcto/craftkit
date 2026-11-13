@@ -341,11 +341,9 @@ commands! {
         params: {
             /// The category to take away: `Comments`, `Attachments` or
             /// `LinksActionsScripts`.
-
             category: craftkit_sdk::Text,
         },
         run: {
-
             let category = self.category.0.trim().to_string();
             if !CATEGORIES.contains(&category.as_str()) {
                 return Err(EngineError::Failed {
@@ -367,6 +365,7 @@ commands! {
 
         }
     }
+
     /// The **hidden information** of a file is counted.
     ///
     /// A query: it does not change the document. A file that hides nothing
@@ -379,11 +378,9 @@ commands! {
             /// The category to count.
             ///
             /// Leave it out and every category is counted.
-
             category: Option<craftkit_sdk::Text>,
         },
         run: {
-
             let counts = scan(session);
             let listed: Vec<Json> = match &self.category {
                 None => counts

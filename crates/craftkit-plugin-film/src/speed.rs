@@ -86,21 +86,17 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The speed: one is the media as it is, two is twice as fast.
-
             speed: Number,
             /// Whether the clips that were after it move up by the change in
             /// its length.
             ///
             /// Leave it out and the change is bounded by the space there is:
             /// a clip that would run into its neighbour is refused.
-
             ripple: Option<Bool>,
         },
         run: {
-
             let id = "film.clip.speed".to_string();
             let clip = self.clip.0;
             let speed = self.speed.0;

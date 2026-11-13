@@ -26,11 +26,9 @@ commands! {
         icon: "list",
         params: {
             /// The track to read.
-
             track: NodeRef,
         },
         run: {
-
             let id = "film.track.get".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {

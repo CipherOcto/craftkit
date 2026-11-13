@@ -404,24 +404,19 @@ commands! {
         menu: ("Clip", "Import MIDI"),
         params: {
             /// The track the clip goes on.
-
             track: NodeRef,
             /// Where the clip starts, in samples.
-
             start: Number,
             /// The MIDI file to read.
-
             path: Text,
             /// Whether the file's **tempo map** comes in with it.
             ///
             /// The file's tempos, meters and key signatures become the
             /// document's events. Without it, the file is read at the
             /// document's own tempo.
-
             tempo_map: Option<Bool>,
         },
         run: {
-
             let id = "sound.clip.midi.import".to_string();
             let start = samples(self.start.0, "where the clip starts")?;
             let path = self.path.0.clone();
@@ -498,6 +493,7 @@ commands! {
 
         }
     }
+
     /// **Import a MIDI file as tracks**: a track for every track of the
     /// file.
     ///
@@ -521,21 +517,17 @@ commands! {
         menu: ("File", "Import MIDI as Tracks"),
         params: {
             /// The MIDI file to read.
-
             path: Text,
             /// Where the tracks are put, in samples.
-
             start: Number,
             /// Whether the file's **tempo map** comes in with it.
             ///
             /// The file's tempos, meters and key signatures become the
             /// document's events. Without it, the file is read at the
             /// document's own tempo.
-
             tempo_map: Option<Bool>,
         },
         run: {
-
             let id = "sound.track.midi.import".to_string();
             let start = samples(self.start.0, "where the tracks are put")?;
             let path = self.path.0.clone();
@@ -611,6 +603,7 @@ commands! {
 
         }
     }
+
     /// **Export the MIDI** of a clip to a file.
     ///
     /// The file is a Standard MIDI File at nine hundred and sixty ticks a
@@ -628,14 +621,11 @@ commands! {
         menu: ("Clip", "Export MIDI"),
         params: {
             /// The clip to export.
-
             clip: NodeRef,
             /// Where the file is written.
-
             path: Text,
         },
         run: {
-
             let id = "sound.clip.midi.export".to_string();
             let clip_id = self.clip.0;
             let path = self.path.0.clone();
@@ -738,6 +728,7 @@ commands! {
 
         }
     }
+
     /// **Read the MIDI** of a clip.
     ///
     /// The notes and the controllers are given back, and so is the **next**
@@ -748,11 +739,9 @@ commands! {
         icon: "list",
         params: {
             /// The clip to read.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.midi.read".to_string();
             let clip_id = self.clip.0;
             let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
@@ -783,6 +772,7 @@ commands! {
 
         }
     }
+
     /// **Name the notes** of a MIDI clip.
     ///
     /// The tree's MIDI crate carries a table of names: a note is "C3", a
@@ -800,11 +790,9 @@ commands! {
         icon: "list",
         params: {
             /// The clip whose notes are named.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.midi.names".to_string();
             let clip_id = self.clip.0;
             let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
@@ -866,6 +854,7 @@ commands! {
 
         }
     }
+
     /// **Quantise the notes** of a clip onto the session's **grid**.
     ///
     /// The grid is the session's (§200) and the lines are musical, so they
@@ -890,11 +879,9 @@ commands! {
         menu: ("Clip", "Quantize MIDI"),
         params: {
             /// The clip to quantise.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.midi.quantize".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -935,6 +922,7 @@ commands! {
 
         }
     }
+
     /// **Transpose** the notes of a clip.
     ///
     /// The pitch of a MIDI note is from zero to a hundred and twenty-seven,
@@ -951,14 +939,11 @@ commands! {
         menu: ("Clip", "Transpose MIDI"),
         params: {
             /// The clip to transpose.
-
             clip: NodeRef,
             /// How many semitones, up or down.
-
             semitones: Number,
         },
         run: {
-
             let id = "sound.clip.midi.transpose".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -993,6 +978,7 @@ commands! {
 
         }
     }
+
     /// **Change the velocity** of the notes of a clip.
     ///
     /// The velocity is how hard a note is struck, and it is from one to a
@@ -1019,26 +1005,19 @@ commands! {
         menu: ("Clip", "Velocity"),
         params: {
             /// The clip to change.
-
             clip: NodeRef,
             /// The velocity every note is struck at.
-
             set: Option<Number>,
             /// The change in the velocity of every note.
-
             delta: Option<Number>,
             /// The factor every note's velocity is multiplied by.
-
             scale: Option<Number>,
             /// The softest a note may be struck: with `max`, it is the limit.
-
             min: Option<Number>,
             /// The hardest a note may be struck: with `min`, it is the limit.
-
             max: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.midi.velocity".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1123,6 +1102,7 @@ commands! {
 
         }
     }
+
     /// **Change the length** of the notes of a clip.
     ///
     /// A note is always at least one tick long: a note of no length is a
@@ -1146,23 +1126,17 @@ commands! {
         menu: ("Clip", "Duration"),
         params: {
             /// The clip to change.
-
             clip: NodeRef,
             /// The length every note is given, in ticks.
-
             set: Option<Number>,
             /// The change in the length of every note, in ticks.
-
             delta: Option<Number>,
             /// The factor every note's length is multiplied by.
-
             scale: Option<Number>,
             /// The gap of ticks before the next note, for a legato.
-
             gap: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.midi.duration".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1240,6 +1214,7 @@ commands! {
 
         }
     }
+
     /// **Make a MIDI clip** with no notes in it.
     ///
     /// The tree's editor makes a MIDI clip when a person asks for one on a
@@ -1260,18 +1235,14 @@ commands! {
         menu: ("Clip", "New MIDI Clip"),
         params: {
             /// The track the clip goes on.
-
             track: NodeRef,
             /// Where the clip starts, in samples.
-
             start: Number,
             /// How long the clip is, in samples. A bar at the document's tempo
             /// without it.
-
             length: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.midi.add".to_string();
             let start = samples(self.start.0, "where the clip starts")?;
             let settings = session_of(session.document());
@@ -1309,6 +1280,7 @@ commands! {
 
         }
     }
+
     /// **Add a note** to a MIDI clip.
     ///
     /// The **pitch**, the **velocity** and the **channel** are refused when
@@ -1327,26 +1299,19 @@ commands! {
         menu: ("Clip", "Add Note"),
         params: {
             /// The clip the note goes in.
-
             clip: NodeRef,
             /// The pitch: zero to a hundred and twenty-seven.
-
             pitch: Number,
             /// Where the note starts, in ticks from the start of the clip.
-
             start: Number,
             /// How long the note is, in ticks. Half a quarter note without it.
-
             length: Option<Number>,
             /// How hard the note is struck: one to a hundred and twenty-seven.
-
             velocity: Option<Number>,
             /// The channel the note is on: zero to fifteen.
-
             channel: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.midi.note.add".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1388,6 +1353,7 @@ commands! {
 
         }
     }
+
     /// **Edit a note** of a MIDI clip.
     ///
     /// The note is named by its **index** in the clip's notes, which are in
@@ -1406,26 +1372,19 @@ commands! {
         menu: ("Clip", "Edit Note"),
         params: {
             /// The clip the note is in.
-
             clip: NodeRef,
             /// Which note: its index in the clip's notes.
-
             index: Number,
             /// The new pitch.
-
             pitch: Option<Number>,
             /// The new start, in ticks.
-
             start: Option<Number>,
             /// The new length, in ticks.
-
             length: Option<Number>,
             /// The new velocity.
-
             velocity: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.midi.note.edit".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1472,6 +1431,7 @@ commands! {
 
         }
     }
+
     /// **Remove notes** from a MIDI clip.
     ///
     /// The notes are named by their **indices**, and an index that names no
@@ -1485,14 +1445,11 @@ commands! {
         menu: ("Clip", "Remove Note"),
         params: {
             /// The clip the notes are in.
-
             clip: NodeRef,
             /// Which notes: their indices in the clip's notes.
-
             indices: serde_json::Value,
         },
         run: {
-
             let id = "sound.clip.midi.note.remove".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1533,6 +1490,7 @@ commands! {
 
         }
     }
+
     /// **Move notes** of a MIDI clip.
     ///
     /// The notes move **later** or **earlier** by so many ticks, and **up**
@@ -1550,20 +1508,15 @@ commands! {
         menu: ("Clip", "Move Notes"),
         params: {
             /// The clip the notes are in.
-
             clip: NodeRef,
             /// Which notes: their indices in the clip's notes.
-
             indices: serde_json::Value,
             /// How much later or earlier, in ticks.
-
             ticks: Option<Number>,
             /// How much higher or lower, in semitones.
-
             semitones: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.midi.notes.move".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1631,6 +1584,7 @@ commands! {
 
         }
     }
+
     /// **Add a controller** to a MIDI clip.
     ///
     /// The **kind** says what it changes: a `control` change, a
@@ -1656,27 +1610,20 @@ commands! {
         menu: ("Clip", "Add Controller"),
         params: {
             /// The clip the controller goes in.
-
             clip: NodeRef,
             /// What it changes: `control`, `pitch_bend`, `channel_pressure`,
             /// `poly_pressure` or `program`.
-
             kind: Text,
             /// Where it happens, in ticks from the start of the clip.
-
             at: Number,
             /// The value it changes it to.
-
             value: Number,
             /// The number it changes, for the kinds that have one.
-
             number: Option<Number>,
             /// The channel it happens on: zero to fifteen.
-
             channel: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.midi.ctrl.add".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1694,6 +1641,7 @@ commands! {
 
         }
     }
+
     /// **Edit a controller** of a MIDI clip.
     ///
     /// The controller is named by its **index** in the clip's controllers,
@@ -1708,29 +1656,21 @@ commands! {
         menu: ("Clip", "Edit Controller"),
         params: {
             /// The clip the controller is in.
-
             clip: NodeRef,
             /// Which controller: its index in the clip's controllers.
-
             index: Number,
             /// What it changes.
-
             kind: Option<Text>,
             /// Where it happens, in ticks.
-
             at: Option<Number>,
             /// The value it changes it to.
-
             value: Option<Number>,
             /// The number it changes, for the kinds that have one.
-
             number: Option<Number>,
             /// The channel it happens on.
-
             channel: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.midi.ctrl.edit".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1777,6 +1717,7 @@ commands! {
 
         }
     }
+
     /// **Take controllers** off a MIDI clip.
     ///
     /// The controllers are named by their **indices**, and an index that
@@ -1790,14 +1731,11 @@ commands! {
         menu: ("Clip", "Remove Controller"),
         params: {
             /// The clip the controllers are in.
-
             clip: NodeRef,
             /// Which controllers: their indices in the clip's controllers.
-
             indices: serde_json::Value,
         },
         run: {
-
             let id = "sound.clip.midi.ctrl.remove".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;
@@ -1830,6 +1768,7 @@ commands! {
 
         }
     }
+
     /// **Take the duplicate notes** out of a MIDI clip.
     ///
     /// Two notes of the same channel, pitch and start are the same note,
@@ -1846,11 +1785,9 @@ commands! {
         menu: ("Clip", "Remove Duplicate Notes"),
         params: {
             /// The clip to tidy.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.midi.notes.dedupe".to_string();
             let clip_id = self.clip.0;
             let mut payload = clip_of(session, &id, clip_id)?;

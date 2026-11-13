@@ -150,11 +150,9 @@ commands! {
         icon: "list",
         params: {
             /// The field to read.
-
             field: NodeRef,
         },
         run: {
-
             let id = "pdf.field.calculate".to_string();
             let document = session.document();
             let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
@@ -193,6 +191,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **value** a field is **calculated** to hold.
     ///
     /// A query: it does not change the document. A field that is not
@@ -203,11 +202,9 @@ commands! {
         icon: "list",
         params: {
             /// The field to read.
-
             field: NodeRef,
         },
         run: {
-
             let id = "pdf.field.value".to_string();
             let document = session.document();
             let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {

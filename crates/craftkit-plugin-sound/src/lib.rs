@@ -1275,14 +1275,11 @@ commands! {
         menu: ("Ruler"),
         params: {
             /// What to call it.
-
             name: Text,
             /// The scale the ruler counts by: `bars` or `seconds`.
-
             scale: Option<Text>,
         },
         run: {
-
             let scale = match &self.scale {
                 Some(scale) => {
                     let scale = scale.0.as_str();
@@ -1308,6 +1305,7 @@ commands! {
 
         }
     }
+
     /// Make a track.
     ///
     /// A track comes with one playlist, because a track with no takes is not a
@@ -1321,17 +1319,13 @@ commands! {
         menu: ("Track", "New"),
         params: {
             /// What to call it.
-
             name: Text,
             /// What kind of track it is: `audio`, `instrument`, `aux`, `master`.
-
             track_kind: Option<Text>,
             /// How many channels it has.
-
             channels: Option<Number>,
         },
         run: {
-
             let name = self.name.0.clone();
             let track_kind = match &self.track_kind {
                 Some(kind) => kind.0.clone(),
@@ -1368,6 +1362,7 @@ commands! {
 
         }
     }
+
     /// Add a **take** to a track.
     ///
     /// A take is the tree's playlist: an alternative set of clips on the
@@ -1381,14 +1376,11 @@ commands! {
         menu: ("Track", "Takes"),
         params: {
             /// The track the take is on.
-
             track: NodeRef,
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let track = self.track.0;
             let name = self.name.0.clone();
             if name.trim().is_empty() {
@@ -1427,6 +1419,7 @@ commands! {
 
         }
     }
+
     /// Say which **take** of a track is played.
     ///
     /// The tree's track has several playlists and an index of the one that
@@ -1441,14 +1434,11 @@ commands! {
         menu: ("Track", "Takes"),
         params: {
             /// The track the take is on.
-
             track: NodeRef,
             /// The take that is played.
-
             playlist: Text,
         },
         run: {
-
             let track = self.track.0;
             let name = self.playlist.0.clone();
             let Some(node) = session.document().node(track) else {
@@ -1487,6 +1477,7 @@ commands! {
 
         }
     }
+
     /// Set a track's **elastic algorithm**.
     ///
     /// An elastic track is a track whose clips are **stretched and the
@@ -1512,15 +1503,12 @@ commands! {
         menu: ("Track", "Elastic"),
         params: {
             /// The track to set.
-
             track: NodeRef,
             /// The algorithm: `polyphonic`, `rhythmic`, `monophonic`,
             /// `varispeed`, `x-form`, or `none` to take the elastic away.
-
             algorithm: Text,
         },
         run: {
-
             let id = self.track.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -1561,6 +1549,7 @@ commands! {
 
         }
     }
+
     /// Make a track **solo safe**, or not.
     ///
     /// A solo silences the other tracks, and a **solo-safe** track is not
@@ -1579,14 +1568,11 @@ commands! {
         menu: ("Track", "Solo Safe"),
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether it is solo safe.
-
             solo_safe: Bool,
         },
         run: {
-
             let id = self.track.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -1619,6 +1605,7 @@ commands! {
 
         }
     }
+
     /// Mute a track, or let it be heard.
     ///
     /// The track's own **mute** is the level of the whole track: a muted
@@ -1640,14 +1627,11 @@ commands! {
         menu: ("Track", "Mute"),
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether it is muted.
-
             muted: Bool,
         },
         run: {
-
             let id = self.track.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -1697,6 +1681,7 @@ commands! {
 
         }
     }
+
     /// Set a track's **pan**.
     ///
     /// The pan is the **balance** of the track's sound: minus one is all
@@ -1717,14 +1702,11 @@ commands! {
         menu: ("Track", "Pan"),
         params: {
             /// The track to set.
-
             track: NodeRef,
             /// Its balance: from minus one to one.
-
             pan: Number,
         },
         run: {
-
             let id = self.track.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -1763,6 +1745,7 @@ commands! {
 
         }
     }
+
     /// Set a track's **trim** and **phase**.
     ///
     /// The trim is the level of the track's **input**, before its inserts,
@@ -1777,18 +1760,14 @@ commands! {
         menu: ("Track", "Trim"),
         params: {
             /// The track to set.
-
             track: NodeRef,
             /// Its trim, in decibels: from minus one hundred and forty-four to
             /// twenty-four.
-
             trim_db: Option<Number>,
             /// Whether its phase is inverted.
-
             phase: Option<Bool>,
         },
         run: {
-
             let id = self.track.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -1840,6 +1819,7 @@ commands! {
 
         }
     }
+
     /// Set a track's **fader**.
     ///
     /// The fader is the level of the track's **output**: it comes after
@@ -1866,15 +1846,12 @@ commands! {
         menu: ("Track", "Fader"),
         params: {
             /// The track to set.
-
             track: NodeRef,
             /// Its level, in decibels: from minus one hundred and forty-four
             /// to twelve.
-
             db: Number,
         },
         run: {
-
             let id = self.track.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -1931,6 +1908,7 @@ commands! {
 
         }
     }
+
     /// **Solo** a track.
     ///
     /// A soloed track silences the others: when one track is soloed, the
@@ -1949,14 +1927,11 @@ commands! {
         menu: ("Track", "Solo"),
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether the track is soloed.
-
             solo: Bool,
         },
         run: {
-
             let id = self.track.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -1986,6 +1961,7 @@ commands! {
 
         }
     }
+
     /// Put a clip on a track.
     ///
     /// The track may be given as an id, and the playlist as a name: a track
@@ -2000,29 +1976,21 @@ commands! {
         menu: ("Track", "New"),
         params: {
             /// The track the clip goes on.
-
             track: NodeRef,
             /// The playlist it goes in, if the track has more than one.
-
             playlist: Option<Text>,
             /// Where it starts, in samples.
-
             start: Number,
             /// How long it is, in samples.
-
             length: Number,
             /// How much **longer** it is played than its source: one is none.
-
             stretch: Option<Number>,
             /// The source it plays.
-
             source: Option<NodeRef>,
             /// What to call it.
-
             name: Option<Text>,
         },
         run: {
-
             let start = samples(self.start.0, "where the clip starts")?;
             let length = samples(self.length.0, "how long the clip is")?;
             if length == 0 {
@@ -2095,6 +2063,7 @@ commands! {
 
         }
     }
+
     /// **Move** clips along the timeline.
     ///
     /// The clips move by so many samples, later or earlier, and their
@@ -2119,14 +2088,11 @@ commands! {
         menu: ("Clip", "Move"),
         params: {
             /// The clips to move: their ids.
-
             clips: serde_json::Value,
             /// How much later or earlier, in samples.
-
             delta: Number,
         },
         run: {
-
             let id = "sound.clip.move".to_string();
             let clips = crate::clip_ids_of(&self.clips, &id)?;
             if clips.is_empty() {
@@ -2177,6 +2143,7 @@ commands! {
 
         }
     }
+
     /// **Trim** clips to the **material** they play.
     ///
     /// A clip plays a part of a source, and a clip that was moved may
@@ -2199,11 +2166,9 @@ commands! {
         menu: ("Clip", "Trim to Material"),
         params: {
             /// The clips to trim: their ids.
-
             clips: serde_json::Value,
         },
         run: {
-
             let id = "sound.clip.trim.to.file".to_string();
             let clips = crate::clip_ids_of(&self.clips, &id)?;
             if clips.is_empty() {
@@ -2264,6 +2229,7 @@ commands! {
 
         }
     }
+
     /// Stretch a clip.
     ///
     /// A stretched clip is **longer and lower**: the source is read more
@@ -2292,14 +2258,11 @@ commands! {
         menu: ("Clip", "Stretch"),
         params: {
             /// The clip to stretch.
-
             clip: NodeRef,
             /// How much longer it is played than its source: one is none.
-
             stretch: Number,
         },
         run: {
-
             let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
                 id: "sound.clip.stretch".to_string(),
                 message: format!("there is no node `{}`", self.clip.0),
@@ -2340,6 +2303,7 @@ commands! {
 
         }
     }
+
     /// Do something to a clip's **sound**.
     ///
     /// A process is one of the tree's **audio-suite processes**: the sound
@@ -2366,17 +2330,13 @@ commands! {
         menu: ("Clip", "Process"),
         params: {
             /// The clip to process.
-
             clip: NodeRef,
             /// What to do: `reverse`, `invert`, `normalize` or `dc_offset`.
-
             process: Text,
             /// What it is given: `normalize` takes a `target_db`.
-
             params: Option<Json>,
         },
         run: {
-
             let name = self.process.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -2417,6 +2377,7 @@ commands! {
 
         }
     }
+
     /// Take a process off a clip.
     ///
     /// The **last** process of that name is the one that goes, because the
@@ -2432,14 +2393,11 @@ commands! {
         menu: ("Clip", "Unprocess"),
         params: {
             /// The clip to take the process off.
-
             clip: NodeRef,
             /// The name of the process.
-
             process: Text,
         },
         run: {
-
             let name = self.process.0.trim().to_string();
             let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
                 id: "sound.clip.process.remove".to_string(),
@@ -2471,6 +2429,7 @@ commands! {
 
         }
     }
+
     /// Move the **pitch** of a clip.
     ///
     /// A pitch shift is the other half of a stretch: a stretch makes the
@@ -2494,14 +2453,11 @@ commands! {
         menu: ("Clip", "Pitch"),
         params: {
             /// The clip to shift.
-
             clip: NodeRef,
             /// How many semitones: twelve is an octave up, zero is none.
-
             semitones: Number,
         },
         run: {
-
             let semitones = self.semitones.0;
             if !semitones.is_finite() || !(-MAX_PITCH_SEMITONES..=MAX_PITCH_SEMITONES).contains(&semitones) {
                 return Err(EngineError::Failed {
@@ -2541,6 +2497,7 @@ commands! {
 
         }
     }
+
     /// **Fade** a clip **to a place**: up to it, or down to it.
     ///
     /// The tree's editor fades a clip to the **playhead**: "Fade to
@@ -2564,19 +2521,15 @@ commands! {
         menu: ("Clip", "Fade"),
         params: {
             /// The clip to fade.
-
             clip: NodeRef,
             /// Where the fade ends, in the clip's own samples.
-
             at: Number,
             /// Which way the fade goes: `in` fades the clip from its head up
             /// to the place, and `out` fades it from the place down to its
             /// tail.
-
             to: Option<Text>,
         },
         run: {
-
             let id = "sound.clip.fade.to".to_string();
             let clip_id = self.clip.0;
             let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
@@ -2654,6 +2607,7 @@ commands! {
 
         }
     }
+
     /// Fade a clip.
     ///
     /// A fade is a **curve from silence to full**, and it is at the two
@@ -2677,23 +2631,17 @@ commands! {
         menu: ("Clip", "Fade"),
         params: {
             /// The clip to fade.
-
             clip: NodeRef,
             /// How long the fade in is, in samples.
-
             fade_in: Option<Number>,
             /// How long the fade out is, in samples.
-
             fade_out: Option<Number>,
             /// The shape of the curve: linear, equal_power, s_curve, exponential or logarithmic.
-
             shape: Option<Text>,
             /// How much the curve is bent, from -1 to 1.
-
             curvature: Option<Number>,
         },
         run: {
-
             let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
                 id: "sound.clip.fade".to_string(),
                 message: format!("there is no node `{}`", self.clip.0),
@@ -2775,6 +2723,7 @@ commands! {
 
         }
     }
+
     /// Trim a clip.
     ///
     /// A trim is about a **range**, and not about a node: the clip keeps its
@@ -2794,17 +2743,13 @@ commands! {
         menu: ("Clip", "Trim"),
         params: {
             /// The clip to trim, if the caller names one.
-
             clip: Option<NodeRef>,
             /// Where the clip starts, in samples.
-
             from: Option<Number>,
             /// Where the clip ends, in samples.
-
             to: Option<Number>,
         },
         run: {
-
             // The clip: named, or the one that is selected.
             let (clip_id, span) = match (self.clip, selection_span(session)) {
                 (Some(clip), Some((_, span))) => (clip.0, Some(span)),
@@ -2922,6 +2867,7 @@ commands! {
 
         }
     }
+
     /// Separate a clip into two.
     ///
     /// The tree's editor separates a take at a place on the track: every
@@ -2947,14 +2893,11 @@ commands! {
         menu: ("Clip", "Separate"),
         params: {
             /// The clip to separate.
-
             clip: NodeRef,
             /// Where to cut it, in samples on the timeline.
-
             at: Number,
         },
         run: {
-
             let id = "sound.clip.separate".to_string();
             let clip_id = self.clip.0;
             let at = self.at.0;
@@ -3004,6 +2947,7 @@ commands! {
 
         }
     }
+
     /// Separate a clip on the **grid**.
     ///
     /// The tree's editor separates a take on the grid: the clip is cut at
@@ -3024,11 +2968,9 @@ commands! {
         menu: ("Clip", "Separate on Grid"),
         params: {
             /// The clip to separate.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.separate.grid".to_string();
             let clip_id = self.clip.0;
             let (name, payload) = {
@@ -3093,6 +3035,7 @@ commands! {
 
         }
     }
+
     /// Separate a clip at its **transients**.
     ///
     /// The tree's editor separates a take at the transients of its sound:
@@ -3124,14 +3067,11 @@ commands! {
         menu: ("Clip", "Separate on Transients"),
         params: {
             /// The clip to separate.
-
             clip: NodeRef,
             /// How small a rise may be and still be a transient, from zero to one.
-
             sensitivity: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.separate.transients".to_string();
             let clip_id = self.clip.0;
             let (name, payload) = {
@@ -3245,6 +3185,7 @@ commands! {
 
         }
     }
+
     /// **Strip the silence** out of a clip.
     ///
     /// The tree's editor strips silence: it finds the parts of a sound that
@@ -3283,30 +3224,23 @@ commands! {
         menu: ("Clip", "Strip Silence"),
         params: {
             /// The clip to strip.
-
             clip: NodeRef,
             /// How far below the loudest part a part may be and still be kept,
             /// in decibels.
-
             threshold_db: Option<Number>,
             /// How long a part must be to be kept, in milliseconds.
-
             min_length_ms: Option<Number>,
             /// How much silence is kept before each part, in milliseconds.
-
             pad_before_ms: Option<Number>,
             /// How much silence is kept after each part, in milliseconds.
-
             pad_after_ms: Option<Number>,
             /// What to do with the parts: `strip` keeps the loud parts and
             /// throws the quiet ones away, `extract` keeps the quiet parts and
             /// throws the loud ones away, and `separate` cuts the clip at the
             /// edges of the loud parts and keeps everything.
-
             mode: Option<Text>,
         },
         run: {
-
             let id = "sound.clip.strip.silence".to_string();
             let clip_id = self.clip.0;
             // The **mode**: what is kept and what is thrown away. A mode
@@ -3486,6 +3420,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **loud parts** of a clip: where the silence is.
     ///
     /// The tree's editor has a **preview** of its Strip Silence: it finds
@@ -3502,24 +3437,18 @@ commands! {
         icon: "list",
         params: {
             /// The clip to look at.
-
             clip: NodeRef,
             /// How far below the loudest part a part may be and still be kept,
             /// in decibels.
-
             threshold_db: Option<Number>,
             /// How long a part must be to be kept, in milliseconds.
-
             min_length_ms: Option<Number>,
             /// How much silence is kept before each part, in milliseconds.
-
             pad_before_ms: Option<Number>,
             /// How much silence is kept after each part, in milliseconds.
-
             pad_after_ms: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.strip.silence.read".to_string();
             let clip_id = self.clip.0;
             let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
@@ -3549,6 +3478,7 @@ commands! {
 
         }
     }
+
     /// Space the **clips** against each other.
     ///
     /// The clips are butted together: each one starts where the last one
@@ -3563,19 +3493,15 @@ commands! {
         menu: ("Clip"),
         params: {
             /// The clips to space: their ids.
-
             clips: serde_json::Value,
             /// The gap between them, in samples.
-
             gap: Number,
             /// `end-to-start` — each clip starts where the last one ended — or
             /// `start-to-start`, which keeps their starts the same distance
             /// apart. The first one if it is left out.
-
             mode: Option<Text>,
         },
         run: {
-
             let id = "sound.clip.space".to_string();
             let list = self.clips.as_array().ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
@@ -3680,6 +3606,7 @@ commands! {
 
         }
     }
+
     /// Put a clip **in front** of the others on its track, or **behind**
     /// them.
     ///
@@ -3695,14 +3622,11 @@ commands! {
         menu: ("Clip", "Order"),
         params: {
             /// The clip to move.
-
             clip: NodeRef,
             /// `front` or `back`.
-
             place: Text,
         },
         run: {
-
             let id = "sound.clip.order".to_string();
             let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
@@ -3736,6 +3660,7 @@ commands! {
 
         }
     }
+
     /// Loop a clip: the copies of it that follow it.
     ///
     /// The tree's editor pastes a copy of the clip onto the track, and the
@@ -3764,18 +3689,14 @@ commands! {
         menu: ("Clip", "Loop"),
         params: {
             /// The clip to loop.
-
             clip: NodeRef,
             /// How many times the clip is played: the clip and its loops.
-
             count: Option<Number>,
             /// How long the whole looped clip is, in samples. The last loop is
             /// cut short to fit.
-
             length: Option<Number>,
             /// Loop up to the next clip on the track, or else to the end of the
             /// timeline.
-
             fill: Option<Bool>,
         },
         methods: {
@@ -3850,7 +3771,6 @@ commands! {
 
         },
         run: {
-
             let id = "sound.clip.loop".to_string();
             let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
@@ -3941,6 +3861,7 @@ commands! {
 
         }
     }
+
     /// Unloop a clip: take the copies away.
     ///
     /// The tree's editor has to **find** the copies before it can take them
@@ -3964,16 +3885,13 @@ commands! {
         menu: ("Clip", "Unloop"),
         params: {
             /// The clip whose loop is to be taken away.
-
             clip: NodeRef,
             /// `remove` — the copies are taken away. `flatten` — the copies
             /// stay, and are not a loop any more. The first one if it is left
             /// out.
-
             mode: Option<Text>,
         },
         run: {
-
             let id = "sound.clip.unloop".to_string();
             let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
@@ -4037,6 +3955,7 @@ commands! {
 
         }
     }
+
     /// Snap a clip to its **neighbour**.
     ///
     /// The tree's editor has a menu — *Edit ▸ Snap to* — with two items in
@@ -4062,16 +3981,13 @@ commands! {
         menu: ("Clip", "Snap to"),
         params: {
             /// The clips to snap: their ids.
-
             clips: serde_json::Value,
             /// `next` — each clip's end meets the start of the clip that
             /// follows it. `previous` — each clip's start meets the end of the
             /// clip that comes before it.
-
             direction: Text,
         },
         run: {
-
             let id = "sound.clip.snap".to_string();
             let list = self.clips.as_array().ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
@@ -4184,6 +4100,7 @@ commands! {
 
         }
     }
+
     /// Set the tempo.
     ///
     /// The tempo map is a **list of events** and not a single number, so this
@@ -4198,14 +4115,11 @@ commands! {
         menu: ("Event", "Tempo"),
         params: {
             /// How fast, in beats a minute.
-
             bpm: Number,
             /// Where, in ticks.
-
             tick: Option<Number>,
         },
         run: {
-
             let bpm = self.bpm.0;
             if !bpm.is_finite() || !(5.0..=1000.0).contains(&bpm) {
                 return Err(EngineError::Failed {
@@ -4238,6 +4152,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the tempo at a tick.
     ///
     /// The tempo map is a list of events, and a map that can only grow is
@@ -4257,11 +4172,9 @@ commands! {
         menu: ("Event", "Tempo"),
         params: {
             /// Where the tempo is, in ticks.
-
             tick: Number,
         },
         run: {
-
             let id = "sound.tempo.remove".to_string();
             let tick = ticks(self.tick.0)?;
             if tick == 0 {
@@ -4279,6 +4192,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the meter at a tick.
     ///
     /// The meter is a list of events, and the same rule the tempo follows
@@ -4293,11 +4207,9 @@ commands! {
         menu: ("Event", "Meter"),
         params: {
             /// Where the meter is, in ticks.
-
             tick: Number,
         },
         run: {
-
             let id = "sound.meter.remove".to_string();
             let tick = ticks(self.tick.0)?;
             if tick == 0 {
@@ -4315,6 +4227,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the key at a tick.
     ///
     /// The key is a list of events too, and the same rule the tempo
@@ -4329,11 +4242,9 @@ commands! {
         menu: ("Event", "Key"),
         params: {
             /// Where the key is, in ticks.
-
             tick: Number,
         },
         run: {
-
             let id = "sound.key.remove".to_string();
             let tick = ticks(self.tick.0)?;
             if tick == 0 {
@@ -4351,6 +4262,7 @@ commands! {
 
         }
     }
+
     /// Set the meter.
     ///
     /// The meter is a list of events too: a bar may be three beats long from
@@ -4364,17 +4276,13 @@ commands! {
         menu: ("Event", "Meter"),
         params: {
             /// How many beats a bar has.
-
             numerator: Number,
             /// Which beat a bar has.
-
             denominator: Number,
             /// Where, in ticks.
-
             tick: Option<Number>,
         },
         run: {
-
             let numerator = self.numerator.0 as u32;
             let denominator = self.denominator.0 as u32;
             if !(1..=64).contains(&numerator) || ![1, 2, 4, 8, 16, 32, 64].contains(&denominator) {
@@ -4408,6 +4316,7 @@ commands! {
 
         }
     }
+
     /// **Move** a marker, or **rename** it.
     ///
     /// The marker's **name** is what a person calls it, and its **place**
@@ -4423,20 +4332,15 @@ commands! {
         menu: ("Marker"),
         params: {
             /// The marker to change.
-
             marker: NodeRef,
             /// The new name.
-
             name: Option<Text>,
             /// The new place, in samples.
-
             start: Option<Number>,
             /// The new end, in samples.
-
             end: Option<Number>,
         },
         run: {
-
             let id = "sound.marker.set".to_string();
             let marker = self.marker.0;
             let node = session.document().node(marker).ok_or_else(|| EngineError::Failed {
@@ -4479,6 +4383,7 @@ commands! {
 
         }
     }
+
     /// **Scale** the tempos of the document.
     ///
     /// Every tempo is multiplied by the **factor**: a factor of two is
@@ -4497,11 +4402,9 @@ commands! {
         menu: ("Event", "Tempo"),
         params: {
             /// The factor every tempo is multiplied by.
-
             factor: Number,
         },
         run: {
-
             let id = "sound.tempo.scale".to_string();
             let factor = self.factor.0;
             if !factor.is_finite() || factor <= 0.0 {
@@ -4542,6 +4445,7 @@ commands! {
 
         }
     }
+
     /// Make a **range** of the tempo map constant.
     ///
     /// The tempo at the start of the range is the one given, the tempo
@@ -4560,17 +4464,13 @@ commands! {
         menu: ("Event", "Tempo"),
         params: {
             /// How fast, in beats a minute.
-
             bpm: Number,
             /// Where the range starts, in ticks.
-
             start: Option<Number>,
             /// Where the range ends, in ticks.
-
             end: Option<Number>,
         },
         run: {
-
             let id = "sound.tempo.constant".to_string();
             let bpm = self.bpm.0;
             if !bpm.is_finite() || !(5.0..=1000.0).contains(&bpm) {
@@ -4644,6 +4544,7 @@ commands! {
 
         }
     }
+
     /// Put a marker in the document.
     sound.marker.add {
         area: "sound",
@@ -4654,17 +4555,13 @@ commands! {
         menu: ("Marker"),
         params: {
             /// What to call it.
-
             name: Text,
             /// Where it is, in samples.
-
             start: Number,
             /// Where it ends, in samples.
-
             end: Option<Number>,
         },
         run: {
-
             let start = samples(self.start.0, "where the marker is")?;
             let end = match &self.end {
                 Some(end) => samples(end.0, "where the marker ends")?,
@@ -4678,6 +4575,7 @@ commands! {
 
         }
     }
+
     /// Add a source: a reference to media.
     ///
     /// The path is **relative to the document**, because a document that
@@ -4691,17 +4589,13 @@ commands! {
         menu: ("File", "Import"),
         params: {
             /// Where the media is.
-
             path: Text,
             /// How many channels it has.
-
             channels: Option<Number>,
             /// How long it is, in frames.
-
             frames: Option<Number>,
         },
         run: {
-
             let path = self.path.0.clone();
             let channels = match &self.channels {
                 Some(channels) => channels.0 as u32,
@@ -4728,6 +4622,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a source.
     ///
     /// The source goes and so does the **asset** it brought: the document
@@ -4747,11 +4642,9 @@ commands! {
         menu: ("File", "Remove Source"),
         params: {
             /// The source to take away.
-
             source: NodeRef,
         },
         run: {
-
             let id = "sound.source.remove".to_string();
             let source = self.source.0;
             let node = session.document().node(source).ok_or_else(|| EngineError::Failed {
@@ -4774,6 +4667,7 @@ commands! {
 
         }
     }
+
     /// **Measure** the peaks of a source.
     ///
     /// The peaks are the shape of the sound in a small table, and the shape
@@ -4792,11 +4686,9 @@ commands! {
         undoable,
         params: {
             /// The source to measure.
-
             source: NodeRef,
         },
         run: {
-
             let id = self.source.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -4839,6 +4731,7 @@ commands! {
 
         }
     }
+
     /// Put the **playhead** where it is, or move it.
     ///
     /// The playhead is a **node**, so there is one of it and it is moved.
@@ -4851,11 +4744,9 @@ commands! {
         menu: ("Playhead"),
         params: {
             /// Where it is, in samples.
-
             position: Number,
         },
         run: {
-
             let position = samples(self.position.0, "where the playhead is")?;
             if position < 0 {
                 return Err(EngineError::Failed {
@@ -4884,6 +4775,7 @@ commands! {
 
         }
     }
+
     /// **Mute** a clip, or unmute it.
     ///
     /// A muted clip is not played and is still there: the tree's renderer
@@ -4898,14 +4790,11 @@ commands! {
         menu: ("Track", "Mute"),
         params: {
             /// The clip to mute.
-
             clip: NodeRef,
             /// Whether it is muted. Without it, the clip is muted.
-
             muted: Option<Bool>,
         },
         run: {
-
             let id = self.clip.0;
             let Some(node) = session.document().node(id) else {
                 return Err(EngineError::Failed {
@@ -4942,6 +4831,7 @@ commands! {
 
         }
     }
+
     /// Render the document into a **sound file**.
     ///
     /// The renderer is the first thing in this tree that makes a sound: it
@@ -4963,11 +4853,9 @@ commands! {
         menu: ("Render"),
         params: {
             /// Where to write the sound.
-
             path: Text,
         },
         run: {
-
             let path = self.path.0.clone();
             let mix = mix_of(session.document(), "sound.render", None)?;
             let channels = mix.channels;
@@ -4983,6 +4871,7 @@ commands! {
 
         }
     }
+
     /// Render the **stems**: one file for each track.
     ///
     /// A stem is the mix with **one track in it**: the tree's bounce solos
@@ -5006,11 +4895,9 @@ commands! {
         menu: ("Render"),
         params: {
             /// The directory to write the stems into.
-
             directory: Text,
         },
         run: {
-
             let directory = self.directory.0.clone();
             if directory.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -5068,6 +4955,7 @@ commands! {
 
         }
     }
+
     /// **Consolidate** a track: the clips of a track become one clip of a
     /// file that holds their sound.
     ///
@@ -5092,24 +4980,19 @@ commands! {
         menu: ("Track", "Consolidate"),
         params: {
             /// The track to consolidate.
-
             track: NodeRef,
             /// Where the range starts, in samples.
             ///
             /// Without it, the range starts at the beginning of the session.
-
             start: Option<Number>,
             /// Where the range ends, in samples.
             ///
             /// Without it, the range ends at the end of the track's clips.
-
             end: Option<Number>,
             /// The directory the file is written into.
-
             directory: Text,
         },
         run: {
-
             let id = "sound.track.consolidate".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
@@ -5262,6 +5145,7 @@ commands! {
 
         }
     }
+
     /// Set the session: the sample rate and the timecode.
     ///
     /// These are the settings that belong to the session and not to any one
@@ -5275,41 +5159,31 @@ commands! {
         menu: ("Options"),
         params: {
             /// The sample rate, in samples a second.
-
             sample_rate: Option<Number>,
             /// Where the document starts on a timecode, in samples.
-
             timecode_start: Option<Number>,
             /// Whether the **metronome** is heard.
-
             metronome: Option<Bool>,
             /// How loud the click is, in decibels.
-
             click_volume_db: Option<Number>,
             /// The click's pitch, as a note number.
-
             click_note: Option<Number>,
             /// The **accent's** pitch: the click on the first beat of a bar.
-
             click_accent_note: Option<Number>,
             /// The **layout** of the room: the speakers the sound is heard on.
             ///
             /// One of `stereo`, `5.0`, `5.1`, `7.1` and `7.1.4`, and a layout
             /// that is not one of them is **refused**.
-
             layout: Option<Text>,
             /// Whether the recording is **destructive**: the sound that is
             /// recorded over is gone.
-
             destructive_record: Option<Bool>,
             /// Whether the recording is a **track punch**: the recording is
             /// written over the part of the track that is armed and nowhere
             /// else.
-
             track_punch: Option<Bool>,
         },
         run: {
-
             let mut settings = session_of(session.document());
             if let Some(rate) = &self.sample_rate {
                 if !rate.0.is_finite() || rate.0 < 1.0 || rate.0 > 768_000.0 {

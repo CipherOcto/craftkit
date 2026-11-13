@@ -155,15 +155,12 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// The **parts** of the equation: a text, a fraction, a
             /// superscript, a subscript or a radical.
-
             parts: Json,
         },
         run: {
-
             let id = "prose.block.equation.add".to_string();
             let text = check(&self.parts, &id)?;
             let Some(document) = session.document().node(self.document.0) else {
@@ -194,6 +191,7 @@ commands! {
 
         }
     }
+
     /// **Set** the parts of an equation.
     ///
     /// The text of the equation is written with them, because the text is
@@ -206,14 +204,11 @@ commands! {
         undoable,
         params: {
             /// The equation.
-
             block: NodeRef,
             /// The **parts** of the equation.
-
             parts: Json,
         },
         run: {
-
             let id = "prose.equation.set".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {

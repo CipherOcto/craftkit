@@ -43,27 +43,21 @@ commands! {
         params: {
             /// The path data, in the SVG spelling: the moves, the lines and the
             /// curves of the path. An **arc** is refused.
-
             d: Option<Text>,
             /// The anchors of the path: a list of `{x, y}`, each with an
             /// optional `in` and `out` handle, each a pair of numbers.
-
             anchors: Option<Json>,
             /// Whether the path is closed.
             ///
             /// It says so for the **anchors**; with path data the data itself
             /// says whether the path is closed, as it does in the tree.
-
             closed: Option<Bool>,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is filled with, as `#rrggbb`.
-
             fill: Option<Text>,
         },
         run: {
-
             let id = "vector.path.create".to_string();
             let path = match (&self.d, &self.anchors) {
                 (Some(_), Some(_)) => {

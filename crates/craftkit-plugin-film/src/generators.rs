@@ -68,34 +68,26 @@ commands! {
         undoable,
         params: {
             /// What to call it.
-
             name: Text,
             /// The bin it goes in.
-
             bin: NodeRef,
             /// The item's own id, in the editor.
-
             item: Number,
             /// What kind of generator it is: `Black Video`, `Transparent
             /// Video`, `Bars and Tone`, `Universal Counting Leader` or `Color
             /// Matte`.
-
             kind: Text,
             /// How long it is, in seconds. The default is five, and the bars
             /// and the tone are ten.
-
             seconds: Option<Number>,
             /// The rate it is made at: `25`, `23.976`, … The default is the
             /// tree's own `23.976`.
-
             rate: Option<Text>,
             /// The colour of the matte: `#rrggbb`. The default is the tree's
             /// own dark grey, and a colour on another generator is refused.
-
             colour: Option<Text>,
         },
         run: {
-
             let id = "film.item.generator".to_string();
             let name = self.name.0.clone();
             if name.trim().is_empty() {
@@ -189,6 +181,7 @@ commands! {
 
         }
     }
+
     /// The **colour** of a colour matte is changed.
     ///
     /// The tree's rule: the colour must be `#rrggbb`, and the item must
@@ -204,14 +197,11 @@ commands! {
         undoable,
         params: {
             /// The item: the colour matte.
-
             item: NodeRef,
             /// The colour of the matte: `#rrggbb`.
-
             colour: Text,
         },
         run: {
-
             let id = "film.item.matte.colour".to_string();
             let item = self.item.0;
             let Some(node) = session.document().node(item) else {

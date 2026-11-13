@@ -79,16 +79,13 @@ commands! {
         undoable,
         params: {
             /// The file specification the document carries.
-
             specification: NodeRef,
             /// The name the file is listed under.
             ///
             /// Leave it out and the name of the file specification is used.
-
             name: Option<Text>,
         },
         run: {
-
             // The **file specification**: an object of the document that
             // says it is one.
             let Some(specification) = session.document().node(self.specification.0) else {

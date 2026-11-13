@@ -178,27 +178,20 @@ commands! {
         undoable,
         params: {
             /// The entity to array.
-
             entity: NodeRef,
             /// How many rows.
-
             rows: Number,
             /// How many columns.
-
             columns: Number,
             /// The distance between the rows.
-
             row_spacing: Number,
             /// The distance between the columns.
-
             column_spacing: Number,
             /// The block the copies go in. The block of the entity itself when
             /// it is not said.
-
             block: Option<NodeRef>,
         },
         run: {
-
             let id = "cad.entity.array.rectangular".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;
@@ -272,6 +265,7 @@ commands! {
 
         }
     }
+
     /// **Array** an entity **about a centre**: the items go round it.
     cad.entity.array.polar {
         area: "cad",
@@ -281,28 +275,21 @@ commands! {
         undoable,
         params: {
             /// The entity to array.
-
             entity: NodeRef,
             /// The centre of the array.
-
             centre: Json,
             /// How many items the array holds.
-
             count: Number,
             /// The angle the array goes through, in degrees. A whole turn when
             /// it is not said.
-
             degrees: Option<Number>,
             /// Whether the copies are turned with the array.
-
             rotate: Option<Bool>,
             /// The block the copies go in. The block of the entity itself when
             /// it is not said.
-
             block: Option<NodeRef>,
         },
         run: {
-
             let id = "cad.entity.array.polar".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;

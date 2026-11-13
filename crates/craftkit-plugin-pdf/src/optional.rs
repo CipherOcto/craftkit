@@ -178,11 +178,9 @@ commands! {
             /// The layer to read.
             ///
             /// Leave it out and every layer is read.
-
             name: Option<craftkit_sdk::Text>,
         },
         run: {
-
             let id = COMMAND.to_string();
             let all = layers_of(session.document());
             let listed: Vec<Json> = match &self.name {

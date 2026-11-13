@@ -35,14 +35,11 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let id = "film.item.rename".to_string();
             let item = self.item.0;
             let Some(node) = session.document().node(item) else {
@@ -66,6 +63,7 @@ commands! {
 
         }
     }
+
     /// **Name** a bin.
     film.bin.rename {
         area: "film",
@@ -75,14 +73,11 @@ commands! {
         undoable,
         params: {
             /// The bin.
-
             bin: NodeRef,
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let id = "film.bin.rename".to_string();
             let bin = self.bin.0;
             let Some(node) = session.document().node(bin) else {

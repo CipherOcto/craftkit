@@ -549,30 +549,22 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
             /// The range it reads: `A1:C5`.
-
             range: Text,
             /// The column it gathers the rows by, as `A`.
-
             row: Text,
             /// The column it spreads the groups over, as `C`.
-
             column: Option<Text>,
             /// The column it puts together, as `B`.
-
             value: Option<Text>,
             /// The way it puts them together: `sum`, `average`, `min`, `max` or
             /// `count`.
-
             aggregate: Option<Text>,
         },
         run: {
-
             let id = "grid.pivot.create".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -724,6 +716,7 @@ commands! {
 
         }
     }
+
     /// **Say** where the **grand totals** of a pivot are.
     ///
     /// The tree's own modes: `off`, `on`, `rows` and `columns`. The grand
@@ -738,19 +731,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
             /// Where the totals are.
             ///
             /// `on` — the default — `off`, `rows` or `columns`.
-
             mode: Text,
         },
         run: {
-
             let id = "grid.pivot.grandtotals".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -788,6 +777,7 @@ commands! {
 
         }
     }
+
     /// **Say** which **items** of a field a pivot keeps.
     ///
     /// The tree's own rules: the field is a column of the range the pivot
@@ -801,22 +791,17 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
             /// The column it filters by: `C`.
-
             field: Text,
             /// The items it keeps.
             ///
             /// Without it, every item is kept.
-
             selected: Option<craftkit_sdk::serde_json::Value>,
         },
         run: {
-
             let id = "grid.pivot.filter".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -894,6 +879,7 @@ commands! {
 
         }
     }
+
     /// **Say** in what **order** the items of a field are.
     ///
     /// The tree's own orders: `asc`, `desc` and `none` — the last of them
@@ -908,22 +894,17 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
             /// The column it orders: `A`.
-
             field: Text,
             /// The order it is in.
             ///
             /// `asc` — the default — `desc` or `none`.
-
             order: Option<Text>,
         },
         run: {
-
             let id = "grid.pivot.sort".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -978,6 +959,7 @@ commands! {
 
         }
     }
+
     /// **Say** how the items of a **date field** are grouped.
     ///
     /// The tree's own groupings: `years`, `quarters`, `months` and `days`,
@@ -991,22 +973,17 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
             /// The column it groups: `C`.
-
             field: Text,
             /// How the items are grouped.
             ///
             /// `years`, `quarters`, `months` or `days`.
-
             by: Text,
         },
         run: {
-
             let id = "grid.pivot.group".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -1060,6 +1037,7 @@ commands! {
 
         }
     }
+
     /// **Say** how the values of a pivot are **shown**.
     ///
     /// The tree's own ways: `normal`, `percentOfGrandTotal`,
@@ -1073,21 +1051,17 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
             /// The way the values are shown.
             ///
             /// `normal` — the default — `percentOfGrandTotal`,
             /// `percentOfColumnTotal`, `percentOfRowTotal`, `runningTotal` or
             /// `rank`.
-
             show_as: Text,
         },
         run: {
-
             let id = "grid.pivot.showas".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -1120,6 +1094,7 @@ commands! {
 
         }
     }
+
     /// **Say** where the **subtotals** of a pivot are.
     ///
     /// The tree's own modes: `none`, `top` and `bottom`, and a mode that
@@ -1132,19 +1107,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
             /// Where the subtotals are.
             ///
             /// `none` — the default — `top` or `bottom`.
-
             mode: Text,
         },
         run: {
-
             let id = "grid.pivot.subtotals".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -1175,6 +1146,7 @@ commands! {
 
         }
     }
+
     /// **Read** the summary of a pivot.
     ///
     /// The summary is derived: it is worked out now, from the cells of the
@@ -1185,14 +1157,11 @@ commands! {
         icon: "grid",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
         },
         run: {
-
             let id = "grid.pivot.read".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -1546,6 +1515,7 @@ commands! {
 
         }
     }
+
     /// **Read** the rows that stand behind a **group** of a pivot.
     ///
     /// The group is the key of the row field, and the rows are the rows
@@ -1558,17 +1528,13 @@ commands! {
         icon: "grid",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
             /// The group: the key of the row field.
-
             group: Text,
         },
         run: {
-
             let id = "grid.pivot.detail".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -1658,6 +1624,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a pivot of a sheet.
     ///
     /// The cells it read stay where they are: a pivot is a fact of the
@@ -1670,14 +1637,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
         },
         run: {
-
             let id = "grid.pivot.remove".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;

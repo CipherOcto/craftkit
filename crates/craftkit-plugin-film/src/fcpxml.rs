@@ -402,18 +402,14 @@ commands! {
         icon: "list",
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The **width** of the sequence, in pixels. The document does not
             /// say it, so the caller does.
-
             width: Number,
             /// The **height** of the sequence, in pixels.
-
             height: Number,
         },
         run: {
-
             let id = "film.export.fcpxml".to_string();
             let sequence = self.sequence.0;
             let Some(node) = session.document().node(sequence).cloned() else {

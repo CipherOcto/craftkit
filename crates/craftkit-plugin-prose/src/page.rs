@@ -152,29 +152,21 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The width of the page, in points.
-
             width: Number,
             /// The height of the page, in points.
-
             height: Number,
             /// The margin at the top, in points.
-
             top: Option<Number>,
             /// The margin at the bottom, in points.
-
             bottom: Option<Number>,
             /// The margin on the left, in points.
-
             left: Option<Number>,
             /// The margin on the right, in points.
-
             right: Option<Number>,
         },
         run: {
-
             let id = "prose.page.set".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;
@@ -221,6 +213,7 @@ commands! {
 
         }
     }
+
     /// **Read** the page of a document.
     ///
     /// The page is a fact of the document, and whether it is a **landscape**
@@ -231,11 +224,9 @@ commands! {
         icon: "rect",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.page.get".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;

@@ -109,14 +109,11 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The frame the mark in is at.
-
             frame: Number,
         },
         run: {
-
             let id = "film.sequence.mark.in".to_string();
             let sequence = self.sequence.0;
             the_sequence(session, &id, sequence)?;
@@ -150,6 +147,7 @@ commands! {
 
         }
     }
+
     /// **Set** the **mark out** of a sequence.
     ///
     /// The tree's own rule: the mark out is the frame the caller says, and
@@ -163,14 +161,11 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The frame the mark out is at.
-
             frame: Number,
         },
         run: {
-
             let id = "film.sequence.mark.out".to_string();
             let sequence = self.sequence.0;
             the_sequence(session, &id, sequence)?;
@@ -204,6 +199,7 @@ commands! {
 
         }
     }
+
     /// **Take** the **marks** of a sequence away.
     ///
     /// The tree's own three commands — the clear in, the clear out and the
@@ -216,14 +212,11 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// Which mark is taken away: `in`, `out` or `both`.
-
             which: Text,
         },
         run: {
-
             let id = "film.sequence.mark.clear".to_string();
             let sequence = self.sequence.0;
             the_sequence(session, &id, sequence)?;

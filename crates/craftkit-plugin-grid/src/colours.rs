@@ -52,17 +52,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The colour: `#rrggbb`, or `none` to take it away.
-
             colour: Text,
         },
         run: {
-
             let id = "grid.cell.font.colour".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -107,6 +103,7 @@ commands! {
 
         }
     }
+
     /// **Fill** a cell with a colour.
     ///
     /// The tree's Fill Color: the colour behind the text of the cell, and
@@ -119,17 +116,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The colour: `#rrggbb`, or `none` to take it away.
-
             colour: Text,
         },
         run: {
-
             let id = "grid.cell.fill".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

@@ -115,11 +115,9 @@ commands! {
         icon: "list",
         params: {
             /// The page whose fonts are read.
-
             page: NodeRef,
         },
         run: {
-
             let page = self.page.0;
             let document = session.document();
             let Some(node) = document.node(page) else {

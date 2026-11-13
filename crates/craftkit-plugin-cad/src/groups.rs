@@ -92,17 +92,13 @@ commands! {
         undoable,
         params: {
             /// What to call the group.
-
             name: Text,
             /// The block the group stands in.
-
             block: NodeRef,
             /// The entities that are members of the group.
-
             members: Json,
         },
         run: {
-
             let id = "cad.group.add".to_string();
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
@@ -177,6 +173,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **groups** of a drawing.
     ///
     /// The members of a group are the relations it holds, and they are
@@ -187,11 +184,9 @@ commands! {
         icon: "list",
         params: {
             /// The drawing.
-
             drawing: NodeRef,
         },
         run: {
-
             let id = "cad.group.list".to_string();
             let drawing = self.drawing.0;
             let Some(node) = session.document().node(drawing) else {
@@ -226,6 +221,7 @@ commands! {
 
         }
     }
+
     /// **Move** the **members** of a group.
     ///
     /// The group is a fact of the drawing and the moving of it is derived:
@@ -238,14 +234,11 @@ commands! {
         undoable,
         params: {
             /// The group.
-
             group: NodeRef,
             /// The vector the members go by.
-
             by: Json,
         },
         run: {
-
             let id = "cad.group.move".to_string();
             let group = self.group.0;
             the_group(session, &id, group)?;

@@ -134,26 +134,19 @@ commands! {
         undoable,
         params: {
             /// The page the stamp is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The rectangle the stamp covers: four numbers.
-
             rect: Json,
             /// The kind of stamp: one of the tree's own twenty two.
-
             kind: Text,
             /// The line that says who did it.
-
             by: Option<Text>,
             /// The colour of the stamp: three numbers.
-
             colour: Option<Json>,
         },
         run: {
-
             // The **kind**: one of the tree's own twenty two.
             let Some(kind) = kind_of(&self.kind.0) else {
                 return Err(EngineError::Failed {

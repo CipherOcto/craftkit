@@ -47,17 +47,13 @@ commands! {
         undoable,
         params: {
             /// The media.
-
             item: NodeRef,
             /// The mark in: the first frame of the media that may be played.
-
             mark_in: Option<Number>,
             /// The mark out: the frame after the last one that may be played.
-
             mark_out: Option<Number>,
         },
         run: {
-
             let id = "film.item.mark".to_string();
             let item = self.item.0;
             let Some(node) = session.document().node(item) else {

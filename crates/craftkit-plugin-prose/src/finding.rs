@@ -214,21 +214,16 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
             /// The pattern to find.
-
             what: Text,
             /// Whether the pattern holds **wildcards**: a `*` for any text and
             /// a `?` for one character.
-
             wildcards: Option<Bool>,
             /// Whether the **case** matters.
-
             case: Option<Bool>,
         },
         run: {
-
             let id = "prose.find".to_string();
             let block = self.block.0;
             let (tokens, case) = pattern_of(&id, &self.what.0, self.wildcards, self.case)?;
@@ -251,6 +246,7 @@ commands! {
 
         }
     }
+
     /// **Replace** a pattern in a block.
     ///
     /// The text is rewritten and the **runs** are rewritten with it: the
@@ -263,24 +259,18 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The pattern to find.
-
             what: Text,
             /// What to put in its place.
-
             with: Text,
             /// Whether the pattern holds **wildcards**: a `*` for any text and
             /// a `?` for one character.
-
             wildcards: Option<Bool>,
             /// Whether the **case** matters.
-
             case: Option<Bool>,
         },
         run: {
-
             let id = "prose.replace".to_string();
             let block = self.block.0;
             let (tokens, case) = pattern_of(&id, &self.what.0, self.wildcards, self.case)?;

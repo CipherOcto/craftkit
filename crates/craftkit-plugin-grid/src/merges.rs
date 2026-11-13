@@ -124,14 +124,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range that is merged: `A1:B2`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.merge.set".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -206,6 +203,7 @@ commands! {
 
         }
     }
+
     /// **Unmerge** a range of cells.
     ///
     /// The range must be exactly a range that was merged.
@@ -217,14 +215,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range that is unmerged: `A1:B2`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.merge.clear".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -269,6 +264,7 @@ commands! {
 
         }
     }
+
     /// **Merge** a range of cells **across** its rows.
     ///
     /// The tree's Merge Across: every row of the range is merged on its
@@ -286,14 +282,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range that is merged across: `A1:B3`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.merge.across".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -376,6 +369,7 @@ commands! {
 
         }
     }
+
     /// **Merge** a range of cells and **centre** its text.
     ///
     /// The tree's Merge and Center: the range becomes one cell and its text
@@ -392,14 +386,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range that is merged: `A1:B2`.
-
             range: Text,
         },
         run: {
-
             let id = "grid.merge.center".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

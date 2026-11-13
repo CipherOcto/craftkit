@@ -144,15 +144,12 @@ commands! {
         undoable,
         params: {
             /// The paragraph.
-
             block: NodeRef,
             /// The way the case is changed: `upper`, `lower`, `toggle`, `title`
             /// or `sentence`.
-
             mode: craftkit_sdk::Text,
         },
         run: {
-
             let id = "prose.block.case".to_string();
             let block = self.block.0;
             let mode = self.mode.0.trim().to_lowercase();

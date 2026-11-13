@@ -49,14 +49,11 @@ commands! {
         icon: "file",
         params: {
             /// The password that opens the file.
-
             password: Text,
             /// Where to write the file without its encryption.
-
             path: Text,
         },
         run: {
-
             let path = self.path.0.clone();
             if path.trim().is_empty() {
                 return Err(EngineError::Failed {

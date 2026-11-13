@@ -258,14 +258,11 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
             /// The vector it moves by.
-
             by: Json,
         },
         run: {
-
             let id = "cad.entity.move".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;
@@ -295,6 +292,7 @@ commands! {
 
         }
     }
+
     /// **Turn** an entity about a point.
     cad.entity.rotate {
         area: "cad",
@@ -304,17 +302,13 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
             /// The point it turns about.
-
             about: Json,
             /// The angle, in degrees.
-
             degrees: Number,
         },
         run: {
-
             let id = "cad.entity.rotate".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;
@@ -347,6 +341,7 @@ commands! {
 
         }
     }
+
     /// **Scale** an entity about a point.
     cad.entity.scale {
         area: "cad",
@@ -356,17 +351,13 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
             /// The point it scales about.
-
             about: Json,
             /// The factor: above nothing.
-
             factor: Number,
         },
         run: {
-
             let id = "cad.entity.scale".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;
@@ -402,6 +393,7 @@ commands! {
 
         }
     }
+
     /// **Take** an entity **away**.
     cad.entity.remove {
         area: "cad",
@@ -411,11 +403,9 @@ commands! {
         undoable,
         params: {
             /// The entity.
-
             entity: NodeRef,
         },
         run: {
-
             let id = "cad.entity.remove".to_string();
             let entity = self.entity.0;
             the_entity(session, &id, entity)?;

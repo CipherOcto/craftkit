@@ -88,33 +88,24 @@ commands! {
         undoable,
         params: {
             /// The style.
-
             style: NodeRef,
             /// The **alignment** of the paragraph.
-
             alignment: Option<Text>,
             /// The room **above** the paragraph, in points.
-
             space_before: Option<Number>,
             /// The room **below** the paragraph, in points.
-
             space_after: Option<Number>,
             /// The **line spacing**, as a multiple of the line.
-
             line_spacing: Option<Number>,
             /// The **indent** of the paragraph, in points.
-
             indent_left: Option<Number>,
             /// The **indent** at the right of the paragraph, in points.
-
             indent_right: Option<Number>,
             /// The **indent of the first line**, in points. A negative one
             /// hangs the line.
-
             indent_first: Option<Number>,
         },
         run: {
-
             let id = "prose.style.paragraph".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style) else {
@@ -220,6 +211,7 @@ commands! {
 
         }
     }
+
     /// **Read** the paragraph of a style, with the paragraph of its base
     /// under it.
     prose.style.paragraph.read {
@@ -228,11 +220,9 @@ commands! {
         icon: "list",
         params: {
             /// The style.
-
             style: NodeRef,
         },
         run: {
-
             let id = "prose.style.paragraph.read".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style) else {
@@ -256,6 +246,7 @@ commands! {
 
         }
     }
+
     /// **Read** the paragraph of a block: the paragraph of the style it is
     /// on.
     prose.block.paragraph {
@@ -264,11 +255,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.paragraph".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {

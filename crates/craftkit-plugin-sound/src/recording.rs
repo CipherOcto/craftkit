@@ -31,14 +31,11 @@ commands! {
         menu: ("Track", "Record"),
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether it is armed for recording.
-
             armed: Bool,
         },
         run: {
-
             let id = "sound.track.record".to_string();
             let track = self.track.0;
             let armed = self.armed.0;
@@ -70,6 +67,7 @@ commands! {
 
         }
     }
+
     /// Let a track **hear its input**, or not.
     ///
     /// The tree's monitor puts the **live input** in the mix in place of
@@ -84,14 +82,11 @@ commands! {
         menu: ("Track", "Monitor"),
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether it hears its input.
-
             monitoring: Bool,
         },
         run: {
-
             let id = "sound.track.monitor".to_string();
             let track = self.track.0;
             let monitoring = self.monitoring.0;

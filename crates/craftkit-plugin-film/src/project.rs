@@ -22,7 +22,6 @@ commands! {
         params: {
         },
         run: {
-
             let document = session.document();
             // The **bins**: the nodes that hold the items.
             let mut bins: Vec<Json> = Vec::new();

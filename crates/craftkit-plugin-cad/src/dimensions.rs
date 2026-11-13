@@ -101,20 +101,15 @@ commands! {
         undoable,
         params: {
             /// The block it goes in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// The entity it **measures**.
-
             entity: NodeRef,
             /// Where it is written.
-
             at: Json,
         },
         run: {
-
             let id = "cad.dimension.add".to_string();
             let measured = self.entity.0;
             let Some(entity) = session.document().node(measured).cloned() else {
@@ -155,6 +150,7 @@ commands! {
 
         }
     }
+
     /// **Say** what a dimension says of its own.
     ///
     /// A text that is **empty** takes the text away, and the measurement
@@ -167,14 +163,11 @@ commands! {
         undoable,
         params: {
             /// The dimension.
-
             dimension: NodeRef,
             /// What it says. Without it the measurement shows.
-
             text: Text,
         },
         run: {
-
             let id = "cad.dimension.text".to_string();
             let dimension = self.dimension.0;
             let Some(node) = session.document().node(dimension).cloned() else {

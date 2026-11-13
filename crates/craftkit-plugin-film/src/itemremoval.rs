@@ -27,11 +27,9 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             let id = "film.item.remove".to_string();
             let item = self.item.0;
             let Some(node) = session.document().node(item) else {

@@ -78,11 +78,9 @@ commands! {
         icon: "list",
         params: {
             /// The field to read.
-
             field: NodeRef,
         },
         run: {
-
             let id = "pdf.field.validate".to_string();
             let document = session.document();
             let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {

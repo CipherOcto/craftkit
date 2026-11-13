@@ -85,18 +85,16 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether the track is enabled.
-
             on: Bool,
         },
         run: {
-
             set_flag(session, "film.track.enable", self.track.0, "enabled", self.on.0)
 
         }
     }
+
     /// **Mute** a track, or **unmute** it.
     film.track.mute {
         area: "film",
@@ -106,18 +104,16 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether the track is muted.
-
             on: Bool,
         },
         run: {
-
             set_flag(session, "film.track.mute", self.track.0, "muted", self.on.0)
 
         }
     }
+
     /// **Solo** a track, or **unsolo** it.
     film.track.solo {
         area: "film",
@@ -127,18 +123,16 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether the track is soloed.
-
             on: Bool,
         },
         run: {
-
             set_flag(session, "film.track.solo", self.track.0, "solo", self.on.0)
 
         }
     }
+
     /// **Set** the **volume** of a track, in decibels.
     film.track.volume {
         area: "film",
@@ -148,14 +142,11 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
             /// The volume, in decibels.
-
             db: Number,
         },
         run: {
-
             let id = "film.track.volume".to_string();
             let track = self.track.0;
             the_track(session, &id, track)?;
@@ -174,6 +165,7 @@ commands! {
 
         }
     }
+
     /// **Set** the **pan** of a track.
     ///
     /// The pan is a number between minus a hundred and a hundred, and a
@@ -187,14 +179,11 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
             /// The pan: between minus a hundred and a hundred.
-
             pan: Number,
         },
         run: {
-
             let id = "film.track.pan".to_string();
             let track = self.track.0;
             the_track(session, &id, track)?;
@@ -220,6 +209,7 @@ commands! {
 
         }
     }
+
     /// **Put** a **label** on a track, or **take it off**.
     film.track.label {
         area: "film",
@@ -229,14 +219,11 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
             /// The label: `Violet`, `Iris`, … — or nothing to take it off.
-
             label: Text,
         },
         run: {
-
             let id = "film.track.label".to_string();
             let track = self.track.0;
             the_track(session, &id, track)?;
@@ -267,6 +254,7 @@ commands! {
 
         }
     }
+
     /// **Rename** a track.
     film.track.rename {
         area: "film",
@@ -276,14 +264,11 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
             /// The name.
-
             name: Text,
         },
         run: {
-
             let id = "film.track.rename".to_string();
             let track = self.track.0;
             the_track(session, &id, track)?;

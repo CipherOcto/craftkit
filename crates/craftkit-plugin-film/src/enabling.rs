@@ -47,14 +47,11 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// Whether the clip plays. Without it the flag is toggled.
-
             on: Option<Bool>,
         },
         run: {
-
             let id = "film.clip.enable".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

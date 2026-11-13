@@ -50,11 +50,9 @@ commands! {
         menu: ("Clip", "Remove"),
         params: {
             /// The clip to take away.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.remove".to_string();
             let clip = self.clip.0;
             let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {
@@ -82,6 +80,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a marker.
     ///
     /// The marker goes and nothing else goes with it: a marker is a place
@@ -95,11 +94,9 @@ commands! {
         menu: ("Marker", "Remove"),
         params: {
             /// The marker to take away.
-
             marker: NodeRef,
         },
         run: {
-
             let id = "sound.marker.remove".to_string();
             let marker = self.marker.0;
             let node = session.document().node(marker).ok_or_else(|| EngineError::Failed {
@@ -119,6 +116,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a track.
     ///
     /// The track goes with its **takes**, its **clips** and its **lanes**,
@@ -136,11 +134,9 @@ commands! {
         menu: ("Track", "Remove"),
         params: {
             /// The track to take away.
-
             track: NodeRef,
         },
         run: {
-
             let id = "sound.track.remove".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {

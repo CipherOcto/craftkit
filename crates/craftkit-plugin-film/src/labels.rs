@@ -61,14 +61,11 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The label: `Violet`, `Iris`, …
-
             label: Text,
         },
         run: {
-
             let id = "film.clip.label".to_string();
             let clip = self.clip.0;
             let wanted = self.label.0.clone();
@@ -102,6 +99,7 @@ commands! {
 
         }
     }
+
     /// Take the **label** off a clip.
     ///
     /// A clip with no label is in no group, and that is the tree's own: a
@@ -114,11 +112,9 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "film.clip.label.delete".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {
@@ -148,6 +144,7 @@ commands! {
 
         }
     }
+
     /// Put a **label** on a media item.
     ///
     /// The label is one of the tree's own sixteen — the same list the
@@ -160,14 +157,11 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The label: `Violet`, `Iris`, …
-
             label: Text,
         },
         run: {
-
             let id = "film.item.label".to_string();
             let item = self.item.0;
             let wanted = self.label.0.clone();
@@ -201,6 +195,7 @@ commands! {
 
         }
     }
+
     /// Take the **label** off a media item.
     ///
     /// An item with no label is in no group, and that is the tree's own.
@@ -212,11 +207,9 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             let id = "film.item.label.delete".to_string();
             let item = self.item.0;
             let Some(node) = session.document().node(item) else {
@@ -246,6 +239,7 @@ commands! {
 
         }
     }
+
     /// The **group** of an item: every item that carries its label.
     ///
     /// The group is **derived**, as the group of a clip is: it changes when
@@ -256,11 +250,9 @@ commands! {
         icon: "list",
         params: {
             /// The item whose label makes the group.
-
             item: NodeRef,
         },
         run: {
-
             let id = "film.item.label.group".to_string();
             let item = self.item.0;
             let Some(node) = session.document().node(item) else {
@@ -297,6 +289,7 @@ commands! {
 
         }
     }
+
     /// The **group** of a clip: every clip that carries its label.
     ///
     /// The group is **derived**: it changes when a label is put on a clip
@@ -307,11 +300,9 @@ commands! {
         icon: "list",
         params: {
             /// The clip whose label makes the group.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "film.clip.label.group".to_string();
             let mut wanted: Vec<String> = Vec::new();
             {

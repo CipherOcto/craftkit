@@ -117,26 +117,19 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell the sparkline is drawn in.
-
             cell: Text,
             /// The range it reads.
-
             range: Text,
             /// The kind: `line`, `column` or `win_loss`.
-
             kind: Option<Text>,
             /// The colour of the sparkline, as `#rrggbb`.
-
             colour: Option<Text>,
             /// Whether the **markers** are drawn.
-
             markers: Option<Bool>,
         },
         run: {
-
             let id = "grid.sparkline.set".to_string();
             let sheet = self.sheet.0;
             sheet_of(session, &id, sheet)?;
@@ -196,6 +189,7 @@ commands! {
 
         }
     }
+
     /// **Read** the sparkline of a cell: what it reads and what it shows.
     ///
     /// Without a cell, every sparkline of the sheet is read.
@@ -208,14 +202,11 @@ commands! {
         icon: "chart",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell. Without it, every sparkline of the sheet is read.
-
             cell: Option<Text>,
         },
         run: {
-
             let id = "grid.sparkline.read".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -262,6 +253,7 @@ commands! {
 
         }
     }
+
     /// **Take** the sparkline of a cell away.
     grid.sparkline.remove {
         area: "grid",
@@ -271,14 +263,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.sparkline.remove".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;

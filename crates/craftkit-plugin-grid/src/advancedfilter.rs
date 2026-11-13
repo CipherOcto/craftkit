@@ -261,26 +261,20 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The **list**: a range of rows under a row of headings.
-
             range: Text,
             /// The **criteria**: a range of headings and criteria rows.
-
             criteria: Text,
             /// The range the rows that are kept are **copied** to.
             ///
             /// Leave it out and the command only says which rows are kept.
-
             copy_to: Option<Text>,
             /// Whether only the **first** row of a set of the same values is
             /// kept.
-
             unique: Option<Bool>,
         },
         run: {
-
             let id = COMMAND.to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

@@ -41,20 +41,15 @@ commands! {
         menu: ("Path", "Cut by line"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The line's **first** point, `{"x": …, "y": …}` or `[x, y]`.
-
             from: Json,
             /// The line's **second** point.
-
             to: Json,
             /// What to call the pieces.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "vector.path.cut.line".to_string();
             let from =
                 read_point(&self.from).map_err(|message| EngineError::Failed { id: id.clone(), message })?;

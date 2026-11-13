@@ -59,16 +59,13 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// The text that stands for it.
             ///
             /// An empty text takes the alt text away.
-
             alt: Text,
         },
         run: {
-
             let id = "prose.table.alt".to_string();
             let table = self.table.0;
             the_table(session, &id, table)?;
@@ -97,6 +94,7 @@ commands! {
 
         }
     }
+
     /// **Say** whether the first row of a table is a header row.
     prose.table.header {
         area: "prose",
@@ -106,14 +104,11 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// Whether the first row is a header row.
-
             header: Bool,
         },
         run: {
-
             let id = "prose.table.header".to_string();
             let table = self.table.0;
             the_table(session, &id, table)?;
@@ -129,6 +124,7 @@ commands! {
 
         }
     }
+
     /// **Read** a cell of a table.
     prose.table.cell.get {
         area: "prose",
@@ -136,17 +132,13 @@ commands! {
         icon: "list",
         params: {
             /// The table.
-
             table: NodeRef,
             /// The row the cell is in, counting from nothing.
-
             row: Number,
             /// The column the cell is in, counting from nothing.
-
             column: Number,
         },
         run: {
-
             let id = "prose.table.cell.get".to_string();
             let table = self.table.0;
             let row = index_of(&id, self.row, "row")?;
@@ -170,6 +162,7 @@ commands! {
 
         }
     }
+
     /// **Set** a cell of a table.
     prose.table.cell.set {
         area: "prose",
@@ -179,20 +172,15 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// The row the cell is in, counting from nothing.
-
             row: Number,
             /// The column the cell is in, counting from nothing.
-
             column: Number,
             /// What the cell holds.
-
             value: Json,
         },
         run: {
-
             let id = "prose.table.cell.set".to_string();
             let table = self.table.0;
             let row = index_of(&id, self.row, "row")?;
@@ -218,6 +206,7 @@ commands! {
 
         }
     }
+
     /// Put a **row** in a table.
     prose.table.row.add {
         area: "prose",
@@ -227,15 +216,12 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// Where the row goes: the rows below it move down. The end of the
             /// table when it is not said.
-
             at: Option<Number>,
         },
         run: {
-
             let id = "prose.table.row.add".to_string();
             let table = self.table.0;
             let node = the_table(session, &id, table)?;
@@ -262,6 +248,7 @@ commands! {
 
         }
     }
+
     /// Take a **row** out of a table.
     prose.table.row.remove {
         area: "prose",
@@ -271,14 +258,11 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// The row that goes.
-
             row: Number,
         },
         run: {
-
             let id = "prose.table.row.remove".to_string();
             let table = self.table.0;
             let row = index_of(&id, self.row, "row")?;
@@ -308,6 +292,7 @@ commands! {
 
         }
     }
+
     /// Put a **column** in a table.
     prose.table.column.add {
         area: "prose",
@@ -317,15 +302,12 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// Where the column goes: the columns beside it move right. The
             /// end of the table when it is not said.
-
             at: Option<Number>,
         },
         run: {
-
             let id = "prose.table.column.add".to_string();
             let table = self.table.0;
             let node = the_table(session, &id, table)?;
@@ -353,6 +335,7 @@ commands! {
 
         }
     }
+
     /// Take a **column** out of a table.
     prose.table.column.remove {
         area: "prose",
@@ -362,14 +345,11 @@ commands! {
         undoable,
         params: {
             /// The table.
-
             table: NodeRef,
             /// The column that goes.
-
             column: Number,
         },
         run: {
-
             let id = "prose.table.column.remove".to_string();
             let table = self.table.0;
             let column = index_of(&id, self.column, "column")?;

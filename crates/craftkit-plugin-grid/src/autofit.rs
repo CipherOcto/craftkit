@@ -104,14 +104,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which column: `A`, `B`, `AA`.
-
             column: Text,
         },
         run: {
-
             let id = "grid.column.autofit".to_string();
             let sheet = self.sheet.0;
             let node = the_sheet(session, &id, sheet)?;
@@ -166,6 +163,7 @@ commands! {
 
         }
     }
+
     /// **Make** a row **as tall as its text**.
     ///
     /// The height is worked out from the lines the cells hold, and a line
@@ -178,14 +176,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which row, counting from one.
-
             row: Number,
         },
         run: {
-
             let id = "grid.row.autofit".to_string();
             let sheet = self.sheet.0;
             let node = the_sheet(session, &id, sheet)?;

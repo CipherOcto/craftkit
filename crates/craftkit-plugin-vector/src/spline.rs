@@ -60,25 +60,19 @@ commands! {
         params: {
             /// The points the curve goes through: `{x, y}`, each with an
             /// optional `corner`, or a pair of numbers `[x, y]`.
-
             points: Json,
             /// Whether the curve is closed.
-
             closed: Option<Bool>,
             /// The path to curve, if there is one already.
             ///
             /// Without it, a new path is put in the document.
-
             path: Option<NodeRef>,
             /// What to call it.
-
             name: Option<Text>,
             /// The colour it is filled with, as `#rrggbb`.
-
             fill: Option<Text>,
         },
         run: {
-
             let id = "vector.path.spline".to_string();
             let points =
                 read_points(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;

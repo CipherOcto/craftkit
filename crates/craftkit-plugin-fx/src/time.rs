@@ -99,6 +99,7 @@ commands! {
 
         }
     }
+
     /// **Read** the time of a composition.
     fx.time.get {
         area: "fx",
@@ -122,6 +123,7 @@ commands! {
 
         }
     }
+
     /// **Go to** the start of a composition.
     fx.time.start {
         area: "fx",
@@ -138,6 +140,7 @@ commands! {
 
         }
     }
+
     /// **Go to** the end of a composition.
     fx.time.end {
         area: "fx",
@@ -158,6 +161,7 @@ commands! {
 
         }
     }
+
     /// **Step** the time of a composition.
     fx.time.step {
         area: "fx",

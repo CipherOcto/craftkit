@@ -664,13 +664,13 @@ commands! {
         params: {
         },
         run: {
-
             let styles: Vec<Json> = STYLES.iter().map(to_json).collect();
             Ok(Outcome::new(format!("this tree has {} citation style(s)", styles.len()))
                 .with_data(json!({ "styles": styles })))
 
         }
     }
+
     /// **Say** which **citation style** a document cites by.
     ///
     /// The style is a fact of the document, and a style that is not one of
@@ -683,17 +683,14 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The name of the style.
             ///
             /// The name of the style, or a name that begins with one of its
             /// aliases: `apa`, `chicago`, `mla`, `gosttitle`…
-
             style: Text,
         },
         run: {
-
             let id = "prose.document.citestyle.set".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {
@@ -731,6 +728,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **citation style** of a document.
     ///
     /// A query: it does not change the document. A document that names no
@@ -741,11 +739,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.document.citestyle.read".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {
@@ -766,6 +762,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **citation** of a source, in the style of its
     /// document.
     ///
@@ -778,17 +775,13 @@ commands! {
         icon: "list",
         params: {
             /// The document the source belongs to.
-
             document: NodeRef,
             /// The tag that names the source.
-
             tag: Text,
             /// The pages of the source that are cited.
-
             pages: Option<Text>,
         },
         run: {
-
             let id = "prose.document.citation".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {

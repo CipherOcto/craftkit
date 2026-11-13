@@ -146,31 +146,23 @@ commands! {
         undoable,
         params: {
             /// The workbook the scenario is in.
-
             workbook: NodeRef,
             /// The sheet the scenario is on.
-
             sheet: NodeRef,
             /// The name of the scenario.
-
             name: Text,
             /// The **changing cells**: a list of the addresses of them.
-
             changing: Json,
             /// The **values** they hold: one for each changing cell.
             ///
             /// Leave them out and they are the values the cells hold now.
-
             values: Option<Json>,
             /// A **comment** on the scenario.
-
             comment: Option<Text>,
             /// Whether a scenario of the same name is **replaced**.
-
             replace: Option<Bool>,
         },
         run: {
-
             let id = format!("{COMMAND}.add");
             let workbook = self.workbook.0;
             let sheet = self.sheet.0;
@@ -333,6 +325,7 @@ commands! {
 
         }
     }
+
     /// **List** the **scenarios** of a workbook.
     grid.scenario.list {
         area: "grid",
@@ -340,16 +333,13 @@ commands! {
         icon: "list",
         params: {
             /// The workbook the scenarios are in.
-
             workbook: NodeRef,
             /// The sheet the scenarios are on.
             ///
             /// Leave it out and every scenario of the workbook is listed.
-
             sheet: Option<NodeRef>,
         },
         run: {
-
             let id = format!("{COMMAND}.list");
             let _ = &id;
             let workbook = self.workbook.0;
@@ -381,6 +371,7 @@ commands! {
 
         }
     }
+
     /// **Show** a **scenario**: the changing cells hold the values of it.
     ///
     /// The tree's own `scenarioShow`.
@@ -392,17 +383,13 @@ commands! {
         undoable,
         params: {
             /// The workbook the scenario is in.
-
             workbook: NodeRef,
             /// The name of the scenario.
-
             name: Text,
             /// The sheet the scenario is on.
-
             sheet: Option<NodeRef>,
         },
         run: {
-
             let id = format!("{COMMAND}.show");
             let workbook = self.workbook.0;
             let name = self.name.0.trim().to_string();
@@ -444,6 +431,7 @@ commands! {
 
         }
     }
+
     /// **Delete** a **scenario** of a workbook.
     ///
     /// The tree's own `scenarioDelete`.
@@ -455,17 +443,13 @@ commands! {
         undoable,
         params: {
             /// The workbook the scenario is in.
-
             workbook: NodeRef,
             /// The name of the scenario.
-
             name: Text,
             /// The sheet the scenario is on.
-
             sheet: Option<NodeRef>,
         },
         run: {
-
             let id = format!("{COMMAND}.delete");
             let workbook = self.workbook.0;
             let name = self.name.0.trim().to_string();
@@ -486,6 +470,7 @@ commands! {
 
         }
     }
+
     /// The **summary** of the scenarios of a sheet: a sheet of its own that
     /// says what every scenario does to the book.
     ///
@@ -500,18 +485,14 @@ commands! {
         undoable,
         params: {
             /// The workbook the scenarios are in.
-
             workbook: NodeRef,
             /// The sheet the scenarios are on.
-
             sheet: NodeRef,
             /// The **result cells**: `B10` or `B10:B12,D4`. The default is
             /// none, and then the summary says the changing cells only.
-
             result_cells: Option<Text>,
         },
         run: {
-
             let id = "grid.scenario.summary".to_string();
             let workbook = self.workbook.0;
             let sheet = self.sheet.0;

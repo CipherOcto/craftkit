@@ -121,26 +121,19 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The **angle** the light comes from, in degrees.
-
             angle: Number,
             /// The **distance** the shadow is moved, in points.
-
             distance: Number,
             /// The **blur** the shadow is softened by, in points.
-
             blur: Option<Number>,
             /// The **colour** of the shadow, as `#rrggbb`.
-
             colour: Option<Text>,
             /// The **opacity** of the shadow, from zero to one.
-
             opacity: Option<Number>,
         },
         run: {
-
             let id = "layout.item.shadow".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;

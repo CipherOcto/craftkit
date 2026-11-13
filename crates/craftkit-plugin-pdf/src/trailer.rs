@@ -62,11 +62,9 @@ commands! {
             /// The entry to read.
             ///
             /// Leave it out and every entry of the trailer is read.
-
             key: Option<Text>,
         },
         run: {
-
             let document = session.document();
             let entries = trailer_of(document);
             let (entries, count) = match &self.key {

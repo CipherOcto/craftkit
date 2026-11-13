@@ -120,17 +120,13 @@ commands! {
         undoable,
         params: {
             /// The workbook the style belongs to.
-
             workbook: NodeRef,
             /// The name of the style.
-
             name: Text,
             /// The format the style carries.
-
             format: Text,
         },
         run: {
-
             let id = "grid.style.add".to_string();
             let workbook = the_workbook(session, self.workbook.0, &id)?;
             let name = self.name.0.trim().to_string();
@@ -167,6 +163,7 @@ commands! {
 
         }
     }
+
     /// The **format** of a style is changed.
     ///
     /// Every cell that names the style is written with the new format: the
@@ -180,17 +177,13 @@ commands! {
         undoable,
         params: {
             /// The workbook the style belongs to.
-
             workbook: NodeRef,
             /// The name of the style.
-
             name: Text,
             /// The format the style carries.
-
             format: Text,
         },
         run: {
-
             let id = "grid.style.set".to_string();
             let workbook = the_workbook(session, self.workbook.0, &id)?;
             let name = self.name.0.trim().to_string();
@@ -231,6 +224,7 @@ commands! {
 
         }
     }
+
     /// The **lock** of a style is changed.
     ///
     /// The lock is the tree's **protection**: the cells that name the style
@@ -248,17 +242,13 @@ commands! {
         undoable,
         params: {
             /// The workbook the style belongs to.
-
             workbook: NodeRef,
             /// The name of the style.
-
             name: Text,
             /// Whether the cells that name it are locked.
-
             locked: Bool,
         },
         run: {
-
             let id = "grid.style.lock".to_string();
             let workbook = the_workbook(session, self.workbook.0, &id)?;
             let name = self.name.0.trim().to_string();
@@ -288,6 +278,7 @@ commands! {
 
         }
     }
+
     /// The **alignment** of a style is changed.
     ///
     /// The tree's alignment is a style's, and here a style may carry one:
@@ -305,27 +296,20 @@ commands! {
         undoable,
         params: {
             /// The workbook the style belongs to.
-
             workbook: NodeRef,
             /// The name of the style.
-
             name: Text,
             /// How the text lies **across** the cell: general, left, center,
             /// right, fill, justify or center-across.
-
             horizontal: Option<Text>,
             /// How the text lies **down** the cell: top, middle or bottom.
-
             vertical: Option<Text>,
             /// How far the text is indented.
-
             indent: Option<Number>,
             /// Whether the text wraps.
-
             wrap: Option<Bool>,
         },
         run: {
-
             let id = "grid.style.align".to_string();
             let workbook = the_workbook(session, self.workbook.0, &id)?;
             let name = self.name.0.trim().to_string();
@@ -373,6 +357,7 @@ commands! {
 
         }
     }
+
     /// The **font** of a style is changed.
     ///
     /// The tree's font is a style's, and here a style may carry one: the
@@ -390,29 +375,22 @@ commands! {
         undoable,
         params: {
             /// The workbook the style belongs to.
-
             workbook: NodeRef,
             /// The name of the style.
-
             name: Text,
             /// The **name** of the face. It is the face's name and not the
             /// style's, so it is called `face` here.
-
             face: Option<Text>,
             /// The **size** of the text.
-
             size: Option<Number>,
             /// The **underline**: none, single, double, single accounting or
             /// double accounting.
-
             underline: Option<Text>,
             /// Where the text sits **above or below** its line: baseline,
             /// superscript or subscript.
-
             vert: Option<Text>,
         },
         run: {
-
             let id = "grid.style.font".to_string();
             let workbook = the_workbook(session, self.workbook.0, &id)?;
             let name = self.name.0.trim().to_string();
@@ -460,6 +438,7 @@ commands! {
 
         }
     }
+
     /// A **style** is taken away.
     ///
     /// The cells that named it keep their own format: a style that is not
@@ -473,14 +452,11 @@ commands! {
         undoable,
         params: {
             /// The workbook the style belongs to.
-
             workbook: NodeRef,
             /// The name of the style.
-
             name: Text,
         },
         run: {
-
             let id = "grid.style.remove".to_string();
             let workbook = the_workbook(session, self.workbook.0, &id)?;
             let name = self.name.0.trim().to_string();
@@ -504,6 +480,7 @@ commands! {
 
         }
     }
+
     /// A **cell** names a style.
     ///
     /// The style must be one the workbook has — a name that is not there is
@@ -517,18 +494,14 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The name of the style. An empty name means the cell has no
             /// style.
-
             style: Text,
         },
         run: {
-
             let id = "grid.cell.style".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

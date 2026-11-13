@@ -370,30 +370,23 @@ commands! {
         menu: ("Track", "Surround"),
         params: {
             /// The track to set.
-
             track: NodeRef,
             /// How far to the left or the right: from minus one to one.
-
             x: Option<Number>,
             /// How far back or forward: from minus one at the back to one at
             /// the front.
-
             y: Option<Number>,
             /// How high: from zero at the ear to one overhead.
-
             z: Option<Number>,
             /// How spread out the sound is: from zero, a point source, to one,
             /// every speaker.
-
             divergence: Option<Number>,
             /// The share of the centre speaker's sound that stays on it, as a
             /// percentage: the rest goes to a phantom centre on the left and
             /// the right.
-
             center: Option<Number>,
         },
         run: {
-
             let id = "sound.track.surround".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {
@@ -450,6 +443,7 @@ commands! {
 
         }
     }
+
     /// Take a track's **surround pan** away.
     ///
     /// A track with no surround pan is balanced, and a balance is not a
@@ -463,11 +457,9 @@ commands! {
         menu: ("Track", "Surround"),
         params: {
             /// The track to take it from.
-
             track: NodeRef,
         },
         run: {
-
             let id = "sound.track.surround.delete".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {

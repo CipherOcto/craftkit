@@ -137,11 +137,9 @@ commands! {
             /// The entry to read.
             ///
             /// Leave it out and everything the form says is read.
-
             key: Option<Text>,
         },
         run: {
-
             let id = "pdf.form.read".to_string();
             let document = session.document();
             let Some(form) = form_of(document) else {

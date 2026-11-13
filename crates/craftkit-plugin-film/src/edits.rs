@@ -76,15 +76,14 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             go_to_edit(session, "film.playhead.nextedit", self.sequence.0, true)
 
         }
     }
+
     /// **Go to** the previous edit point of a sequence.
     film.playhead.prevedit {
         area: "film",
@@ -94,15 +93,14 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             go_to_edit(session, "film.playhead.prevedit", self.sequence.0, false)
 
         }
     }
+
     /// **Cut** the clip that is under the playhead with the **razor**.
     film.timeline.razor {
         area: "film",
@@ -112,18 +110,14 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The track the clip is on.
-
             track: NodeRef,
             /// The frame to cut at. The playhead of the sequence when it is
             /// not said.
-
             at: Option<Number>,
         },
         run: {
-
             let id = "film.timeline.razor".to_string();
             let sequence = self.sequence.0;
             let track = self.track.0;

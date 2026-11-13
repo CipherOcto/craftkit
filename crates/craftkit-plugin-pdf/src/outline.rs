@@ -63,23 +63,18 @@ commands! {
         undoable,
         params: {
             /// The bookmark's title.
-
             title: Text,
             /// The page the bookmark goes to.
-
             destination: Option<NodeRef>,
             /// The bookmark it goes under: the outline's root, or another
             /// bookmark.
-
             parent: Option<NodeRef>,
             /// The object number of the bookmark in the file.
             ///
             /// Leave it out and the next free number is used.
-
             object: Option<Number>,
         },
         run: {
-
             let id = "pdf.outline.add".to_string();
             let title = self.title.0.trim().to_string();
             if title.is_empty() {
@@ -288,6 +283,7 @@ commands! {
 
         }
     }
+
     /// Read the **outline**: the bookmarks, in the order they are in.
     ///
     /// A query: it does not change the document.
@@ -299,11 +295,9 @@ commands! {
             /// The root of the outline.
             ///
             /// Leave it out and the outline of the document's catalog is read.
-
             root: Option<NodeRef>,
         },
         run: {
-
             let id = "pdf.outline.read".to_string();
             let root = match self.root {
                 Some(root) => {

@@ -227,23 +227,17 @@ commands! {
         menu: ("Clip", "Auto Rename"),
         params: {
             /// The clips to name: their ids.
-
             clips: serde_json::Value,
             /// The name before the number. Without it, the scheme is taken away.
-
             name: Option<Text>,
             /// The number the next new piece gets. One without it.
-
             number: Option<Number>,
             /// How many zeros go in front of the number. None without it.
-
             zeros: Option<Number>,
             /// The text after the number. Nothing without it.
-
             suffix: Option<Text>,
         },
         run: {
-
             let id = "sound.clip.autoname".to_string();
             let clips = crate::clip_ids_of(&self.clips, &id)?;
             if clips.is_empty() {
@@ -327,6 +321,7 @@ commands! {
 
         }
     }
+
     /// **Read the scheme** a clip is in.
     ///
     /// The scheme is read and the **next name** is worked out: the name
@@ -337,11 +332,9 @@ commands! {
         icon: "list",
         params: {
             /// The clip to read the scheme of.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.autoname.read".to_string();
             let clip = self.clip.0;
             let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {

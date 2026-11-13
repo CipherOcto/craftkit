@@ -918,11 +918,9 @@ commands! {
         example,
         params: {
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let name = self.name.0.clone();
             if name.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -948,6 +946,7 @@ commands! {
 
         }
     }
+
     /// **Add** a **custom list** to a workbook.
     ///
     /// A custom list is a list of words a fill may step through: the
@@ -966,14 +965,11 @@ commands! {
         undoable,
         params: {
             /// The workbook the list belongs to.
-
             workbook: NodeRef,
             /// The words of the list, one per line.
-
             words: Text,
         },
         run: {
-
             let id = "grid.workbook.list.add".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {
@@ -1025,6 +1021,7 @@ commands! {
 
         }
     }
+
     /// **Take away** a **custom list** of a workbook.
     ///
     /// The list is named by its **place**: the first list, the second
@@ -1037,14 +1034,11 @@ commands! {
         undoable,
         params: {
             /// The workbook the list belongs to.
-
             workbook: NodeRef,
             /// Which list: the first is 1, the second is 2, and so on.
-
             list: Number,
         },
         run: {
-
             let id = "grid.workbook.list.remove".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {
@@ -1084,6 +1078,7 @@ commands! {
 
         }
     }
+
     /// **Set** the **date system** of a workbook.
     ///
     /// The system is the calendar the workbook's serials are counted in:
@@ -1101,14 +1096,11 @@ commands! {
         undoable,
         params: {
             /// The workbook.
-
             workbook: NodeRef,
             /// `1900` or `1904`.
-
             system: Text,
         },
         run: {
-
             let id = "grid.workbook.date.system".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {
@@ -1141,6 +1133,7 @@ commands! {
 
         }
     }
+
     /// Put a **sheet** in a workbook.
     grid.sheet.add {
         area: "grid",
@@ -1150,14 +1143,11 @@ commands! {
         undoable,
         params: {
             /// The workbook it goes in.
-
             workbook: NodeRef,
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             let workbook = self.workbook.0;
             // The **rules** of a sheet's name are the rules of the name and
@@ -1203,6 +1193,7 @@ commands! {
 
         }
     }
+
     /// Put a **value** in a cell.
     grid.cell.set {
         area: "grid",
@@ -1212,17 +1203,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The value: a number, a text or a boolean.
-
             value: Json,
         },
         run: {
-
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, "grid.cell.set")?;
             let value = Value::from_json(&self.value);
@@ -1251,6 +1238,7 @@ commands! {
 
         }
     }
+
     /// Put a **number format** on a cell.
     ///
     /// The formats this tree knows are `general`, `0`, `0.00`, `#,##0`,
@@ -1270,19 +1258,15 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The format: `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` or
             /// `0.00%` — or the **name** of a format, such as `currency` or
             /// `scientific`.
-
             format: Text,
         },
         run: {
-
             let id = "grid.cell.format".to_string();
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, &id)?;
@@ -1325,6 +1309,7 @@ commands! {
 
         }
     }
+
     /// Put a **date** in a cell.
     ///
     /// A date in a spreadsheet is a **number** and a **format**: the number
@@ -1342,22 +1327,17 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The date, as `2026-10-26`.
-
             date: Text,
             /// The format the date is written with. The default is
             /// `yyyy-mm-dd`, and a format that is not a date format is
             /// refused.
-
             format: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.date".to_string();
             let sheet = self.sheet.0;
             // The **locks** the styles of the workbook carry: they are
@@ -1433,6 +1413,7 @@ commands! {
 
         }
     }
+
     /// Put a **time** in a cell.
     ///
     /// A time in a spreadsheet is a **number** and a **format**: the number
@@ -1449,22 +1430,17 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The time, as `13:45` or `1:45 pm`.
-
             time: Text,
             /// The format the time is written with. The default is the format
             /// the time was written in, and a format that is not a time format
             /// is refused.
-
             format: Option<Text>,
         },
         run: {
-
             let id = "grid.cell.time".to_string();
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, &id)?;
@@ -1534,6 +1510,7 @@ commands! {
 
         }
     }
+
     /// The **text** a cell shows.
     ///
     /// The text is the **value** of the cell written with its format, and
@@ -1546,14 +1523,11 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.text".to_string();
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, &id)?;
@@ -1602,6 +1576,7 @@ commands! {
 
         }
     }
+
     /// Put a **formula** in a cell.
     ///
     /// A formula that does not parse is refused, and so is one that reads
@@ -1615,17 +1590,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The formula, with or without its `=`.
-
             formula: Text,
         },
         run: {
-
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, "grid.formula.set")?;
             // The **locks** the styles of the workbook carry.
@@ -1684,6 +1655,7 @@ commands! {
 
         }
     }
+
     /// Empty a **cell**.
     grid.cell.clear {
         area: "grid",
@@ -1693,14 +1665,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, "grid.cell.clear")?;
             // The **locks** the styles of the workbook carry: they are
@@ -1746,6 +1715,7 @@ commands! {
 
         }
     }
+
     /// The **precedents** of a cell: the areas its formula reads.
     ///
     /// The tree's own flag: `all` says the trace is at **every** level and
@@ -1759,17 +1729,13 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// Whether the trace is at **every** level and not only the first.
-
             all: Option<Bool>,
         },
         run: {
-
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, "grid.precedents")?;
             let Some(node) = session.document().node(sheet) else {
@@ -1827,6 +1793,7 @@ commands! {
 
         }
     }
+
     /// The **dependents** of a cell: the cells whose formulas read it.
     grid.dependents {
         area: "grid",
@@ -1834,17 +1801,13 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// Whether the trace is at **every** level and not only the first.
-
             all: Option<Bool>,
         },
         run: {
-
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, "grid.dependents")?;
             let Some(node) = session.document().node(sheet) else {
@@ -1907,6 +1870,7 @@ commands! {
 
         }
     }
+
     /// The **values** of a sheet: every formula, computed.
     ///
     /// The same thing the evaluator says, as a command: an agent asks for
@@ -1917,11 +1881,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet to calculate.
-
             sheet: NodeRef,
         },
         run: {
-
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
                 return Err(EngineError::Failed {

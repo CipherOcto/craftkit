@@ -25,14 +25,11 @@ commands! {
         undoable,
         params: {
             /// The track.
-
             track: NodeRef,
             /// Whether the track is locked.
-
             locked: Bool,
         },
         run: {
-
             let id = "film.track.lock".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {

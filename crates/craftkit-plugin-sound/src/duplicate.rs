@@ -34,23 +34,17 @@ commands! {
         menu: ("Track", "Duplicate"),
         params: {
             /// The track to duplicate.
-
             track: NodeRef,
             /// Whether the copy carries the **playlists** and their clips.
-
             playlists: Option<Bool>,
             /// Whether the copy carries the **automation**.
-
             automation: Option<Bool>,
             /// Whether the copy carries the **inserts**.
-
             inserts: Option<Bool>,
             /// Whether the copy carries the **sends**.
-
             sends: Option<Bool>,
         },
         run: {
-
             let id = "sound.track.duplicate".to_string();
             let track = self.track.0;
             // The **document** is copied first: the copy is made out of

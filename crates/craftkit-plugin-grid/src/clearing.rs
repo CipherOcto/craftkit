@@ -37,14 +37,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.clear.contents".to_string();
             let sheet = self.sheet.0;
             // The **locks** the styles of the workbook carry: they are
@@ -94,6 +91,7 @@ commands! {
 
         }
     }
+
     /// **Clear the format** of a cell: its number format and its style.
     ///
     /// The cell keeps what it holds.
@@ -105,14 +103,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.clear.format".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

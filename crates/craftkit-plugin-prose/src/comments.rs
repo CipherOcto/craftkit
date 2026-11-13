@@ -74,17 +74,13 @@ commands! {
         undoable,
         params: {
             /// The block the comment is on.
-
             block: NodeRef,
             /// Who said it.
-
             author: Text,
             /// What they said.
-
             text: Text,
         },
         run: {
-
             let id = "prose.comment.set".to_string();
             let block = self.block.0;
             let document = the_block(session, &id, block)?;
@@ -117,6 +113,7 @@ commands! {
 
         }
     }
+
     /// **Read** the comment on a block.
     ///
     /// A block with no comment has no comment, and that is said as
@@ -127,11 +124,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.comment.get".to_string();
             let block = self.block.0;
             let document = the_block(session, &id, block)?;
@@ -149,6 +144,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the comment on a block.
     ///
     /// A block with no comment has no comment to take away, and that is
@@ -161,11 +157,9 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.comment.delete".to_string();
             let block = self.block.0;
             let document = the_block(session, &id, block)?;

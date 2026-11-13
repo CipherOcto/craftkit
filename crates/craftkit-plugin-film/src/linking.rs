@@ -78,14 +78,11 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The clip it is linked to.
-
             with: NodeRef,
         },
         run: {
-
             let id = "film.clip.link".to_string();
             let clip = self.clip.0;
             let with = self.with.0;
@@ -142,6 +139,7 @@ commands! {
 
         }
     }
+
     /// **Unlink** a clip from its group.
     ///
     /// A clip that is left alone in its group is unlinked too: a link
@@ -154,11 +152,9 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "film.clip.unlink".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

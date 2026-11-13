@@ -168,14 +168,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The scale, in percent: a whole number from 10 to 400.
-
             percent: Number,
         },
         run: {
-
             let id = "grid.print.scale".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;
@@ -207,6 +204,7 @@ commands! {
 
         }
     }
+
     /// **Print** a sheet to fit: so many pages wide and so many pages tall.
     ///
     /// The scale that does it is **derived** — the largest scale at which
@@ -221,19 +219,15 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The number of pages the sheet is **wide**: one, two or three.
             /// Zero means as many as it takes.
-
             wide: Number,
             /// The number of pages the sheet is **tall**. Zero means as many
             /// as it takes.
-
             tall: Number,
         },
         run: {
-
             let id = "grid.print.fit".to_string();
             let sheet = self.sheet.0;
             let node = sheet_of(session, &id, sheet)?;

@@ -83,33 +83,24 @@ commands! {
         undoable,
         params: {
             /// The page the attachment is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The point the attachment hangs from: two numbers.
-
             at: Json,
             /// The name of the attached file.
-
             name: Text,
             /// The file that is attached.
-
             path: Text,
             /// Where the bytes of the attachment are written.
-
             to: Text,
             /// The icon of the attachment: `PushPin`, `Paperclip`, `Graph` or
             /// `Tag`.
-
             icon: Option<Text>,
             /// The colour of the attachment: three numbers.
-
             colour: Option<Json>,
         },
         run: {
-
             // The **name** of the attached file: the tree's own rule.
             let name = self.name.0.trim().to_string();
             if name.is_empty() {

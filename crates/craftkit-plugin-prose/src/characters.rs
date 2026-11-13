@@ -138,32 +138,23 @@ commands! {
         undoable,
         params: {
             /// The block the text is in.
-
             block: NodeRef,
             /// Where the text begins, counted in characters.
-
             start: Number,
             /// How long the text is, counted in characters.
-
             length: Number,
             /// Whether the text is **bold**.
-
             bold: Option<Bool>,
             /// Whether the text is **italic**.
-
             italic: Option<Bool>,
             /// Whether the text is **underlined**.
-
             underline: Option<Bool>,
             /// The **colour** of the text, as `#rrggbb`.
-
             colour: Option<Text>,
             /// The **size** of the text.
-
             size: Option<Number>,
         },
         run: {
-
             let id = "prose.run.format".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {

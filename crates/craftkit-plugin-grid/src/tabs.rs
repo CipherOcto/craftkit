@@ -54,11 +54,9 @@ commands! {
         undoable,
         params: {
             /// The sheet to hide.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.sheet.hide".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -97,6 +95,7 @@ commands! {
 
         }
     }
+
     /// **Unhide** a sheet.
     grid.sheet.unhide {
         area: "grid",
@@ -106,11 +105,9 @@ commands! {
         undoable,
         params: {
             /// The sheet to unhide.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.sheet.unhide".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -136,6 +133,7 @@ commands! {
 
         }
     }
+
     /// The **colour** of a sheet's tab.
     ///
     /// The colour is a hex colour — `#RRGGBB` — and `none` takes it away.
@@ -149,14 +147,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The colour: `#FF0000`, or `none`.
-
             color: Text,
         },
         run: {
-
             let id = "grid.sheet.color".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

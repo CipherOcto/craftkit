@@ -161,11 +161,9 @@ commands! {
         icon: "list",
         params: {
             /// The page whose text is read.
-
             page: NodeRef,
         },
         run: {
-
             let page = self.page.0;
             if session.document().node(page).is_none() {
                 return Err(EngineError::Failed {
@@ -204,6 +202,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **text** of a page.
     ///
     /// A query: it does not change the document. A page with no content has
@@ -214,11 +213,9 @@ commands! {
         icon: "list",
         params: {
             /// The page whose text is read.
-
             page: NodeRef,
         },
         run: {
-
             let page = self.page.0;
             let found = text_of_page(session.document(), page)?;
             let text = found.joined();

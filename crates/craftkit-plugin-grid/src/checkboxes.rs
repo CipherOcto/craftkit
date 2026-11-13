@@ -52,14 +52,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.checkbox.set".to_string();
             let sheet = self.sheet.0;
             // The **locks** the styles of the workbook carry: they are
@@ -99,6 +96,7 @@ commands! {
 
         }
     }
+
     /// **Toggle** the checkbox of a cell.
     ///
     /// A cell that holds a formula is not toggled, and a cell that is not
@@ -111,14 +109,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
         },
         run: {
-
             let id = "grid.cell.checkbox.toggle".to_string();
             let sheet = self.sheet.0;
             // The **locks** the styles of the workbook carry: they are

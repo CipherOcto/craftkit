@@ -40,17 +40,13 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The scrub: a run of points, `[[x, y], …]`.
-
             points: Json,
             /// How near the ends have to be. 12 if it is not given.
-
             tolerance: Option<Number>,
         },
         run: {
-
             let id = "vector.path.join.scrub".to_string();
             let drag =
                 read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;

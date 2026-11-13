@@ -44,20 +44,15 @@ commands! {
         menu: ("Path", "Erase"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The drag: a run of points, `[[x, y], …]`.
-
             points: Json,
             /// How wide the eraser is. 8 if it is not given.
-
             width: Option<Number>,
             /// What to call the paths that are left.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "vector.path.erase".to_string();
             let drag =
                 read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;

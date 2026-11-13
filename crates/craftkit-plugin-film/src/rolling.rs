@@ -69,18 +69,14 @@ commands! {
         undoable,
         params: {
             /// The clip before the cut.
-
             left: NodeRef,
             /// The clip after the cut.
-
             right: NodeRef,
             /// How far the cut moves, in frames. A negative number moves it
             /// the other way.
-
             delta: Number,
         },
         run: {
-
             let id = "film.clip.roll".to_string();
             let left = self.left.0;
             let right = self.right.0;

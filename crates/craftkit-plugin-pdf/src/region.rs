@@ -77,15 +77,12 @@ commands! {
         icon: "list",
         params: {
             /// The page whose text is read.
-
             page: NodeRef,
             /// The region: four numbers, the left, the bottom, the right and
             /// the top of it.
-
             rect: Json,
         },
         run: {
-
             let page = self.page.0;
             let Some(region) = crate::boxes::rect_of(&self.rect) else {
                 return Err(EngineError::Failed {

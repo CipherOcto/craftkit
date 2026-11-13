@@ -89,17 +89,13 @@ commands! {
         undoable,
         params: {
             /// The page the background is on.
-
             page: NodeRef,
             /// The colour of the background: white is the tree's.
-
             colour: Option<Text>,
             /// The opacity of the background, between zero and one.
-
             opacity: Option<Number>,
         },
         run: {
-
             let colour = match &self.colour {
                 Some(colour) => {
                     let parsed = craftkit_sdk::document::Colour::from_hex(colour.0.trim())

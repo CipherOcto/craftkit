@@ -107,32 +107,23 @@ commands! {
         undoable,
         params: {
             /// The page the polygon is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The kind of shape: `polygon` or `polyline`.
-
             kind: Text,
             /// The corners of the shape: points of two numbers.
-
             vertices: Json,
             /// The colour of the line: three numbers.
-
             colour: Option<Json>,
             /// The width of the line, in points.
-
             width: Option<Number>,
             /// The colour of the fill of a polygon: three numbers.
-
             fill: Option<Json>,
             /// Whether the border of a polygon is **cloudy**.
-
             cloud: Option<Bool>,
         },
         run: {
-
             // The **kind**: one of the tree's own two.
             let kind = self.kind.0.trim().to_ascii_lowercase();
             let closed = match kind.as_str() {

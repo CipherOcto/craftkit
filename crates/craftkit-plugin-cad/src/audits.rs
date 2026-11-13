@@ -160,11 +160,9 @@ commands! {
         icon: "list",
         params: {
             /// The drawing.
-
             drawing: NodeRef,
         },
         run: {
-
             let id = "cad.audit".to_string();
             let drawing = self.drawing.0;
             let Some(node) = session.document().node(drawing) else {

@@ -163,7 +163,6 @@ commands! {
         params: {
         },
         run: {
-
             let document = session.document();
             let Some(root) = structure_of(document) else {
                 return Ok(Outcome::new("the file is not tagged").with_data(json!({

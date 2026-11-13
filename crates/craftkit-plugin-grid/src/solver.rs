@@ -634,42 +634,32 @@ commands! {
         icon: "check",
         params: {
             /// The costs of the objective: a list of numbers.
-
             objective: Option<Json>,
             /// The rows of the constraints: a list of
             /// `{coefficients, sense, rhs}`.
-
             constraints: Option<Json>,
             /// The bounds of the variables: a list of `[low, high]`, and
             /// `null` is a bound that is not there.
-
             bounds: Option<Json>,
             /// Whether the program is **maximised**: it is minimised when this
             /// is not given.
-
             maximise: Option<Bool>,
             /// The **budget** of the solver: the most pivots it may make.
-
             budget: Option<Number>,
             /// The variables that are **integers**: a list of flags, one for
             /// each variable.
-
             integer: Option<Json>,
             /// The variables that are **binary**: a list of flags, one for each
             /// variable. A binary variable is an integer variable whose values
             /// are zero and one.
-
             binary: Option<Json>,
             /// The most **nodes** the branch and bound may visit.
-
             max_nodes: Option<Number>,
             /// The **optimality** of an integer answer, in per cent: a
             /// hundredth of a per cent is the tree's own zero.
-
             gap: Option<Number>,
         },
         run: {
-
             let id = "grid.solver.solve".to_string();
             let Some(objective) = &self.objective else {
                 return Err(EngineError::Failed {

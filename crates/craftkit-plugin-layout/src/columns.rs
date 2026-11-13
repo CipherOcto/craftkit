@@ -94,17 +94,13 @@ commands! {
         undoable,
         params: {
             /// The page.
-
             page: NodeRef,
             /// How many columns there are.
-
             count: Number,
             /// The room between them. Without it, the columns have no gutter.
-
             gutter: Option<Number>,
         },
         run: {
-
             let id = "layout.page.columns".to_string();
             let page = self.page.0;
             let Some(node) = session.document().node(page).cloned() else {

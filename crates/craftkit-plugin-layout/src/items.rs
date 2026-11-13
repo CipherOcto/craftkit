@@ -103,14 +103,11 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The opacity, as a percentage: from zero to a hundred.
-
             opacity: Number,
         },
         run: {
-
             let id = "layout.item.opacity".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;
@@ -130,6 +127,7 @@ commands! {
 
         }
     }
+
     /// **Hide** an item.
     ///
     /// A hidden item is not drawn.
@@ -141,11 +139,9 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             let id = "layout.item.hide".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;
@@ -158,6 +154,7 @@ commands! {
 
         }
     }
+
     /// **Show** an item.
     layout.item.show {
         area: "layout",
@@ -167,11 +164,9 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             let id = "layout.item.show".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;
@@ -184,6 +179,7 @@ commands! {
 
         }
     }
+
     /// **Lock** an item.
     ///
     /// A locked item may not be edited, and every command that changes it
@@ -196,11 +192,9 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             let id = "layout.item.lock".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;
@@ -212,6 +206,7 @@ commands! {
 
         }
     }
+
     /// **Unlock** an item.
     layout.item.unlock {
         area: "layout",
@@ -221,11 +216,9 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
         },
         run: {
-
             let id = "layout.item.unlock".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;
@@ -237,6 +230,7 @@ commands! {
 
         }
     }
+
     /// **Scale** an item.
     ///
     /// The factor is on the **size** of the shape, and the place of the
@@ -250,14 +244,11 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The factor: twice is twice as big.
-
             factor: Number,
         },
         run: {
-
             let id = "layout.item.scale".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;

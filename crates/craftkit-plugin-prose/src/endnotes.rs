@@ -58,14 +58,11 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// What it says.
-
             text: Text,
         },
         run: {
-
             let id = "prose.endnote.add".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {
@@ -99,6 +96,7 @@ commands! {
 
         }
     }
+
     /// **Read** the endnotes of a block.
     ///
     /// The answer is every run that points at an endnote, with the
@@ -110,11 +108,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.endnotes".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {

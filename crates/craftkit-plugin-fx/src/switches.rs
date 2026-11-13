@@ -276,6 +276,7 @@ commands! {
 
         }
     }
+
     /// Put the composition's **hide shy layers** switch on or off.
     ///
     /// The tree's composition has one switch that is about the layers

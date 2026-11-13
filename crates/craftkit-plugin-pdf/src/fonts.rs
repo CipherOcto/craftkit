@@ -159,11 +159,9 @@ commands! {
             /// The font to read.
             ///
             /// Leave it out and every font of the document is read.
-
             font: Option<NodeRef>,
         },
         run: {
-
             let document = session.document();
             let mut fonts = fonts(document);
             if let Some(font) = self.font {

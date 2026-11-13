@@ -35,11 +35,9 @@ commands! {
         icon: "list",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.errors".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

@@ -181,7 +181,6 @@ commands! {
         params: {
         },
         run: {
-
             let document = session.document();
             let figures = figures_of(document);
             let tagged = crate::preflight::the_catalog(document)
@@ -214,6 +213,7 @@ commands! {
 
         }
     }
+
     /// **Set** the **alternative text** of a figure.
     ///
     /// The text that is empty **takes the text away**: the tree's own rule.
@@ -225,14 +225,11 @@ commands! {
         undoable,
         params: {
             /// The figure: the node of its element in the structure tree.
-
             figure: NodeRef,
             /// The alternative text. An empty text takes the text away.
-
             alt: Text,
         },
         run: {
-
             let id = "pdf.figure.alt.set".to_string();
             let figure = self.figure.0;
             let Some(node) = session.document().node(figure) else {

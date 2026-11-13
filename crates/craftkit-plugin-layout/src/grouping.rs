@@ -100,14 +100,11 @@ commands! {
         undoable,
         params: {
             /// The items to group: at least two.
-
             items: Json,
             /// What to call the group.
-
             name: Option<Text>,
         },
         run: {
-
             let command = "layout.item.group";
             let ids = ids_of(&self.items, command)?;
             if ids.len() < 2 {
@@ -253,6 +250,7 @@ commands! {
 
         }
     }
+
     /// **Ungroup** a group: the items go back where the group stood.
     layout.item.ungroup {
         area: "layout",
@@ -262,11 +260,9 @@ commands! {
         undoable,
         params: {
             /// The group.
-
             group: NodeRef,
         },
         run: {
-
             let command = "layout.item.ungroup";
             let group = self.group.0;
             let node = item_of(session, command, group)?;

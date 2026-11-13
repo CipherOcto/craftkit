@@ -230,23 +230,17 @@ commands! {
         undoable,
         params: {
             /// The block the table stands in.
-
             block: NodeRef,
             /// What to call it.
-
             name: Text,
             /// Where its first corner is.
-
             at: Json,
             /// How many rows it has.
-
             rows: Number,
             /// How many columns it has.
-
             columns: Number,
         },
         run: {
-
             let id = "cad.table.add".to_string();
             let rows = count(self.rows, "the rows of a table", &id)?;
             let columns = count(self.columns, "the columns of a table", &id)?;
@@ -294,6 +288,7 @@ commands! {
 
         }
     }
+
     /// **Write** the **text** of a cell.
     ///
     /// The tree's own rule: writing into a covered cell writes its anchor.
@@ -305,20 +300,15 @@ commands! {
         undoable,
         params: {
             /// The table the cell is in.
-
             table: NodeRef,
             /// The row of the cell.
-
             row: Number,
             /// The column of the cell.
-
             column: Number,
             /// The text of the cell.
-
             text: Text,
         },
         run: {
-
             let id = "cad.table.set".to_string();
             let node = the_table(session, &id, self.table.0)?;
             let mut geometry = geometry_of(node);
@@ -347,6 +337,7 @@ commands! {
 
         }
     }
+
     /// **Insert** a **row** into a table.
     ///
     /// The tree's own rule: the row goes **before** the row that is named,
@@ -359,14 +350,11 @@ commands! {
         undoable,
         params: {
             /// The table the row goes in.
-
             table: NodeRef,
             /// The row it goes before. It goes at the end when it is not said.
-
             row: Option<Number>,
         },
         run: {
-
             let id = "cad.table.insert.row".to_string();
             let node = the_table(session, &id, self.table.0)?;
             let mut geometry = geometry_of(node);
@@ -408,6 +396,7 @@ commands! {
 
         }
     }
+
     /// **Delete** a **row** of a table.
     ///
     /// The tree's own rule: a table keeps at least one row.
@@ -419,14 +408,11 @@ commands! {
         undoable,
         params: {
             /// The table the row is in.
-
             table: NodeRef,
             /// The row that goes.
-
             row: Number,
         },
         run: {
-
             let id = "cad.table.delete.row".to_string();
             let node = the_table(session, &id, self.table.0)?;
             let mut geometry = geometry_of(node);
@@ -485,6 +471,7 @@ commands! {
 
         }
     }
+
     /// **Merge** the cells of a table into one.
     ///
     /// The tree's own rules: a merge is **at least two cells**, the texts
@@ -498,23 +485,17 @@ commands! {
         undoable,
         params: {
             /// The table the cells are in.
-
             table: NodeRef,
             /// The row of the first cell.
-
             row: Number,
             /// The column of the first cell.
-
             column: Number,
             /// How many rows the merge covers.
-
             rows: Number,
             /// How many columns the merge covers.
-
             columns: Number,
         },
         run: {
-
             let id = "cad.table.merge".to_string();
             let node = the_table(session, &id, self.table.0)?;
             let mut geometry = geometry_of(node);
@@ -574,6 +555,7 @@ commands! {
 
         }
     }
+
     /// **Unmerge** the cells of a table.
     ///
     /// The tree's own rule: the merges that cover the cell are taken away.
@@ -585,17 +567,13 @@ commands! {
         undoable,
         params: {
             /// The table the cells are in.
-
             table: NodeRef,
             /// The row of the cell.
-
             row: Number,
             /// The column of the cell.
-
             column: Number,
         },
         run: {
-
             let id = "cad.table.unmerge".to_string();
             let node = the_table(session, &id, self.table.0)?;
             let mut geometry = geometry_of(node);

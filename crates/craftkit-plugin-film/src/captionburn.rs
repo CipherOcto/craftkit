@@ -135,27 +135,20 @@ commands! {
         icon: "image",
         params: {
             /// The text of the caption.
-
             text: Text,
             /// The caption track that holds the style; the tree's own style
             /// when it is not said.
-
             track: Option<NodeRef>,
             /// The width of the frame.
-
             width: Number,
             /// The height of the frame.
-
             height: Number,
             /// The settings of the cue: `line:50% align:center`.
-
             settings: Option<Text>,
             /// Where the picture is written.
-
             to: Text,
         },
         run: {
-
             let style = captionlayout::style_of(session, self.track)?;
             let settings = self.settings.as_ref().map(|text| text.0.clone()).unwrap_or_default();
             let laid = captionlayout::placement(&self.text.0, &style, &settings, self.width.0, self.height.0)

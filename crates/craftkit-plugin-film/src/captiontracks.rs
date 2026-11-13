@@ -86,17 +86,13 @@ commands! {
         undoable,
         params: {
             /// What to call it.
-
             name: Text,
             /// The sequence it is in.
-
             sequence: NodeRef,
             /// The format of the track: `subtitle` when it is not given.
-
             format: Option<Text>,
         },
         run: {
-
             let command = "film.caption.track.add";
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
@@ -140,6 +136,7 @@ commands! {
 
         }
     }
+
     /// Add a **cue** to a caption track.
     ///
     /// The cues of a track never overlap, and a cue that ends before it
@@ -152,20 +149,15 @@ commands! {
         undoable,
         params: {
             /// The caption track.
-
             track: NodeRef,
             /// The frame the cue starts at.
-
             start: Number,
             /// The frame the cue ends at.
-
             end: Number,
             /// The text of the cue.
-
             text: Text,
         },
         run: {
-
             let command = "film.caption.add";
             let track = self.track.0;
             the_track(session, command, track)?;
@@ -231,6 +223,7 @@ commands! {
 
         }
     }
+
     /// The **cues** of a caption track, in the order they start in.
     film.caption.read {
         area: "film",
@@ -238,11 +231,9 @@ commands! {
         icon: "list",
         params: {
             /// The caption track.
-
             track: NodeRef,
         },
         run: {
-
             let command = "film.caption.read";
             let track = self.track.0;
             let node = the_track(session, command, track)?;
@@ -264,6 +255,7 @@ commands! {
 
         }
     }
+
     /// Take a **cue** away from a caption track.
     film.caption.remove {
         area: "film",
@@ -273,11 +265,9 @@ commands! {
         undoable,
         params: {
             /// The cue.
-
             caption: NodeRef,
         },
         run: {
-
             let command = "film.caption.remove";
             let caption = self.caption.0;
             let Some(node) = session.document().node(caption) else {
@@ -297,6 +287,7 @@ commands! {
 
         }
     }
+
     /// **Import** a caption file as a new caption track of a sequence.
     ///
     /// The tree's own rule: the cues of the file are **snapped to the
@@ -312,21 +303,16 @@ commands! {
         undoable,
         params: {
             /// The sequence the track goes on.
-
             sequence: NodeRef,
             /// The file to read.
-
             path: Text,
             /// The format of the file: `subrip` when it is not given.
-
             format: Option<Text>,
             /// The name of the track: the name of the file when it is not
             /// given.
-
             name: Option<Text>,
         },
         run: {
-
             let command = "film.caption.import";
             let sequence = self.sequence.0;
             let Some(node) = session.document().node(sequence) else {
@@ -472,6 +458,7 @@ commands! {
 
         }
     }
+
     /// **Export** the cues of a caption track as a caption file.
     ///
     /// The tree's own rule: the captions of a track are written back as a
@@ -486,25 +473,19 @@ commands! {
         undoable,
         params: {
             /// The caption track.
-
             track: NodeRef,
             /// The file to write.
-
             path: Text,
             /// The format of the file: `subrip` when it is not given.
-
             format: Option<Text>,
             /// Whether an MCC file carries the **CEA-608** pairs of the field
             /// one: it does when this is not given.
-
             cea_608: Option<Bool>,
             /// Whether an MCC file carries the **CEA-708** service data: it
             /// does when this is not given.
-
             cea_708: Option<Bool>,
         },
         run: {
-
             let command = "film.captions.export";
             let track = self.track.0;
             let node = the_track(session, command, track)?;

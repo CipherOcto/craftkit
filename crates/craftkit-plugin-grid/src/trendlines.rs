@@ -438,26 +438,20 @@ commands! {
         icon: "chart",
         params: {
             /// The chart.
-
             chart: NodeRef,
             /// The kind of fit: `linear`, `exponential`, `logarithmic`,
             /// `power`, `polynomial` or `moving_average`.
-
             kind: Text,
             /// The order of a polynomial: between two and six.
-
             order: Option<Number>,
             /// The period of a moving average: between two and two hundred and
             /// fifty-five.
-
             period: Option<Number>,
             /// The name of one series: every series is fitted when it is not
             /// said.
-
             series: Option<Text>,
         },
         run: {
-
             let id = "grid.chart.trendline".to_string();
             let chart = self.chart.0;
             let Some(node) = session.document().node(chart).cloned() else {

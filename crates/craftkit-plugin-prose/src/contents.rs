@@ -86,15 +86,12 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
             /// The levels that are in the table: three of them, one to three,
             /// unless the reader asks for others.
-
             levels: Option<Number>,
         },
         run: {
-
             let id = "prose.document.contents".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {

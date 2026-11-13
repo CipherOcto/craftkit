@@ -79,14 +79,11 @@ commands! {
         undoable,
         params: {
             /// The cue.
-
             caption: NodeRef,
             /// The frames to stand it by.
-
             delta: Number,
         },
         run: {
-
             let command = "film.caption.duplicate";
             let caption = self.caption.0;
             let (node, track) = the_caption(session, command, caption)?;
@@ -158,6 +155,7 @@ commands! {
 
         }
     }
+
     /// **Delete** a caption track, and its cues go with it.
     film.caption.track.delete {
         area: "film",
@@ -167,11 +165,9 @@ commands! {
         undoable,
         params: {
             /// The caption track.
-
             track: NodeRef,
         },
         run: {
-
             let command = "film.caption.track.delete";
             let track = self.track.0;
             let node = the_track(session, command, track)?;

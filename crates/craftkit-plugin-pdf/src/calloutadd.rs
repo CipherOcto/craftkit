@@ -91,29 +91,21 @@ commands! {
         undoable,
         params: {
             /// The page the callout is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The box the text is in: four numbers.
-
             rect: Json,
             /// The point the leader turns at: two numbers.
-
             knee: Json,
             /// The point the leader starts at: two numbers.
-
             point: Json,
             /// The text of the callout.
-
             contents: Text,
             /// The size of the text, in points.
-
             size: Option<Number>,
         },
         run: {
-
             // The **box**: four numbers, and the corners may come in any
             // order.
             let numbers = numbers_of(&self.rect);

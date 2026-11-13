@@ -49,14 +49,11 @@ commands! {
         menu: ("Track", "Commit"),
         params: {
             /// The track to commit.
-
             track: NodeRef,
             /// The directory the file is written into.
-
             directory: Text,
         },
         run: {
-
             let id = "sound.track.commit".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {

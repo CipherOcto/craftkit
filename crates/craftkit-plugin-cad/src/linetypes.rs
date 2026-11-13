@@ -127,7 +127,6 @@ commands! {
         params: {
         },
         run: {
-
             let types: Vec<Json> = TYPES.iter().map(to_json).collect();
             Ok(Outcome::new(format!("this tree has {} line type(s)", types.len()))
                 .with_data(json!({ "linetypes": types })))

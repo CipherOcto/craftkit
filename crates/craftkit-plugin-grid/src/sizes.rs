@@ -72,17 +72,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which row, counting from one.
-
             row: Number,
             /// How high it is, in points.
-
             height: Number,
         },
         run: {
-
             let id = "grid.row.height".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -125,6 +121,7 @@ commands! {
 
         }
     }
+
     /// The **width** of a column, in characters.
     grid.column.width {
         area: "grid",
@@ -134,17 +131,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// Which column: `A`, `B`, `AA`.
-
             column: Text,
             /// How wide it is, in characters.
-
             width: Number,
         },
         run: {
-
             let id = "grid.column.width".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

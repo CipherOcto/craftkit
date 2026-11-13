@@ -215,35 +215,25 @@ commands! {
         undoable,
         params: {
             /// The sheet the chart is in.
-
             sheet: NodeRef,
             /// The range the chart reads: `A1:C10`.
-
             range: Text,
             /// The kind of chart: `column`, `bar`, `line` or `pie`.
-
             kind: Option<Text>,
             /// The title of the chart.
-
             title: Option<Text>,
             /// Where the legend is: `none`, `bottom`, `top`, `left` or `right`.
-
             legend: Option<Text>,
             /// Whether the data labels are shown.
-
             data_labels: Option<Bool>,
             /// Whether the gridlines are shown.
-
             gridlines: Option<Bool>,
             /// The title of the axis of the categories.
-
             x_title: Option<Text>,
             /// The title of the axis of the values.
-
             y_title: Option<Text>,
         },
         run: {
-
             let id = "grid.chart.add".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {
@@ -333,6 +323,7 @@ commands! {
 
         }
     }
+
     /// **Read** a chart: what it reads and what it shows.
     ///
     /// The data is **derived**: it is worked out from the cells of the
@@ -343,11 +334,9 @@ commands! {
         icon: "chart",
         params: {
             /// The chart.
-
             chart: NodeRef,
         },
         run: {
-
             let id = "grid.chart.read".to_string();
             let chart = self.chart.0;
             let Some(node) = session.document().node(chart).cloned() else {
@@ -388,6 +377,7 @@ commands! {
 
         }
     }
+
     /// **Change** a chart: its range, its kind or its title.
     ///
     /// What is not said stays as it was.
@@ -399,35 +389,25 @@ commands! {
         undoable,
         params: {
             /// The chart.
-
             chart: NodeRef,
             /// The range the chart reads.
-
             range: Option<Text>,
             /// The kind of chart.
-
             kind: Option<Text>,
             /// The title of the chart.
-
             title: Option<Text>,
             /// Where the legend is: `none`, `bottom`, `top`, `left` or `right`.
-
             legend: Option<Text>,
             /// Whether the data labels are shown.
-
             data_labels: Option<Bool>,
             /// Whether the gridlines are shown.
-
             gridlines: Option<Bool>,
             /// The title of the axis of the categories.
-
             x_title: Option<Text>,
             /// The title of the axis of the values.
-
             y_title: Option<Text>,
         },
         run: {
-
             let id = "grid.chart.set".to_string();
             let chart = self.chart.0;
             let Some(node) = session.document().node(chart).cloned() else {
@@ -521,6 +501,7 @@ commands! {
 
         }
     }
+
     /// **Turn** an **element** of a chart on or off.
     ///
     /// The tree's own: the elements of a chart are the **title**, the
@@ -546,22 +527,17 @@ commands! {
         undoable,
         params: {
             /// The chart.
-
             chart: NodeRef,
             /// The element: `title`, `legend`, `dataLabels`, `gridlines`,
             /// `axisTitles` or `smooth`.
-
             element: Text,
             /// Whether the element is on; it is on unless it is said to be
             /// off.
-
             on: Option<Bool>,
             /// Where the legend is: `bottom`, `top`, `left` or `right`.
-
             position: Option<Text>,
         },
         run: {
-
             let id = "grid.chart.element".to_string();
             let chart = self.chart.0;
             let Some(node) = session.document().node(chart).cloned() else {
@@ -684,6 +660,7 @@ commands! {
 
         }
     }
+
     /// **Take** a chart away.
     grid.chart.remove {
         area: "grid",
@@ -693,11 +670,9 @@ commands! {
         undoable,
         params: {
             /// The chart.
-
             chart: NodeRef,
         },
         run: {
-
             let id = "grid.chart.remove".to_string();
             let chart = self.chart.0;
             let Some(node) = session.document().node(chart).cloned() else {

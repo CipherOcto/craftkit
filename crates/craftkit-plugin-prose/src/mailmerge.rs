@@ -164,14 +164,11 @@ commands! {
         icon: "list",
         params: {
             /// The names of the columns of the data source.
-
             headers: Option<Json>,
             /// The rows of the data source: a list of lists of values.
-
             rows: Json,
         },
         run: {
-
             let headers: Vec<String> = match &self.headers {
                 Some(headers) => {
                     let Some(list) = headers.as_array() else {

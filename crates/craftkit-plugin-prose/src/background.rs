@@ -88,16 +88,13 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The colour of the page, as `#rrggbb`.
             ///
             /// An empty colour takes the colour of the page away.
-
             colour: Text,
         },
         run: {
-
             let id = "prose.page.background".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;
@@ -123,6 +120,7 @@ commands! {
 
         }
     }
+
     /// **Put** a **watermark** on the page of a document.
     ///
     /// The text is what the watermark says, and an **empty** text takes
@@ -137,22 +135,17 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// What the watermark says.
             ///
             /// An empty text takes the watermark away.
-
             text: Text,
             /// Whether the watermark runs **across** the page.
-
             diagonal: Option<Bool>,
             /// The colour of the watermark, as `#rrggbb`.
-
             colour: Option<Text>,
         },
         run: {
-
             let id = "prose.page.watermark".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;

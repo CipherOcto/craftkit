@@ -43,23 +43,18 @@ commands! {
         menu: ("Track", "Repeat"),
         params: {
             /// The track whose material is repeated.
-
             track: NodeRef,
             /// Where the range starts, in samples.
-
             start: Option<Number>,
             /// Where the range ends, in samples.
-
             end: Option<Number>,
             /// How many times the range is repeated.
             ///
             /// One is none. The number is **clamped** into its bounds: it is a
             /// knob and not a fact about the material.
-
             count: Option<Number>,
         },
         run: {
-
             let id = "sound.track.repeat".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {

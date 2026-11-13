@@ -580,14 +580,11 @@ commands! {
         undoable,
         params: {
             /// The file to read.
-
             path: Text,
             /// The name to give the paths.
-
             name: Option<Text>,
         },
         run: {
-
             let path = self.path.0.clone();
             if path.trim().is_empty() {
                 return Err(EngineError::Failed {

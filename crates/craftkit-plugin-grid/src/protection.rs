@@ -190,20 +190,15 @@ commands! {
         undoable,
         params: {
             /// The sheet to protect.
-
             sheet: NodeRef,
             /// Whether the **sorting** is still allowed.
-
             sort: Option<Bool>,
             /// Whether the **filtering** is still allowed.
-
             filter: Option<Bool>,
             /// Whether the **formatting** is still allowed.
-
             format: Option<Bool>,
         },
         run: {
-
             let id = "grid.sheet.protect".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -238,6 +233,7 @@ commands! {
 
         }
     }
+
     /// **Unprotect** a sheet: the protection is gone.
     grid.sheet.unprotect {
         area: "grid",
@@ -247,11 +243,9 @@ commands! {
         undoable,
         params: {
             /// The sheet to unprotect.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.sheet.unprotect".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -281,6 +275,7 @@ commands! {
 
         }
     }
+
     /// **Lock** a cell, or let it be changed.
     ///
     /// The tree's Lock Cell: a button, and a button pressed twice does the
@@ -297,18 +292,14 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// Whether the cell is locked: the opposite of what it is when
             /// this is not named.
-
             locked: Option<Bool>,
         },
         run: {
-
             let id = "grid.cell.lock".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;
@@ -349,6 +340,7 @@ commands! {
 
         }
     }
+
     /// **Set** the **edit ranges** of a sheet: the ranges that stay
     /// editable while the sheet is protected.
     ///
@@ -362,14 +354,11 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The **ranges** that stay editable: `["A1:B2", "D4"]`.
-
             ranges: craftkit_sdk::serde_json::Value,
         },
         run: {
-
             let id = "grid.sheet.edit.set".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -434,6 +423,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **edit ranges** of a sheet: the ranges that stay
     /// editable while the sheet is protected.
     grid.sheet.edit.read {
@@ -442,11 +432,9 @@ commands! {
         icon: "lock",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
         },
         run: {
-
             let id = "grid.sheet.edit.read".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

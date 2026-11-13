@@ -68,14 +68,11 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The name of the place.
-
             name: Text,
         },
         run: {
-
             let id = "prose.block.bookmark".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -136,6 +133,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the bookmark of a block.
     ///
     /// A block with no bookmark has none to take away, and that is
@@ -148,11 +146,9 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.bookmark.delete".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {
@@ -184,6 +180,7 @@ commands! {
 
         }
     }
+
     /// **Read** the bookmarks of a document.
     ///
     /// They are **derived**: they are the blocks that carry a name.
@@ -193,11 +190,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.document.bookmarks".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

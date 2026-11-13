@@ -43,17 +43,13 @@ commands! {
         menu: ("Path", "Cut"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The knife's run: a list of points, `[[x, y], …]`.
-
             points: Json,
             /// What to call the pieces.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "vector.path.knife".to_string();
             let run =
                 read_run(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;

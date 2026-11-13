@@ -54,20 +54,15 @@ commands! {
         icon: "list",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell whose value is **varied**.
-
             input: Text,
             /// The cell whose value is **read**.
-
             result: Text,
             /// The values to try: a list of numbers.
-
             values: Json,
         },
         run: {
-
             let id = "grid.whatif".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

@@ -501,14 +501,11 @@ commands! {
         example,
         params: {
             /// What to call it.
-
             name: Text,
             /// The bin it goes in, if it goes in one.
-
             parent: Option<NodeRef>,
         },
         run: {
-
             let name = self.name.0.clone();
             if name.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -523,6 +520,7 @@ commands! {
 
         }
     }
+
     /// Put an **item** in a bin.
     ///
     /// The item's own id is the editor's, and it is kept in the payload:
@@ -535,26 +533,19 @@ commands! {
         undoable,
         params: {
             /// What to call it.
-
             name: Text,
             /// The bin it goes in.
-
             bin: NodeRef,
             /// The item's own id, in the editor.
-
             item: Number,
             /// Where the media is, if it is a media file.
-
             path: Option<Text>,
             /// How long it is, in frames.
-
             duration: Option<Number>,
             /// Whether it was made offline on purpose.
-
             offline: Option<craftkit_sdk::Bool>,
         },
         run: {
-
             let name = self.name.0.clone();
             if name.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -591,6 +582,7 @@ commands! {
 
         }
     }
+
     /// Put a **track** in a sequence.
     film.track.add {
         area: "film",
@@ -600,17 +592,13 @@ commands! {
         undoable,
         params: {
             /// What to call it.
-
             name: Text,
             /// The sequence it is in.
-
             sequence: NodeRef,
             /// What kind of track it is: `video`, `audio`, `title`, …
-
             kind: Text,
         },
         run: {
-
             let name = self.name.0.clone();
             if name.trim().is_empty() {
                 return Err(EngineError::Failed {
@@ -639,6 +627,7 @@ commands! {
 
         }
     }
+
     /// Put a **clip** on a track.
     ///
     /// The clip has the **two clocks**: where it starts on the timeline and
@@ -652,23 +641,17 @@ commands! {
         undoable,
         params: {
             /// The track it goes on.
-
             track: NodeRef,
             /// The item it plays.
-
             item: NodeRef,
             /// Where it starts on the timeline, in frames.
-
             start: Number,
             /// How long it is, in frames.
-
             duration: Number,
             /// Where in the media it begins, in frames.
-
             source_in: Option<Number>,
         },
         run: {
-
             let track = self.track.0;
             let item = self.item.0;
             for id in [track, item] {
@@ -714,6 +697,7 @@ commands! {
 
         }
     }
+
     /// The timeline of the document.
     ///
     /// A query: the clips in the order they start, and the length of every
@@ -725,7 +709,6 @@ commands! {
         params: {
         },
         run: {
-
             let mut tracks: Vec<serde_json::Value> = Vec::new();
             for track in session.document().walk().filter(|node| node.kind == "film.track") {
                 let mut clips: Vec<(u64, u64)> = track

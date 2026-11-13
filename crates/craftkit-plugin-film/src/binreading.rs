@@ -24,11 +24,9 @@ commands! {
         icon: "list",
         params: {
             /// The bin to read.
-
             bin: NodeRef,
         },
         run: {
-
             let id = "film.bin.get".to_string();
             let bin = self.bin.0;
             let Some(node) = session.document().node(bin) else {

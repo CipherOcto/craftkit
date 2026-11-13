@@ -38,14 +38,11 @@ commands! {
         undoable,
         params: {
             /// The path.
-
             path: NodeRef,
             /// The opacity, as a percentage: from zero to a hundred.
-
             opacity: Number,
         },
         run: {
-
             let id = "vector.path.opacity".to_string();
             let opacity = self.opacity.0;
             if !opacity.is_finite() || !(0.0..=100.0).contains(&opacity) {

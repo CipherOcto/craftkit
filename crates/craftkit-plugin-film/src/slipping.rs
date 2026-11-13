@@ -77,15 +77,12 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// How far the clip slips, in frames of the timeline. A negative
             /// number slips it the other way.
-
             delta: Number,
         },
         run: {
-
             let id = "film.clip.slip".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

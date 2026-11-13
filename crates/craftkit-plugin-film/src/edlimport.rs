@@ -181,16 +181,13 @@ commands! {
         undoable,
         params: {
             /// The file to read.
-
             path: Text,
             /// What to call the sequence.
             ///
             /// Without it, the title of the list.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "film.import.edl".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {

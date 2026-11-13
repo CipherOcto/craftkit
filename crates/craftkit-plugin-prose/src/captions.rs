@@ -198,34 +198,27 @@ commands! {
         undoable,
         params: {
             /// The paragraph.
-
             block: NodeRef,
             /// The label: what the thing is called.
             ///
             /// It is `Figure` when it is not given.
-
             label: Option<Text>,
             /// What the caption says.
-
             text: Option<Text>,
             /// The format of the number: `arabic`, `roman`, `alphabetic` or
             /// `ALPHABETIC`.
-
             format: Option<Text>,
             /// The **chapter** the caption is in: the level of a heading, one
             /// to nine.
             ///
             /// The number of a caption that names a chapter is counted again
             /// at each chapter, and the caption says the chapter it is in.
-
             chapter: Option<Number>,
             /// The **separator** between the chapter number and the number of
             /// the caption: `-`, `.`, `:`, an em dash or an en dash.
-
             separator: Option<Text>,
         },
         run: {
-
             let id = "prose.block.caption".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block).cloned() else {
@@ -276,6 +269,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **captions** of a document, each with the **number**
     /// it has.
     prose.document.captions {
@@ -284,11 +278,9 @@ commands! {
         icon: "list",
         params: {
             /// The document.
-
             document: NodeRef,
         },
         run: {
-
             let id = "prose.document.captions".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {

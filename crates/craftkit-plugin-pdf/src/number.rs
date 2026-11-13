@@ -47,14 +47,11 @@ commands! {
         undoable,
         params: {
             /// The object.
-
             object: NodeRef,
             /// The number it has in the file.
-
             number: Number,
         },
         run: {
-
             let id = "pdf.object.number".to_string();
             let object = self.object.0;
             let Some(node) = session.document().node(object) else {

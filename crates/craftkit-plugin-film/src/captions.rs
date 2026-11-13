@@ -427,11 +427,9 @@ commands! {
         icon: "search",
         params: {
             /// The file to look at.
-
             path: Text,
         },
         run: {
-
             let id = "film.captions.detect".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {
@@ -455,6 +453,7 @@ commands! {
 
         }
     }
+
     /// **Read** the **cues** of a caption file.
     ///
     /// The cues are read out of the file, and they are not kept: a
@@ -468,14 +467,11 @@ commands! {
         icon: "list",
         params: {
             /// The file to read.
-
             path: Text,
             /// The format of the file: `subrip` when it is not given.
-
             format: Option<Text>,
         },
         run: {
-
             let id = "film.captions.read".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {
@@ -602,6 +598,7 @@ commands! {
 
         }
     }
+
     /// **Write** a caption file.
     ///
     /// The cues are given to the command and the file is written. The
@@ -616,33 +613,25 @@ commands! {
         undoable,
         params: {
             /// The file to write.
-
             path: Text,
             /// The format of the file: `subrip` when it is not given.
-
             format: Option<Text>,
             /// The cues: each one a `start`, an `end` and a `text`.
-
             cues: Json,
             /// The blocks of a WebVTT file: the notes, the styles and the
             /// regions.
-
             blocks: Option<Json>,
             /// Whether an SCC file carries the **drop-frame** timecode: it does
             /// not when this is not given.
-
             drop_frame: Option<Bool>,
             /// Whether an MCC file carries the **CEA-608** pairs of the field
             /// one: it does when this is not given.
-
             cea_608: Option<Bool>,
             /// Whether an MCC file carries the **CEA-708** service data: it
             /// does when this is not given.
-
             cea_708: Option<Bool>,
         },
         run: {
-
             let id = "film.captions.write".to_string();
             let path = self.path.0.trim().to_string();
             if path.is_empty() {

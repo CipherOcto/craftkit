@@ -318,17 +318,14 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// The kind of list: `bullet`, `numbered`, `numberedParen`,
             /// `outline`, `upperLetter`, `lowerLetter`, `lowerLetterDot`,
             /// `lowerRoman` or `legal` — or a single character, which is a
             /// bullet of its own.
-
             kind: Text,
         },
         run: {
-
             let id = "prose.list.add".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document) else {
@@ -365,6 +362,7 @@ commands! {
 
         }
     }
+
     /// Put a **block** in a list, at a level.
     ///
     /// The block's own list is replaced: a block is in one list.
@@ -376,18 +374,14 @@ commands! {
         undoable,
         params: {
             /// The block.
-
             block: NodeRef,
             /// The list.
-
             list: NodeRef,
             /// The level, counting from zero. Without it the block is at the
             /// first level.
-
             level: Option<Number>,
         },
         run: {
-
             let id = "prose.block.numbering".to_string();
             let block = self.block.0;
             let list = self.list.0;
@@ -446,6 +440,7 @@ commands! {
 
         }
     }
+
     /// **Read** the number of a block.
     ///
     /// The number is **derived**: it is the count of the blocks of the list
@@ -457,11 +452,9 @@ commands! {
         icon: "list",
         params: {
             /// The block.
-
             block: NodeRef,
         },
         run: {
-
             let id = "prose.block.number".to_string();
             let block = self.block.0;
             let Some(node) = session.document().node(block) else {

@@ -225,17 +225,13 @@ commands! {
         menu: ("Edit", "Copy"),
         params: {
             /// The track whose material is copied.
-
             track: NodeRef,
             /// Where the range starts, in samples.
-
             start: Option<Number>,
             /// Where the range ends, in samples.
-
             end: Option<Number>,
         },
         run: {
-
             let id = "sound.track.copy".to_string();
             let (start, end) = crate::range_of(session, self.track.0, &id, self.start, self.end)?;
             let copies = crate::copies_of_range(session, self.track.0, start, end);
@@ -259,6 +255,7 @@ commands! {
 
         }
     }
+
     /// **Cut** the material of a range of a track.
     ///
     /// The material is **copied** into the clipboard and then **taken
@@ -273,17 +270,13 @@ commands! {
         menu: ("Edit", "Cut"),
         params: {
             /// The track whose material is cut.
-
             track: NodeRef,
             /// Where the range starts, in samples.
-
             start: Option<Number>,
             /// Where the range ends, in samples.
-
             end: Option<Number>,
         },
         run: {
-
             let id = "sound.track.cut".to_string();
             let (start, end) = crate::range_of(session, self.track.0, &id, self.start, self.end)?;
             let copies = crate::copies_of_range(session, self.track.0, start, end);
@@ -311,6 +304,7 @@ commands! {
 
         }
     }
+
     /// **Paste** the clipboard onto a track.
     ///
     /// The material of the clipboard is laid on the track at the place the
@@ -327,14 +321,11 @@ commands! {
         menu: ("Edit", "Paste"),
         params: {
             /// The track the material is pasted onto.
-
             track: NodeRef,
             /// Where the material is pasted, in samples.
-
             at: Option<Number>,
         },
         run: {
-
             let id = "sound.track.paste".to_string();
             let track = self.track.0;
             let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
@@ -393,6 +384,7 @@ commands! {
 
         }
     }
+
     /// The **clipboard** of the document, read: how many clips it holds and
     /// how long the range was.
     sound.track.clipboard.read {
@@ -402,7 +394,6 @@ commands! {
         params: {
         },
         run: {
-
             let Some(clipboard) = clipboard_of(session.document()) else {
                 return Ok(Outcome::new("the clipboard is empty")
                     .with_data(serde_json::json!({ "empty": true, "length": 0, "clips": Vec::<u64>::new() })));

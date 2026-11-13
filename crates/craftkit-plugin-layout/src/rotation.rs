@@ -105,15 +105,12 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The turn, in degrees. A turn of ninety is a quarter turn, and
             /// the turn is clockwise on the page.
-
             degrees: Number,
         },
         run: {
-
             let id = "layout.item.rotate".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;

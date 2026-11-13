@@ -485,11 +485,9 @@ commands! {
         example,
         params: {
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -509,6 +507,7 @@ commands! {
 
         }
     }
+
     /// Put a **spread** in a document.
     layout.spread.add {
         area: "layout",
@@ -518,14 +517,11 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// What to call it.
-
             name: Text,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -552,6 +548,7 @@ commands! {
 
         }
     }
+
     /// Put a **page** in a spread.
     layout.page.add {
         area: "layout",
@@ -561,20 +558,15 @@ commands! {
         undoable,
         params: {
             /// The spread it goes in.
-
             spread: NodeRef,
             /// What to call it.
-
             name: Text,
             /// How wide it is.
-
             width: Option<Number>,
             /// How high it is.
-
             height: Option<Number>,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -603,6 +595,7 @@ commands! {
 
         }
     }
+
     /// Put a **layer** in a document.
     layout.layer.add {
         area: "layout",
@@ -612,17 +605,13 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// The layer's name.
-
             name: Text,
             /// Its colour, as a name or a number.
-
             color: Option<Text>,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -649,6 +638,7 @@ commands! {
 
         }
     }
+
     /// Put a **story** in a document: the text, stored once.
     layout.story.add {
         area: "layout",
@@ -658,17 +648,13 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// What to call it.
-
             name: Text,
             /// The text of the story.
-
             text: Text,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -694,6 +680,7 @@ commands! {
 
         }
     }
+
     /// Put an **asset** in a document: a file the document places.
     ///
     /// The file is the node's **stream**, so the bytes travel beside the
@@ -706,20 +693,15 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// What to call it.
-
             name: Text,
             /// Where the file is, relative to the document.
-
             path: Text,
             /// What kind of file it is: `image`, `eps`, `font`, …
-
             kind: Option<Text>,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -761,6 +743,7 @@ commands! {
 
         }
     }
+
     /// Put an **item** in a spread.
     ///
     /// The **kind** is named by the caller: `layout.item.frame`,
@@ -774,23 +757,17 @@ commands! {
         undoable,
         params: {
             /// The spread it goes in.
-
             spread: NodeRef,
             /// What to call it.
-
             name: Text,
             /// What kind of item it is.
-
             kind: Option<Text>,
             /// Its shape: `rectangle`, `ellipse`, `polygon`, `line`, `path`.
-
             shape: Option<Text>,
             /// Where it is, as `{x, y, width, height}`.
-
             rect: Option<Json>,
         },
         run: {
-
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
                 return Err(EngineError::Failed {
@@ -827,6 +804,7 @@ commands! {
 
         }
     }
+
     /// Put an item **on a layer**.
     ///
     /// The layer is not the item's parent — the item is in the spread, and
@@ -839,14 +817,11 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The layer.
-
             layer: NodeRef,
         },
         run: {
-
             let item = self.item.0;
             let layer = self.layer.0;
             let Some(node) = session.document().node(layer) else {
@@ -887,6 +862,7 @@ commands! {
 
         }
     }
+
     /// Put a **story** in an item: the text the frame shows.
     ///
     /// The story is not the item's parent and not its payload: it is an
@@ -900,14 +876,11 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The story.
-
             story: NodeRef,
         },
         run: {
-
             let item = self.item.0;
             let story = self.story.0;
             let Some(node) = session.document().node(story) else {

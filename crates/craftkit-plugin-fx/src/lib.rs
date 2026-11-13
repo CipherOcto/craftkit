@@ -253,6 +253,7 @@ commands! {
 
         }
     }
+
     /// Put a **layer** in a composition.
     fx.layer.add {
         area: "fx",
@@ -293,6 +294,7 @@ commands! {
 
         }
     }
+
     /// Set a property, by its path.
     ///
     /// The path is the plugin's own: `transform/position`, `effects/#1/blurriness`.
@@ -341,6 +343,7 @@ commands! {
 
         }
     }
+
     /// Make a property **spatial**.
     ///
     /// A spatial property is one whose value is a **point**: a pair or a
@@ -455,6 +458,7 @@ commands! {
 
         }
     }
+
     /// Read a property, by its path.
     fx.prop.get {
         area: "fx",

@@ -108,6 +108,7 @@ commands! {
 
         }
     }
+
     /// Take the **expression** off a property.
     ///
     /// The property keeps its keyframes, and its value is the one they
@@ -161,6 +162,7 @@ commands! {
 
         }
     }
+
     /// **Bake** the expression of a property into **keyframes**.
     ///
     /// An expression says what the value is at every frame; baking it

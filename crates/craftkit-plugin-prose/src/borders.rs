@@ -153,28 +153,21 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// `box` for a border on every side, `none` for none at all.
-
             kind: Option<Text>,
             /// The style of the border.
-
             style: Option<Text>,
             /// The width of the border, in points.
-
             width: Option<Number>,
             /// The colour of the border, as `#rrggbb`.
             ///
             /// An empty colour takes the colour away.
-
             colour: Option<Text>,
             /// The borders of the sides named: `{"top": {…}, "left": null}`.
-
             sides: Option<Json>,
         },
         run: {
-
             let id = "prose.page.borders".to_string();
             let document = self.document.0;
             the_document(session, &id, document)?;

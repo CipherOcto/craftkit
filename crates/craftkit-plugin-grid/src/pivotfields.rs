@@ -120,14 +120,11 @@ commands! {
         icon: "list",
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The name of the pivot.
-
             name: Text,
         },
         run: {
-
             let id = "grid.pivot.fields".to_string();
             let sheet = self.sheet.0;
             let node = crate::pivots::sheet_of(session, &id, sheet)?;

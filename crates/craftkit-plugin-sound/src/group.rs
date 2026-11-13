@@ -211,14 +211,11 @@ commands! {
         menu: ("Clip", "Group"),
         params: {
             /// The name of the group.
-
             name: Text,
             /// The clips to put in it: their ids.
-
             clips: serde_json::Value,
         },
         run: {
-
             let id = "sound.clip.group".to_string();
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
@@ -276,6 +273,7 @@ commands! {
 
         }
     }
+
     /// **Take clips out of their groups.**
     ///
     /// A clip that is in no group is left alone: there is nothing to take
@@ -293,11 +291,9 @@ commands! {
         menu: ("Clip", "Ungroup"),
         params: {
             /// The clips to take out of their groups: their ids.
-
             clips: serde_json::Value,
         },
         run: {
-
             let id = "sound.clip.ungroup".to_string();
             let clips = crate::clip_ids_of(&self.clips, &id)?;
             let mut left = 0;
@@ -322,6 +318,7 @@ commands! {
 
         }
     }
+
     /// **Read the group** a clip is in.
     ///
     /// The group is an edge and not a field, so the group of a clip is
@@ -333,11 +330,9 @@ commands! {
         icon: "list",
         params: {
             /// The clip to read the group of.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "sound.clip.group.read".to_string();
             let clip = self.clip.0;
             let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {
@@ -365,6 +360,7 @@ commands! {
 
         }
     }
+
     /// **Put tracks in a group**.
     ///
     /// The group is named: the tracks go into the group with that name, and
@@ -388,14 +384,11 @@ commands! {
         menu: ("Track", "Group"),
         params: {
             /// The name of the group.
-
             name: Text,
             /// The tracks to put in it: their ids.
-
             tracks: serde_json::Value,
         },
         run: {
-
             let id = "sound.track.group".to_string();
             let name = self.name.0.trim().to_string();
             if name.is_empty() {
@@ -452,6 +445,7 @@ commands! {
 
         }
     }
+
     /// **Set the flags** of a group of tracks.
     ///
     /// **Mix** says the group's members are mixed together, and **active**
@@ -468,17 +462,13 @@ commands! {
         menu: ("Track", "Group Settings"),
         params: {
             /// The group.
-
             group: NodeRef,
             /// Whether the members are mixed together.
-
             mix: Option<Bool>,
             /// Whether the group is on.
-
             active: Option<Bool>,
         },
         run: {
-
             let id = "sound.track.group.set".to_string();
             let group = self.group.0;
             let node = session.document().node(group).ok_or_else(|| EngineError::Failed {
@@ -509,6 +499,7 @@ commands! {
 
         }
     }
+
     /// **Take a group** of tracks away.
     ///
     /// The group is removed and the tracks stay where they were: a group is
@@ -522,11 +513,9 @@ commands! {
         menu: ("Track", "Ungroup"),
         params: {
             /// The group to take away.
-
             group: NodeRef,
         },
         run: {
-
             let id = "sound.track.ungroup".to_string();
             let group = self.group.0;
             let node = session.document().node(group).ok_or_else(|| EngineError::Failed {

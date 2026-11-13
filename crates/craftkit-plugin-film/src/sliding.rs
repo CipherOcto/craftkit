@@ -76,15 +76,12 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// How far it slides, in frames. A negative number slides it the
             /// other way.
-
             delta: Number,
         },
         run: {
-
             let id = "film.clip.slide".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

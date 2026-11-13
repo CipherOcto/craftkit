@@ -155,14 +155,11 @@ commands! {
         undoable,
         params: {
             /// The sequence.
-
             sequence: NodeRef,
             /// The rate: `25`, `23.976` or `30000/1001`.
-
             rate: Text,
         },
         run: {
-
             let id = "film.sequence.rate.set".to_string();
             let sequence = self.sequence.0;
             the_sequence(session, &id, sequence)?;
@@ -178,6 +175,7 @@ commands! {
 
         }
     }
+
     /// **Read** the rate of a sequence.
     ///
     /// The answer is the rate, the length of the sequence in **frames** and
@@ -189,11 +187,9 @@ commands! {
         icon: "list",
         params: {
             /// The sequence.
-
             sequence: NodeRef,
         },
         run: {
-
             let id = "film.sequence.rate.get".to_string();
             let sequence = self.sequence.0;
             let node = the_sequence(session, &id, sequence)?;

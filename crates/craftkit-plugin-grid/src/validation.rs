@@ -520,51 +520,37 @@ commands! {
         undoable,
         params: {
             /// The sheet the rule is on.
-
             sheet: NodeRef,
             /// The range the rule is over: `A1:A9`.
-
             range: Text,
             /// The kind: `any`, `whole`, `decimal`, `list`, `date`, `time`,
             /// `textLength`.
-
             kind: Text,
             /// The operator: `between` and the rest.
-
             operator: Option<Text>,
             /// The first formula: the number, or the list.
-
             formula1: Option<Text>,
             /// The second formula, for the operators that have two.
-
             formula2: Option<Text>,
             /// Whether a blank is allowed. The tree's default is that it is.
-
             ignore_blank: Option<Bool>,
             /// Whether the list of a **list** rule is shown as a dropdown in
             /// the cell. The tree's default is that it is.
-
             dropdown: Option<Bool>,
             /// The title of the **input message**: what a host shows when the
             /// cell is chosen.
-
             input_title: Option<Text>,
             /// The **input message** itself.
-
             input_message: Option<Text>,
             /// The title of the **error message**.
-
             error_title: Option<Text>,
             /// The **error message** itself.
-
             error_message: Option<Text>,
             /// The **style** of the error: `stop`, `warning` or `information`.
             /// The tree's default is `stop`.
-
             error_style: Option<Text>,
         },
         run: {
-
             let id = "grid.validation.set".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -663,6 +649,7 @@ commands! {
 
         }
     }
+
     /// Take the **validation rules** off a range of a sheet.
     grid.validation.clear {
         area: "grid",
@@ -672,14 +659,11 @@ commands! {
         undoable,
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The range to clear.
-
             range: Text,
         },
         run: {
-
             let id = "grid.validation.clear".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {
@@ -716,6 +700,7 @@ commands! {
 
         }
     }
+
     /// Check a **value** against the validation rules of a cell.
     ///
     /// The rule that covers the cell is the one that is checked, and the
@@ -730,17 +715,13 @@ commands! {
         icon: "check",
         params: {
             /// The sheet.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// The value to check.
-
             input: Text,
         },
         run: {
-
             let id = "grid.validation.check".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

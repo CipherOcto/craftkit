@@ -82,24 +82,19 @@ commands! {
         undoable,
         params: {
             /// The document.
-
             document: NodeRef,
             /// The font of the headings.
             ///
             /// It is not nothing, and an empty font is refused.
-
             major: Option<Text>,
             /// The font of the body.
-
             minor: Option<Text>,
             /// The accent colour of the headings, as `#rrggbb`.
             ///
             /// An empty colour takes the accent away.
-
             accent: Option<Text>,
         },
         run: {
-
             let id = "prose.document.theme".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {

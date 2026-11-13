@@ -107,17 +107,13 @@ commands! {
         undoable,
         params: {
             /// The cue.
-
             caption: NodeRef,
             /// The edge: `in` or `out`.
-
             edge: Text,
             /// The frames to take away, or to add.
-
             delta: Number,
         },
         run: {
-
             let command = "film.caption.trim";
             let caption = self.caption.0;
             let (node, track) = the_caption(session, command, caption)?;
@@ -187,6 +183,7 @@ commands! {
 
         }
     }
+
     /// **Move** a cue: it stays at or after the start of the sequence and
     /// it does not run into its neighbours.
     film.caption.move {
@@ -197,14 +194,11 @@ commands! {
         undoable,
         params: {
             /// The cue.
-
             caption: NodeRef,
             /// The frames to move it by.
-
             delta: Number,
         },
         run: {
-
             let command = "film.caption.move";
             let caption = self.caption.0;
             let (node, track) = the_caption(session, command, caption)?;
@@ -249,6 +243,7 @@ commands! {
 
         }
     }
+
     /// **Split** a cue in two at a frame.
     ///
     /// The frame leaves a frame on either side of it, and the two halves
@@ -261,14 +256,11 @@ commands! {
         undoable,
         params: {
             /// The cue.
-
             caption: NodeRef,
             /// The frame to split it at.
-
             at: Number,
         },
         run: {
-
             let command = "film.caption.split";
             let caption = self.caption.0;
             let (node, track) = the_caption(session, command, caption)?;
@@ -303,6 +295,7 @@ commands! {
 
         }
     }
+
     /// **Merge** the cues that are next to each other into one.
     ///
     /// The merged cue runs from the start of the first to the end of the
@@ -315,11 +308,9 @@ commands! {
         undoable,
         params: {
             /// The cues, in the order they stand in.
-
             captions: Option<Json>,
         },
         run: {
-
             let command = "film.caption.merge";
             let given = match self.captions.clone() {
                 Some(Json::Array(items)) => {

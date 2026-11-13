@@ -69,18 +69,14 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The edge that is stretched: `in` or `out`.
-
             edge: Text,
             /// How much it is stretched, in frames. A negative number stretches
             /// it the other way.
-
             delta: Number,
         },
         run: {
-
             let id = "film.clip.stretch".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

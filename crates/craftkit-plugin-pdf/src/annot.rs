@@ -100,21 +100,17 @@ commands! {
         undoable,
         params: {
             /// The annotation.
-
             annotation: NodeRef,
             /// Whether the annotation prints.
             ///
             /// Leave it out and the annotation keeps the flag it has.
-
             print: Option<Bool>,
             /// Whether the annotation is hidden.
             ///
             /// Leave it out and the annotation keeps the flag it has.
-
             hidden: Option<Bool>,
         },
         run: {
-
             let id = "pdf.annot.flags".to_string();
             let annotation = self.annotation.0;
             let Some(node) = session.document().node(annotation).cloned() else {

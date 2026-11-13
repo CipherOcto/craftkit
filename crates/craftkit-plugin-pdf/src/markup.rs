@@ -84,22 +84,17 @@ commands! {
         undoable,
         params: {
             /// The page the markup is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The kind of markup: `highlight`, `underline`, `strikeout` or
             /// `squiggly`.
-
             kind: Text,
             /// The region the markup covers: four numbers, the left, the
             /// bottom, the right and the top of it.
-
             region: Json,
         },
         run: {
-
             // The **kind**: one of the tree's own four.
             let Some((subtype, colour)) = kind_of(&self.kind.0) else {
                 return Err(EngineError::Failed {

@@ -125,17 +125,13 @@ commands! {
         undoable,
         params: {
             /// The document it goes in.
-
             document: NodeRef,
             /// What to call it.
-
             name: Text,
             /// The style it is based on.
-
             based_on: Option<NodeRef>,
         },
         run: {
-
             let id = "layout.style.add".to_string();
             let document = self.document.0;
             let Some(node) = session.document().node(document).cloned() else {
@@ -192,6 +188,7 @@ commands! {
 
         }
     }
+
     /// **Fill** a style with a colour — or take the fill away.
     ///
     /// An empty colour takes the fill away, and a colour that is not said
@@ -204,14 +201,11 @@ commands! {
         undoable,
         params: {
             /// The style.
-
             style: NodeRef,
             /// The colour of the fill.
-
             colour: Option<Text>,
         },
         run: {
-
             let id = "layout.style.fill".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style).cloned() else {
@@ -251,6 +245,7 @@ commands! {
 
         }
     }
+
     /// **Stroke** a style with a colour — or take the stroke away.
     ///
     /// The colour is written `#rrggbb` and the weight is in points. A
@@ -263,17 +258,13 @@ commands! {
         undoable,
         params: {
             /// The style.
-
             style: NodeRef,
             /// The colour of the stroke.
-
             colour: Option<Text>,
             /// The **weight** of the stroke, in points.
-
             weight: Option<Number>,
         },
         run: {
-
             let id = "layout.style.stroke".to_string();
             let style = self.style.0;
             let Some(node) = session.document().node(style).cloned() else {
@@ -349,6 +340,7 @@ commands! {
 
         }
     }
+
     /// **Put** an item on a style — or take it off.
     ///
     /// The paint the item is drawn with is **derived**: its own when it
@@ -361,14 +353,11 @@ commands! {
         undoable,
         params: {
             /// The item.
-
             item: NodeRef,
             /// The style it is on. Without one, the item is on no style.
-
             style: Option<NodeRef>,
         },
         run: {
-
             let id = "layout.item.style".to_string();
             let item = self.item.0;
             let node = item_of(session, &id, item)?;

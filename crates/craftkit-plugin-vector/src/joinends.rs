@@ -38,25 +38,19 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Which contour of the path, counting from zero.
-
             first: Number,
             /// The other contour, counting from zero.
-
             second: Number,
             /// Which end of each contour is joined: `["first"|"last", "first"|"last"]`.
             ///
             /// The **nearest** pair when it is left out.
-
             ends: Option<Json>,
             /// The joined point: `corner` or `smooth`.
-
             to: Option<Text>,
         },
         run: {
-
             let id = "vector.path.join.ends".to_string();
             let kind = match self.to.as_ref().map(|to| to.0.as_str()) {
                 None | Some("corner") => Some(false),

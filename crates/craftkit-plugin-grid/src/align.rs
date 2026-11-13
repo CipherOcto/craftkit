@@ -153,27 +153,20 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The cell's address.
-
             cell: Text,
             /// How the text lies **across** the cell: general, left, center,
             /// right, fill, justify or center-across.
-
             horizontal: Option<Text>,
             /// How the text lies **down** the cell: top, middle or bottom.
-
             vertical: Option<Text>,
             /// How far the text is indented.
-
             indent: Option<Number>,
             /// Whether the text wraps.
-
             wrap: Option<Bool>,
         },
         run: {
-
             let id = "grid.cell.align".to_string();
             let sheet = self.sheet.0;
             let cell = crate::cell_at(&self.cell.0, &id)?;

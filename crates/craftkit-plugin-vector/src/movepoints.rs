@@ -30,24 +30,18 @@ commands! {
         menu: ("Path", "Points"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Which contour of the path, counting from zero. The first one if
             /// it is left out.
-
             contour: Option<Number>,
             /// The points, counting from zero: a list of whole numbers.
-
             points: Json,
             /// How far across the points go.
-
             dx: Number,
             /// How far down the points go.
-
             dy: Number,
         },
         run: {
-
             let id = "vector.path.move.points".to_string();
             let (dx, dy) = (self.dx.0, self.dy.0);
             if !dx.is_finite() || !dy.is_finite() {

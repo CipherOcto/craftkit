@@ -58,14 +58,11 @@ commands! {
         menu: ("Track", "Rename"),
         params: {
             /// The track to rename.
-
             track: NodeRef,
             /// Its new name.
-
             name: Text,
         },
         run: {
-
             let id = "sound.track.rename".to_string();
             let track = self.track.0;
             let Some(node) = session.document().node(track) else {
@@ -93,6 +90,7 @@ commands! {
 
         }
     }
+
     /// **Rename** a clip.
     ///
     /// A clip that is in an **auto rename scheme** keeps its place in it:
@@ -107,14 +105,11 @@ commands! {
         menu: ("Track", "Rename Clip"),
         params: {
             /// The clip to rename.
-
             clip: NodeRef,
             /// Its new name.
-
             name: Text,
         },
         run: {
-
             let id = "sound.clip.rename".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

@@ -45,17 +45,13 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The track it goes on.
-
             track: NodeRef,
             /// Where it goes, in frames.
-
             start: Number,
         },
         run: {
-
             let id = "film.clip.insert".to_string();
             let clip = self.clip.0;
             let track = self.track.0;

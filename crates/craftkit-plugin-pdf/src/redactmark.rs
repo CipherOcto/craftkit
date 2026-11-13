@@ -70,33 +70,24 @@ commands! {
         undoable,
         params: {
             /// The page the mark is on.
-
             page: NodeRef,
             /// The object number the annotation has in the file.
-
             object: Number,
             /// The region the mark covers: four numbers.
-
             region: Json,
             /// The text that is written over the area.
-
             text: Option<Text>,
             /// The colour of the mark: three numbers.
-
             colour: Option<Json>,
             /// The size of the overlay text, in points.
-
             size: Option<Number>,
             /// The alignment of the overlay text: `0` left, `1` centre, `2`
             /// right.
-
             align: Option<Number>,
             /// Whether the overlay text **repeats** over the area.
-
             repeat: Option<Bool>,
         },
         run: {
-
             // The **page**: a page of the document.
             let Some(page) = session.document().node(self.page.0) else {
                 return Err(EngineError::Failed {

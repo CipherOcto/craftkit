@@ -41,15 +41,12 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
             /// The **source** frame the clip holds: the frame at that point of
             /// the media, held to the end of the clip.
-
             at: Number,
         },
         run: {
-
             let id = "film.clip.hold".to_string();
             let clip = self.clip.0;
             let at = self.at.0;
@@ -103,6 +100,7 @@ commands! {
 
         }
     }
+
     /// **Take away** the frame hold of a clip.
     ///
     /// The clip plays its media to the end of the clip again.
@@ -114,11 +112,9 @@ commands! {
         undoable,
         params: {
             /// The clip.
-
             clip: NodeRef,
         },
         run: {
-
             let id = "film.clip.hold.delete".to_string();
             let clip = self.clip.0;
             let Some(node) = session.document().node(clip) else {

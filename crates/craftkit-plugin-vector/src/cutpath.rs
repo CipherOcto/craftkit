@@ -40,18 +40,14 @@ commands! {
         menu: ("Path", "Cut"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// Which contour of the path, counting from zero. The first one if
             /// it is left out.
-
             contour: Option<Number>,
             /// The point of the contour to cut at, counting from zero.
-
             point: Number,
         },
         run: {
-
             let id = "vector.path.cut".to_string();
             let mut vector = vector_of(session, self.path.0)?;
             let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);

@@ -70,17 +70,14 @@ commands! {
         menu: ("Clip", "Conform to Tempo"),
         params: {
             /// The clip to conform.
-
             clip: NodeRef,
             /// The tempo of the material, in beats a minute.
             ///
             /// Without it, the tempo the clip remembers, and the tempo of the
             /// document where the clip starts if it does not remember one.
-
             source_bpm: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.conform".to_string();
             let clip = self.clip.0;
             let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {

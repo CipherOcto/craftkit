@@ -88,21 +88,16 @@ commands! {
         undoable,
         params: {
             /// The entity to copy.
-
             entity: NodeRef,
             /// What to call the copy.
-
             name: Text,
             /// The vector the copy is made **by**.
-
             by: Json,
             /// The block the copy goes in. The block of the entity itself when
             /// it is not said.
-
             block: Option<NodeRef>,
         },
         run: {
-
             let id = "cad.entity.copy".to_string();
             let entity = self.entity.0;
             let node = the_entity(session, &id, entity)?;

@@ -283,17 +283,13 @@ commands! {
         undoable,
         params: {
             /// The sheet it goes in.
-
             sheet: NodeRef,
             /// The row it is inserted at, counted from one.
-
             row: Number,
             /// How many rows are inserted. Without it, one row.
-
             count: Option<Number>,
         },
         run: {
-
             let id = "grid.row.insert".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet).cloned() else {

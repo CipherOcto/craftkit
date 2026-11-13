@@ -73,11 +73,9 @@ commands! {
         icon: "page",
         params: {
             /// The page.
-
             page: NodeRef,
         },
         run: {
-
             let id = "layout.page.facing".to_string();
             let page = self.page.0;
             let Some(node) = session.document().node(page).cloned() else {

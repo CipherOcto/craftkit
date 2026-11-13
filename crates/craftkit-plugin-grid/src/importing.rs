@@ -139,21 +139,16 @@ commands! {
         undoable,
         params: {
             /// The workbook the sheet goes in.
-
             workbook: NodeRef,
             /// The text.
-
             text: Text,
             /// What to call the sheet. Without it, the sheet is called
             /// `imported`.
-
             name: Option<Text>,
             /// The **delimiter**: one character. The default is a comma.
-
             delimiter: Option<Text>,
         },
         run: {
-
             let id = "grid.import.csv".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {
@@ -273,6 +268,7 @@ commands! {
 
         }
     }
+
     /// **Import** a list of objects into a workbook, as a sheet.
     ///
     /// The **keys** of the objects are the columns of the sheet, in the
@@ -286,18 +282,14 @@ commands! {
         undoable,
         params: {
             /// The workbook the sheet goes in.
-
             workbook: NodeRef,
             /// The **list of objects**: `[{ "who": "ann", "amount": 3 }]`.
-
             data: Json,
             /// What to call the sheet. Without it, the sheet is called
             /// `imported`.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "grid.import.json".to_string();
             let workbook = self.workbook.0;
             let Some(node) = session.document().node(workbook) else {

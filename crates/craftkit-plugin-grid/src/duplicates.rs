@@ -59,23 +59,18 @@ commands! {
         undoable,
         params: {
             /// The sheet it is in.
-
             sheet: NodeRef,
             /// The range to look at. Without it, the used range is used.
-
             range: Option<Text>,
             /// The columns the **key** is made of, such as `A:C`.
             ///
             /// Without it, every column of the range is part of the key.
-
             columns: Option<Text>,
             /// Whether the first row of the range is a **header** and stays
             /// where it is.
-
             header: Option<Bool>,
         },
         run: {
-
             let id = "grid.duplicates.remove".to_string();
             let sheet = self.sheet.0;
             let Some(node) = session.document().node(sheet) else {

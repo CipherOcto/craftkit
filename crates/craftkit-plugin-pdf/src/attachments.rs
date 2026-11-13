@@ -200,11 +200,9 @@ commands! {
             /// The attachment to read.
             ///
             /// Leave it out and every attachment is read.
-
             name: Option<craftkit_sdk::Text>,
         },
         run: {
-
             let id = COMMAND.to_string();
             let all = attachments_of(session.document());
             let listed: Vec<Json> = match &self.name {

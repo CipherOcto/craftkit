@@ -101,18 +101,16 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// Whether the layer is on.
-
             on: Bool,
         },
         run: {
-
             set_flag(session, "cad.layer.on", self.layer.0, "on", self.on.0)
 
         }
     }
+
     /// **Freeze** a layer, or **unfreeze** it.
     cad.layer.freeze {
         area: "cad",
@@ -122,18 +120,16 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// Whether the layer is frozen.
-
             on: Bool,
         },
         run: {
-
             set_flag(session, "cad.layer.freeze", self.layer.0, "frozen", self.on.0)
 
         }
     }
+
     /// **Lock** a layer, or **unlock** it.
     cad.layer.lock {
         area: "cad",
@@ -143,18 +139,16 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// Whether the layer is locked.
-
             on: Bool,
         },
         run: {
-
             set_flag(session, "cad.layer.lock", self.layer.0, "locked", self.on.0)
 
         }
     }
+
     /// **Set** the **colour** of a layer.
     ///
     /// The colour is an **index** above nothing or a **name**, and the
@@ -168,14 +162,11 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// The colour: an index or a name.
-
             color: Text,
         },
         run: {
-
             let id = "cad.layer.color".to_string();
             let layer = self.layer.0;
             the_layer(session, &id, layer)?;
@@ -204,6 +195,7 @@ commands! {
 
         }
     }
+
     /// **Set** the colour a layer is **drawn in**, as `#rrggbb`.
     cad.layer.fill {
         area: "cad",
@@ -213,14 +205,11 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// The colour it is drawn in, as `#rrggbb`.
-
             fill: Text,
         },
         run: {
-
             let id = "cad.layer.fill".to_string();
             let layer = self.layer.0;
             the_layer(session, &id, layer)?;
@@ -240,6 +229,7 @@ commands! {
 
         }
     }
+
     /// **Set** the **line type** of a layer.
     cad.layer.linetype {
         area: "cad",
@@ -249,14 +239,11 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// The line type: `Continuous`, `Dashed`, `Center` and so on.
-
             linetype: Text,
         },
         run: {
-
             let id = "cad.layer.linetype".to_string();
             let layer = self.layer.0;
             the_layer(session, &id, layer)?;
@@ -290,6 +277,7 @@ commands! {
 
         }
     }
+
     /// **Set** the **line weight** of a layer, in millimetres.
     cad.layer.lineweight {
         area: "cad",
@@ -299,14 +287,11 @@ commands! {
         undoable,
         params: {
             /// The layer.
-
             layer: NodeRef,
             /// The line weight, in millimetres.
-
             mm: Number,
         },
         run: {
-
             let id = "cad.layer.lineweight".to_string();
             let layer = self.layer.0;
             the_layer(session, &id, layer)?;
@@ -328,6 +313,7 @@ commands! {
 
         }
     }
+
     /// **Read** the layers of a drawing.
     cad.layer.list {
         area: "cad",
@@ -335,11 +321,9 @@ commands! {
         icon: "list",
         params: {
             /// The drawing.
-
             drawing: NodeRef,
         },
         run: {
-
             let id = "cad.layer.list".to_string();
             let drawing = self.drawing.0;
             let Some(node) = session.document().node(drawing) else {

@@ -277,31 +277,23 @@ commands! {
         undoable,
         params: {
             /// The page the watermark is on.
-
             page: NodeRef,
             /// The text of the watermark.
-
             text: Text,
             /// The size of the text: the tree's own size is used when it is
             /// not given.
-
             size: Option<Number>,
             /// The rotation of the text, in degrees: forty-five is the tree's.
-
             rotation: Option<Number>,
             /// The opacity of the watermark, between zero and one: a half is
             /// the tree's.
-
             opacity: Option<Number>,
             /// The colour of the text: the tree's grey.
-
             colour: Option<Text>,
             /// The watermark is drawn **behind** the content of the page.
-
             behind: Option<Bool>,
         },
         run: {
-
             let text = self.text.0.clone();
             if text.trim().is_empty() {
                 return Err(EngineError::Failed {

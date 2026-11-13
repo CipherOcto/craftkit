@@ -47,24 +47,18 @@ commands! {
         menu: ("Path", "Cut by rectangle"),
         params: {
             /// The path.
-
             path: NodeRef,
             /// The rectangle: `[x, y, width, height]`.
-
             rect: Option<Json>,
             /// A **corner** of the rectangle, when it is not given as four
             /// numbers.
-
             from: Option<Json>,
             /// The **other** corner.
-
             to: Option<Json>,
             /// What to call the shape that is left.
-
             name: Option<Text>,
         },
         run: {
-
             let id = "vector.path.cut.rect".to_string();
             let rect = read_rect(&self.rect, &self.from, &self.to)
                 .map_err(|message| EngineError::Failed { id: id.clone(), message })?;

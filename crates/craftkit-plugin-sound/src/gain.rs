@@ -72,17 +72,13 @@ commands! {
         menu: ("Clip", "Gain"),
         params: {
             /// The clips to set the gain of: their ids.
-
             clips: serde_json::Value,
             /// The gain, in decibels.
-
             db: Option<Number>,
             /// The change in the gain, in decibels.
-
             delta_db: Option<Number>,
         },
         run: {
-
             let id = "sound.clip.gain".to_string();
             let clips = crate::clip_ids_of(&self.clips, &id)?;
             let (absolute, delta) = match (self.db, self.delta_db) {
@@ -151,6 +147,7 @@ commands! {
 
         }
     }
+
     /// **Bypass the gain** of clips.
     ///
     /// While the bypass is on, the clip plays as it is: the gain is not in
@@ -168,14 +165,11 @@ commands! {
         menu: ("Clip", "Bypass Gain"),
         params: {
             /// The clips to bypass the gain of: their ids.
-
             clips: serde_json::Value,
             /// Whether the gain is bypassed. Without it, the bypass is toggled.
-
             bypassed: Option<Bool>,
         },
         run: {
-
             let id = "sound.clip.gain.bypass".to_string();
             let clips = crate::clip_ids_of(&self.clips, &id)?;
             let mut set = 0;

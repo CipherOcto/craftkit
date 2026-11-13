@@ -133,11 +133,9 @@ commands! {
         icon: "list",
         params: {
             /// The page to read.
-
             page: craftkit_sdk::NodeRef,
         },
         run: {
-
             let page = self.page.0;
             let (transition, duration) = transition_of(session.document(), page)?;
             Ok(Outcome::new(match &transition {

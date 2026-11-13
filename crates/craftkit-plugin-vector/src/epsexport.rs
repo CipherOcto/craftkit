@@ -360,11 +360,9 @@ commands! {
         undoable,
         params: {
             /// The file to write.
-
             path: Text,
         },
         run: {
-
             let path = self.path.0.trim().to_string();
             if path.is_empty() {
                 return Err(EngineError::Failed {
