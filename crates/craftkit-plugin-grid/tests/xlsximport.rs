@@ -284,6 +284,50 @@ fn the_filter_of_a_sheet_is_imported() {
     assert_eq!(read.data["value"].as_f64(), Some(1.0), "and the cell is the one that is judged");
 }
 
+/// The **links** of a sheet are imported: the places its cells go to.
+#[test]
+fn the_links_of_a_sheet_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.invalid/page" TargetMode="External"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><hyperlinks><hyperlink ref="A1:B1" r:id="rId1"/></hyperlinks><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["links"].as_u64(), Some(2), "the link is on both cells of its range");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    for address in ["A1", "B1"] {
+        let read = session
+            .execute("grid.cell.link.get", &json!({ "sheet": sheet, "cell": address }))
+            .expect("the link is read");
+        assert_eq!(
+            read.data["link"]["target"].as_str(),
+            Some("https://example.invalid/page"),
+            "the link of {address}"
+        );
+    }
+}
+
 /// A file that is **not a workbook** is refused.
 #[test]
 fn a_file_that_is_not_a_workbook_is_refused() {

@@ -34,6 +34,19 @@ use crate::formula::{CellRef, Value};
 /// The most **bytes** a workbook file may hold.
 const MAX_BYTES: u64 = 512 * 1024 * 1024;
 
+/// The most **cells** the links of one sheet may cover.
+///
+/// The tree's own bound: a file may put one link on a whole column,
+/// and a sheet of ten thousand cells of links is enough.
+const MAX_LINK_CELLS: u64 = 10_000;
+
+/// The most **bytes** the targets of the links of one sheet may hold.
+///
+/// The tree's own bound: the same link is copied to every cell of its
+/// range, so the length of a target times the cells it covers must
+/// stay bounded.
+const MAX_LINK_BYTES: u64 = 8 * 1024 * 1024;
+
 /// The **text of a file's formula**, as the tree reads it.
 ///
 /// A file spells some functions with a prefix — `_xlfn.` — and some
@@ -277,6 +290,68 @@ commands! {
                 }
                 imported_filters += 1;
             }
+            // The **links** of the sheets: the places their cells go
+            // to.
+            //
+            // A file's link is over a **range** of cells and is copied
+            // to each of them, and a link here is on **one cell** — so
+            // the range is walked, within the tree's own bounds.
+            let mut imported_links = 0u64;
+            let mut dropped_links = 0u64;
+            for (sheet_name, links) in &workbook.links {
+                let Some(sheet_id) = session
+                    .document()
+                    .walk()
+                    .find(|node| node.kind == "grid.sheet" && node.name == *sheet_name)
+                    .map(|node| node.id)
+                else {
+                    continue;
+                };
+                let mut written: Vec<(String, Json)> = Vec::new();
+                let mut cells = 0u64;
+                let mut bytes = 0u64;
+                for link in links {
+                    let link_bytes = (link.target.len() + link.tooltip.as_ref().map_or(0, |tooltip| tooltip.len())) as u64;
+                    for row in link.row..=link.last_row {
+                        for column in link.column..=link.last_column {
+                            if cells >= MAX_LINK_CELLS {
+                                dropped_links += 1;
+                                break;
+                            }
+                            if bytes.saturating_add(link_bytes) > MAX_LINK_BYTES {
+                                dropped_links += 1;
+                                break;
+                            }
+                            cells += 1;
+                            bytes = bytes.saturating_add(link_bytes);
+                            let address =
+                                crate::formula::CellRef { col: column, row: row as u32 }.to_text();
+                            let mut one = craftkit_sdk::serde_json::Map::new();
+                            one.insert("target".to_string(), json!(link.target.clone()));
+                            if let Some(tooltip) = &link.tooltip {
+                                one.insert("tooltip".to_string(), json!(tooltip.clone()));
+                            }
+                            written.push((address, craftkit_sdk::serde_json::Value::Object(one)));
+                            imported_links += 1;
+                        }
+                    }
+                }
+                if written.is_empty() {
+                    continue;
+                }
+                if let Some(node) = session.document_mut()?.node_mut(sheet_id) {
+                    let mut map = node
+                        .data
+                        .get("links")
+                        .and_then(|links| links.as_object())
+                        .cloned()
+                        .unwrap_or_default();
+                    for (address, link) in written {
+                        map.insert(address, link);
+                    }
+                    node.data["links"] = craftkit_sdk::serde_json::Value::Object(map);
+                }
+            }
             let mut summary = format!("imported {filled} cell(s) into the workbook `{name}`");
             if unread > 0 {
                 summary.push_str(&format!("; {unread} formula(s) could not be read and were not imported"));
@@ -309,6 +384,8 @@ commands! {
                 "unread_names": unread_names,
                 "filters": imported_filters,
                 "unread_filters": unread_filters,
+                "links": imported_links,
+                "dropped_links": dropped_links,
                 "system": system.name(),
                 "warnings": workbook.warnings,
             })))

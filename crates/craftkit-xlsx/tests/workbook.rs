@@ -270,6 +270,43 @@ fn the_filter_of_a_sheet_is_read() {
     );
 }
 
+/// The **links** of a sheet are read: the places its cells go to.
+#[test]
+fn the_links_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.invalid/page" TargetMode="External"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><hyperlinks><hyperlink ref="A1:B2" r:id="rId1" tooltip="the page"/><hyperlink ref="C1" location="One!A1"/></hyperlinks><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.links.len(), 1, "one sheet has links");
+    let (_, links) = &workbook.links[0];
+    assert_eq!(links.len(), 2, "two links");
+    assert_eq!(links[0].target, "https://example.invalid/page", "the first goes outside");
+    assert_eq!(links[0].tooltip, Some("the page".to_string()), "and it has a tooltip");
+    assert_eq!(links[0].column, 0, "it is on the first cell of its range");
+    assert_eq!(links[0].last_column, 1, "and it covers the second column");
+    assert_eq!(links[1].target, "One!A1", "the second goes inside the workbook");
+    assert!(!links[1].external, "and it is not outside");
+}
+
 /// A package with **no workbook** is refused.
 #[test]
 fn a_package_with_no_workbook_is_refused() {

@@ -165,6 +165,30 @@ pub enum DateSystem {
     Y1904,
 }
 
+/// A **link** of a sheet: a place a cell goes to.
+///
+/// The link is over a **range** of cells: a file may put one link on
+/// many cells at once, and the tree's reader copies it to each of
+/// them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hyperlink {
+    /// The first cell of the range.
+    pub column: u32,
+    /// The row of the first cell.
+    pub row: u64,
+    /// The last cell of the range: the same column and row when the
+    /// link is on one cell.
+    pub last_column: u32,
+    /// The row of the last cell.
+    pub last_row: u64,
+    /// Where the link goes.
+    pub target: String,
+    /// The text shown when the mouse rests on it.
+    pub tooltip: Option<String>,
+    /// Whether it goes **outside** the workbook.
+    pub external: bool,
+}
+
 /// A **criterion** of a filter: what the cells of a column are
 /// judged by.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -242,6 +266,8 @@ pub struct Workbook {
     pub names: Vec<Name>,
     /// The **filter** of each sheet, by the name of the sheet.
     pub filters: Vec<(String, AutoFilter)>,
+    /// The **links** of each sheet, by the name of the sheet.
+    pub links: Vec<(String, Vec<Hyperlink>)>,
     /// The date system the numbers of the cells are counted in.
     pub system: DateSystem,
     /// The **warnings**: what could not be read, and what was kept
@@ -323,11 +349,14 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             workbook.warnings.push(format!("the sheet \"{name}\" is a {} and was not read", relation.kind));
             continue;
         }
-        let (mut sheet, filter) =
+        let (mut sheet, filter, links) =
             read_sheet(&mut package, &relation.target, &strings, &styles, &mut workbook.warnings);
         sheet.name = name;
         if let Some(filter) = filter {
             workbook.filters.push((sheet.name.clone(), filter));
+        }
+        if !links.is_empty() {
+            workbook.links.push((sheet.name.clone(), links));
         }
         workbook.sheets.push(sheet);
         let _ = index;
@@ -407,16 +436,22 @@ fn read_sheet(
     strings: &[String],
     styles: &Styles,
     warnings: &mut Vec<String>,
-) -> (Sheet, Option<AutoFilter>) {
+) -> (Sheet, Option<AutoFilter>, Vec<Hyperlink>) {
     let mut sheet = Sheet::default();
     let Some(root) = read_xml(package, part).ok().flatten() else {
         warnings.push(format!("the part {part} could not be read; the sheet is empty"));
-        return (sheet, None);
+        return (sheet, None, Vec::new());
     };
     // The **filter** of the sheet: the rows it hides.
     let filter = root.child("autoFilter").map(read_filter);
+    // The **links** of the sheet: the places its cells go to. A link
+    // that names a **relationship** goes to what that relationship
+    // points at, and the relationships of a sheet are in the sheet's
+    // own part.
+    let sheet_rels = rels_of(package, part).unwrap_or_default();
+    let links = read_links(&root, &sheet_rels);
     let Some(data) = root.child("sheetData") else {
-        return (sheet, filter);
+        return (sheet, filter, links);
     };
 
     // The row the reader is on: a row that does not say which row it is
@@ -469,7 +504,58 @@ fn read_sheet(
             "the sheet holds {dropped} cells or rows outside the {MAX_ROWS} × {MAX_COLS} grid; they were dropped"
         ));
     }
-    (sheet, filter)
+    (sheet, filter, links)
+}
+
+/// Read the **links** of a sheet: the places its cells go to.
+///
+/// A link names a **range** of cells, and it may name a place inside
+/// the workbook or a place outside it. A link with no place at all is
+/// not a link, and it is left out.
+fn read_links(root: &craftkit_xml::El, sheet_rels: &[Rel]) -> Vec<Hyperlink> {
+    let Some(list) = root.child("hyperlinks") else { return Vec::new() };
+    let mut out = Vec::new();
+    for link in list.kids("hyperlink") {
+        let Some(range) = link.attr("ref") else { continue };
+        let Some((first, last)) = range_of(range) else { continue };
+        // A link that names a **relationship** goes outside the
+        // workbook; a link that names a **location** goes inside it.
+        let relation = link.attr("id").and_then(|id| sheet_rels.iter().find(|rel| rel.id == id));
+        let outside = relation.is_some();
+        let mut target = relation.map(|rel| rel.target.clone()).unwrap_or_default();
+        if let Some(location) = link.attr("location").filter(|location| !location.is_empty()) {
+            if target.is_empty() {
+                target = location.trim_start_matches('#').to_string();
+            } else {
+                target = format!("{target}#{location}");
+            }
+        }
+        if target.is_empty() {
+            continue;
+        }
+        out.push(Hyperlink {
+            column: first.0,
+            row: first.1,
+            last_column: last.0,
+            last_row: last.1,
+            target,
+            tooltip: link.attr("tooltip").map(|tooltip| tooltip.to_string()),
+            external: outside,
+        });
+    }
+    out
+}
+
+/// The **first** and the **last** cell of a range, as the columns and
+/// the rows they are.
+fn range_of(range: &str) -> Option<((u32, u64), (u32, u64))> {
+    let mut parts = range.split(':');
+    let first = address_of(parts.next()?.trim())?;
+    let last = match parts.next() {
+        Some(text) => address_of(text.trim())?,
+        None => first,
+    };
+    Some((first, last))
 }
 
 /// Read the **filter** of a sheet: the range it is over, and the
