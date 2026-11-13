@@ -4351,6 +4351,7 @@ so.
 | the **XML reader**: a part of a file, read as elements | **built.** A part of a file is read as elements — the attributes, the children, the text, the entities — within the tree's own limits, and a part in UTF-16 as well (§903) | §903 |
 | the **workbook reader**: a workbook file, read as a workbook | **built.** A workbook file is read as a workbook — its sheets, their names, their cells, their values and their formulas — with the tree's grid bounds and the tree's date systems (§904) | §904 |
 | the **command** that imports a workbook file | **built.** `grid.import.xlsx` reads a workbook file into the document — a workbook, a sheet for each sheet of the file, and the cells — with the file's own date system (§905) | §905 |
+| the **styles part**: the number formats, so a date becomes a date | **built.** The number formats of a workbook are read, and a cell with a date format on it is a date (§906) | §906 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59762,3 +59763,59 @@ A workbook file goes into the document.
   formula with another cell keeps its value and has no formula.
 - **The workbook is not written back**: a workbook that came from a file
   is in the document, and there is no command that saves it.
+
+## 906. The styles part: the number formats, so a date becomes a date
+
+A number with a date format on it is a date.
+
+### What was built
+
+- **The styles part** is read: the **number formats** the workbook
+  names by their own number, and the **cell formats** that say which
+  number format a cell is written with. A cell names one of them by
+  its **style**, and so the format of a cell is found by two steps —
+  the style of the cell, and the number format of that style.
+- **The built-in formats** are the tree's own table: thirty-six of
+  them, by the number they have. The numbers that are not in it — 23
+  to 36, which are East Asian locale formats — read as the general
+  format.
+- **The import carries the format**: a cell with a date format on it
+  is a date, and the cell shows the date and not the number.
+
+### What the port found
+
+- **The tree's reader reads the whole style**: fonts, fills, borders,
+  alignments, protection, the theme's colours, the palette, the named
+  styles and the differential formats. That is a **model**, and this
+  crate is a **reader**: it reads the **number formats**, which are
+  what say whether a number is a date.
+- **The tree's built-in formats are a table of thirty-six**, and so
+  they are here. A format the workbook names by its own number wins
+  over the built-in one of that number, and that is the tree's rule.
+- **The general format is not carried**: a cell with no format of its
+  own has the general format, and the general format is what a cell
+  has when nothing is said about it. Carrying it would put a format
+  on every cell of a workbook that says nothing.
+- **A format this tree cannot read is not imported**: the cell keeps
+  its value and the import says how many formats were not read. The
+  tree's own format language is a list of shapes, and a code outside
+  it has no shape here.
+
+### What it cost
+
+- **One module** in `craftkit-xlsx` — `styles` — of about 190 lines:
+  the styles, the built-in formats and the custom ones.
+- **One test** in the reader's test file: a built-in format, a custom
+  format, and a cell with no style.
+- **One test** in the import's test file: a date in a file is a date.
+- **No new command** and **no new dependency**: the styles part is
+  XML, and the reader of §903 reads it.
+
+### What it does not settle
+
+- **The fonts, the fills and the borders are not read**: a cell's
+  look is not imported, and only its format is.
+- **A shared formula is still not filled in**: a cell that shares a
+  formula with another cell keeps its value and has no formula.
+- **The workbook is not written back**: there is still no command that
+  saves a workbook.
