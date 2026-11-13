@@ -92,6 +92,9 @@ pub enum Family {
     Outside,
     /// The functions that are **answered with a reason**.
     Refused,
+    /// The **host's** functions: the ones the tree's program carries
+    /// and its registry does not.
+    Host,
 }
 
 impl Family {
@@ -129,6 +132,7 @@ impl Family {
             Family::Array => "array",
             Family::Outside => "outside",
             Family::Refused => "refused",
+            Family::Host => "host",
         }
     }
 }
@@ -169,6 +173,7 @@ const FAMILIES: &[(Family, &[&str])] = &[
     (Family::Ets, crate::ets::NAMES),
     (Family::Matrix, crate::matrices::NAMES),
     (Family::Array, crate::arrays::ARRAY_FUNCTIONS),
+    (Family::Host, crate::host::NAMES),
 ];
 
 /// The **family** that carries a name, when one does.
@@ -185,6 +190,9 @@ pub fn family_of(name: &str) -> Option<Family> {
     }
     if crate::refused::reason_for(name).is_some() {
         return Some(Family::Refused);
+    }
+    if crate::host::reason_for(name).is_some() {
+        return Some(Family::Host);
     }
     None
 }
@@ -206,6 +214,9 @@ pub fn functions() -> Vec<(&'static str, &'static str)> {
     }
     for (name, _) in crate::refused::REFUSED_FUNCTIONS {
         out.push((*name, Family::Refused.name()));
+    }
+    for (name, _) in crate::host::REFUSED {
+        out.push((*name, Family::Host.name()));
     }
     out
 }

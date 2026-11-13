@@ -1862,6 +1862,12 @@ impl Cells {
 pub struct Book {
     /// The sheets, by name.
     sheets: BTreeMap<String, Cells>,
+    /// The sheets, in the **order** they were added.
+    ///
+    /// The sheets themselves are held in a map, and a map has no order;
+    /// but the tree's `SHEET` numbers the sheets of a workbook, and a
+    /// number that changes when a sheet is renamed is not a number.
+    order: Vec<String>,
     /// The **hidden rows** of each sheet, by sheet name.
     hidden: BTreeMap<String, Vec<u64>>,
     /// The **filter** of each sheet, by sheet name.
@@ -1877,6 +1883,7 @@ impl Book {
     pub fn in_system(system: crate::dates::System) -> Book {
         Book {
             sheets: BTreeMap::new(),
+            order: Vec::new(),
             hidden: BTreeMap::new(),
             filters: BTreeMap::new(),
             names: BTreeMap::new(),
@@ -1986,7 +1993,37 @@ impl Book {
 
     /// Put a sheet in the workbook.
     pub fn add(&mut self, name: &str, cells: Cells) {
+        if !self.order.iter().any(|sheet| sheet == name) {
+            self.order.push(name.to_string());
+        }
         self.sheets.insert(name.to_string(), cells);
+    }
+
+    /// The **cell** at an address, when the sheet has one.
+    pub(crate) fn cell_at(&self, sheet: &str, cell: CellRef) -> Option<&Cell> {
+        self.sheets.get(sheet).and_then(|cells| cells.get(cell))
+    }
+
+    /// Whether the book has a **sheet**.
+    pub(crate) fn has_sheet(&self, name: &str) -> bool {
+        self.sheets.contains_key(name)
+    }
+
+    /// Whether the book has a **name**.
+    pub(crate) fn has_name(&self, name: &str) -> bool {
+        self.names.contains_key(name)
+    }
+
+    /// The **number** of a sheet in the book, when the book has it.
+    ///
+    /// The sheets are counted from one, as the tree counts them.
+    pub fn sheet_number(&self, name: &str) -> Option<usize> {
+        self.order.iter().position(|sheet| sheet == name).map(|at| at + 1)
+    }
+
+    /// How many **sheets** the book has.
+    pub fn sheet_count(&self) -> usize {
+        self.order.len()
     }
 
     /// Whether a cell's formula reads itself, directly or through
@@ -2255,6 +2292,11 @@ impl Book {
             }
             Some(crate::inventory::Family::Matrix) => {
                 return self.matrices(sheet, name, arguments, being);
+            }
+            // The **host's** names: the ones the tree's program carries
+            // and its registry does not.
+            Some(crate::inventory::Family::Host) => {
+                return self.host(sheet, name, arguments, being);
             }
             // The tree's **arrays**: a function that gives back a
             // table, and a formula here is a value.

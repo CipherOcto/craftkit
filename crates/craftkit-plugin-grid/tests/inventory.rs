@@ -67,14 +67,15 @@ fn no_name_is_in_two_families() {
     }
 }
 
-/// **The list is the tree's list, and three more.** The tree's registry
-/// holds four hundred and ninety functions, and this battery knows
-/// every one of them — plus `TEXT` and `SUBTOTAL`, which the tree's
-/// own functions crate leaves to its host, and `EXPON`, this tree's
-/// own alias of `EXPONDIST`.
+/// **The list is the tree's list, and eleven more.** The tree's
+/// registry holds four hundred and ninety functions, and this battery
+/// knows every one of them — plus `TEXT` and `SUBTOTAL`, which the
+/// tree's own functions crate leaves to its host, `EXPON`, this tree's
+/// own alias of `EXPONDIST`, and the twenty **host** names of §896
+/// and §897.
 #[test]
 fn the_list_is_the_trees_list() {
-    assert_eq!(inventory().len(), 493, "the number of functions the battery knows");
+    assert_eq!(inventory().len(), 513, "the number of functions the battery knows");
 }
 
 /// **Every name in the list is answered.** A name in the list that the
