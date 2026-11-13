@@ -89,6 +89,12 @@
 //! lognormal and the beta (the module `distributions`, and the
 //! maths of the module `special`).
 //!
+//! And a formula may ask the **other names** of the tree's functions —
+//! the old name of the upper tail of the chi-square, the old name of
+//! the inverse of the binomial — and it may ask for the **negative
+//! binomial** and the **range** of the binomial (the module
+//! `distributions`).
+//!
 //! And a formula may ask how two sets of numbers **move together**:
 //! the correlation, the slope of the line, where it crosses the axis,
 //! its error and its prediction (the module `regression`).

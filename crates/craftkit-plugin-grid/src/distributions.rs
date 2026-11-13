@@ -82,6 +82,14 @@ pub fn is_distribution_function(name: &str) -> bool {
             | "WEIBULL.DIST"
             | "HYPGEOM.DIST"
             | "HYPGEOMDIST"
+            | "CHIINV"
+            | "FDIST"
+            | "CRITBINOM"
+            | "BETAINV"
+            | "F.INV.RT"
+            | "NEGBINOM.DIST"
+            | "NEGBINOMDIST"
+            | "BINOM.DIST.RANGE"
     )
 }
 
@@ -528,7 +536,7 @@ impl Book {
                     }
                 }
             }
-            "CHISQ.DIST" | "CHISQ.DIST.RT" | "CHIDIST" | "CHISQ.INV" | "CHISQ.INV.RT" => {
+            "CHISQ.DIST" | "CHISQ.DIST.RT" | "CHIDIST" | "CHISQ.INV" | "CHISQ.INV.RT" | "CHIINV" => {
                 let first = match self.number_at(sheet, arguments, 0, being) {
                     Ok(first) => first,
                     Err(message) => return Value::Error(message),
@@ -594,7 +602,7 @@ impl Book {
                     }
                 }
             }
-            "F.DIST" | "F.DIST.RT" | "F.INV" | "FINV" => {
+            "F.DIST" | "F.DIST.RT" | "F.INV" | "FINV" | "FDIST" | "F.INV.RT" => {
                 let first = match self.number_at(sheet, arguments, 0, being) {
                     Ok(first) => first,
                     Err(message) => return Value::Error(message),
@@ -628,7 +636,7 @@ impl Book {
                             f_pdf(first, one, two)
                         })
                     }
-                    "F.DIST.RT" => {
+                    "F.DIST.RT" | "FDIST" => {
                         if first < 0.0 {
                             return Value::Error("#NUM!".to_string());
                         }
@@ -655,7 +663,7 @@ impl Book {
                     }
                 }
             }
-            "BINOM.DIST" | "BINOMDIST" | "BINOM.INV" => {
+            "BINOM.DIST" | "BINOMDIST" | "BINOM.INV" | "CRITBINOM" => {
                 let first = match self.number_at(sheet, arguments, 0, being) {
                     Ok(first) => first,
                     Err(message) => return Value::Error(message),
@@ -668,7 +676,7 @@ impl Book {
                     Ok(third) => third,
                     Err(message) => return Value::Error(message),
                 };
-                if name == "BINOM.INV" {
+                if name == "BINOM.INV" || name == "CRITBINOM" {
                     let (n, p, alpha) = (first.trunc(), second, third);
                     if n < 0.0 || !(0.0..=1.0).contains(&p) || !(0.0..=1.0).contains(&alpha) {
                         return Value::Error("#NUM!".to_string());
@@ -748,7 +756,104 @@ impl Book {
                 }
                 Value::Number(if cumulative { -(-lambda * x).exp_m1() } else { lambda * (-lambda * x).exp() })
             }
-            "BETA.DIST" | "BETADIST" | "BETA.INV" => {
+            "NEGBINOM.DIST" | "NEGBINOMDIST" => {
+                let (failures, successes, probability) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                ) {
+                    (Ok(failures), Ok(successes), Ok(probability)) => {
+                        (failures.trunc(), successes.trunc(), probability)
+                    }
+                    (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                // The **cumulative** is the fourth argument of the
+                // tree's `NEGBINOM.DIST` and is not there at all in
+                // its `NEGBINOMDIST`.
+                let cumulative = if name == "NEGBINOM.DIST" {
+                    match arguments.get(3) {
+                        Some(argument) => {
+                            let value = self.evaluate(sheet, argument, being);
+                            match as_bool(&value) {
+                                Ok(cumulative) => cumulative,
+                                Err(message) => return Value::Error(message),
+                            }
+                        }
+                        None => false,
+                    }
+                } else {
+                    false
+                };
+                if failures < 0.0 || successes < 1.0 || !(0.0..=1.0).contains(&probability) {
+                    return Value::Error("#NUM!".to_string());
+                }
+                if cumulative {
+                    if probability == 0.0 {
+                        return Value::Number(0.0);
+                    }
+                    return Value::Number(crate::special::reg_inc_beta(
+                        probability,
+                        successes,
+                        failures + 1.0,
+                    ));
+                }
+                if probability == 0.0 || probability == 1.0 {
+                    return Value::Number(if probability == 1.0 && failures == 0.0 { 1.0 } else { 0.0 });
+                }
+                Value::Number(
+                    (ln_combination(failures + successes - 1.0, successes - 1.0)
+                        + successes * probability.ln()
+                        + failures * (1.0 - probability).ln())
+                    .exp(),
+                )
+            }
+            "BINOM.DIST.RANGE" => {
+                let (trials, probability, first) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                ) {
+                    (Ok(trials), Ok(probability), Ok(first)) => (trials.trunc(), probability, first.trunc()),
+                    (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                // The **second** end of the range is the first one when
+                // it is not given.
+                let second = match arguments.get(3) {
+                    Some(argument) => match self.evaluate(sheet, argument, being).as_number() {
+                        Some(second) => second.trunc(),
+                        None => return Value::Error("#VALUE!".to_string()),
+                    },
+                    None => first,
+                };
+                if !(0.0..=1e15).contains(&trials)
+                    || !(0.0..=1.0).contains(&probability)
+                    || first < 0.0
+                    || first > trials
+                    || second < first
+                    || second > trials
+                {
+                    return Value::Error("#NUM!".to_string());
+                }
+                // A **wide** range is the difference of the two ends,
+                // and a narrow one is the sum of its terms.
+                if second - first > 10_000.0 {
+                    return Value::Number(
+                        binom_cdf(second, trials, probability) - binom_cdf(first - 1.0, trials, probability),
+                    );
+                }
+                let mut sum = 0.0;
+                let mut k = first;
+                while k <= second {
+                    sum += binom_pmf(k, trials, probability);
+                    k += 1.0;
+                }
+                Value::Number(sum)
+            }
+            "BETA.DIST" | "BETADIST" | "BETA.INV" | "BETAINV" => {
                 let first = match self.number_at(sheet, arguments, 0, being) {
                     Ok(first) => first,
                     Err(message) => return Value::Error(message),
@@ -774,7 +879,7 @@ impl Book {
                 if low >= high {
                     return Value::Error("#NUM!".to_string());
                 }
-                if name == "BETA.INV" {
+                if name == "BETA.INV" || name == "BETAINV" {
                     if alpha <= 0.0 || beta <= 0.0 || !(0.0..=1.0).contains(&first) {
                         return Value::Error("#NUM!".to_string());
                     }

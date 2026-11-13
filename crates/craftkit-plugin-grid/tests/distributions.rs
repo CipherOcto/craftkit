@@ -280,3 +280,86 @@ fn the_trees_errors_are_the_errors() {
         "and more successes than trials is an error"
     );
 }
+
+/// The tree's **other names** for the functions that are here.
+#[test]
+fn the_trees_other_names_are_here() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    assert_eq!(
+        computed(&mut session, sheet, "A1", "=ROUND(CHIINV(0.050001,10),5)"),
+        json!(18.30697),
+        "the old name of the upper tail of the chi-square"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A2", "=ROUND(FDIST(15.2069,6,4),6)"),
+        json!(0.01),
+        "the old name of the right tail of the F"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A3", "=CRITBINOM(6,0.5,0.75)"),
+        json!(4.0),
+        "the old name of the inverse of the binomial"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A4", "=ROUND(BETAINV(0.685470581,8,10,1,3),8)"),
+        json!(2.0),
+        "the old name of the inverse of the beta"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A5", "=ROUND(F.INV.RT(0.01,6,4),5)"),
+        json!(15.20686),
+        "and the other name of the inverse of the right tail of the F"
+    );
+}
+
+/// The **negative binomial**: how many failures come before a number
+/// of successes.
+#[test]
+fn the_negative_binomial_is_found() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    assert_eq!(
+        computed(&mut session, sheet, "A1", "=ROUND(NEGBINOM.DIST(10,5,0.25,TRUE),7)"),
+        json!(0.3135141),
+        "the cumulative"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A2", "=ROUND(NEGBINOM.DIST(10,5,0.25,FALSE),7)"),
+        json!(0.0550487),
+        "and the one term"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A3", "=ROUND(NEGBINOMDIST(10,5,0.25),7)"),
+        json!(0.0550487),
+        "and the old name of the one term"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A4", "=NEGBINOM.DIST(10,5,2)"),
+        json!({ "error": "#NUM!" }),
+        "and a probability that is not one is an error"
+    );
+}
+
+/// The **range** of the binomial: the probability of a number of
+/// successes between two numbers.
+#[test]
+fn the_range_of_the_binomial_is_found() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    assert_eq!(
+        computed(&mut session, sheet, "A1", "=ROUND(BINOM.DIST.RANGE(6,0.5,2,3),8)"),
+        json!(0.546875),
+        "the two middle numbers"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A2", "=ROUND(BINOM.DIST.RANGE(6,0.5,2),8)"),
+        json!(0.234375),
+        "and one number of the range is the same number"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A3", "=BINOM.DIST.RANGE(6,0.5,2,7)"),
+        json!({ "error": "#NUM!" }),
+        "and a range that is not inside the trials is an error"
+    );
+}
