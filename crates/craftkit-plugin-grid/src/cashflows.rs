@@ -29,7 +29,16 @@ use crate::formula::{Book, CellRef, Expr, Value};
 pub fn is_cash_flow_function(name: &str) -> bool {
     matches!(
         name,
-        "IRR" | "MIRR" | "XIRR" | "XNPV" | "FVSCHEDULE" | "CUMIPMT" | "CUMPRINC" | "DOLLARDE" | "DOLLARFR"
+        "IRR"
+            | "MIRR"
+            | "XIRR"
+            | "XNPV"
+            | "NPV"
+            | "FVSCHEDULE"
+            | "CUMIPMT"
+            | "CUMPRINC"
+            | "DOLLARDE"
+            | "DOLLARFR"
     )
 }
 
@@ -95,6 +104,53 @@ impl Book {
         Ok((numbers, days))
     }
 
+    /// The **flows** of a series: the numbers of the cells of a range,
+    /// and the value of a plain argument.
+    ///
+    /// The tree's rule: the text of a **cell** is not a flow and is
+    /// not counted, and the text of a plain argument is the number it
+    /// writes — and a text that is not a number is an error.
+    fn flows_of(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        from: usize,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<Vec<f64>, String> {
+        let mut flows = Vec::new();
+        for argument in arguments.iter().skip(from) {
+            match argument {
+                Expr::Range { .. } | Expr::Name(_) => {
+                    let (name, area) = self.area_of(sheet, argument)?;
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let value = self.value_of_guarded(&name, CellRef { col, row }, being);
+                            match value {
+                                Value::Number(number) => flows.push(number),
+                                Value::Error(message) => return Err(message),
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                other => {
+                    let value = self.evaluate(sheet, other, being);
+                    match value {
+                        Value::Number(number) => flows.push(number),
+                        Value::Bool(flag) => flows.push(if flag { 1.0 } else { 0.0 }),
+                        Value::Text(text) => match crate::criteria::number_text(&text) {
+                            Some(number) => flows.push(number),
+                            None => return Err("#VALUE!".to_string()),
+                        },
+                        Value::Error(message) => return Err(message),
+                        Value::Empty => {}
+                    }
+                }
+            }
+        }
+        Ok(flows)
+    }
+
     /// The **cash flow functions**.
     pub(crate) fn cash_flows(
         &self,
@@ -104,6 +160,28 @@ impl Book {
         being: &mut Vec<(String, CellRef)>,
     ) -> Value {
         match name {
+            "NPV" => {
+                let rate = match self.number_at(sheet, arguments, 0, being) {
+                    Ok(rate) => rate,
+                    Err(message) => return Value::Error(message),
+                };
+                if rate == -1.0 {
+                    return Value::Error("#DIV/0!".to_string());
+                }
+                let flows = match self.flows_of(sheet, arguments, 1, being) {
+                    Ok(flows) => flows,
+                    Err(message) => return Value::Error(message),
+                };
+                // The tree's rule: the **first** flow is discounted once,
+                // and the second twice.
+                let mut sum = 0.0;
+                let mut divisor = 1.0;
+                for flow in flows {
+                    divisor *= 1.0 + rate;
+                    sum += flow / divisor;
+                }
+                Value::Number(sum)
+            }
             "XNPV" => {
                 let rate = match self.number_at(sheet, arguments, 0, being) {
                     Ok(rate) => rate,

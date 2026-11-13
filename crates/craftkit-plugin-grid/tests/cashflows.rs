@@ -198,3 +198,21 @@ fn the_trees_errors_are_the_errors() {
         "and two series of different lengths have no worth"
     );
 }
+
+/// The **worth today** of a series of payments.
+#[test]
+fn the_worth_today_of_a_series_of_payments() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    // The tree's own example: a rate of a tenth and four payments.
+    assert_eq!(
+        computed(&mut session, sheet, "D1", "=ROUND(NPV(0.1,-10000,3000,4200,6800),6)"),
+        json!(1188.443412),
+        "the worth today"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "D2", "=NPV(-1,1)"),
+        json!({ "error": "#DIV/0!" }),
+        "and a rate of less than none is a division by nothing"
+    );
+}

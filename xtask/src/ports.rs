@@ -214,6 +214,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/lookups.rs",
         section: "§882",
     },
+    Port {
+        rule: "the worth today",
+        from: "gridcraft/crates/functions/src/financial/tvm.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/cashflows.rs",
+        command: "craftkit-plugin-grid::cashflows",
+        test: "crates/craftkit-plugin-grid/tests/cashflows.rs",
+        section: "§883",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
