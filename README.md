@@ -4348,6 +4348,7 @@ so.
 | the tree's **subtotal**, and its **error** | **built.** An error in the range of a SUBTOTAL is the error of the whole subtotal, as the tree says (§900) | §900 |
 | the **inflate**, and the crate it belongs in | **built.** The RFC 1951 inflate is a library of its own now — the raw stream and the zlib wrapper — and the picture reader and the PDF filter both read it from there (§901) | §901 |
 | the **package**: a ZIP archive, read | **built.** The container of a workbook file is here — the directory, the parts, the stored and the compressed — with the tree's bounds and the tree's checksums (§902) | §902 |
+| the **XML reader**: a part of a file, read as elements | **built.** A part of a file is read as elements — the attributes, the children, the text, the entities — within the tree's own limits, and a part in UTF-16 as well (§903) | §903 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59566,3 +59567,65 @@ The container of a workbook file is here.
 - **The package is not read as XML**, and the relationships between the
   parts are not read: that is the next arc, and it is the XML reader
   it needs.
+
+## 903. The XML reader: a part of a file, read as elements
+
+The last piece under the workbook reader is here.
+
+### What was built
+
+- **`craftkit-xml`** — a library of its own: the **XML reader**. It
+  reads a part of a file and gives back the **root element**, and from
+  there the parts a caller asks for: a child by name, a path of names,
+  an attribute by name, the text of an element.
+- **The parts of an element are named once**: `attr`, `attr_u32`,
+  `attr_i64`, `attr_f64`, `attr_bool` and `flag` for the attributes,
+  `child`, `kids` and `path` for the children, and `child_val` for the
+  `val` attribute a spreadsheet part uses most.
+
+### What the port found
+
+- **The tree reads its XML with a crate from the registry**
+  (`quick-xml`), and this tree's readers are its own code. So the
+  reader is written here: the elements, the attributes, the text, the
+  entities and the CDATA sections.
+- **The tree's own reader keeps the prefixes of the names**, and it
+  matches the parts of a spreadsheet by their prefixed names. This one
+  keeps the **local** name only — the part after the colon — and that
+  is enough: a spreadsheet part has one prefix for its whole file, and
+  the prefix is not part of what a part *means*.
+- **A part is a bomb**: a part of endless empty elements fits in a
+  small file and takes gigabytes of tree. The reader refuses what it
+  cannot make sense of, and it refuses **within limits**: **256** deep
+  and **1 000 000** elements, and a part that says more is refused
+  with a reason.
+- **The tree's own reader is strict about a broken part, and this one
+  is forgiving in two places, and says so**: an element that is never
+  closed is read as far as it goes, and an end tag that closes nothing
+  is ignored. Both are the tree's own rules.
+- **A part may be UTF-16**, and a spreadsheet part written by a
+  program that is not careful may be. The reader reads UTF-8, UTF-16 in
+  either order, and a byte-order mark in front of each.
+
+### What it cost
+
+- **One crate** — `craftkit-xml` — of about 440 lines: the reader, the
+  element and its parts.
+- **Seventeen tests** in its test file: the root, the attributes, the
+  text, the children, a path, the entities, a CDATA section, a comment
+  and a declaration, a prefixed name, a part in UTF-16, bytes that are
+  not XML, a part with no element, a part that is too deep, an element
+  with no name, an attribute that is not quoted, an element that is
+  not closed, and an element with no children.
+- **Three tables and the architecture document** know the new crate.
+- **No new command** and **no new dependency**: an XML part is
+  arithmetic over characters.
+
+### What it does not settle
+
+- **The XML is not validated**: a part that does not match the schema
+  is the caller's business and not this reader's.
+- **The XML is not written**: a writer is a different program.
+- **The package is still not read as a workbook**: the parts of a
+  workbook are related to one another by a part of its own — the
+  relationships — and that is the next arc.
