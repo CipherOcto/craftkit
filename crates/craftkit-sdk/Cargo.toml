@@ -20,3 +20,9 @@ inventory = { workspace = true }
 # that comes from. The door's own `unsafe` is in that crate and nowhere
 # else.
 craftkit-ffi = { workspace = true }
+
+[dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../craftkit-scratch", version = "0.2.0" }

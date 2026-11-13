@@ -41,10 +41,9 @@ impl Tree {
     fn new(name: &str) -> Tree {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir()
-            .join(format!("craftkit-gates-battery-{}-{name}-{unique}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        std::fs::create_dir_all(&root).expect("the directory is made");
+        let root =
+            craftkit_scratch::dir(&format!("craftkit-gates-battery-{}-{name}-{unique}", std::process::id()))
+                .expect("the directory is made");
         Tree { root }
     }
 

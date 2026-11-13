@@ -5,3 +5,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
+[dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../craftkit-scratch", version = "0.2.0" }

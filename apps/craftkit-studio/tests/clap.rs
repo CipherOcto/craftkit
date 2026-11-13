@@ -166,7 +166,8 @@ fn a_library_that_is_not_there_is_refused() {
 #[test]
 fn a_file_that_is_not_a_plugin_is_refused() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
-    let path = std::env::temp_dir().join(fixture_name("craftkit-v2-clap-not-a-plugin"));
+    let path =
+        craftkit_scratch::file(&fixture_name("craftkit-v2-clap-not-a-plugin")).expect("the scratch is made");
     std::fs::write(&path, b"this is not a shared library").expect("the file is written");
     let error = session
         .execute("clap.attach", &json!({ "path": path.to_string_lossy() }))

@@ -71,6 +71,10 @@ craftkit-png = { path = "crates/craftkit-png", version = "0.2.0" }
 # **library**, not a plugin: it contributes nothing to the registry and
 # the linker does not wire it in.
 craftkit-jpeg = { path = "crates/craftkit-jpeg", version = "0.2.0" }
+# The **scratch**: the file or the directory a test works in, taken back
+# when the thread that asked for it ends. A **dev** dependency of the
+# crates whose tests use it, and nothing that ships links it.
+craftkit-scratch = { path = "crates/craftkit-scratch", version = "0.2.0" }
 # The **picture's size**: read from a picture's header. A **library**,
 # not a plugin: it contributes nothing to the registry and the linker
 # does not wire it in.

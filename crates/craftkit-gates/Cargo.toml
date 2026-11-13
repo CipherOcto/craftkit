@@ -9,3 +9,9 @@ license.workspace = true
 # No dependencies: the gate reads the tree's own files, and a gate that
 # dragged something in would be a gate that could not be trusted.
 [dependencies]
+
+[dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../craftkit-scratch", version = "0.2.0" }

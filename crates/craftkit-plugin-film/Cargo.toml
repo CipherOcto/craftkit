@@ -18,5 +18,8 @@ craftkit-font = { path = "../craftkit-font", version = "0.2.0" }
 craftkit-raster = { path = "../craftkit-raster", version = "0.2.0" }
 
 [dev-dependencies]
+# The **scratch**: the file a test writes, taken back when the test's
+# thread ends. A dev dependency: nothing that ships links it.
+craftkit-scratch = { path = "../craftkit-scratch", version = "0.2.0" }
 # The **picture**: the test reads the PNG that the burn-in writes.
 craftkit-png = { path = "../craftkit-png", version = "0.2.0" }

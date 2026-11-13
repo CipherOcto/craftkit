@@ -259,9 +259,7 @@ fn a_bookmark_that_cannot_be_is_refused() {
 /// too.
 #[test]
 fn the_outline_survives_the_round_trip() {
-    let directory = std::env::temp_dir().join("craftkit-v2-outline-round");
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir("craftkit-v2-outline-round").expect("the directory is made");
     let path = format!("{}/bookmarks.pdf", directory.to_string_lossy());
     let mut session = session();
     a_catalog(&mut session);

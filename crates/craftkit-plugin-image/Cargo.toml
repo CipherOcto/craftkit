@@ -19,6 +19,10 @@ craftkit-png = { workspace = true }
 craftkit-jpeg = { workspace = true }
 
 [dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../craftkit-scratch", version = "0.2.0" }
 # The **rasteriser**, and only for the tests: it writes the PNG the
 # tests draw. Nothing that ships links it.
 craftkit-raster = { path = "../craftkit-raster", version = "0.2.0" }

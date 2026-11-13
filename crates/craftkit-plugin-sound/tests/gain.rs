@@ -31,9 +31,7 @@ fn session() -> Session {
 
 /// A directory of this test's own, so that the files do not mix.
 fn directory(name: &str) -> String {
-    let path = std::env::temp_dir().join(format!("craftkit-v2-gain-{name}"));
-    let _ = std::fs::remove_dir_all(&path);
-    std::fs::create_dir_all(&path).expect("the directory is made");
+    let path = craftkit_scratch::dir(&format!("craftkit-v2-gain-{name}")).expect("the directory is made");
     path.to_string_lossy().to_string()
 }
 

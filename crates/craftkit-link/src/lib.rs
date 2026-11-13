@@ -272,8 +272,7 @@ mod tests {
 
     #[test]
     fn a_plugin_dependency_is_found() {
-        let dir = std::env::temp_dir().join("craftkit-link-test");
-        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let dir = craftkit_scratch::dir("craftkit-link-test").expect("the directory is made");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
             &manifest,
@@ -288,8 +287,7 @@ mod tests {
 
     #[test]
     fn a_dependency_that_is_not_a_plugin_is_not_found() {
-        let dir = std::env::temp_dir().join("craftkit-link-test-2");
-        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let dir = craftkit_scratch::dir("craftkit-link-test-2").expect("the directory is made");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(&manifest, "[dependencies]\nserde_json = \"1\"\n").expect("the manifest is written");
         assert!(plugin_dependencies(&manifest).is_empty());
@@ -305,8 +303,7 @@ mod tests {
     /// which plugins are optional and which feature turns them on.
     #[test]
     fn an_optional_plugin_is_wired_in_only_when_its_feature_is_on() {
-        let dir = std::env::temp_dir().join("craftkit-link-test-4");
-        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let dir = craftkit_scratch::dir("craftkit-link-test-4").expect("the directory is made");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
             &manifest,
@@ -343,8 +340,7 @@ mod tests {
     /// registry is empty there, and nothing says so.
     #[test]
     fn the_generated_file_anchors_every_plugin() {
-        let dir = std::env::temp_dir().join("craftkit-link-test-3");
-        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let dir = craftkit_scratch::dir("craftkit-link-test-3").expect("the directory is made");
         let manifest = dir.join("Cargo.toml");
         std::fs::write(
             &manifest,

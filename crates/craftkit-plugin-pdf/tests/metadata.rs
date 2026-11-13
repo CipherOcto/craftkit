@@ -45,10 +45,8 @@ fn add_object(session: &mut Session, object: u64, entries: Json) -> u64 {
 
 /// A **directory** for the bytes of this test.
 fn a_directory(name: &str) -> std::path::PathBuf {
-    let path = std::env::temp_dir().join(format!("craftkit-v2-metadata-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&path);
-    std::fs::create_dir_all(&path).expect("the directory is made");
-    path
+    craftkit_scratch::dir(&format!("craftkit-v2-metadata-{name}-{}", std::process::id()))
+        .expect("the directory is made")
 }
 
 /// A **file** with a catalog and an information dictionary.

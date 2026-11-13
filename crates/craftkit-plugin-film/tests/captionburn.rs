@@ -61,9 +61,8 @@ fn painted(picture: &craftkit_png::Picture) -> u64 {
 fn a_caption_is_burnt_into_the_frame_and_the_picture_is_written() {
     let mut session = session();
     let track = a_track(&mut session);
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-burn-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-burn-{}", std::process::id()))
+        .expect("the directory is made");
     let to = directory.join("frame.png").to_string_lossy().to_string();
     let outcome = session
         .execute(
@@ -83,9 +82,8 @@ fn a_caption_is_burnt_into_the_frame_and_the_picture_is_written() {
 fn the_letters_are_where_the_layout_says_they_are() {
     let mut session = session();
     let track = a_track(&mut session);
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-burn-place-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-burn-place-{}", std::process::id()))
+        .expect("the directory is made");
     let to = directory.join("frame.png").to_string_lossy().to_string();
     let outcome = session
         .execute(
@@ -125,9 +123,8 @@ fn the_background_of_the_style_is_under_the_letters() {
             &json!({ "track": track, "background": true, "background_colour": "#ff0000ff" }),
         )
         .expect("the style is set");
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-burn-bg-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-burn-bg-{}", std::process::id()))
+        .expect("the directory is made");
     let to = directory.join("frame.png").to_string_lossy().to_string();
     session
         .execute(
@@ -151,9 +148,8 @@ fn the_background_of_the_style_is_under_the_letters() {
 fn a_caption_with_no_words_is_refused() {
     let mut session = session();
     let track = a_track(&mut session);
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-burn-empty-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-burn-empty-{}", std::process::id()))
+        .expect("the directory is made");
     let to = directory.join("frame.png").to_string_lossy().to_string();
     let refusal = session
         .execute(
@@ -170,9 +166,8 @@ fn a_caption_with_no_words_is_refused() {
 fn a_frame_that_is_too_big_is_refused() {
     let mut session = session();
     let track = a_track(&mut session);
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-burn-big-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-burn-big-{}", std::process::id()))
+        .expect("the directory is made");
     let to = directory.join("frame.png").to_string_lossy().to_string();
     let refusal = session
         .execute(

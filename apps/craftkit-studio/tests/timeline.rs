@@ -59,7 +59,7 @@ fn a_sound_document_is_framed() {
 fn a_sound_document_has_a_picture() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
     add_clip(&mut session);
-    let path = std::env::temp_dir().join("craftkit-v2-timeline.png");
+    let path = craftkit_scratch::file("craftkit-v2-timeline.png").expect("the scratch is made");
     let path = path.to_string_lossy().to_string();
     let outcome = session
         .execute("doc.snapshot", &json!({ "path": path, "width": 64, "height": 32 }))

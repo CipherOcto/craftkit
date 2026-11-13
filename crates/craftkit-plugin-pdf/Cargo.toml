@@ -16,3 +16,9 @@ craftkit-derive = { workspace = true }
 # inflate is the one the kit has. It is a **library**, and the linker
 # does not wire it in.
 craftkit-png = { path = "../craftkit-png", version = "0.2.0" }
+
+[dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../craftkit-scratch", version = "0.2.0" }

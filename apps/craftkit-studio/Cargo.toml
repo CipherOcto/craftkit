@@ -129,6 +129,10 @@ clap = ["dep:craftkit-plugin-clap"]
 vst3 = ["dep:craftkit-plugin-vst3"]
 
 [dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../../crates/craftkit-scratch", version = "0.2.0" }
 # The counting allocator: the one piece of unsafe in v2, and what makes
 # the lane's "must not allocate" rule a measurement rather than a claim.
 # It is a **dev** dependency: nothing in the application links it, and

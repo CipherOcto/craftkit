@@ -9,7 +9,7 @@
 //! therefore **rules and not gates**: they were true, and nothing said
 //! so.
 //!
-//! This crate is the gate. It has six rules:
+//! This crate is the gate. It has seven rules:
 //!
 //! 1. **The deny attribute is the house one.** Every crate root carries
 //!    the same six lints, in the same order, so that a deny list that
@@ -33,6 +33,12 @@
 //!    every row. A battery that declares a command the other way is a
 //!    battery that is half one spelling, and the half that is not a table
 //!    is the half a reader cannot see at a glance. §860–§869.
+//! 7. **A test does not litter.** A test that writes into the system's
+//!    temporary directory and leaves it there leaves **115 000 files** and
+//!    a gigabyte of disk behind after one full run of the tree's tests.
+//!    The **scratch** is the way: a path that is handed back when the
+//!    thread that asked for it ends. A test that names the temporary
+//!    directory itself is a finding. §873.
 //!
 //! # The rule that moved, and why
 //!
@@ -149,6 +155,11 @@ pub const LAYERS: &[(&str, u8)] = &[
     // that change a signal. It knows nothing about a document, a canvas
     // or the kit.
     ("craftkit-plugins", 0),
+    // The **scratch**: the file or the directory a test works in, taken
+    // back when the thread that asked for it ends. It knows nothing
+    // about a document, a canvas or the kit, and nothing that ships
+    // links it.
+    ("craftkit-scratch", 0),
     // L1 — the door: opening a shared library and calling the table in
     // it. One `unsafe` block, and it is named.
     ("craftkit-ffi", 1),
@@ -471,7 +482,85 @@ pub fn check(root: &Path) -> Vec<Finding> {
     // Rule 6: a battery is a table.
     batteries_are_tables(root, &mut findings);
 
+    // Rule 7: a test does not litter.
+    tests_do_not_litter(root, &mut findings);
+
     findings
+}
+
+/// The crate that owns the temporary directory: the **scratch**.
+///
+/// It is the one crate that may name the temporary directory, because
+/// handing out a path is its whole job.
+pub const SCRATCH: &str = "craftkit-scratch";
+
+/// Rule 7: **a test does not litter**.
+///
+/// A test that writes a file into the system's temporary directory and
+/// does not take it away has left litter: one full run of this tree's
+/// tests wrote **115 167 files** and about a gigabyte into `/tmp`, and
+/// nothing in the tree said so, because a file that is written and
+/// forgotten is not a thing a gate can see.
+///
+/// The **scratch** is the way. It hands out a path that is unique — the
+/// process and a counter, so two tests never fight over one — and it
+/// takes the path back when the thread that asked for it ends.
+///
+/// The rule is checked against the **code**: a name in a comment is not a
+/// call, and a name in a string is not a call either. And it is checked
+/// against the **tests** only: a program that needs a temporary
+/// directory at runtime is a program that has business there, and it
+/// takes its own directory away.
+fn tests_do_not_litter(root: &Path, findings: &mut Vec<Finding>) {
+    for crate_ in crates(root) {
+        if crate_.name == SCRATCH {
+            continue;
+        }
+        for (file, code) in test_code(&crate_.dir) {
+            if !has_word(&code, "temp_dir") {
+                continue;
+            }
+            findings.push(Finding {
+                rule: "litter",
+                crate_: crate_.name.clone(),
+                message: format!(
+                    "{} names the temporary directory: a test's scratch is the scratch crate's, and \
+                     it is taken back when the test ends",
+                    file.display()
+                ),
+            });
+        }
+    }
+}
+
+/// The **test code** of a crate: the integration tests, and the unit
+/// tests inside the source.
+///
+/// The integration tests are test code from their first line. The unit
+/// tests are the source from its `#[cfg(test)]` onwards — which is a
+/// slice and not a parse, and the slice is the **whole** of the rest of
+/// the file, because a gate that is sure is worth more than a gate that
+/// is exact.
+fn test_code(dir: &Path) -> Vec<(PathBuf, String)> {
+    let mut out = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir.join("tests")) {
+        for entry in entries.filter_map(|entry| entry.ok()) {
+            let path = entry.path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else { continue };
+            out.push((path, code_only(&text)));
+        }
+    }
+    for path in rust_files(dir) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        let code = code_only(&text);
+        let Some(at) = code.find("#[cfg(test)]") else { continue };
+        out.push((path, code[at..].to_string()));
+    }
+    out.sort_by(|one, other| one.0.cmp(&other.0));
+    out
 }
 
 /// Rule 6: **a battery is a table**.

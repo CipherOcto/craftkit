@@ -38,7 +38,7 @@ fn session() -> Session {
 fn a_png_file(name: &str) -> String {
     let mut image = craftkit_raster::Image::new(2, 2, Colour::WHITE);
     image.blend(0, 0, Colour::BLACK, craftkit_sdk::BlendMode::Normal);
-    let path = std::env::temp_dir().join(format!("craftkit-v2-image-{name}.png"));
+    let path = craftkit_scratch::file(&format!("craftkit-v2-image-{name}.png")).expect("the scratch is made");
     std::fs::write(&path, image.to_png()).expect("the picture is written");
     path.to_string_lossy().to_string()
 }

@@ -221,7 +221,8 @@ fn a_class_that_is_not_there_is_refused() {
 /// A library that is not a plugin is **refused**.
 #[test]
 fn a_library_that_is_not_a_plugin_is_refused() {
-    let path = std::env::temp_dir().join(fixture_name("craftkit-v2-vst3-not-a-plugin"));
+    let path =
+        craftkit_scratch::file(&fixture_name("craftkit-v2-vst3-not-a-plugin")).expect("the scratch is made");
     std::fs::write(&path, b"this is not a shared library").expect("the file is written");
     let path = path.to_string_lossy().to_string();
     let opened = Vst3Plugin::open(&path);

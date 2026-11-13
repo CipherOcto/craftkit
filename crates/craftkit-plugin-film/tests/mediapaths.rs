@@ -30,9 +30,8 @@ fn session() -> Session {
 
 /// A file of this test's own, in a **folder** of its own.
 fn a_file(name: &str, text: &str) -> String {
-    let folder = std::env::temp_dir().join(format!("craftkit-v2-mediapaths-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&folder);
-    std::fs::create_dir_all(&folder).expect("the folder is made");
+    let folder = craftkit_scratch::dir(&format!("craftkit-v2-mediapaths-{name}-{}", std::process::id()))
+        .expect("the directory is made");
     let path = folder.join(format!("{name}.otio"));
     std::fs::write(&path, text).expect("the file is written");
     path.to_string_lossy().to_string()

@@ -47,8 +47,8 @@ fn a_sequence(session: &mut Session) -> u64 {
 fn a_file(name: &str, text: &str) -> String {
     // A **directory** of this test's own, so that the name of the file
     // is the name the test gives it: the track is named after the file.
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-captionimport-{}", std::process::id()));
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-captionimport-{}", std::process::id()))
+        .expect("the directory is made");
     let path = directory.join(format!("{name}.srt"));
     std::fs::write(&path, text).expect("the file is written");
     path.to_string_lossy().to_string()

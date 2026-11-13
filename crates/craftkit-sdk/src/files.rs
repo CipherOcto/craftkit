@@ -113,7 +113,7 @@ mod tests {
 
     /// A file with some bytes in it.
     fn temporary(name: &str, bytes: &[u8]) -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("craftkit-files-{name}"));
+        let path = craftkit_scratch::file(&format!("craftkit-files-{name}")).expect("the scratch is made");
         std::fs::write(&path, bytes).expect("the file is written");
         path
     }
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn a_file_that_is_not_there_is_refused() {
-        let path = std::env::temp_dir().join("craftkit-files-not-there");
+        let path = craftkit_scratch::file("craftkit-files-not-there").expect("the scratch is made");
         let error = read_bounded(&path, 1024).expect_err("there is no such file");
         assert!(error.contains("could not be read"), "{error}");
     }

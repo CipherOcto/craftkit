@@ -168,7 +168,7 @@ fn an_unknown_field_survives_the_whole_way_round() {
 #[test]
 fn opening_a_file_from_the_future_says_so() {
     let ecosystem = ecosystem();
-    let path = std::env::temp_dir().join("craftkit-v2-future-file.craftkit");
+    let path = craftkit_scratch::file("craftkit-v2-future-file.craftkit").expect("the scratch is made");
     let path = path.to_string_lossy().to_string();
     std::fs::write(
         &path,

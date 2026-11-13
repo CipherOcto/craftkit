@@ -49,9 +49,8 @@ fn a_content_stream(session: &mut Session, name: &str) {
 
 /// A **directory** of this test's own, so that the files do not mix.
 fn directory(name: &str) -> String {
-    let path = std::env::temp_dir().join(format!("craftkit-v2-intent-{name}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&path);
-    std::fs::create_dir_all(&path).expect("the directory is made");
+    let path = craftkit_scratch::dir(&format!("craftkit-v2-intent-{name}-{}", std::process::id()))
+        .expect("the directory is made");
     path.to_string_lossy().to_string()
 }
 

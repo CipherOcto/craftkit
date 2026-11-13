@@ -58,9 +58,8 @@ fn a_track(session: &mut Session, rate: &str) -> (u64, u64) {
 fn a_file(name: &str) -> String {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let directory =
-        std::env::temp_dir().join(format!("craftkit-v2-stl-write-{}-{unique}", std::process::id()));
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-stl-write-{}-{unique}", std::process::id()))
+        .expect("the directory is made");
     let path = directory.join(name);
     path.to_string_lossy().to_string()
 }

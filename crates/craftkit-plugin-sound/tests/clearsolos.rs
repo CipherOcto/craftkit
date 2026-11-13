@@ -39,9 +39,8 @@ fn session() -> Session {
 fn directory(name: &str) -> String {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!("craftkit-v2-clearsolos-{name}-{unique}"));
-    let _ = std::fs::remove_dir_all(&path);
-    std::fs::create_dir_all(&path).expect("the directory is made");
+    let path = craftkit_scratch::dir(&format!("craftkit-v2-clearsolos-{name}-{unique}"))
+        .expect("the directory is made");
     path.to_string_lossy().to_string()
 }
 

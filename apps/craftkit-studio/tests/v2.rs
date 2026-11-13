@@ -912,7 +912,7 @@ fn a_file_that_does_not_say_its_format_is_refused() {
 fn a_document_is_saved_and_opened() {
     let ecosystem = ecosystem();
     let mut session = ecosystem.session();
-    let path = std::env::temp_dir().join("craftkit-v2-format-test.craftkit");
+    let path = craftkit_scratch::file("craftkit-v2-format-test.craftkit").expect("the scratch is made");
     let path = path.to_string_lossy().to_string();
 
     session

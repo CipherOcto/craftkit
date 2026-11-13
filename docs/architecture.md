@@ -43,7 +43,7 @@ layering mistake has been made in a library.
 
 | layer | crates | what it may depend on |
 |---|---|---|
-| **L0** | `craftkit-alloc`, `craftkit-derive`, `craftkit-ffi-abi`, `craftkit-clap-abi`, `craftkit-vst3-abi`, `craftkit-au-abi`, `craftkit-gates`, `craftkit-link`, `craftkit-image`, `craftkit-jpeg`, `craftkit-png`, `craftkit-payload`, `craftkit-sound-time`, `craftkit-text-layout`, `craftkit-hyphen`, `craftkit-font`, `craftkit-wav`, `craftkit-audio`, `craftkit-midi`, `craftkit-plugins` | nothing — the half that knows nothing about a document |
+| **L0** | `craftkit-alloc`, `craftkit-derive`, `craftkit-ffi-abi`, `craftkit-clap-abi`, `craftkit-vst3-abi`, `craftkit-au-abi`, `craftkit-gates`, `craftkit-link`, `craftkit-image`, `craftkit-jpeg`, `craftkit-png`, `craftkit-payload`, `craftkit-sound-time`, `craftkit-text-layout`, `craftkit-hyphen`, `craftkit-font`, `craftkit-wav`, `craftkit-audio`, `craftkit-midi`, `craftkit-plugins`, `craftkit-scratch` | nothing — the half that knows nothing about a document |
 | **L1** | `craftkit-ffi`, `craftkit-clap`, `craftkit-clap-fixture`, `craftkit-vst3`, `craftkit-vst3-fixture`, `craftkit-au`, `craftkit-au-fixture` | L0 — the doors, and their reference fixtures |
 | **L2** | `craftkit-sdk` | L0, L1 — the whole surface a plugin needs |
 | **L3** | `craftkit-control`, `craftkit-mcp`, `craftkit-numeric`, `craftkit-raster`, `craftkit-vector-geom` | L0–L2 — the things above the SDK that are not plugins |
@@ -314,9 +314,12 @@ camera rather than hand-rolling its own input.
 
 - **The tree's own gate** is `crates/craftkit-gates`. It checks the house deny
   attribute, the layering, "a plugin is a plugin", the front end is thin, "the
-  bounds are named in the prose" and "a battery is a table" (a battery
+  bounds are named in the prose", "a battery is a table" (a battery
   declares its commands as rows of a table, and not as structs with
-  `#[derive(Command)]`). The rule that **the numbers agree with the prose**
+  `#[derive(Command)]`) and "a test does not litter" (a test may not name
+  the temporary directory: the **scratch** is the way, and it hands a path
+  back when the thread that asked for it ends). The rule that **the numbers
+  agree with the prose**
   lives where the code is — `apps/craftkit-studio/tests/bounds.rs` — because
   it compares the README's number with the constant the compiler has already
   tied to it (§850). Run the gate with `cargo test -p craftkit-gates`.

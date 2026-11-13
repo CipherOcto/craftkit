@@ -1,0 +1,11 @@
+[package]
+name = "craftkit-scratch"
+description = "The scratch a test works in: a file or a directory that is removed when the test ends."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+# No dependencies: the scratch is a path and a removal, and both are in
+# the standard library.
+[dependencies]

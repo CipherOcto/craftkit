@@ -169,7 +169,8 @@ fn a_unit_that_is_not_set_up_does_not_render() {
 /// A bundle that is not a unit is **refused**.
 #[test]
 fn a_bundle_that_is_not_a_unit_is_refused() {
-    let path = std::env::temp_dir().join(fixture_name("craftkit-v2-au-not-a-unit"));
+    let path =
+        craftkit_scratch::file(&fixture_name("craftkit-v2-au-not-a-unit")).expect("the scratch is made");
     std::fs::write(&path, b"this is not a shared library").expect("the file is written");
     let path = path.to_string_lossy().to_string();
     assert!(AuPlugin::open(&path).is_err(), "the bundle did not open");

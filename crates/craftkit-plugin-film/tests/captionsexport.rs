@@ -48,8 +48,8 @@ fn a_track(session: &mut Session) -> (u64, u64) {
 /// A file of this test's own, so that two tests do not fight over one
 /// file.
 fn a_file(name: &str) -> String {
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-captions-export-{}", std::process::id()));
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-captions-export-{}", std::process::id()))
+        .expect("the directory is made");
     let path = directory.join(name);
     path.to_string_lossy().to_string()
 }

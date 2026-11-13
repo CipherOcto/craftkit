@@ -90,7 +90,7 @@ fn a_finished_task_does_not_move_again() {
 /// finds the tasks it left behind.
 #[test]
 fn the_list_of_tasks_survives_the_process() {
-    let path = std::env::temp_dir().join("craftkit-v2-tasks.json");
+    let path = craftkit_scratch::file("craftkit-v2-tasks.json").expect("the scratch is made");
     let path = path.to_string_lossy().to_string();
     let (mut session, id) = with_a_task();
     session.execute("task.start", &json!({ "task": id })).expect("the task starts");
@@ -111,7 +111,7 @@ fn the_list_of_tasks_survives_the_process() {
 /// process, from what it left behind.
 #[test]
 fn a_task_left_running_can_be_finished_later() {
-    let path = std::env::temp_dir().join("craftkit-v2-tasks-later.json");
+    let path = craftkit_scratch::file("craftkit-v2-tasks-later.json").expect("the scratch is made");
     let path = path.to_string_lossy().to_string();
     let (mut session, id) = with_a_task();
     session.execute("task.start", &json!({ "task": id })).expect("the task starts");

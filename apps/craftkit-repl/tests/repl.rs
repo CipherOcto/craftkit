@@ -131,9 +131,7 @@ fn memory_comes_from_the_command() {
 fn snapshot_writes_a_picture() {
     let mut repl = door();
     repl.run(r#"node.add {"name": "box", "kind": "geometry.rect"}"#);
-    let directory = std::env::temp_dir().join("craftkit-v2-repl");
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir("craftkit-v2-repl").expect("the directory is made");
     let path = directory.join("shot.png");
     let said = text(&repl.run(&format!("snapshot {}", path.display())));
     assert!(said.contains("wrote"), "{said}");

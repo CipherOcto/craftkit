@@ -130,6 +130,8 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-audio", Class::Layer(0)),
     ("craftkit-midi", Class::Layer(0)),
     ("craftkit-plugins", Class::Layer(0)),
+    // The scratch a test works in: a path, and the removal of it.
+    ("craftkit-scratch", Class::Layer(0)),
     // L1 — the doors: opening a shared library and calling the table in it,
     // and the reference plugins they open.
     ("craftkit-ffi", Class::Layer(1)),

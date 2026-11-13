@@ -45,7 +45,8 @@ fn a_sheet(session: &mut Session) -> u64 {
 fn a_png_file(name: &str, width: usize, height: usize) -> String {
     let mut image = craftkit_raster::Image::new(width, height, Colour::WHITE);
     image.blend(0, 0, Colour::BLACK, craftkit_sdk::BlendMode::Normal);
-    let path = std::env::temp_dir().join(format!("craftkit-v2-grid-picture-{name}.png"));
+    let path =
+        craftkit_scratch::file(&format!("craftkit-v2-grid-picture-{name}.png")).expect("the scratch is made");
     std::fs::write(&path, image.to_png()).expect("the picture is written");
     path.to_string_lossy().to_string()
 }
@@ -110,7 +111,8 @@ fn the_bytes_are_in_the_file() {
 fn a_file_that_is_not_a_picture_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    let path = std::env::temp_dir().join("craftkit-v2-grid-picture-not-a-picture.png");
+    let path =
+        craftkit_scratch::file("craftkit-v2-grid-picture-not-a-picture.png").expect("the scratch is made");
     std::fs::write(&path, b"not a picture").expect("the file is written");
     let outcome = session.execute(
         "grid.picture.set",

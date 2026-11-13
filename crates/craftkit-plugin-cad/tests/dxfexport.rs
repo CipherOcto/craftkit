@@ -31,8 +31,8 @@ fn session() -> Session {
 /// A path of this test's own, so that two tests do not fight over one
 /// file.
 fn a_path(name: &str) -> String {
-    std::env::temp_dir()
-        .join(format!("craftkit-v2-dxfout-{name}-{}", std::process::id()))
+    craftkit_scratch::file(&format!("craftkit-v2-dxfout-{name}-{}", std::process::id()))
+        .expect("the scratch is made")
         .to_string_lossy()
         .to_string()
 }

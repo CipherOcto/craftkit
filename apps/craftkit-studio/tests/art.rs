@@ -304,9 +304,7 @@ fn the_undo_takes_the_elements_with_it() {
 /// A directory of this test's own, so that the files do not mix.
 #[cfg(feature = "art")]
 fn directory(name: &str) -> String {
-    let path = std::env::temp_dir().join(format!("craftkit-v2-art-{name}"));
-    let _ = std::fs::remove_dir_all(&path);
-    std::fs::create_dir_all(&path).expect("the directory is made");
+    let path = craftkit_scratch::dir(&format!("craftkit-v2-art-{name}")).expect("the directory is made");
     path.to_string_lossy().to_string()
 }
 

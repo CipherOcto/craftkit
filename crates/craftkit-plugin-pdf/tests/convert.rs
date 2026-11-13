@@ -174,9 +174,8 @@ fn the_report_says_what_is_left() {
 #[test]
 fn the_encryption_is_not_taken_away() {
     let mut session = session();
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-convert-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&directory);
-    std::fs::create_dir_all(&directory).expect("the directory is made");
+    let directory = craftkit_scratch::dir(&format!("craftkit-v2-convert-{}", std::process::id()))
+        .expect("the directory is made");
     let path = directory.join("small.pdf");
     std::fs::write(&path, an_encrypted_file()).expect("the file is written");
     let into = directory.join("streams");

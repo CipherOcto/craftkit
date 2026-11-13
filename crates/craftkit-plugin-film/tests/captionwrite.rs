@@ -32,7 +32,8 @@ fn session() -> Session {
 /// A file of this test's own, so that two tests do not fight over one
 /// file.
 fn a_file(name: &str) -> String {
-    let path = std::env::temp_dir().join(format!("craftkit-v2-srtwrite-{name}-{}", std::process::id()));
+    let path = craftkit_scratch::file(&format!("craftkit-v2-srtwrite-{name}-{}", std::process::id()))
+        .expect("the scratch is made");
     path.to_string_lossy().to_string()
 }
 

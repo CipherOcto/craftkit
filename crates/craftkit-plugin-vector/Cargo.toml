@@ -16,3 +16,9 @@ craftkit-derive = { workspace = true }
 # The geometry. A **library**, not a plugin: it adds no command and no
 # kind, and the linker does not know about it.
 craftkit-vector-geom = { workspace = true }
+
+[dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../craftkit-scratch", version = "0.2.0" }

@@ -34,5 +34,9 @@ craftkit-audio = { path = "../craftkit-audio", version = "0.2.0" }
 craftkit-plugins = { path = "../craftkit-plugins", version = "0.2.0" }
 
 [dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../craftkit-scratch", version = "0.2.0" }
 # The MIDI library, so that a test may write a MIDI file to read.
 craftkit-midi = { workspace = true }

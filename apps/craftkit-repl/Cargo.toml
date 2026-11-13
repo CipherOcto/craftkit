@@ -10,3 +10,9 @@ license.workspace = true
 craftkit-sdk = { workspace = true }
 # The studio: the ecosystem the door drives.
 craftkit-studio = { path = "../craftkit-studio", version = "0.2.0" }
+
+[dev-dependencies]
+# The **scratch**: the file or the directory a test works in, taken
+# back when the thread that asked for it ends. A **dev** dependency:
+# nothing that ships links it.
+craftkit-scratch = { path = "../../crates/craftkit-scratch", version = "0.2.0" }

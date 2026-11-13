@@ -8360,9 +8360,9 @@ mod tests {
     /// file it makes is a sound the kit can read back.
     #[test]
     fn the_document_is_rendered_into_a_file() {
-        let directory = std::env::temp_dir();
-        let source_path = directory.join("craftkit-v2-render-source.wav");
-        let output_path = directory.join("craftkit-v2-render-out.wav");
+        let source_path =
+            craftkit_scratch::file("craftkit-v2-render-source.wav").expect("the scratch is made");
+        let output_path = craftkit_scratch::file("craftkit-v2-render-out.wav").expect("the scratch is made");
         // A source: four samples of half.
         let bytes = craftkit_wav::write(1, 48_000, &[0.5, 0.5, 0.5, 0.5]);
         std::fs::write(&source_path, bytes).expect("the source is written");
@@ -8406,9 +8406,9 @@ mod tests {
     /// that fits.
     #[test]
     fn a_source_at_another_rate_is_resampled() {
-        let directory = std::env::temp_dir();
-        let source_path = directory.join("craftkit-v2-render-rate.wav");
-        let output_path = directory.join("craftkit-v2-render-rate-out.wav");
+        let source_path = craftkit_scratch::file("craftkit-v2-render-rate.wav").expect("the scratch is made");
+        let output_path =
+            craftkit_scratch::file("craftkit-v2-render-rate-out.wav").expect("the scratch is made");
         // A source of eight thousand samples a second, four frames.
         let bytes = craftkit_wav::write(1, 8_000, &[0.5, 0.5, 0.5, 0.5]);
         std::fs::write(&source_path, bytes).expect("the source is written");
@@ -8447,9 +8447,8 @@ mod tests {
     /// is: the volume at the sample's own time.
     #[test]
     fn the_automation_moves_the_volume() {
-        let directory = std::env::temp_dir();
-        let source_path = directory.join("craftkit-v2-auto-source.wav");
-        let output_path = directory.join("craftkit-v2-auto-out.wav");
+        let source_path = craftkit_scratch::file("craftkit-v2-auto-source.wav").expect("the scratch is made");
+        let output_path = craftkit_scratch::file("craftkit-v2-auto-out.wav").expect("the scratch is made");
         let bytes = craftkit_wav::write(1, 48_000, &[0.5; 4]);
         std::fs::write(&source_path, bytes).expect("the source is written");
 
@@ -8500,9 +8499,8 @@ mod tests {
     /// kit does not know is drawn and not heard.
     #[test]
     fn a_mute_lane_mutes_the_track() {
-        let directory = std::env::temp_dir();
-        let source_path = directory.join("craftkit-v2-mute-source.wav");
-        let output_path = directory.join("craftkit-v2-mute-out.wav");
+        let source_path = craftkit_scratch::file("craftkit-v2-mute-source.wav").expect("the scratch is made");
+        let output_path = craftkit_scratch::file("craftkit-v2-mute-out.wav").expect("the scratch is made");
         let bytes = craftkit_wav::write(1, 48_000, &[0.5; 2]);
         std::fs::write(&source_path, bytes).expect("the source is written");
 
@@ -8540,9 +8538,8 @@ mod tests {
     /// twice — once on its own and once through the bus.
     #[test]
     fn the_routing_is_heard() {
-        let directory = std::env::temp_dir();
-        let source_path = directory.join("craftkit-v2-send-source.wav");
-        let output_path = directory.join("craftkit-v2-send-out.wav");
+        let source_path = craftkit_scratch::file("craftkit-v2-send-source.wav").expect("the scratch is made");
+        let output_path = craftkit_scratch::file("craftkit-v2-send-out.wav").expect("the scratch is made");
         let bytes = craftkit_wav::write(1, 48_000, &[0.25, 0.25]);
         std::fs::write(&source_path, bytes).expect("the source is written");
 
@@ -8588,9 +8585,9 @@ mod tests {
     /// plugin and the plugin is a program.
     #[test]
     fn an_insert_is_run_over_the_track() {
-        let directory = std::env::temp_dir();
-        let source_path = directory.join("craftkit-v2-insert-source.wav");
-        let output_path = directory.join("craftkit-v2-insert-out.wav");
+        let source_path =
+            craftkit_scratch::file("craftkit-v2-insert-source.wav").expect("the scratch is made");
+        let output_path = craftkit_scratch::file("craftkit-v2-insert-out.wav").expect("the scratch is made");
         let bytes = craftkit_wav::write(1, 48_000, &[1.0, 1.0]);
         std::fs::write(&source_path, bytes).expect("the source is written");
 
@@ -8633,9 +8630,9 @@ mod tests {
     /// that cannot be made cannot be run.
     #[test]
     fn a_plugin_that_is_not_in_the_catalogue_is_refused() {
-        let directory = std::env::temp_dir();
-        let source_path = directory.join("craftkit-v2-unknown-source.wav");
-        let output_path = directory.join("craftkit-v2-unknown-out.wav");
+        let source_path =
+            craftkit_scratch::file("craftkit-v2-unknown-source.wav").expect("the scratch is made");
+        let output_path = craftkit_scratch::file("craftkit-v2-unknown-out.wav").expect("the scratch is made");
         let bytes = craftkit_wav::write(1, 48_000, &[1.0]);
         std::fs::write(&source_path, bytes).expect("the source is written");
 
@@ -8682,8 +8679,8 @@ mod tests {
         session
             .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 4, "source": source }))
             .expect("the clip is added");
-        let directory = std::env::temp_dir();
-        let output_path = directory.join("craftkit-v2-render-missing.wav");
+        let output_path =
+            craftkit_scratch::file("craftkit-v2-render-missing.wav").expect("the scratch is made");
         let error = session
             .execute("sound.render", &json!({ "path": output_path.to_string_lossy() }))
             .expect_err("the source is not there");

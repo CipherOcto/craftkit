@@ -33,10 +33,9 @@ fn session() -> Session {
 fn directory(name: &str) -> String {
     static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let number = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let path = std::env::temp_dir()
-        .join(format!("craftkit-v2-aes256writing-{name}-{}-{number}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&path);
-    std::fs::create_dir_all(&path).expect("the directory is made");
+    let path =
+        craftkit_scratch::dir(&format!("craftkit-v2-aes256writing-{name}-{}-{number}", std::process::id()))
+            .expect("the directory is made");
     path.to_string_lossy().to_string()
 }
 

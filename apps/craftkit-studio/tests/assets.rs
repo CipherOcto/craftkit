@@ -117,7 +117,7 @@ fn a_damaged_bundle_is_refused() {
 #[test]
 fn a_document_file_that_is_too_big_is_refused() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
-    let path = std::env::temp_dir().join("craftkit-too-big.craftkit");
+    let path = craftkit_scratch::file("craftkit-too-big.craftkit").expect("the scratch is made");
     let file = std::fs::File::create(&path).expect("the file is made");
     // Seventeen megabytes: more than this program's limit.
     let block = vec![b'x'; 1024 * 1024];
