@@ -4329,6 +4329,7 @@ so.
 | the **text** of a number | **built.** FIXED and DOLLAR write a number as text, and NUMBERVALUE reads a text with the separators of the text's own (§881) | §881 |
 | the **lookup** across | **built.** HLOOKUP finds the value of a row of the column that holds the needle, and the tree's LOOKUP — a bisection — is refused and says why (§882) | §882 |
 | the **worth** today | **built.** NPV is the sum of what each payment of a series is worth today, and the first payment is discounted once (§883) | §883 |
+| a **thing** bought on a day | **built.** AMORLINC and AMORDEGRC are the straight line and the declining balance of a thing bought on a day, with the tree's first period and its coefficient (§884) | §884 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58390,3 +58391,72 @@ is the sum of what each payment is worth today.
 
 - **The tree's `NPV` of a series with a date in it** is the `XNPV`,
   and that is here already.
+
+## 884. A thing bought on a day
+
+A thing that wears out may be bought on a day, and then it wears out
+**from that day**.
+
+### What was built
+
+- **Two functions** of the grid battery's formula language:
+  - `AMORLINC(cost, purchased, first, salvage, period, rate, [basis])`
+    — the **straight line** depreciation of the thing;
+  - `AMORDEGRC(cost, purchased, first, salvage, period, rate, [basis])`
+    — the **declining balance** depreciation of it.
+- The **rule** of the two:
+  - the **first period** is the part of the year between the day the
+    thing was bought and the day the first period ends;
+  - the **basis** is the tree's — the way a year is counted — and it
+    is the usual one when it is not given;
+  - a cost that is not a cost, a salvage that is more than the cost,
+    a period that is not a period, a rate that is not a rate, and a
+    first period that ends **before** the thing was bought are all
+    errors.
+- The **straight line** of the first period is the part of the year
+  times the rate of the thing, and the **last period takes what is
+  left** and no more.
+- The **declining balance** of the first period is the part of the
+  year times the rate of the thing times a **coefficient**, and the
+  coefficient depends on how long the thing lasts: one under three
+  years, one and a half under five, two up to six, and two and a half
+  after that. The **two last periods split what is left** between
+  them.
+
+### What the port found
+
+- **The tree's `AMORDEGRC` has a coefficient of its own.** The
+  declining balance of the tree's `DDB` has a factor that is given,
+  and the `AMORDEGRC` has none: it works the coefficient out of the
+  life of the thing, and the life is the rate turned the other way
+  round.
+- **The tree's two are the same in the first period and not in the
+  rest.** The straight line is the same every period, and the
+  declining balance is less and less, and the two of them take what
+  is left in the last period in the same way.
+- **The tree's `AMORLINC` and `AMORDEGRC` count the first period by
+  the basis**, and so they use the financial year fraction that is
+  already in this tree (the module `daycounts`) and not the
+  spreadsheet one of §877.
+
+### What it cost
+
+- **Two functions** in the module `depreciation`, and a **thing that
+  wears out** of their own — the two take seven arguments, and the
+  house's lints say that a function with that many arguments wants a
+  struct to hold them.
+- **One test** in the grid battery's depreciation test file: the two
+  functions on the tree's own example, and a first period that ends
+  before the thing was bought being an error.
+- **No new command**: the wearing out is a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `AMORLINC` and `AMORDEGRC` take a **date** and not a
+  serial.** Here a date is a serial and a format, so the argument is
+  the serial of the day — and a formula that wants a day writes
+  `DATE(...)`.
+- **The tree's `AMORDEGRC` of a period of a million is an error**,
+  and so is here.

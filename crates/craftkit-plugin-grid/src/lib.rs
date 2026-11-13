@@ -39,7 +39,8 @@
 //!
 //! And a formula may ask what a thing that wears out is worth now, a
 //! period at a time: the straight line, the sum of the years, the
-//! declining balance and the double of it (the module `depreciation`).
+//! declining balance and the double of it — and a thing bought on a
+//! day, which wears out from that day (the module `depreciation`).
 //!
 //! And a formula may ask the **price** of a security that is sold at a
 //! discount and redeemed at its value — the discount, the price, the
@@ -78,9 +79,9 @@
 //!
 //! And a formula may ask about the **cash flows** of a plan: the rate
 //! at which a series of payments is worth nothing, with dates or
-//! without them, what a sum grows to through a schedule, and the
-//! interest and the principal of a run of payments (the module
-//! `cashflows`).
+//! without them, what a sum grows to through a schedule, the
+//! interest and the principal of a run of payments, and what a series
+//! of payments is worth **today** (the module `cashflows`).
 //!
 //! And a formula may ask the **shape** of a distribution: the normal,
 //! the gamma, the error function, Student's t, the chi-square, the F,
