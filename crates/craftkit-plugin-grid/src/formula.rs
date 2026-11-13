@@ -3140,6 +3140,11 @@ impl Book {
                                 continue;
                             }
                             let value = self.value_of_guarded(name, cell, being);
+                            // The tree's rule: an **error** in the range
+                            // is the error of the whole subtotal.
+                            if let Value::Error(message) = value {
+                                return Value::Error(message);
+                            }
                             if let Some(number) = value.as_number() {
                                 numbers.push(number);
                             } else if !matches!(value, Value::Empty) {
@@ -3163,6 +3168,11 @@ impl Book {
                                 continue;
                             }
                             let value = self.value_of_guarded(&name.sheet, cell, being);
+                            // The tree's rule: an **error** in the range
+                            // is the error of the whole subtotal.
+                            if let Value::Error(message) = value {
+                                return Value::Error(message);
+                            }
                             if let Some(number) = value.as_number() {
                                 numbers.push(number);
                             } else if !matches!(value, Value::Empty) {
@@ -3173,6 +3183,11 @@ impl Book {
                 }
                 other => {
                     let value = self.evaluate(sheet, other, being);
+                    // The tree's rule: an **error** is the error of the
+                    // whole subtotal.
+                    if let Value::Error(message) = value {
+                        return Value::Error(message);
+                    }
                     if let Some(number) = value.as_number() {
                         numbers.push(number);
                     } else if !matches!(value, Value::Empty) {

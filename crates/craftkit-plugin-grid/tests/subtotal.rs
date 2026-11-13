@@ -198,3 +198,18 @@ fn the_subtotal_is_saved() {
         "the formula is there"
     );
 }
+
+/// An **error** in the range is the error of the whole subtotal: the
+/// tree's own rule.
+#[test]
+fn an_error_in_the_range_is_the_error_of_the_subtotal() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_formula(&mut session, sheet, "A2", "=1/0");
+    a_number(&mut session, sheet, "A3", 3.0);
+    a_formula(&mut session, sheet, "B1", "=SUBTOTAL(9,A1:A3)");
+    let value = value_of(&mut session, sheet, "B1");
+    let text = value.to_string();
+    assert!(text.contains("#DIV/0!"), "the error says so: {text}");
+}
