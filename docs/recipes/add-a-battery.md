@@ -108,6 +108,41 @@ A tool names a **command that exists** and a panel names **commands that
 exist**: the ecosystem checks both when it is built, and refuses a program that
 starts with a tool that cannot run.
 
+### A battery's commands are a table
+
+A **battery** is a family of commands, and the tree writes a family as a
+**table** — one `commands! { … }` per file, one row per command, and the
+compiler writes the struct, the reader, the registration and the spec for
+every row:
+
+```rust
+use craftkit_derive::commands;
+use craftkit_sdk::{Outcome, Text};
+
+commands! {
+    /// Say hello to somebody.
+    hello.greet {
+        area: "hello",
+        icon: "hello",
+        params: {
+            /// Who to greet.
+            name: Text,
+        },
+        run: {
+            Ok(Outcome::new(format!("Hello, {}.", self.name.0)))
+        }
+    }
+}
+```
+
+The row's **id** is the command's id, and the struct's name is the id's own
+shape — `hello.greet` is `HelloGreet`. The **anchor** names it by that name.
+
+**The tree's own gate says so**: `crates/craftkit-gates` has the rule *a
+battery is a table*, and a battery that declares a command with
+`#[derive(Command)]` is a finding. A **plugin** that is not a battery — one
+command, or a handful — declares its commands with the derive.
+
 Every item the battery contributes is named in the anchor:
 
 ```rust

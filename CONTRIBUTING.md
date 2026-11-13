@@ -16,9 +16,12 @@ contribution; it is a rewrite.
   the ten named crates. Every crate root carries the same deny list, in the
   same order.
 - **Everything is a command.** A command is a struct with
-  `#[derive(Command)]`; the fields are the parameters. Behaviour added
-  anywhere else — a special case in a front end, a bespoke tool, a flag on a
-  command line — is the mistake this rule exists to prevent.
+  `#[derive(Command)]`, or a row of a `commands! { … }` table — the fields
+  are the parameters, and the fields of a row are the parameters of the
+  row. The tree's nine batteries are tables; a single command is a
+  derive. Behaviour added anywhere else — a special case in a front end, a
+  bespoke tool, a flag on a command line — is the mistake this rule exists
+  to prevent.
 - **Independent.** No commercial product's material, and no commercial
   product run, measured or compared against. `docs/clean-room.md` has the
   rule and the table.

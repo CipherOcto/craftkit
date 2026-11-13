@@ -20,7 +20,7 @@ The repository root is the directory that holds `crates/`, `apps/` and
 | `cargo xtask doctor` | the machine, not the code: the toolchain, the targets, the tools |
 | a failing `cargo test` | the tree's own rules; the test's name says which rule |
 | a clippy error | the house deny list, or a lint the tree turned on |
-| the gates' gate | `cargo test -p craftkit-gates`: the deny attribute, the layering, the plugin rule, the thin front end, the bounds in the prose |
+| the gates' gate | `cargo test -p craftkit-gates`: the deny attribute, the layering, the plugin rule, the thin front end, the bounds in the prose, the battery that is a table |
 | `cargo xtask cleanroom` | a prohibited product's name outside prose |
 | `cargo xtask assets` | a file that is not attributed, or an asset embedded in code |
 | a command that **refuses** | the tree's own rule, working |

@@ -154,8 +154,13 @@ run      the JSON form: (session, params) -> Result<Outcome, EngineError>
 A command is declared with `#[derive(Command)]` and `#[command(...)]` in
 `crates/craftkit-derive`, and its parameters are the **fields of a struct**:
 the compiler writes the declaration, the reader and the registration. A
-plugin names its own items with `craftkit_sdk::plugin_anchor!(...)`, so that
-the linker keeps them on every target.
+**battery** declares its commands as a **table** instead — `commands! { … }`
+in `crates/craftkit-derive`, one row per command, and the compiler writes the
+same struct, reader, registration and spec for every row. Both spellings
+make the same registry; the table is what the tree's nine batteries use,
+and the derive is what a single command uses. A plugin names its own items
+with `craftkit_sdk::plugin_anchor!(...)`, so that the linker keeps them on
+every target.
 
 Adding behaviour anywhere else — a special case in a front end, a bespoke MCP
 tool, a flag on the CLI — is the mistake this rule exists to prevent. Add a

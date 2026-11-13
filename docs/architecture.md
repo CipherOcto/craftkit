@@ -179,6 +179,38 @@ to be readable by a new one.
    it from the id. The `icon` is a **name**; the drawing is the front end's
    business, and the tree holds no icon file.
 
+   **A battery writes a table instead.** The nine batteries of the tree declare
+   their commands as **one table per file** — `commands! { … }` — and the
+   compiler writes the same struct, reader, registration and spec for every
+   row:
+
+   ```rust
+   use craftkit_derive::commands;
+   use craftkit_sdk::{Bool, EngineError, Outcome, Text};
+
+   commands! {
+       /// Say hello to somebody.
+       hello.greet {
+           area: "hello",
+           icon: "hello",
+           params: {
+               /// Who to greet.
+               name: Text,
+               /// Whether to shout.
+               loudly: Option<Bool>,
+           },
+           run: {
+               Ok(Outcome::new(format!("Hello, {}.", self.name.0)))
+           }
+       }
+   }
+   ```
+
+   The row's **id** is the command's id, and the row's name is the id's own
+   shape: `hello.greet` is `HelloGreet`. The two spellings make the **same
+   registry** — `apps/craftkit-studio/tests/*_registry.rs` pins each
+   battery's registry and says whether it changed.
+
 2. **Implement it.** The command runs against the session and returns an
    outcome; an error is `Result`, never a panic.
 
@@ -282,10 +314,12 @@ camera rather than hand-rolling its own input.
 
 - **The tree's own gate** is `crates/craftkit-gates`. It checks the house deny
   attribute, the layering, "a plugin is a plugin", the front end is thin, "the
-  bounds are named in the prose" and "the numbers agree with the prose" (each
-  public `MAX_*` bound must be named in `README.md`, and the number in the
-  prose must equal the number in the code). Run it with
-  `cargo test -p craftkit-gates`.
+  bounds are named in the prose" and "a battery is a table" (a battery
+  declares its commands as rows of a table, and not as structs with
+  `#[derive(Command)]`). The rule that **the numbers agree with the prose**
+  lives where the code is — `apps/craftkit-studio/tests/bounds.rs` — because
+  it compares the README's number with the constant the compiler has already
+  tied to it (§850). Run the gate with `cargo test -p craftkit-gates`.
 - **The outer gate** is `xtask/` — `cargo xtask doctor`, `cargo xtask ci`, and
   the phases `ci` runs: fmt, assets, cleanroom, lists, layers, web, clippy,
   tests, wasm.

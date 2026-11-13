@@ -16,8 +16,8 @@ The tree has **two** gates, and they do not overlap.
 
 - The **inner** gate is `crates/craftkit-gates`. It knows about the crates: the
   house deny attribute, the layering, what a plugin may depend on, the bounds
-  the README names, and the numbers the README and the code must agree on. It
-  runs as `cargo test -p craftkit-gates`.
+  the README names, and that a battery declares its commands as rows of a
+  table. It runs as `cargo test -p craftkit-gates`.
 - The **outer** gate is `xtask/`. It knows about the **repository**: the layer
   table in `docs/architecture.md` and the inner gate's own table agree, every
   gate the tree names is actually run, every document link in the prose points

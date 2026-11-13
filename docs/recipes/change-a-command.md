@@ -26,7 +26,33 @@ quietly brought into range.
 
 ## 2. Change the declaration
 
-In `crates/craftkit-plugin-<x>/src/<module>.rs`:
+In `crates/craftkit-plugin-<x>/src/<module>.rs` — a **row** of the battery's
+table:
+
+```rust
+cad.entity.arc.add {
+    area: "cad",
+    layer: "cad",
+    icon: "arc",
+    mutates,
+    undoable,
+    params: {
+        /// The block the arc goes in.
+        block: NodeRef,
+        /// The name of the arc.
+        name: Text,
+        /// The radius, in millimetres.
+        ///
+        /// A **number with a unit** is a different kind from a bare number, and
+        /// the unit is part of the parameter's name in the schema.
+        radius: Number,
+    },
+    run: { … }
+}
+```
+
+A command that is **not** part of a battery is a struct, and the change is
+the same one in the other spelling:
 
 ```rust
 #[derive(Command)]
@@ -37,22 +63,23 @@ pub struct AddArc {
     /// The name of the arc.
     pub name: Text,
     /// The radius, in millimetres.
-    ///
-    /// A **number with a unit** is a different kind from a bare number, and
-    /// the unit is part of the parameter's name in the schema.
     pub radius: Number,
 }
 ```
 
-The doc comment on the field is the parameter's help, and it goes into the
+The doc comment on the parameter is the parameter's help, and it goes into the
 schema. **Write the help for the caller**, not for the author of the code.
 
 If the parameter has two spellings, say so:
 
 ```rust
 #[param(or = "other_name")]
-pub name: Text,
+name: Text,
 ```
+
+**The row's id is the command's id, and the struct's name is the id's shape.**
+A command that changes its id changes its name with it, and the battery's
+anchor names the new one — so an id is not a thing to change casually.
 
 ---
 
@@ -148,6 +175,17 @@ cargo clippy --workspace -- -D warnings
 cargo fmt --check
 cargo test -p craftkit-gates
 ```
+
+**A battery's registry is pinned.** `apps/craftkit-studio/tests/<battery>_registry.rs`
+holds every command of the battery as it was, and a change to the **registry**
+— an id, a label, a parameter, a flag, a menu path — is a change to that
+file:
+
+```bash
+cargo test -p craftkit-studio --features <battery> --test <battery>_registry
+```
+
+The test says what changed, and the file is the record of what the tree was.
 
 ---
 

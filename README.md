@@ -4254,6 +4254,7 @@ so.
 | the **pdf battery**, as a table | **built.** The object model of a file is a table in 75 files, and the registry is pinned to what it was (§867) | §867 |
 | the **sound battery**, as a table | **built.** The battery of a sound document is a table; the table learned a parameter's other spelling, a body is found by its name and not by what comes next, and a rename touches no string (§868) | §868 |
 | the **grid battery**, as a table | **built.** The last battery is a table in 69 files, and the tree's readers read a character literal — a quote, as a character — so the source and the registry agree again (§869) | §869 |
+| the **battery**, as a table, and the gate that says so | **built.** The tree's own gate has a sixth rule — a battery declares its commands as rows of a table, and one that uses the other spelling is a finding — and the house's rules, the architecture and the recipes name both spellings (§870) | §870 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57401,3 +57402,74 @@ tree: the tools that count the commands by reading the source.
   the **body** of a command and the **name** of its struct — and a
   conversion that changed either would not be caught by it. The compiler
   and the anchor are the witnesses for those.
+
+## 870. A battery is a table, and the gate says so
+
+§860–§869 converted the nine batteries. This arc asks the question that
+comes next: **what keeps them that way?** A rule that is written down and
+not checked is a comment, and the tree has a gate for exactly that.
+
+### What was built
+
+- **The tree's own gate has a sixth rule: a battery is a table.** A battery
+  that declares a command with `#[derive(Command)]` is a **finding**, and
+  the finding names the file and the crate:
+  ```text
+  battery: crates/craftkit-plugin-cad/src/groups.rs declares a command with
+  `#[derive(Command)]`: a battery declares its commands as rows of a table
+  ```
+  The rule names the **nine batteries** the README counts — the other
+  plugins (the picture, the shape, the typed value, the CLAP and the VST3
+  door) are plugins, and a plugin's own commands are a struct.
+- **The rule is checked against the code, not the prose.** A battery that
+  *talks* about the derive — in a doc comment, in a string — is not a
+  battery that uses it, and the rule says so.
+- **The house's rules name both spellings.** `AGENTS.md`,
+  `CONTRIBUTING.md`, `docs/architecture.md` and the two recipes now say
+  that a **battery** is a table and a **single command** is a struct with
+  the derive — and the recipe says which one to write.
+
+### What the port found
+
+- **The tree's documents were still describing the old spelling.** The
+  recipe for adding a command said to write a struct with
+  `#[derive(Command)]` — and every battery of the tree is a table, so the
+  recipe would have sent a contributor into a file whose import does not
+  fit and whose neighbours are rows. A conversion that changes the tree and
+  not the tree's **instructions** leaves the next reader to find out the
+  hard way.
+- **The gate is a reading of the tree, and this rule is a reading of the
+  reading.** The gate does not link the tree's crates — it reads the source
+  as text — so the rule is "the source says `derive(Command)`". A battery
+  that declared a command in a form the reader does not know would be read
+  as a battery with no commands in it, and `KNOWN-GAPS.md` says what a
+  gate like that cannot see.
+- **A plugin is not a battery.** Eight plugins still declare their
+  commands with the derive, and they are right to: they are one command
+  each, not a family. The rule names the nine and leaves the rest alone.
+
+### What it cost
+
+- **The gate**: one rule, and the table of the nine batteries it names.
+- **The prose**: four documents — the house's rules, the architecture, the
+  two recipes — and the two lists that say what the gate checks.
+- **One new test file**: `crates/craftkit-gates/tests/battery.rs` — five
+  tests: the tree is clean, the rule names nine batteries, a battery that
+  uses the derive is found, a battery of tables is not, and a battery that
+  *talks* about the derive is not.
+
+### What it does not settle
+
+- **The gate cannot see the registry.** It says a battery is a table; it
+  does not say that the table says what the registry should. That is the
+  **snapshot's** work — `apps/craftkit-studio/tests/*_registry.rs` — and the
+  two are different witnesses of different things.
+- **A rule that is checked is still a rule someone has to read.** The gate
+  says "no `#[derive(Command)]` in a battery"; it does not say that the
+  rows are **good** rows, that the ids are right, or that the bodies are
+  the ones the tree meant. Those are the compiler's checks and the
+  registry's truth.
+- **The other plugins are not batteries, and that is a fact about the
+  tree, not a fact about the rule.** The day the picture plugin grows a
+  family of commands, the rule's table has to grow with it — and the table
+  is a list in the gate, where a reader can see it.
