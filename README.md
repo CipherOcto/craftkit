@@ -4353,6 +4353,7 @@ so.
 | the **command** that imports a workbook file | **built.** `grid.import.xlsx` reads a workbook file into the document — a workbook, a sheet for each sheet of the file, and the cells — with the file's own date system (§905) | §905 |
 | the **styles part**: the number formats, so a date becomes a date | **built.** The number formats of a workbook are read, and a cell with a date format on it is a date (§906) | §906 |
 | the **defined names** of a workbook: the names the formulas use | **built.** The names of a workbook are read and imported, and a formula that uses one reads the range it stands for (§907) | §907 |
+| the **auto filter** of a sheet: the filter the file holds | **built.** The filter of a sheet is read and imported, and the column it judges is the column and not an offset in a range (§908) | §908 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59864,6 +59865,59 @@ A name is a word that stands for a range of cells.
   back).
 - **No new command** and **no new dependency**: the names are in the
   workbook part, and the reader of §903 reads it.
+
+### What it does not settle
+
+- **The fonts, the fills and the borders are still not read.**
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 908. The auto filter of a sheet: the filter the file holds
+
+The rows a sheet hides.
+
+### What was built
+
+- **The filter of a sheet** is read: the **range** it is over, and the
+  **criterion** of each of its columns — a list of values, a
+  comparison or two, the top rows of a column, or the rows above the
+  average.
+- **The import carries the filter**: a sheet that hides rows in the
+  file hides them here, and the filter is over the **column** it judges
+  and not over an offset in a range.
+
+### What the port found
+
+- **The tree's filter is over a range and this one's is over a
+  column.** The tree's filter holds a range and a criterion for each
+  column of it, and the criterion names the column by its **offset**
+  in the range: the first column of the range is offset zero. A filter
+  here is over **one column**, and the column is the column itself —
+  so the offset is counted from the first column of the range, and the
+  filter of a file whose range begins at `B` judges `C` where the file
+  says offset one.
+- **The tree's filter has seven kinds of criterion and this one has
+  two.** A list of values and a comparison are read; the top ten, the
+  rows above the average, a colour and an icon are not — a filter that
+  hides rows for a reason nobody can see is worse than no filter at
+  all.
+- **A file's filter may hold several columns**, and this tree's filter
+  holds one column and a **group** of criteria. A file's filter of
+  several columns becomes a group, which is what this tree's filter
+  calls the same thing: the rows that match it are kept.
+- **The tree's `<>` is this tree's `!=`**: a file writes the operation
+  the way a spreadsheet writes it, and a filter here writes it the way
+  this tree does.
+
+### What it cost
+
+- **One kind** in the reader — the filter and its criteria — and the
+  reading of them: about a hundred lines.
+- **Two tests**: one in the reader's test file (a range, a list of
+  values, a comparison) and one in the import's test file (the filter
+  is imported and it hides the row it should).
+- **No new command** and **no new dependency**: the filter is in the
+  sheet part, and the reader of §903 reads it.
 
 ### What it does not settle
 
