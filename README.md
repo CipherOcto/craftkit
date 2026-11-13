@@ -4325,6 +4325,7 @@ so.
 | the **fraction** of a year, and the working days | **built.** YEARFRAC gives the fraction of a year under a basis, and NETWORKDAYS and WORKDAY count and step over the working days (§877) | §877 |
 | the **aggregates** that count the text | **built.** AVERAGEA, MAXA, MINA, VARA, VARPA, STDEVA and STDEVPA count the text of a cell as a zero and a boolean as one or zero (§878) | §878 |
 | the **rounding** to a multiple | **built.** CEILING.MATH, CEILING.PRECISE, ISO.CEILING, FLOOR.MATH and FLOOR.PRECISE round a number to a multiple, and the mode says what a negative number does (§879) | §879 |
+| the **text** around a mark | **built.** TEXTBEFORE and TEXTAFTER take the text before a mark and the text after it — with the tree's instance, its match mode and its match end (§880) | §880 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58157,3 +58158,63 @@ A formula may round a number up or down to a multiple of another one.
   `FLOOR` and a zero for the five that are here.
 - **The tree's `ROUNDUP` and `ROUNDDOWN` are a different thing**: they
   round to a number of **digits**, and not to a multiple.
+
+## 880. The text around a mark
+
+A formula may take the text that is **before** a mark and the text
+that is **after** it.
+
+### What was built
+
+- **Two functions** of the grid battery's formula language:
+  - `TEXTBEFORE(text, delimiter, [instance], [match_mode], [match_end],
+    [if_not_found])`;
+  - `TEXTAFTER(text, delimiter, [instance], [match_mode], [match_end],
+    [if_not_found])`.
+- The **delimiter** is one or more marks — the text of a plain
+  argument, or the text of each cell of a range.
+- The **instance** says which mark: the first is one, and a **negative**
+  one counts from the end.
+- The **match mode** is zero or one: zero is the text as it is, and one
+  is the text **folded**.
+- The **match end** says that the **end of the text** is a mark too, so
+  that the text after the last mark is the empty text.
+- A mark that is **not there** is the value that is given, and `#N/A`
+  when there is none.
+- An **instance of zero**, a **match mode** that is not zero or one,
+  and an instance that is **further away than the text is long** are
+  errors.
+
+### What the port found
+
+- **The tree's longest mark wins.** When two marks could match at the
+  same place, the longer one is the mark — and the scan goes on after
+  it, so two marks never overlap.
+- **The tree's text with no mark is a mark at every place.** A
+  delimiter that is empty — or a set of delimiters that are all empty
+  — makes every place a match: the text before the first mark is then
+  the empty text, and the text after it is the whole text.
+- **The tree's negative instance adds its mark at the start.** The
+  match end adds a mark at the end of the text for a positive
+  instance, and at the start of it for a negative one.
+
+### What it cost
+
+- **Two functions** in the module `texts`, a **matches** helper of
+  their own — the tree's rule for the marks is not the rule of
+  `FIND` and `SEARCH`, which find one place — and a **delimiters**
+  helper that reads a range of cells as a set of marks.
+- **Three tests** in the grid battery's texts test file: the text
+  before a mark and the text after it, the match mode folding the text
+  and the match end being a mark, and a mark that is not there.
+- **No new command**: the text around a mark is a function of the
+  formula language. The grid battery still carries **188** commands and
+  the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `TEXTSPLIT` is not here.** It splits a text into a
+  table, and a table is an array, and this tree has no arrays.
+- **The tree's `REGEXEXTRACT`, `REGEXREPLACE` and `REGEXTEST` are not
+  here.** They match a pattern, and a pattern is a regular
+  expression, and this tree has no engine for one.
