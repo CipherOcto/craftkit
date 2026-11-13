@@ -42,7 +42,43 @@ pub fn is_financial_function(name: &str) -> bool {
             | "NOMINAL"
             | "PDURATION"
             | "RRI"
+            | "EUROCONVERT"
     )
+}
+
+/// The **currencies** the tree's euro conversion knows.
+///
+/// The tree's own table: the **code** of the currency, the rate it is
+/// worth in units per euro, and the number of **decimals** the answer
+/// is written with.
+const EURO_RATES: &[(&str, f64, i32)] = &[
+    ("BEF", 40.3399, 0),
+    ("LUF", 40.3399, 0),
+    ("DEM", 1.95583, 2),
+    ("ESP", 166.386, 0),
+    ("FRF", 6.55957, 2),
+    ("IEP", 0.787564, 2),
+    ("ITL", 1936.27, 0),
+    ("NLG", 2.20371, 2),
+    ("ATS", 13.7603, 2),
+    ("PTE", 200.482, 0),
+    ("FIM", 5.94573, 2),
+    ("GRD", 340.75, 0),
+    ("SIT", 239.64, 2),
+    ("EUR", 1.0, 2),
+];
+
+/// The **currency** a code names, with its rate and its decimals.
+fn euro_currency(code: &str) -> Option<(&'static str, f64, i32)> {
+    EURO_RATES.iter().copied().find(|(name, _, _)| name.eq_ignore_ascii_case(code.trim()))
+}
+
+/// A number written with **significant digits** and no more.
+fn to_significant_digits(number: f64, digits: usize) -> f64 {
+    if !number.is_finite() || number == 0.0 {
+        return number;
+    }
+    format!("{:.*e}", digits.saturating_sub(1).min(30), number).parse().unwrap_or(number)
 }
 
 /// The **type** of a payment: the beginning of the period or the end.
@@ -402,6 +438,64 @@ impl Book {
                     return Value::Error("#NUM!".to_string());
                 }
                 (fv.ln() - pv.ln()) / (1.0 + rate).ln()
+            }
+            "EUROCONVERT" => {
+                let amount = match self.number_at(sheet, arguments, 0, being) {
+                    Ok(number) => number,
+                    Err(message) => return Value::Error(message),
+                };
+                let source = match self.text_at(sheet, arguments, 1, being) {
+                    Ok(text) => text,
+                    Err(message) => return Value::Error(message),
+                };
+                let target = match self.text_at(sheet, arguments, 2, being) {
+                    Ok(text) => text,
+                    Err(message) => return Value::Error(message),
+                };
+                let Some((source_name, source_rate, _)) = euro_currency(&source) else {
+                    return Value::Error("#VALUE!".to_string());
+                };
+                let Some((target_name, target_rate, target_decimals)) = euro_currency(&target) else {
+                    return Value::Error("#VALUE!".to_string());
+                };
+                // The **full precision** says that the answer is not
+                // rounded to the decimals of the currency.
+                let full = match arguments.get(3) {
+                    Some(argument) => {
+                        match crate::formula::truth_of(&self.evaluate(sheet, argument, being)) {
+                            Ok(flag) => flag,
+                            Err(message) => return Value::Error(message),
+                        }
+                    }
+                    None => false,
+                };
+                // The **triangulation** says how many digits the
+                // euros are written with on the way, and it is at
+                // least three.
+                let triangulation = match arguments.get(4) {
+                    Some(_) => {
+                        let digits = match self.number_at(sheet, arguments, 4, being) {
+                            Ok(number) => number.trunc(),
+                            Err(message) => return Value::Error(message),
+                        };
+                        if digits < 3.0 {
+                            return Value::Error("#VALUE!".to_string());
+                        }
+                        Some(digits.min(17.0) as usize)
+                    }
+                    None => None,
+                };
+                if source_name == target_name {
+                    return Value::Number(amount);
+                }
+                let mut euros = amount / source_rate;
+                if source_name != "EUR"
+                    && let Some(digits) = triangulation
+                {
+                    euros = to_significant_digits(euros, digits);
+                }
+                let out = euros * target_rate;
+                if full { out } else { crate::arithmetic::round_half_away(out, target_decimals) }
             }
             _ => {
                 // `RRI`: the rate a sum grows at.

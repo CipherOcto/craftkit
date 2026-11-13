@@ -277,6 +277,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/addresses.rs",
         section: "§889",
     },
+    Port {
+        rule: "the Bessel and the euro",
+        from: "gridcraft/crates/functions/src/engineering/bessel.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/bessels.rs",
+        command: "craftkit-plugin-grid::bessels",
+        test: "crates/craftkit-plugin-grid/tests/bessels.rs",
+        section: "§890",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

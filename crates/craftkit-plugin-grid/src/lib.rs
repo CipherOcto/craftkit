@@ -382,6 +382,7 @@ mod align;
 mod arithmetic;
 pub mod arrays;
 mod autofit;
+mod bessels;
 mod bonds;
 mod borders;
 mod cashflows;

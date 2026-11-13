@@ -2185,6 +2185,9 @@ impl Book {
         if crate::engineering::is_engineering_function(name) {
             return self.engineering(sheet, name, arguments, being);
         }
+        if crate::bessels::is_bessel_function(name) {
+            return self.bessel(sheet, name, arguments, being);
+        }
         if crate::information::is_information_function(name) {
             return self.information(sheet, name, arguments, being);
         }
