@@ -4332,6 +4332,7 @@ so.
 | a **thing** bought on a day | **built.** AMORLINC and AMORDEGRC are the straight line and the declining balance of a thing bought on a day, with the tree's first period and its coefficient (§884) | §884 |
 | the tree's **arrays** | **built.** The twenty-eight functions of the tree that give back a table are listed and refused, each with the reason that a formula here is a value (§885) | §885 |
 | the **determinant** of a square | **built.** MDETERM is the number that multiplies a row of a square with another row to give nothing — with the tree's pivoting and its fifteen significant digits (§886) | §886 |
+| the tree's **other names** | **built.** CHIINV, FDIST, CRITBINOM, BETAINV and F.INV.RT are the tree's names for functions that are here, and the negative binomial and the range of the binomial are here too (§887) | §887 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58556,3 +58557,68 @@ number.
   are, and `MUNIT` with them.
 - **The tree's square of more than two thousand cells is a number
   error**, and so is here.
+
+## 887. The tree's other names, and the negative binomial
+
+The tree has names for its functions that this tree does not have, and
+three functions of its own that are not here.
+
+### What was built
+
+- **Five more names** for functions that are already here:
+  - `CHIINV(probability, deg_freedom)` — the **upper tail** of the
+    chi-square;
+  - `FDIST(x, deg_freedom1, deg_freedom2)` — the **right tail** of the
+    F;
+  - `CRITBINOM(trials, probability_s, alpha)` — the inverse of the
+    binomial;
+  - `BETAINV(probability, alpha, beta, [lower], [upper])` — the
+    inverse of the beta;
+  - `F.INV.RT(probability, deg_freedom1, deg_freedom2)` — the inverse
+    of the right tail of the F.
+- **Two functions** of the **negative binomial** — how many failures
+  come before a number of successes:
+  - `NEGBINOM.DIST(number_f, number_s, probability_s, [cumulative])`;
+  - `NEGBINOMDIST(number_f, number_s, probability_s)` — the same
+    function without the cumulative.
+- **One function** of the **range** of the binomial:
+  `BINOM.DIST.RANGE(trials, probability_s, first, [second])` — the
+  probability of a number of successes between two numbers.
+- The **cumulative** of the negative binomial is the regularised
+  incomplete beta, and a **wide range** of the binomial is the
+  difference of the two ends of the distribution — and a narrow one
+  is the sum of its terms, and ten thousand terms is the bound.
+
+### What the port found
+
+- **The tree's `CHIINV` is the tail and not the other one.** The name
+  is the old one, and it is the **upper** tail: `CHIINV(0.05, 10)` is
+  the number above which five percent of the chi-square lies.
+- **The tree's `FINV` and its `F.INV.RT` are the same function** — the
+  inverse of the **right** tail — and the tree's `F.INV` is the inverse
+  of the left one.
+- **The tree's `BINOM.DIST.RANGE` sums the terms of a narrow range and
+  differences the ends of a wide one.** Ten thousand terms is the
+  bound, and a wider range is the difference of the two ends of the
+  distribution.
+
+### What it cost
+
+- **Five names** in the module `distributions`, and **three
+  functions** of their own: the negative binomial and the range of the
+  binomial.
+- **Three tests** in the grid battery's distributions test file: the
+  tree's other names, the negative binomial, and the range of the
+  binomial.
+- **No new command**: the distributions are a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `NEGBINOM.DIST` of a probability of nothing is zero**,
+  and of a probability of one is one only when there are **no
+  failures** — and that is the tree's rule and not a rounding of this
+  tree's own.
+- **The tree's `FORECAST.ETS` family is not here**: it is a model of
+  a series in time, and it is a different thing from the line of §867.
