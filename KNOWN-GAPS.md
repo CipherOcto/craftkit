@@ -16,8 +16,8 @@ The tree has **two** gates, and they do not overlap.
 
 - The **inner** gate is `crates/craftkit-gates`. It knows about the crates: the
   house deny attribute, the layering, what a plugin may depend on, the bounds
-  the README names, and that a battery declares its commands as rows of a
-  table. It runs as `cargo test -p craftkit-gates`.
+  the README names, that a battery declares its commands as rows of a table,
+  and that a test does not litter. It runs as `cargo test -p craftkit-gates`.
 - The **outer** gate is `xtask/`. It knows about the **repository**: the layer
   table in `docs/architecture.md` and the inner gate's own table agree, every
   gate the tree names is actually run, every document link in the prose points
@@ -93,6 +93,18 @@ These are the README's own honest notes, and they are still true of the tree:
   The leak is bounded by the number of commands the plugin has, and once each.
 - **A subprocess plugin is not checked by the compiler.** Its catalogue is
   data, and a mistake in it is refused when the plugin is loaded.
+- **A test's scratch comes back when its thread ends, and not before.** A
+  test that panics takes its thread down with it, and the harness takes the
+  process down with it, so the scratch of a test that panicked may be left
+  behind. Before §873 the tree's tests left **everything** behind, so this is
+  a smaller hole and not a closed one.
+- **The outer gate's own scratch is left behind on purpose.** The `xtask`
+  writes what a test wrote into `/tmp/craftkit-xtask-tests` and leaves it
+  there, so that a person can look at it; the folder is emptied when the
+  next run owns the name, and the name carries the process id, so a folder
+  of an older run is still there. The tree's seventh rule ("a test does not
+  litter") reads the crates of the tree and not the `xtask`, which depends
+  on nothing of the tree's own.
 - **The wire protocol is a decision, not a derivation.** Newline-delimited
   JSON was chosen because it is trivial to write in any language.
 - **The bridge is a proof, not a product.** It speaks JSON-RPC over stdio

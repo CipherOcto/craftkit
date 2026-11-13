@@ -4257,6 +4257,7 @@ so.
 | the **battery**, as a table, and the gate that says so | **built.** The tree's own gate has a sixth rule — a battery declares its commands as rows of a table, and one that uses the other spelling is a finding — and the house's rules, the architecture and the recipes name both spellings (§870) | §870 |
 | the **snapshot**, and what it pins | **built.** The battery snapshots now pin every field the registry carries that is data — the parameters' help, their other spelling, their unit, the journal and the example flags — and a new test says that every one of the tree's 2 719 parameters has a help (§871) | §871 |
 | the **tables**, and how they read | **built.** The nine batteries are written out again with the roughness gone — a parameter's help sits on its parameter, a body has no air around it, a row is a row — and the change is 3 203 blank lines and not one other character (§872) | §872 |
+| the **scratch** a test works in | **built.** A path is unique, keeps the caller's name, and is taken back when the thread that asked for it ends; 240 test files ask the scratch instead of the temporary directory, and the gate's seventh rule says that a test may not name that directory (§873) | §873 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57611,3 +57612,87 @@ reads** to the person who has to read it.
   The rows are one command each, the parameters are a list, and the body
   is the programmer's own text. Whether a row reads as a **rule** is a
   question a person answers, and the tree has no instrument for it.
+
+## 873. The scratch a test works in
+
+The tree's own tests were littering. One full run of them left **115 167
+files** and about a gigabyte in the system's temporary directory, and
+nothing in the tree said so — because a file that is written and
+forgotten is not a thing a gate can see on its own.
+
+### What was built
+
+- **A crate of its own: `craftkit-scratch` (L0).** It hands out a path
+  and takes it back:
+  - `file(name)` is a path for a file the caller writes — and the file
+    keeps **the caller's own name**;
+  - `dir(name)` is a directory, made and ready to be written into.
+
+  Both are **unique** — the process id and a counter — so two tests, or
+  two crates, never fight over one path. And both are **removed**: the
+  path is remembered by the thread that asked for it, and when that
+  thread ends the file, or the whole directory, is taken away with it.
+  The uniqueness is in the **directory** around the file, never in the
+  file's name: a program under test often takes its name from the file
+  it was given — a picture is named after its file — and a scratch that
+  renamed the file would change what the program does.
+- **240 test files in 13 crates** ask the scratch instead of the
+  temporary directory, and **four crates' unit tests inside their own
+  source** do the same.
+- **A seventh rule in the tree's own gate**: *a test does not litter*. A
+  test may not name the temporary directory; the scratch is the way. A
+  **program** may name it — it is a program, and it takes its own
+  directory away — so the rule is checked against the tests only.
+
+### What the port found
+
+- **The first scratch renamed the files, and a test caught it.** The
+  first version put the uniqueness in the *file's name*
+  (`craftkit-scratch-56068-0-craftkit-v2-image-named.png`), and the
+  image battery's own test said no: **a picture without a name is named
+  after its file**, so the name was part of what the command does. The
+  scratch is now a directory, and the file inside it keeps the name the
+  caller gave.
+- **The names were not unique.** The old helper made its path from a
+  name and the process id — `craftkit-v2-edl-{name}-{pid}` — so two
+  crates' tests that chose the same name wrote to the same file. The
+  scratch's counter makes a path unique inside a process, so that cannot
+  happen again.
+- **The directories were shared inside a binary.** The old helper made
+  **one** directory per *process*, so two tests of the same binary that
+  ran at the same time wrote into it — and one of them wiped it
+  (`remove_dir_all`) while the other was still using it. Each call now
+  makes a directory of its own.
+- **The leak was not only in `tests/`.** Four crates kept unit tests
+  *inside* their source: the sound battery's renderer, the SDK's
+  bounded reader, the linker's manifest reader and the pdf battery's
+  comparer. Three of the four left files behind; the fourth is a
+  program, and it takes its own work directory away.
+- **A rule can only see what it is shown.** The gate read the crates'
+  `src/` and never their `tests/`, so the rule had to be given the test
+  code too — and the test code of a source file is a **slice** from its
+  `#[cfg(test)]` onwards, not a parse.
+
+### What it cost
+
+- One crate, 240 test files, 13 manifests, and the layer table in
+  three places: the tree's own gate, the outer gate's mirror, and the
+  architecture's row.
+- The gate grew a **seventh** rule, and a new test file for it.
+
+### What it does not settle
+
+- **The scratch comes back when the *thread* ends.** A test that panics
+  takes its thread down with it, and the harness takes the process down
+  with it — so the scratch of a test that panicked may be left behind.
+  The old code left **everything** behind, so this is a smaller hole
+  and not a closed one.
+- **The rule is a slice, not a parse.** A program that named the
+  temporary directory *after* a test module in the same file would be
+  caught by mistake. No file in the tree is like that today.
+- **Nothing keeps a program from littering.** The rule is about tests;
+  what a program leaves in the temporary directory is its own business,
+  and the gate does not look at it.
+- **The scratch is a test's own.** It is a **dev** dependency and
+  nothing that ships links it, so a program that wants a path it can
+  hand back has no such thing yet.

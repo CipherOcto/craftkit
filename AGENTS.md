@@ -42,8 +42,8 @@ There are two gate systems in this tree, and they are not the same thing.
 - **The tree's own gate** is `crates/craftkit-gates`. It is a crate with a
   function `check(root) -> Vec<Finding>`, and it knows this tree: it checks the
   house deny attribute, the layering, "a plugin is a plugin", the front end is
-  thin, "the bounds are named in the prose" and "the numbers agree with the
-  prose". Run it with `cargo test -p craftkit-gates`.
+  thin, "the bounds are named in the prose", "a battery is a table" and "a test
+  does not litter". Run it with `cargo test -p craftkit-gates`.
 - **The outer gate** is `xtask/`, reached as `cargo xtask <command>`. Its
   commands are `doctor`, `ci`, `layers`, `assets`, `cleanroom`, `lists`, `web`,
   `wasm`, `deny`, `bundle` and `verify`. `cargo xtask ci` is the whole of it:
@@ -131,6 +131,11 @@ loses it, and the user's trust in everything else.
      command that panics is a command that did not happen.
 
 - **Prove it.** Every crash fix lands with a regression test.
+- **A test that needs a file asks the scratch.** `craftkit_scratch::file`
+  and `craftkit_scratch::dir` hand out a path that is unique and is taken
+  back when the thread that asked for it ends. A test may not name the
+  temporary directory itself: the tree's own gate says so, and the file
+  keeps the caller's own name.
 
 ---
 
@@ -285,6 +290,7 @@ it is still there.
 crates/craftkit-sdk       L2  the whole surface a plugin needs
 crates/craftkit-derive    L0  the macro that writes the declaration, the reader, the registration
 crates/craftkit-gates     L0  the tree's own gate
+crates/craftkit-scratch   L0  the scratch a test works in: a path, and the removal of it
 crates/craftkit-control   L3  the loopback JSON-lines channel
 crates/craftkit-mcp       L3  the MCP server
 crates/craftkit-plugin-*  L4  the batteries
