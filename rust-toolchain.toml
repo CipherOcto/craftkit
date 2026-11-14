@@ -11,7 +11,12 @@
 # `wasm32-unknown-unknown` is a target because `cargo xtask wasm` checks every
 # library crate against it; without the target the check skips, and a skip is
 # not a pass.
+#
+# `rust-analyzer` is a component because the tree's **language server** is it,
+# and `cargo xtask lsp` asks it about the tree: where a thing is declared,
+# what else mentions it, what it is, and what the compiler says of it. An
+# agent that greps for a name asks a question the server has already answered.
 [toolchain]
 channel = "stable"
-components = ["rustfmt", "clippy"]
+components = ["rustfmt", "clippy", "rust-analyzer"]
 targets = ["wasm32-unknown-unknown"]

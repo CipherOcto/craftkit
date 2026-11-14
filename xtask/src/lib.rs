@@ -65,6 +65,7 @@ pub mod find;
 pub mod index;
 pub mod layers;
 pub mod lists;
+pub mod lsp;
 pub mod packages;
 pub mod ports;
 pub mod temp;
@@ -174,6 +175,11 @@ pub const COMMANDS: &[Subcommand] = &[
     },
     Subcommand { name: "census", what: "what an arc costs, measured from the history", run: census::run },
     Subcommand {
+        name: "lsp",
+        what: "ask the language server about the tree: what is declared where, and what uses it",
+        run: lsp::run,
+    },
+    Subcommand {
         name: "digest",
         what: "the conventions of the house, and of a battery (--house, --battery)",
         run: digest::run,
@@ -237,6 +243,11 @@ pub const NOT_GATES: &[(&str, &str)] = &[
         "census",
         "it measures the history; the tree's own numbers do not change because it was measured, so \
          nothing checks it",
+    ),
+    (
+        "lsp",
+        "it asks the language server about the tree; it checks nothing, and the gate is the \
+         compiler's own word, which `ci` has",
     ),
     (
         "verify",

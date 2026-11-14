@@ -1,0 +1,34 @@
+# The **language server** of this tree.
+#
+# The server is `rust-analyzer`, and it is a component of the toolchain the
+# tree pins — so the server that answers is the server of the toolchain this
+# tree is developed against, and not whatever the machine happens to have.
+#
+# `cargo xtask lsp` is the door to it: it asks the server about the tree and
+# prints the answer.
+#
+# The settings here are the tree's own, and there are two of them:
+#
+# - **every feature is on**, so that the server sees the batteries that are
+#   off by default — the vector, the sound and the PDF ones — and a question
+#   about them has an answer;
+# - the **build scripts run**, so that the crates that generate code have
+#   their code, and the server knows the names it generates.
+#
+# The server is a **compiler**, and this tree's compiler is the one the gate
+# runs: `cargo xtask ci` is the word on the tree, and the server is the word
+# on a file.
+
+[build]
+cargo = { allFeatures = true, buildScripts = { enable = true } }
+
+[check]
+# The tree's own word on a file is the gate's, and the gate runs clippy. The
+# server's word is quicker, and it is the compiler's.
+command = "clippy"
+
+[diagnostics]
+# The tree denies the panicking lints in its own crates, and the server is
+# told to hold the same line as the compiler: a warning is a warning and an
+# error is an error.
+enable = true
