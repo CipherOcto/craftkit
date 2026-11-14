@@ -166,6 +166,7 @@ commands! {
             let mut unread_prints = 0u64;
             let mut outlines = 0u64;
             let mut setups = 0u64;
+            let mut breaks = 0u64;
             let mut arrays = 0u64;
             let mut data_tables = 0u64;
             let mut unread_setups = 0u64;
@@ -562,6 +563,18 @@ commands! {
                     data["print"] = print_setup(print, &mut unread_setups).to_json();
                     setups += 1;
                 }
+                // The **breaks** of the printing: the lines a page
+                // begins at.
+                if !sheet.breaks.rows.is_empty() {
+                    data["row_breaks"] =
+                        Json::Array(sheet.breaks.rows.iter().map(|line| json!(line)).collect());
+                    breaks += 1;
+                }
+                if !sheet.breaks.columns.is_empty() {
+                    data["column_breaks"] =
+                        Json::Array(sheet.breaks.columns.iter().map(|line| json!(line)).collect());
+                    breaks += 1;
+                }
                 if !merges.is_empty() {
                     data["merges"] = Json::Array(merges.into_iter().map(Json::String).collect());
                 }
@@ -931,6 +944,7 @@ commands! {
                 "unread_prints": unread_prints,
                 "outlines": outlines,
                 "setups": setups,
+                "breaks": breaks,
                 "arrays": arrays,
                 "data_tables": data_tables,
                 "unread_setups": unread_setups,

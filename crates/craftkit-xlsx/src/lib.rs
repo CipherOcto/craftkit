@@ -271,6 +271,21 @@ pub struct Sheet {
     /// The numbers are the **file's** own: the margins are in inches,
     /// the paper is the file's own number, and the scale is a percent.
     pub print: Option<Print>,
+    /// The **breaks** of the printing: the lines a page begins at, by
+    /// the file's own numbering.
+    ///
+    /// The rows and the columns are two lists, and a break of the
+    /// printing is a row or a column and not both.
+    pub breaks: Breaks,
+}
+
+/// The **breaks** of the printing of a sheet.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Breaks {
+    /// The **rows** a page begins at.
+    pub rows: Vec<u32>,
+    /// The **columns** a page begins at.
+    pub columns: Vec<u32>,
 }
 
 /// The **page setup** of a sheet: the paper, the orientation, the
@@ -880,6 +895,8 @@ fn read_sheet(
     }
     // The **page setup** of the sheet: how it prints.
     sheet.print = read_print(&root);
+    // The **breaks** of the printing: the lines a page begins at.
+    sheet.breaks = read_breaks(&root);
     // The **columns** of the sheet: their width and whether they are
     // hidden. A file says a span of columns at once, so one span of
     // ten columns is ten columns here.
@@ -1352,6 +1369,31 @@ fn read_print(root: &craftkit_xml::El) -> Option<Print> {
         .map(|properties| properties.flag("fitToPage", false))
         .unwrap_or(false);
     Some(print)
+}
+
+/// Read the **breaks** of the printing of a sheet: the rows and the
+/// columns a page begins at.
+///
+/// The lines are the file's own numbering, and a break outside the
+/// grid of the sheet is not a break.
+fn read_breaks(root: &craftkit_xml::El) -> Breaks {
+    let mut breaks = Breaks::default();
+    let Some(rows) = root.child("rowBreaks") else { return breaks };
+    for element in rows.kids("brk") {
+        let Some(line) = element.attr_u32("id") else { continue };
+        if line < MAX_ROWS as u32 {
+            breaks.rows.push(line);
+        }
+    }
+    if let Some(columns) = root.child("colBreaks") {
+        for element in columns.kids("brk") {
+            let Some(line) = element.attr_u32("id") else { continue };
+            if line < MAX_COLS as u32 {
+                breaks.columns.push(line);
+            }
+        }
+    }
+    breaks
 }
 
 /// The **papers** of the file format: the number a file writes, and the
