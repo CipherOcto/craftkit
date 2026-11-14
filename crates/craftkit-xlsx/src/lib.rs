@@ -247,6 +247,32 @@ pub struct Sheet {
     /// Whether the **summary column** of a group of columns sits to
     /// the **right** of the group, when the file says.
     pub summary_right: Option<bool>,
+    /// The **page setup** of the sheet: how it prints.
+    ///
+    /// The numbers are the **file's** own: the margins are in inches,
+    /// the paper is the file's own number, and the scale is a percent.
+    pub print: Option<Print>,
+}
+
+/// The **page setup** of a sheet: the paper, the orientation, the
+/// margins, the scale and the fit.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Print {
+    /// The **paper** the sheet prints on, by name, when the file names
+    /// one it knows.
+    pub paper: Option<String>,
+    /// The **orientation**: `portrait` or `landscape`.
+    pub orientation: Option<String>,
+    /// The **margins**, in inches: left, right, top, bottom, header
+    /// and footer.
+    pub margins: Option<[f64; 6]>,
+    /// The **scale** of the print, in percent.
+    pub scale: Option<u32>,
+    /// The **fit**: the pages wide and the pages tall, when the file
+    /// says it prints to fit.
+    pub fit: Option<(u32, u32)>,
+    /// Whether the sheet prints to **fit** rather than at a scale.
+    pub fit_to_page: bool,
 }
 
 /// A **validation** of a sheet: a rule on what a cell may hold.
@@ -833,6 +859,8 @@ fn read_sheet(
         sheet.summary_below = outline.attr_bool("summaryBelow");
         sheet.summary_right = outline.attr_bool("summaryRight");
     }
+    // The **page setup** of the sheet: how it prints.
+    sheet.print = read_print(&root);
     // The **columns** of the sheet: their width and whether they are
     // hidden. A file says a span of columns at once, so one span of
     // ten columns is ten columns here.
@@ -1244,6 +1272,83 @@ fn read_columns(root: &craftkit_xml::El) -> Vec<Column> {
         }
     }
     columns
+}
+
+/// Read the **page setup** of a sheet: the paper, the orientation, the
+/// margins, the scale and the fit.
+///
+/// The numbers are the **file's** own: the margins are in inches, the
+/// scale is a percent, and the paper is the file's own number.
+fn read_print(root: &craftkit_xml::El) -> Option<Print> {
+    let setup = root.child("pageSetup");
+    let margins = root.child("pageMargins");
+    if setup.is_none() && margins.is_none() {
+        return None;
+    }
+    let mut print = Print::default();
+    if let Some(setup) = setup {
+        print.paper = setup.attr_u32("paperSize").and_then(paper_name).map(str::to_string);
+        print.orientation = setup.attr("orientation").map(str::to_string);
+        print.scale = setup.attr_u32("scale");
+        let wide = setup.attr_u32("fitToWidth");
+        let tall = setup.attr_u32("fitToHeight");
+        if wide.is_some() || tall.is_some() {
+            print.fit = Some((wide.unwrap_or(1), tall.unwrap_or(1)));
+        }
+    }
+    if let Some(margins) = margins {
+        let mut found = [0.0f64; 6];
+        let mut any = false;
+        for (index, name) in ["left", "right", "top", "bottom", "header", "footer"].iter().enumerate() {
+            if let Some(value) = margins.attr_f64(name).filter(|value| *value >= 0.0) {
+                found[index] = value;
+                any = true;
+            }
+        }
+        if any {
+            print.margins = Some(found);
+        }
+    }
+    // Whether the sheet prints to **fit**: the file says it in the
+    // properties of the sheet.
+    print.fit_to_page = root
+        .path(&["sheetPr", "pageSetUpPr"])
+        .map(|properties| properties.flag("fitToPage", false))
+        .unwrap_or(false);
+    Some(print)
+}
+
+/// The **papers** of the file format: the number a file writes, and the
+/// name it means.
+const PAPERS: [(u32, &str); 23] = [
+    (1, "Letter"),
+    (3, "Tabloid"),
+    (4, "Ledger"),
+    (5, "Legal"),
+    (6, "Statement"),
+    (7, "Executive"),
+    (8, "A3"),
+    (9, "A4"),
+    (11, "A5"),
+    (12, "B4"),
+    (13, "B5"),
+    (20, "Envelope #10"),
+    (27, "Envelope DL"),
+    (34, "Envelope B5"),
+    (42, "B4 (ISO)"),
+    (43, "Japanese Postcard"),
+    (69, "Japanese Double Postcard"),
+    (70, "A6"),
+    (71, "Japanese Envelope Kaku #2"),
+    (72, "Japanese Envelope Kaku #3"),
+    (73, "Japanese Envelope #3"),
+    (74, "Japanese Envelope #4"),
+    (88, "B6"),
+];
+
+/// The name of the **paper** a number means, when it means one.
+fn paper_name(number: u32) -> Option<&'static str> {
+    PAPERS.iter().find(|(id, _)| *id == number).map(|(_, name)| *name)
 }
 
 /// Read the **tables** of a sheet.

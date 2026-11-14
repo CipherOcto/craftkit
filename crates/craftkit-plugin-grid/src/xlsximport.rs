@@ -165,6 +165,8 @@ commands! {
             let mut printed = 0u64;
             let mut unread_prints = 0u64;
             let mut outlines = 0u64;
+            let mut setups = 0u64;
+            let mut unread_setups = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -542,6 +544,11 @@ commands! {
                         printed += 1;
                     }
                 }
+                // The **page setup** of the sheet: how it prints.
+                if let Some(print) = &sheet.print {
+                    data["print"] = print_setup(print, &mut unread_setups).to_json();
+                    setups += 1;
+                }
                 if !merges.is_empty() {
                     data["merges"] = Json::Array(merges.into_iter().map(Json::String).collect());
                 }
@@ -900,6 +907,8 @@ commands! {
                 "prints": printed,
                 "unread_prints": unread_prints,
                 "outlines": outlines,
+                "setups": setups,
+                "unread_setups": unread_setups,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,
@@ -993,6 +1002,61 @@ fn validation_formula(text: &str, kind: &str) -> String {
         return text.trim_start_matches('=').trim().to_string();
     }
     text.to_string()
+}
+
+/// The **page setup** of a sheet, as this tree's setup.
+///
+/// The file's numbers are the file's own: the margins are in **inches**
+/// and the tree's are in **points**, and the paper is the file's own
+/// name — a paper this tree does not have is not a paper.
+fn print_setup(print: &craftkit_xlsx::Print, unread: &mut u64) -> crate::printing::Setup {
+    let mut setup = crate::printing::Setup::default();
+    if let Some(paper) = &print.paper {
+        match crate::printing::paper_of(paper) {
+            Some((name, width, height)) => {
+                setup.paper = name.to_string();
+                setup.width = width;
+                setup.height = height;
+            }
+            None => *unread += 1,
+        }
+    }
+    if let Some(orientation) = &print.orientation {
+        if orientation == "portrait" || orientation == "landscape" {
+            setup.orientation = orientation.clone();
+        } else {
+            *unread += 1;
+        }
+    }
+    if let Some(margins) = print.margins {
+        // The tree's margins are in points.
+        setup.margins = [margins[0] * 72.0, margins[1] * 72.0, margins[2] * 72.0, margins[3] * 72.0];
+    }
+    if let Some(scale) = print.scale {
+        let scale = f64::from(scale);
+        if (crate::scaling::MIN_SCALE..=crate::scaling::MAX_SCALE).contains(&scale) {
+            setup.scale = scale;
+        } else {
+            // The tree's own rule: a scale outside the bounds is
+            // refused, and not clamped.
+            *unread += 1;
+        }
+    }
+    if print.fit_to_page
+        && let Some((wide, tall)) = print.fit
+    {
+        if (wide == 0 && tall == 0)
+            || wide > crate::scaling::MAX_FIT_PAGES
+            || tall > crate::scaling::MAX_FIT_PAGES
+        {
+            // A fit of no pages at all is not a fit, and a fit of more
+            // pages than the tree allows is not a fit either.
+            *unread += 1;
+        } else {
+            setup.fit = Some((wide as u16, tall as u16));
+        }
+    }
+    setup
 }
 
 /// The **titles** of a sheet: the rows and the columns that are

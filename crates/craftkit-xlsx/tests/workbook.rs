@@ -801,6 +801,42 @@ fn the_outline_of_a_sheet_is_read() {
     assert_eq!(sheet.summary_right, None, "and the file says nothing of the columns");
 }
 
+/// The **page setup** of a sheet is read: the paper, the orientation,
+/// the margins, the scale and the fit.
+#[test]
+fn the_page_setup_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetData/><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" scale="80" fitToWidth="1" fitToHeight="2"/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let print = workbook.sheets[0].print.as_ref().expect("the sheet has a page setup");
+    assert_eq!(print.paper.as_deref(), Some("A4"), "the paper it prints on");
+    assert_eq!(print.orientation.as_deref(), Some("landscape"), "and the way it lies");
+    assert_eq!(
+        print.margins,
+        Some([0.7, 0.7, 0.75, 0.75, 0.3, 0.3]),
+        "and the margins, in the file's own inches"
+    );
+    assert_eq!(print.scale, Some(80), "and the scale");
+    assert_eq!(print.fit, Some((1, 2)), "and the fit");
+    assert!(print.fit_to_page, "and that it prints to fit");
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

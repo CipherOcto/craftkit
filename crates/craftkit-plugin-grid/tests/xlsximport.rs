@@ -949,6 +949,48 @@ fn the_threads_of_a_sheet_are_imported() {
     assert_eq!(note["replies"][0]["author"].as_str(), Some("bob"), "and who wrote the reply");
 }
 
+/// The **page setup** of a sheet is imported: the paper, the
+/// orientation, the margins, the scale and the fit.
+#[test]
+fn the_page_setup_of_a_sheet_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetData/><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" scale="80" fitToWidth="1" fitToHeight="2"/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["setups"].as_u64(), Some(1), "the page setup was imported");
+    assert_eq!(outcome.data["unread_setups"].as_u64(), Some(0), "and all of it was read");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let setup = &node.data["print"];
+    assert_eq!(setup["paper"].as_str(), Some("A4"), "the paper it prints on");
+    assert_eq!(setup["orientation"].as_str(), Some("landscape"), "and the way it lies");
+    // The tree's margins are in points, and the file's are in inches.
+    let left = setup["margins"]["left"].as_f64().expect("the left margin is a number");
+    assert!((left - 50.4).abs() < 0.001, "the left margin is half an inch and a bit: {left}");
+    assert_eq!(setup["scale"].as_f64(), Some(80.0), "and the scale");
+    assert_eq!(setup["fit"]["wide"].as_f64(), Some(1.0), "and the fit, a page wide");
+    assert_eq!(setup["fit"]["tall"].as_f64(), Some(2.0), "and two pages tall");
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]
