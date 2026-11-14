@@ -162,6 +162,8 @@ commands! {
             let mut unread_conditionals = 0u64;
             let mut imported_validations = 0u64;
             let mut unread_validations = 0u64;
+            let mut printed = 0u64;
+            let mut unread_prints = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -482,6 +484,33 @@ commands! {
                 if !validations.is_empty() {
                     data["validations"] = Json::Array(validations);
                 }
+                // The **printing** of the sheet: the area it prints, and
+                // the titles it repeats on every page.
+                if let Some(area) = &sheet.print_area {
+                    match crate::fill::area_at(area, &id) {
+                        Ok(area) if area.start != area.end => {
+                            data["print_area"] = json!(area.to_text());
+                            printed += 1;
+                        }
+                        // The tree's own rule: an area of one cell is a
+                        // cell, and a cell is not a printed area.
+                        _ => unread_prints += 1,
+                    }
+                }
+                if let Some(text) = &sheet.print_titles {
+                    let (rows, columns) = print_titles_of(text);
+                    if rows.is_empty() && columns.is_empty() {
+                        unread_prints += 1;
+                    } else {
+                        if !rows.is_empty() {
+                            data["title_rows"] = json!(rows);
+                        }
+                        if !columns.is_empty() {
+                            data["title_columns"] = json!(columns);
+                        }
+                        printed += 1;
+                    }
+                }
                 if !merges.is_empty() {
                     data["merges"] = Json::Array(merges.into_iter().map(Json::String).collect());
                 }
@@ -795,6 +824,11 @@ commands! {
                     "; {unread_aligns} alignment(s) could not be read and were not imported"
                 ));
             }
+            if unread_prints > 0 {
+                summary.push_str(&format!(
+                    "; {unread_prints} printing(s) could not be read and were not imported"
+                ));
+            }
             Ok(Outcome::changed(summary).with_data(json!({
                 "id": workbook_id,
                 "name": name,
@@ -818,6 +852,8 @@ commands! {
                 "unread_conditionals": unread_conditionals,
                 "validations": imported_validations,
                 "unread_validations": unread_validations,
+                "prints": printed,
+                "unread_prints": unread_prints,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,
@@ -911,6 +947,53 @@ fn validation_formula(text: &str, kind: &str) -> String {
         return text.trim_start_matches('=').trim().to_string();
     }
     text.to_string()
+}
+
+/// The **titles** of a sheet: the rows and the columns that are
+/// printed on every page.
+///
+/// A file writes the titles as one text — the sheet's own words — and a
+/// part of it is a range of rows or a range of columns. The rows of
+/// the file are counted from one and the tree's are counted from zero.
+fn print_titles_of(text: &str) -> (Vec<u32>, Vec<u32>) {
+    let mut rows: Vec<u32> = Vec::new();
+    let mut columns: Vec<u32> = Vec::new();
+    for part in text.split(',') {
+        let part = part.trim();
+        let own = part.rsplit_once('!').map(|(_, own)| own).unwrap_or(part);
+        let own = own.replace('$', "");
+        let Some((first, second)) = own.split_once(':') else { continue };
+        let (first, second) = (first.trim(), second.trim());
+        if let (Ok(first), Ok(second)) = (first.parse::<u32>(), second.parse::<u32>()) {
+            // A range of **rows**: the rows of the file count from one,
+            // and a sheet is not taller than the tree's own bound.
+            if first >= 1 && second >= first && second as u64 <= crate::formula::MAX_ROWS {
+                for row in (first - 1)..=(second - 1) {
+                    if !rows.contains(&row) {
+                        rows.push(row);
+                    }
+                }
+            }
+            continue;
+        }
+        // A range of **columns**.
+        let (Some(first), Some(second)) =
+            (crate::formula::CellRef::column_index(first), crate::formula::CellRef::column_index(second))
+        else {
+            continue;
+        };
+        if second < first || second as u64 >= crate::formula::MAX_COLS {
+            continue;
+        }
+        for column in first..=second {
+            if !columns.contains(&column) {
+                columns.push(column);
+            }
+        }
+    }
+    rows.sort_unstable();
+    columns.sort_unstable();
+    (rows, columns)
 }
 
 /// The **kind** of a validation, as this tree's kind.

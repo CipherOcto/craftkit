@@ -731,6 +731,36 @@ fn the_validations_of_a_sheet_are_read() {
     assert_eq!(rules[3].formula1.as_deref(), Some("Other!$A$1:$A$3"), "of another sheet's cells");
 }
 
+/// The **printing** of a sheet is read: the area it prints, and the
+/// titles it repeats on every page.
+///
+/// A file says these with the **built-in names**, and they are not
+/// names a formula uses.
+#[test]
+fn the_printing_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">One!$A$1:$C$10</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">One!$A:$B,One!$1:$2</definedName><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">One!$A$1:$C$10</definedName></definedNames></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    assert_eq!(sheet.print_area.as_deref(), Some("A1:C10"), "the area the sheet prints");
+    assert_eq!(sheet.print_titles.as_deref(), Some("One!$A:$B,One!$1:$2"), "and the titles it repeats");
+    // The built-in names are not names a formula uses.
+    assert!(workbook.names.is_empty(), "and no name is read");
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

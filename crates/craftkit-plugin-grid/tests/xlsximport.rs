@@ -799,6 +799,72 @@ fn the_validations_of_a_sheet_are_imported() {
     assert_eq!(check.data["style"].as_str(), Some("warning"), "and the rule warns");
 }
 
+/// The **printing** of a sheet is imported: the area it prints, and the
+/// titles it repeats on every page.
+#[test]
+fn the_printing_of_a_sheet_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">One!$A$1:$C$10</definedName><definedName name="_xlnm.Print_Titles" localSheetId="0">One!$A:$B,One!$1:$2</definedName></definedNames></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["prints"].as_u64(), Some(2), "the area and the titles were imported");
+    assert_eq!(outcome.data["unread_prints"].as_u64(), Some(0), "and none was left out");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["print_area"].as_str(), Some("A1:C10"), "the area the sheet prints");
+    assert_eq!(node.data["title_rows"][0].as_u64(), Some(0), "the first row that repeats");
+    assert_eq!(node.data["title_rows"][1].as_u64(), Some(1), "and the second");
+    assert_eq!(node.data["title_columns"][0].as_u64(), Some(0), "the first column that repeats");
+    assert_eq!(node.data["title_columns"][1].as_u64(), Some(1), "and the second");
+}
+
+/// A **print area of one cell** is not imported: an area of one cell
+/// is a cell, and the tree's own command refuses it.
+#[test]
+fn a_print_area_of_one_cell_is_not_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">One!$A$1</definedName></definedNames></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["prints"].as_u64(), Some(0), "nothing was imported");
+    assert_eq!(outcome.data["unread_prints"].as_u64(), Some(1), "and the area was left out");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert!(node.data.get("print_area").is_none(), "and the sheet prints no area of its own");
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]

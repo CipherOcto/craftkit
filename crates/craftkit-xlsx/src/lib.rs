@@ -223,6 +223,17 @@ pub struct Sheet {
     /// The **validations** of the sheet: the rules on what a cell may
     /// hold.
     pub validations: Vec<Validation>,
+    /// The **area** the sheet prints, when the file names one.
+    ///
+    /// The area is the file's own words — `A1:C10` — without the sheet
+    /// it belongs to and without the `$` of an absolute address.
+    pub print_area: Option<String>,
+    /// The **titles** the sheet prints on every page, when the file
+    /// names them.
+    ///
+    /// The titles are the file's own text: the rows and the columns
+    /// that repeat are said in the file's own way.
+    pub print_titles: Option<String>,
 }
 
 /// A **validation** of a sheet: a rule on what a cell may hold.
@@ -571,6 +582,9 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
         })
         .unwrap_or_default();
     workbook.names = names_of(&workbook_xml, &sheet_names);
+    // The **printing** of the sheets: the area a sheet prints and the
+    // titles it repeats. A file says these with the built-in names.
+    let prints = print_of(&workbook_xml, &sheet_names);
 
     let workbook_rels = rels_of(&mut package, &part)?;
     let strings = shared_strings(&mut package, &workbook_rels, &mut workbook.warnings)?;
@@ -600,7 +614,11 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
         }
         let (mut sheet, filter, links, comments, tables) =
             read_sheet(&mut package, &relation.target, &strings, &styles, &mut workbook.warnings);
-        sheet.name = name;
+        sheet.name = name.clone();
+        if let Some((_, area, titles)) = prints.iter().find(|(sheet, _, _)| *sheet == name) {
+            sheet.print_area = area.clone();
+            sheet.print_titles = titles.clone();
+        }
         if let Some(filter) = filter {
             workbook.filters.push((sheet.name.clone(), filter));
         }
@@ -647,6 +665,54 @@ fn names_of(workbook_xml: &craftkit_xml::El, sheets: &[String]) -> Vec<Name> {
         out.push(Name { name: name.to_string(), scope, refers_to });
     }
     out
+}
+
+/// The **printing** of the sheets: the area a sheet prints, and the
+/// titles it repeats on every page.
+///
+/// A file says these with the **built-in names** — `_xlnm.Print_Area`
+/// and `_xlnm.Print_Titles` — and they are not names a formula uses:
+/// they are the printing of the sheet they belong to. The scope of a
+/// built-in name is the sheet it is about, and the number the file
+/// gives it counts the sheets of the file.
+fn print_of(
+    workbook_xml: &craftkit_xml::El,
+    sheets: &[String],
+) -> Vec<(String, Option<String>, Option<String>)> {
+    let mut out: Vec<(String, Option<String>, Option<String>)> =
+        sheets.iter().map(|name| (name.clone(), None, None)).collect();
+    let Some(names) = workbook_xml.child("definedNames") else { return out };
+    for element in names.kids("definedName") {
+        let Some(name) = element.attr("name") else { continue };
+        let lower = name.to_ascii_lowercase();
+        if lower != "_xlnm.print_area" && lower != "_xlnm.print_titles" {
+            continue;
+        }
+        let Some(scope) = element.attr_u32("localSheetId") else { continue };
+        let Some(sheet) = sheets.get(scope as usize) else { continue };
+        let Some(index) = out.iter().position(|(name, _, _)| name == sheet) else { continue };
+        let text = element.text.trim();
+        if text.is_empty() {
+            continue;
+        }
+        if lower == "_xlnm.print_area" {
+            out[index].1 = Some(area_text(text));
+        } else {
+            out[index].2 = Some(text.to_string());
+        }
+    }
+    out
+}
+
+/// The **area** of a print area: the file's own words, without the
+/// sheet it belongs to and without the `$` of an absolute address.
+///
+/// A file may name several areas, and the **first** is the one: the
+/// others are the areas of a range that is not in one piece.
+fn area_text(text: &str) -> String {
+    let first = text.split(',').next().unwrap_or(text).trim();
+    let own = first.rsplit_once('!').map(|(_, own)| own).unwrap_or(first);
+    own.replace('$', "")
 }
 
 /// The **shared strings** of a workbook: the texts its cells share.
