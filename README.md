@@ -4356,6 +4356,7 @@ so.
 | the **auto filter** of a sheet: the filter the file holds | **built.** The filter of a sheet is read and imported, and the column it judges is the column and not an offset in a range (§908) | §908 |
 | the **links** of a sheet: the places its cells go to | **built.** The links of a sheet are read and imported, and a link over a range is put on each of its cells (§909) | §909 |
 | the **comments** of a sheet: the notes a cell carries | **built.** The comments of a sheet are read and imported, and the author line a note begins with is dropped (§910) | §910 |
+| the **tables** of a sheet: the ranges with a name and a way of being totalled | **built.** The tables of a sheet are read and imported, and the way a column is totalled in is the way this tree has (§911) | §911 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60021,4 +60022,69 @@ A cell can carry a note.
   whether a thread is resolved, are not imported.
 - **The fonts, the fills and the borders are still not read.**
 - **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 911. The tables of a sheet: the ranges with a name and a way of being totalled
+
+A sheet may hold **tables**: a named range of cells whose columns are
+totalled in a way.
+
+### What was built
+
+- **The tables of a sheet** are read: the name of each, the range it
+  reaches, whether it has a **total row**, the **way** its columns are
+  totalled in, the ways of the columns that have one of their own, and
+  the **label** of the total row. They are in **parts of their own**
+  that the sheet names by a relationship.
+- **The import carries the tables**: a range with a name in the file is
+  a table here.
+
+### What the port found
+
+- **The tree's tables are in parts of their own**, and the sheet names
+  them by a `tableParts` list and a relationship. So the reader follows
+  the sheet's relationships and reads the parts they name.
+- **The tree's table is an object with more than this one has**: an id,
+  a header row, a **style** (the banded rows, the banded columns, the
+  first column, the last column, the style's name), the **filter** of
+  the table, the **XML** columns of a query table, the calculated
+  column formulas and the unique names. Here the table is the **name,
+  the range, the totals and the ways**, because a style is a drawing
+  and a drawing is not a fact of the sheet.
+- **A column may be totalled in a way this tree does not have.** The
+  tree has `custom` — a formula of its own — and here a column with a
+  way that is not here is **left out** rather than given a name that
+  means nothing: the ways here are `sum`, `average`, `count`,
+  `count-numbers`, `max`, `min`, `standard-deviation`, `variance` and
+  `none`, and `countNums` is `count-numbers` and `stdDev` is
+  `standard-deviation`.
+- **The tree keeps a way for every column and a label for every
+  column.** Here a table has one way and one label: the way of the
+  first column that has one is the way of the table, and the columns
+  that have one of their own are kept beside it. A table with no way at
+  all is totalled in the **sum**, because that is what a table without
+  a way of its own is.
+
+### What it cost
+
+- **One kind** in the reader — the table — and the reading of it:
+  about a hundred lines.
+- **Three tests**: two in the reader's test file (the name, the range,
+  the totals, the ways and the label; and a way this tree does not have
+  is left out) and one in the import's test file (the table is imported
+  and reads back).
+- **No new command** and **no new dependency**: the tables are XML,
+  and the reader of §903 reads it.
+
+### What it does not settle
+
+- **The style of a table is not read**: the banded rows, the banded
+  columns and the style's name are not imported.
+- **The filter of a table** — the one inside the table part, and not
+  the filter of the sheet — is not read.
+- **A calculated column formula** is not read: a column whose values
+  are computed by a formula of its own is read as the numbers it
+  holds.
+- **The threaded comments, the fonts, the fills and the borders are
+  still not read.**
 - **The workbook is still not written back.**
