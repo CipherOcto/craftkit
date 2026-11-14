@@ -738,6 +738,67 @@ fn the_conditional_formats_of_a_sheet_are_imported() {
     assert_eq!(rule["priority"].as_u64(), Some(1), "and it is tried first");
 }
 
+/// The **validations** of a sheet are imported: the rules on what a
+/// cell may hold.
+#[test]
+fn the_validations_of_a_sheet_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><dataValidations count="3"><dataValidation type="list" allowBlank="1" sqref="B1:B5"><formula1>"a,b,c"</formula1></dataValidation><dataValidation type="whole" operator="between" errorStyle="warning" sqref="C1" errorTitle="too big" error="not between one and ten"><formula1>1</formula1><formula2>10</formula2></dataValidation><dataValidation type="custom" sqref="D1"><formula1>A1&gt;0</formula1></dataValidation></dataValidations></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["validations"].as_u64(), Some(2), "two rules were imported");
+    assert_eq!(outcome.data["unread_validations"].as_u64(), Some(1), "one rule was left out");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let rule = &node.data["validations"][0];
+    assert_eq!(rule["range"].as_str(), Some("B1:B5"), "the range it is about");
+    assert_eq!(rule["kind"].as_str(), Some("list"), "the kind of the rule");
+    assert_eq!(rule["formula1"].as_str(), Some("\"a,b,c\""), "the list of words");
+    assert_eq!(rule["allow_blank"].as_bool(), Some(true), "a blank is allowed");
+    assert_eq!(rule["dropdown"].as_bool(), Some(true), "and the list is shown in the cell");
+    let rule = &node.data["validations"][1];
+    assert_eq!(rule["range"].as_str(), Some("C1"), "the range of the second rule");
+    assert_eq!(rule["kind"].as_str(), Some("whole"), "a whole number");
+    assert_eq!(rule["operator"].as_str(), Some("between"), "between two");
+    assert_eq!(rule["formula1"].as_str(), Some("1"), "one");
+    assert_eq!(rule["formula2"].as_str(), Some("10"), "and ten");
+    assert_eq!(rule["error_style"].as_str(), Some("warning"), "and it warns rather than refuses");
+    assert_eq!(rule["error_title"].as_str(), Some("too big"), "with a title for the error");
+    // The imported rules are the tree's own rules: they check a value.
+    let check =
+        session.execute("grid.validation.check", &json!({ "sheet": sheet, "cell": "B1", "input": "b" }));
+    let check = check.expect("the value is checked");
+    assert_eq!(check.data["ok"].as_bool(), Some(true), "a word of the list passes");
+    let check =
+        session.execute("grid.validation.check", &json!({ "sheet": sheet, "cell": "B1", "input": "z" }));
+    let check = check.expect("the value is checked");
+    assert_eq!(check.data["ok"].as_bool(), Some(false), "a word that is not of the list does not");
+    let check =
+        session.execute("grid.validation.check", &json!({ "sheet": sheet, "cell": "C1", "input": "50" }));
+    let check = check.expect("the value is checked");
+    assert_eq!(check.data["ok"].as_bool(), Some(false), "a number out of the range does not");
+    assert_eq!(check.data["style"].as_str(), Some("warning"), "and the rule warns");
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]

@@ -160,6 +160,8 @@ commands! {
             let mut views = 0u64;
             let mut imported_conditionals = 0u64;
             let mut unread_conditionals = 0u64;
+            let mut imported_validations = 0u64;
+            let mut unread_validations = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -428,6 +430,57 @@ commands! {
                 }
                 if !hidden_columns.is_empty() {
                     data["hidden_columns"] = Json::Array(hidden_columns);
+                }
+                // The **validations** of the sheet: the rules on what a
+                // cell may hold.
+                let mut validations: Vec<Json> = Vec::new();
+                for rule in &sheet.validations {
+                    let Some(kind) = validation_kind(&rule.kind) else {
+                        unread_validations += 1;
+                        continue;
+                    };
+                    let operator = match &rule.operator {
+                        Some(operator) => match crate::validation::Operator::parse(operator) {
+                            Some(operator) => operator.name(),
+                            None => {
+                                unread_validations += 1;
+                                continue;
+                            }
+                        },
+                        None => crate::validation::Operator::Between.name(),
+                    };
+                    let mut entry = craftkit_sdk::serde_json::Map::new();
+                    entry.insert("range".to_string(), json!(rule.ranges[0]));
+                    entry.insert("kind".to_string(), json!(kind));
+                    entry.insert("operator".to_string(), json!(operator));
+                    entry.insert(
+                        "formula1".to_string(),
+                        json!(match &rule.formula1 {
+                            Some(text) => validation_formula(text, kind),
+                            None => String::new(),
+                        }),
+                    );
+                    entry.insert(
+                        "formula2".to_string(),
+                        match &rule.formula2 {
+                            Some(formula) => json!(validation_formula(formula, kind)),
+                            None => Json::Null,
+                        },
+                    );
+                    entry.insert("allow_blank".to_string(), json!(rule.allow_blank));
+                    entry.insert("dropdown".to_string(), json!(rule.in_cell_dropdown));
+                    entry.insert("input_title".to_string(), json!(rule.input_title));
+                    entry.insert("input_message".to_string(), json!(rule.input_message));
+                    entry.insert("show_input".to_string(), json!(rule.show_input));
+                    entry.insert("error_title".to_string(), json!(rule.error_title));
+                    entry.insert("error_message".to_string(), json!(rule.error_message));
+                    entry.insert("error_style".to_string(), json!(rule.error_style));
+                    entry.insert("show_error".to_string(), json!(rule.show_error));
+                    validations.push(Json::Object(entry));
+                    imported_validations += 1;
+                }
+                if !validations.is_empty() {
+                    data["validations"] = Json::Array(validations);
                 }
                 if !merges.is_empty() {
                     data["merges"] = Json::Array(merges.into_iter().map(Json::String).collect());
@@ -763,6 +816,8 @@ commands! {
                 "views": views,
                 "conditionals": imported_conditionals,
                 "unread_conditionals": unread_conditionals,
+                "validations": imported_validations,
+                "unread_validations": unread_validations,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,
@@ -838,6 +893,43 @@ fn align_of(align: &craftkit_xlsx::Alignment) -> Option<Json> {
         "indent": align.indent,
         "wrap": align.wrap,
     }))
+}
+
+/// The **formula** of a validation rule, as this tree's formula.
+///
+/// A file writes the list of a list rule in one of two ways: as the
+/// words of the list, in quotes, or as a reference to a range of
+/// cells. The tree's own list rule reads both, and reads the words
+/// with their quotes — so the words are kept as they are, and a
+/// reference keeps its sheet and its cells.
+fn validation_formula(text: &str, kind: &str) -> String {
+    let text = tree_formula(text);
+    let text = text.trim();
+    if kind == "list" && !text.starts_with('"') {
+        // A reference: the tree reads it without the `=` a file may
+        // write before it.
+        return text.trim_start_matches('=').trim().to_string();
+    }
+    text.to_string()
+}
+
+/// The **kind** of a validation, as this tree's kind.
+///
+/// The file names the kind in its own words, and the tree's own kind
+/// for "anything at all" is `any` and the file's is `none`. A kind
+/// this tree does not have — a **custom** rule, which is a formula of
+/// its own — is nothing here.
+fn validation_kind(kind: &str) -> Option<&'static str> {
+    match kind {
+        "none" => Some("any"),
+        "whole" => Some("whole"),
+        "decimal" => Some("decimal"),
+        "list" => Some("list"),
+        "date" => Some("date"),
+        "time" => Some("time"),
+        "textLength" => Some("textLength"),
+        _ => None,
+    }
 }
 
 /// The **filter** of a sheet, as this tree's filter.

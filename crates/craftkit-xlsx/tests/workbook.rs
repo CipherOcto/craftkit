@@ -678,6 +678,59 @@ fn the_names_of_a_workbook_are_read() {
     assert_eq!(workbook.names[1].scope, Some("Two".to_string()), "and it belongs to a sheet");
 }
 
+/// The **validations** of a sheet are read: the rules on what a cell
+/// may hold.
+#[test]
+fn the_validations_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><dataValidations count="3"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" sqref="B1:B5 D1"><formula1>"a,b,c"</formula1></dataValidation><dataValidation type="whole" operator="between" errorStyle="warning" showDropDown="1" sqref="C1" prompt="p" promptTitle="pt" error="e" errorTitle="et"><formula1>1</formula1><formula2>10</formula2></dataValidation></dataValidations><extLst><ext uri="{CCE6A557-97BC-4b89-ADB6-D9C93CAAB3DF}"><x14:dataValidations xmlns:x14="x" xmlns:xm="m" count="1"><x14:dataValidation type="list"><x14:formula1><xm:f>Other!$A$1:$A$3</xm:f></x14:formula1><xm:sqref>G1:G4</xm:sqref></x14:dataValidation></x14:dataValidations></ext></extLst></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let rules = &workbook.sheets[0].validations;
+    // A rule over two ranges is two rules here.
+    assert_eq!(rules.len(), 4, "four rules are read");
+    assert_eq!(rules[0].ranges, vec!["B1:B5".to_string()], "the first is about the first range");
+    assert_eq!(rules[0].kind, "list", "and it is a list");
+    assert_eq!(rules[0].formula1.as_deref(), Some("\"a,b,c\""), "of three words");
+    assert!(rules[0].allow_blank, "and a blank is allowed");
+    assert!(rules[0].show_input, "and the input message is shown");
+    assert!(rules[0].show_error, "and the error message is shown");
+    assert_eq!(rules[1].ranges, vec!["D1".to_string()], "the second is about the second range");
+    assert_eq!(rules[1].kind, "list", "and it is the same list");
+    // The second rule of the file: a whole number between two.
+    assert_eq!(rules[2].kind, "whole", "the third is a whole number");
+    assert_eq!(rules[2].operator.as_deref(), Some("between"), "between two");
+    assert_eq!(rules[2].formula1.as_deref(), Some("1"), "one");
+    assert_eq!(rules[2].formula2.as_deref(), Some("10"), "and ten");
+    assert_eq!(rules[2].error_style, "warning", "and it warns rather than refuses");
+    assert_eq!(rules[2].input_title, "pt", "with a title for the input");
+    assert_eq!(rules[2].input_message, "p", "and the input message");
+    assert_eq!(rules[2].error_title, "et", "and a title for the error");
+    assert_eq!(rules[2].error_message, "e", "and the error message");
+    // A file's `showDropDown` hides the arrow of the list.
+    assert!(!rules[2].in_cell_dropdown, "and the arrow is not shown");
+    // The rule of the extension list: the range is a child, and the
+    // formula is in a child of a child.
+    assert_eq!(rules[3].ranges, vec!["G1:G4".to_string()], "the fourth is about its range");
+    assert_eq!(rules[3].kind, "list", "and it is a list");
+    assert_eq!(rules[3].formula1.as_deref(), Some("Other!$A$1:$A$3"), "of another sheet's cells");
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

@@ -220,6 +220,48 @@ pub struct Sheet {
     /// The **conditional formats** of the sheet: the rules that are
     /// about a range of cells.
     pub conditionals: Vec<Conditional>,
+    /// The **validations** of the sheet: the rules on what a cell may
+    /// hold.
+    pub validations: Vec<Validation>,
+}
+
+/// A **validation** of a sheet: a rule on what a cell may hold.
+///
+/// The names are the **file's** own, and the ranges are the file's own
+/// words — `A1:A9` — because the file may name several ranges for one
+/// rule.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Validation {
+    /// The ranges the rule is over.
+    pub ranges: Vec<String>,
+    /// The **kind** of the rule: the file's own name — `whole`,
+    /// `decimal`, `list`, `date`, `time`, `textLength`, `custom` or
+    /// `none`.
+    pub kind: String,
+    /// The **operator**: the file's own name, when the file names one.
+    pub operator: Option<String>,
+    /// The **first formula**: the number, the word or the list.
+    pub formula1: Option<String>,
+    /// The **second formula**, for the operators that have two.
+    pub formula2: Option<String>,
+    /// Whether a **blank** is allowed.
+    pub allow_blank: bool,
+    /// Whether the list of a list rule is shown **in the cell**.
+    pub in_cell_dropdown: bool,
+    /// The **title** of the input message.
+    pub input_title: String,
+    /// The **input message** itself.
+    pub input_message: String,
+    /// Whether the input message is **shown**.
+    pub show_input: bool,
+    /// The **title** of the error message.
+    pub error_title: String,
+    /// The **error message** itself.
+    pub error_message: String,
+    /// The **style** of the error: `stop`, `warning` or `information`.
+    pub error_style: String,
+    /// Whether the error message is **shown**.
+    pub show_error: bool,
 }
 
 /// A **conditional format** of a sheet: a rule about a range of cells.
@@ -686,6 +728,9 @@ fn read_sheet(
     // The **conditional formats** of the sheet: the rules that are
     // about a range of cells.
     sheet.conditionals = read_conditionals(&root, styles);
+    // The **validations** of the sheet: the rules on what a cell may
+    // hold.
+    sheet.validations = read_validations(&root);
     // The **rows** of the sheet: their height and whether they are
     // hidden. A file says a row of its own, and this reader reads the
     // rows as it reads the cells.
@@ -929,6 +974,102 @@ fn conditional_op(operator: &str) -> Option<&'static str> {
         "greaterThanOrEqual" => Some(">="),
         "lessThanOrEqual" => Some("<="),
         _ => None,
+    }
+}
+
+/// Read the **validations** of a sheet: the rules on what a cell may
+/// hold.
+///
+/// A file names the ranges of a rule in one list, and this tree's rule
+/// is over **one** range — so a rule over two ranges is two rules
+/// here, with the same kind and the same formulas.
+///
+/// A file may hold its rules in the **extension list** of the sheet
+/// instead of beside the cells, and those rules are read too.
+fn read_validations(root: &craftkit_xml::El) -> Vec<Validation> {
+    let mut validations = Vec::new();
+    // The rules of the sheet itself.
+    if let Some(list) = root.child("dataValidations") {
+        for rule in list.kids("dataValidation") {
+            read_validation(rule, &mut validations);
+        }
+    }
+    // The rules of the **extension list**: a file may put a rule there
+    // instead, and there the range is a child of the rule rather than
+    // an attribute of it.
+    for list in root.kids("extLst") {
+        for extension in list.kids("ext") {
+            let Some(rules) = extension.child("dataValidations") else { continue };
+            for rule in rules.kids("dataValidation") {
+                read_validation(rule, &mut validations);
+            }
+        }
+    }
+    validations
+}
+
+/// Read **one** validation of a sheet.
+///
+/// A file writes the range of a rule as an attribute — `sqref` — and
+/// the extension list writes it as a child of the same name. A file
+/// writes the formulas of a rule as children, and the extension list
+/// writes them as a child of a child: the formula is in a `f`.
+fn read_validation(rule: &craftkit_xml::El, validations: &mut Vec<Validation>) {
+    let sqref = rule
+        .attr("sqref")
+        .map(|sqref| sqref.to_string())
+        .or_else(|| rule.child("sqref").map(|sqref| sqref.text.trim().to_string()));
+    let Some(sqref) = sqref else { return };
+    let ranges: Vec<String> = sqref
+        .split_whitespace()
+        .map(|range| range.replace('$', ""))
+        .filter(|range| !range.is_empty())
+        .collect();
+    if ranges.is_empty() {
+        return;
+    }
+    let formula = |name: &str| {
+        let formula = rule.child(name)?;
+        let text = formula.child("f").map(|f| f.text.as_str()).unwrap_or(formula.text.as_str());
+        let text = text.trim();
+        if text.is_empty() { None } else { Some(text.to_string()) }
+    };
+    let kind = rule.attr("type").unwrap_or("none").to_string();
+    let operator = rule.attr("operator").map(|operator| operator.to_string());
+    let formula1 = formula("formula1");
+    let formula2 = formula("formula2");
+    let allow_blank = rule.flag("allowBlank", false);
+    // A file's `showDropDown` **hides** the arrow of a list, and
+    // the tree's flag is that the arrow is shown.
+    let in_cell_dropdown = !rule.flag("showDropDown", false);
+    let input_title = rule.attr("promptTitle").unwrap_or("").to_string();
+    let input_message = rule.attr("prompt").unwrap_or("").to_string();
+    let show_input = rule.flag("showInputMessage", false);
+    let error_title = rule.attr("errorTitle").unwrap_or("").to_string();
+    let error_message = rule.attr("error").unwrap_or("").to_string();
+    let error_style = match rule.attr("errorStyle") {
+        Some("warning") => "warning",
+        Some("information") => "information",
+        _ => "stop",
+    };
+    let show_error = rule.flag("showErrorMessage", false);
+    for range in ranges {
+        validations.push(Validation {
+            ranges: vec![range],
+            kind: kind.clone(),
+            operator: operator.clone(),
+            formula1: formula1.clone(),
+            formula2: formula2.clone(),
+            allow_blank,
+            in_cell_dropdown,
+            input_title: input_title.clone(),
+            input_message: input_message.clone(),
+            show_input,
+            error_title: error_title.clone(),
+            error_message: error_message.clone(),
+            error_style: error_style.to_string(),
+            show_error,
+        });
     }
 }
 

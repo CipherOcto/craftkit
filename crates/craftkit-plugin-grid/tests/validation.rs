@@ -156,6 +156,44 @@ fn a_rule_of_a_list_takes_a_word_from_the_list() {
     assert!(!passes(&mut session, sheet, "A1", "Unknown"), "and a word that is not of the list fails");
 }
 
+/// A list rule may name **another sheet's** cells: the words are read
+/// from the sheet the rule names.
+#[test]
+fn a_list_rule_may_name_another_sheets_cells() {
+    let mut session = session();
+    let outcome =
+        session.execute("grid.workbook.add", &json!({ "name": "the book" })).expect("the workbook is added");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let outcome = session
+        .execute("grid.sheet.add", &json!({ "workbook": workbook, "name": "One" }))
+        .expect("the sheet is added");
+    let sheet = outcome.data["id"].as_u64().expect("the sheet has an id");
+    let outcome = session
+        .execute("grid.sheet.add", &json!({ "workbook": workbook, "name": "Other" }))
+        .expect("the sheet is added");
+    let other = outcome.data["id"].as_u64().expect("the sheet has an id");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": other, "cell": "A1", "value": "ann" }))
+        .expect("the cell is set");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": other, "cell": "A2", "value": "bob" }))
+        .expect("the cell is set");
+    session
+        .execute(
+            "grid.validation.set",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A9",
+                "kind": "list",
+                "formula1": "Other!A1:A2",
+            }),
+        )
+        .expect("the rule is set");
+    assert!(passes(&mut session, sheet, "A1", "ann"), "a word of the other sheet passes");
+    assert!(passes(&mut session, sheet, "A1", "bob"), "and so does another");
+    assert!(!passes(&mut session, sheet, "A1", "cat"), "and a word that is not of it fails");
+}
+
 /// A list rule with **no list** is refused: a rule that cannot be
 /// checked is not a rule.
 #[test]

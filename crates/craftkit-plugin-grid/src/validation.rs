@@ -328,12 +328,16 @@ pub fn list_items(book: &Book, sheet: &str, rule: &Rule) -> Vec<String> {
             .filter(|item| !item.is_empty())
             .collect();
     }
-    if let Ok(Expr::Range { start, end, .. }) = formula::parse(text) {
+    if let Ok(Expr::Range { sheet: named, start, end, .. }) = formula::parse(text) {
         let area = Area::new(start.cell, end.cell);
+        // A list may be **another sheet's** cells: the reference names
+        // the sheet it is in.
+        let named = named.map(|name| name.trim_matches('\'').to_string());
+        let target = named.as_deref().unwrap_or(sheet);
         let mut items = Vec::new();
         for row in area.start.row..=area.end.row {
             for col in area.start.col..=area.end.col {
-                let value = book.value_of(sheet, CellRef { row, col });
+                let value = book.value_of(target, CellRef { row, col });
                 let text = value_text(&value);
                 if text.is_empty() {
                     continue;
