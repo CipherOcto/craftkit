@@ -4357,6 +4357,7 @@ so.
 | the **links** of a sheet: the places its cells go to | **built.** The links of a sheet are read and imported, and a link over a range is put on each of its cells (§909) | §909 |
 | the **comments** of a sheet: the notes a cell carries | **built.** The comments of a sheet are read and imported, and the author line a note begins with is dropped (§910) | §910 |
 | the **tables** of a sheet: the ranges with a name and a way of being totalled | **built.** The tables of a sheet are read and imported, and the way a column is totalled in is the way this tree has (§911) | §911 |
+| the **styles** of a cell: the font, the fill, the alignment and the borders | **built.** The styles a cell carries are read and imported — the font, the colour behind the text, how the text lies and the lines on the edges (§912) | §912 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60087,4 +60088,76 @@ totalled in a way.
   holds.
 - **The threaded comments, the fonts, the fills and the borders are
   still not read.**
+- **The workbook is still not written back.**
+
+## 912. The styles of a cell: the font, the fill, the alignment and the borders
+
+A cell carries more than its value: it carries how it **looks**.
+
+### What was built
+
+- The **font** of a cell is read: the face of its text, the size of
+  it, whether it is bold, italic or struck through, the underline, the
+  place of the text above or below its line, and the colour of it.
+- The **fill** of a cell is read: the colour behind its text.
+- The **alignment** of a cell is read: how its text lies across it and
+  how it lies down it, how far it is indented and whether it wraps.
+- The **borders** of a cell are read: the lines on its four edges, the
+  style of each line and its colour.
+- The **import carries all of them**: a cell written in a face is read
+  in that face.
+
+### What the port found
+
+- **The tree's styles are in one part of the file**, and a cell names
+  one of them by its number — the `s` attribute — so the reader reads
+  the **fonts**, the **fills**, the **borders** and the **cell
+  formats** and finds the cell's own among them.
+- **The tree's cell carries a style and this one's carries the parts
+  of it.** The tree's font, fill, border, alignment, protection and
+  number format live in one style that many cells share; here the
+  number format was already the cell's own (§906), and now the font,
+  the fill, the alignment and the borders are the cell's own too —
+  which is what this tree's model already says (§816, §819).
+- **A cell that names no style has no font here.** The tree's reader
+  gives such a cell the first font of the workbook; here a cell that
+  names nothing keeps the sheet's own face, and the sheet's own face
+  is not a cell's.
+- **A fill is not always a colour.** The tree's fill is a **pattern**,
+  and there are sixteen of them; here only the **solid** one is a
+  colour behind the text, and a pattern of stripes is a drawing.
+- **A colour in a file is three things.** The tree reads a colour in
+  **hex**, by its **number** in the old palette, and as a **theme**
+  colour with a tint. This tree has no theme: a theme colour is not
+  carried, and the hex and the old palette are.
+- **A colour in hex has an alpha byte in front of it.** The tree drops
+  it, and so does this one: a colour here is six digits of hex.
+- **The tree's alignments are seven across and five down.** This tree
+  has six across and three down: `distributed` and `justify` — down —
+  are not alignments here, and an alignment this tree does not have is
+  **not carried** rather than carried wrongly.
+- **The tree's borders have two diagonals**; this tree's cell has four
+  edges, and the diagonals are not edges.
+
+### What it cost
+
+- **Four kinds** in the reader — the font, the fill, the alignment and
+  the borders — and the reading of them: about two hundred lines.
+- **Four tests** in the reader's test file (the font with its marks
+  and its colour; the fill, and a pattern that is not a colour; the
+  alignment; the borders) and **one** in the import's test file (the
+  styles are imported and read back).
+- **No new command** and **no new dependency**: the styles are XML,
+  and the reader of §903 reads it.
+
+### What it does not settle
+
+- **The theme is not read**: a colour that the file names by its theme
+  is not carried, and this tree has no theme to carry it into.
+- **The protection of a cell is not read**: whether the cell is locked
+  or its text is hidden is a matter of the sheet's protection, and it
+  is not carried here.
+- **The named styles of a workbook are not read**: the styles the file
+  names, and the style a cell may name by name, are not imported.
+- **A shared formula is still not filled in.**
 - **The workbook is still not written back.**
