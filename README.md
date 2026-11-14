@@ -4369,6 +4369,7 @@ so.
 | the **print area** and the **print titles** of a sheet | **built.** What a sheet prints and which of its lines repeat on every page are read and imported, and the built-in names that say so are not names a formula uses (§921) | §921 |
 | the **outline** of a sheet | **built.** The groups of rows and of columns are read and imported — the level of each line in its group and where the summary sits (§922) | §922 |
 | the **replies** of a note | **built.** The threads of a sheet are read and imported — the note, the replies under it and whether it is resolved (§923) | §923 |
+| the **page setup** of a sheet | **built.** How a sheet prints is read and imported — the paper, the orientation, the margins, the scale and the fit (§924) | §924 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60813,4 +60814,62 @@ written under it.
 - **A note that is written in the old way only** — a file with no
   thread part — has no replies, and the tree's own command may put
   them there.
+- **The workbook is still not written back.**
+
+## 924. The page setup of a sheet: the paper, the margins, the scale and the fit
+
+A file says how a sheet prints: on what paper, how it lies, how wide
+the margins are, and whether it prints at a scale or to fit.
+
+### What was built
+
+- The **page setup** of a sheet is read: the **paper**, the
+  **orientation**, the **margins**, the **scale** and the **fit**.
+- The **import writes it as the tree's own setup**: the paper by name,
+  the orientation, the margins, the scale and the fit — the shape the
+  tree's own commands write under `print`.
+
+### What the port found
+
+- **The file's paper is a number**, and the number means a paper: the
+  reader gives the **name** the number means, from the file format's
+  own table.
+- **The file's margins are in inches and the tree's are in points**,
+  and the tree's four margins are the file's first four: the file has
+  two more — the margins of the header and of the footer — and the
+  tree has no word for them.
+- **The tree's papers and the file's are nearly the same**, and four
+  of the file's are not in the tree: the statement and the three
+  envelopes. **A paper this tree does not have is not a paper**, and
+  it is left out.
+- **The tree's reader clamps a scale that is out of bounds**, and
+  **the tree refuses it**: a scale of five hundred percent is not a
+  scale of four hundred, and saying so is better than saying it
+  quietly.
+- **A fit is a fit only when the file says the sheet prints to fit** —
+  in the properties of the sheet — and the pages of the fit are the
+  file's own. **A fit of no pages at all is refused**, as the tree's
+  own command refuses it.
+- **Zero pages means as many as it takes**, in the tree and in the
+  file, and the numbers mean the same thing.
+
+### What it cost
+
+- **One kind** in the reader — the page setup — and the table of the
+  file's papers: about ninety lines.
+- **One helper** in the battery: the file's setup, as the tree's own.
+- **Two tests**: one in the reader's test file (the paper, the
+  margins, the scale and the fit) and one in the import's test file
+  (the setup is the tree's own).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The options of the printing are not read**: a file may say that
+  the gridlines and the headings are printed, and that the sheet is
+  centred on the page, and none of that is read.
+- **The header and the footer of the printed page are not read**: a
+  file holds them, and the tree has no word for them.
+- **The breaks of the printing are not read**: a file may say where a
+  page breaks, and the tree has breaks of its own.
 - **The workbook is still not written back.**
