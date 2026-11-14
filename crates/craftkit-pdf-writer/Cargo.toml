@@ -1,0 +1,9 @@
+[package]
+name = "craftkit-pdf-writer"
+description = "The PDF writer: a file written as a PDF. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]

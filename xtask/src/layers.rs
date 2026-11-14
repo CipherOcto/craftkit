@@ -133,6 +133,9 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-plugins", Class::Layer(0)),
     // The scratch a test works in: a path, and the removal of it.
     ("craftkit-scratch", Class::Layer(0)),
+    // The PDF writer: a file written as a PDF. It draws pages and gives
+    // back bytes, and it depends on nothing.
+    ("craftkit-pdf-writer", Class::Layer(0)),
     // L1 — the doors: opening a shared library and calling the table in it,
     // and the reference plugins they open.
     ("craftkit-ffi", Class::Layer(1)),

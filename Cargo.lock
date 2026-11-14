@@ -515,6 +515,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-pdf-writer"
+version = "0.2.0"
+
+[[package]]
 name = "craftkit-plugin-art"
 version = "0.2.0"
 dependencies = [

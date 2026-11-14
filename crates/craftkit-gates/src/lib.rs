@@ -165,6 +165,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     // about a document, a canvas or the kit, and nothing that ships
     // links it.
     ("craftkit-scratch", 0),
+    // The **PDF writer**: a file written as a PDF. It knows nothing
+    // about a document, a canvas or the kit — it draws pages and
+    // gives back bytes.
+    ("craftkit-pdf-writer", 0),
     // L1 — the door: opening a shared library and calling the table in
     // it. One `unsafe` block, and it is named.
     ("craftkit-ffi", 1),
