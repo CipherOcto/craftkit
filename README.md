@@ -4364,6 +4364,7 @@ so.
 | the **merges** of a sheet | **built.** The ranges that are one cell are read and imported, and a merge with a value under it is left out rather than losing the value (§916) | §916 |
 | the **view** of a sheet | **built.** The gridlines, the headings, the zeros, the right-to-left, the formulas shown, the zoom and the frozen panes of a sheet are read and imported (§917) | §917 |
 | the **conditional formats** of a sheet | **built.** The rules that are about a range of cells are read and imported — the comparison, the look and the priority — and a rule this tree does not have is left out (§918) | §918 |
+| the **shared formulas** of a sheet | **built.** A group of cells that shares one formula is read and filled in — the master's formula, moved to where each cell is (§919) | §919 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60521,4 +60522,56 @@ of cells and say what the cells that match them look like.
   name one, and this tree's look is a format and a fill.
 - **The borders and the alignment of a rule are not read**: the same.
 - **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 919. The shared formulas of a sheet: the group that shares one formula
+
+A file may write one formula once and let a group of cells **share**
+it.
+
+### What was built
+
+- The **shared formulas** of a sheet are read: the text of the group's
+  **master**, and the distance of each cell from it.
+- The **import fills the group in**: a cell that shares a formula gets
+  the master's formula, **moved** to where the cell is.
+
+### What the port found
+
+- **The tree's reader fills the group in and this one does it too**,
+  and in two steps: the tree parses the master's formula and moves the
+  references in the parsed expression; here the reader — which knows
+  the file's words and not the model's — gives the master's text and
+  the distance from the master, and the **battery** parses it and moves
+  it. The moving is the model's, so it is done there.
+- **The master's cell is the cell at the top left of the group**, and
+  it writes the formula; the other cells of the group **name** it by
+  the number of the group and write nothing. A cell that names a group
+  that was never written is **left alone**: it keeps the value the file
+  cached for it.
+- **The tree moves the references and here the references are moved**,
+  by the same rule: a reference that is not absolute moves with the
+  cell, and one that is absolute does not.
+- **A formula that cannot be moved is not a formula**: the cell keeps
+  the value the file cached for it, and the import says how many it
+  could not read.
+
+### What it cost
+
+- **One kind** in the reader — the shared formula — and the reading of
+  it: about sixty lines.
+- **Two tests**: one in the reader's test file (the master, the
+  followers and their distances) and one in the import's test file (the
+  group is filled in and the formula is moved).
+- **No new command** and **no new dependency**: the moving is the
+  model's own, and it was already there.
+
+### What it does not settle
+
+- **The array formula of a cell is not read**: a file may write a
+  formula as an array, and the cells of the array hold the values the
+  file cached for them.
+- **The table formula of a cell is not read**, for the same reason.
+- **A dynamic array formula is not read**: a file may mark a formula
+  as one that spills, and the mark is not carried.
 - **The workbook is still not written back.**
