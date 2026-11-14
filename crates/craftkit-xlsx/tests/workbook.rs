@@ -1035,6 +1035,36 @@ fn the_charts_of_a_sheet_are_read() {
     assert_eq!(charts[0].series, vec!["One!$B$2:$B$10".to_string()], "and the cells of its series");
 }
 
+/// A cell that holds a **date** in the file's own words is read: the
+/// date is counted in the file's own system.
+#[test]
+fn the_dates_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="d"><v>2024-01-01</v></c><c r="B1" t="d"><v>2024-01-01T12:00:00Z</v></c><c r="C1" t="d"><v>12:00:00</v></c><c r="D1" t="d"><v>not a date</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let cells = &workbook.sheets[0].cells;
+    assert_eq!(cells[0].value, Value::Number(45292.0), "the day is counted from the epoch of the file");
+    assert_eq!(cells[1].value, Value::Number(45292.5), "and a day with a time is half a day later");
+    assert_eq!(cells[2].value, Value::Number(0.5), "and a time alone is a part of a day");
+    assert_eq!(cells[3].value, Value::Empty, "and a text that is not a date is nothing");
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

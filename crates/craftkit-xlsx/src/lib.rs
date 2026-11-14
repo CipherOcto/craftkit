@@ -981,6 +981,9 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
     let prints = print_of(&workbook_xml, &sheet_names);
 
     let workbook_rels = rels_of(&mut package, &part)?;
+    // The **date system** of the workbook, for the cells that hold a
+    // date in the file's own words.
+    let system = workbook.system;
     let strings = shared_strings(&mut package, &workbook_rels, &mut workbook.warnings)?;
     let styles = read_styles_of(&mut package, &workbook_rels, &mut workbook.warnings);
 
@@ -1012,6 +1015,7 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             &strings,
             &styles,
             &workbook_rels,
+            system,
             &mut workbook.warnings,
         );
         sheet.name = name.clone();
@@ -1163,6 +1167,7 @@ fn read_sheet(
     strings: &[String],
     styles: &Styles,
     workbook_rels: &[Rel],
+    system: DateSystem,
     warnings: &mut Vec<String>,
 ) -> (Sheet, Parts) {
     let mut sheet = Sheet::default();
@@ -1288,7 +1293,7 @@ fn read_sheet(
                 continue;
             }
             next_column = column + 1;
-            let value = value_of(cell, strings);
+            let value = value_of(cell, strings, system);
             // The **formula** of the cell: the file's own text. A cell
             // that **shares** a formula with other cells writes the
             // formula once, in the cell at the top left of its group,
@@ -2077,7 +2082,7 @@ fn filter_op(operation: Option<&str>) -> &'static str {
 }
 
 /// The **value** of a cell, as the file holds it.
-fn value_of(cell: &craftkit_xml::El, strings: &[String]) -> Value {
+fn value_of(cell: &craftkit_xml::El, strings: &[String], system: DateSystem) -> Value {
     let raw = cell.child("v").map(|v| v.text.trim().to_string());
     match cell.attr("t").unwrap_or("n") {
         "s" => match raw.as_deref().and_then(|text| text.parse::<usize>().ok()) {
@@ -2106,6 +2111,12 @@ fn value_of(cell: &craftkit_xml::El, strings: &[String]) -> Value {
             Some(text) => Value::Error(text),
             None => Value::Empty,
         },
+        // A **date**: the file writes it as an ISO text, and the
+        // tree counts the days.
+        "d" => match raw.as_deref().and_then(|text| parse_iso(text, system)) {
+            Some(number) => Value::Number(number),
+            None => Value::Empty,
+        },
         _ => match raw.as_deref() {
             Some(text) if !text.is_empty() => match text.parse::<f64>() {
                 Ok(number) if number.is_finite() => Value::Number(number),
@@ -2115,6 +2126,102 @@ fn value_of(cell: &craftkit_xml::El, strings: &[String]) -> Value {
         },
     }
 }
+
+/// The **serial** of an ISO date or a time, when it is one.
+///
+/// A file writes a date in a cell as `2024-01-01`, or with a time
+/// `2024-01-01T12:00:00`, or a time alone `12:00:00`. The number is
+/// the **serial** of the day: the days are counted in the file's own
+/// system.
+fn parse_iso(text: &str, system: DateSystem) -> Option<f64> {
+    let text = text.trim().trim_end_matches('Z');
+    let (date, time) = match text.split_once('T') {
+        Some((date, time)) => (date, Some(time)),
+        None if text.contains(':') => ("", Some(text)),
+        None => (text, None),
+    };
+    let mut serial = 0.0;
+    if !date.is_empty() {
+        let mut parts = date.split('-');
+        let year = parts.next()?.parse::<i64>().ok()?;
+        let month = parts.next()?.parse::<u32>().ok()?;
+        let day = parts.next()?.parse::<u32>().ok()?;
+        serial = serial_from_ymd(system, year, month, day)?;
+    }
+    if let Some(time) = time {
+        // A time zone offset is dropped: the file's time is the time.
+        let time = time.split('+').next().unwrap_or(time);
+        let mut parts = time.split(':');
+        let hour = parts.next()?.parse::<f64>().ok()?;
+        let minute = parts.next().unwrap_or("0").parse::<f64>().ok()?;
+        let second = parts.next().unwrap_or("0").parse::<f64>().ok()?;
+        if !(0.0..24.0).contains(&hour) || !(0.0..60.0).contains(&minute) || !(0.0..61.0).contains(&second) {
+            return None;
+        }
+        serial += (hour * 3600.0 + minute * 60.0 + second) / 86_400.0;
+    }
+    Some(serial)
+}
+
+/// The **serial** of a day, in the file's own system.
+///
+/// The 1900 system counts the days from the 31st of December 1899,
+/// and it holds a day that never was — the 29th of February 1900 —
+/// before the first of March. The 1904 system counts the days from
+/// the first of January 1904.
+fn serial_from_ymd(system: DateSystem, year: i64, month: u32, day: u32) -> Option<f64> {
+    if !(1..=12).contains(&month) || day < 1 || day > days_in_month(year, month) {
+        return None;
+    }
+    let days = days_from_civil(year, month, day);
+    let serial = match system {
+        DateSystem::Y1900 => days - DAYS_1899_12_30 - i64::from(year == 1900 && month <= 2),
+        DateSystem::Y1904 => days - DAYS_1904_01_01,
+    };
+    if serial < 0 {
+        return None;
+    }
+    Some(serial as f64)
+}
+
+/// The **days** of a month, in a year.
+fn days_in_month(year: i64, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 0,
+    }
+}
+
+/// The **days** from the first of January 1970 to a day.
+///
+/// The count of the days of the Gregorian calendar, which is the
+/// count everybody counts.
+const fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = if year >= 0 { year } else { year - 399 } / 400;
+    let year_of_era = year - era * 400;
+    let month = month as i64;
+    let day = day as i64;
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// The days from the first of January 1970 to the 30th of December
+/// 1899: the day before the first of the 1900 system.
+const DAYS_1899_12_30: i64 = days_from_civil(1899, 12, 30);
+
+/// The days from the first of January 1970 to the first of January
+/// 1904: the first of the 1904 system.
+const DAYS_1904_01_01: i64 = days_from_civil(1904, 1, 1);
 
 /// The place of a cell, from its address: `B7` is the column 1 and the
 /// row 6.
