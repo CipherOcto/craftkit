@@ -4359,6 +4359,7 @@ so.
 | the **tables** of a sheet: the ranges with a name and a way of being totalled | **built.** The tables of a sheet are read and imported, and the way a column is totalled in is the way this tree has (§911) | §911 |
 | the **styles** of a cell: the font, the fill, the alignment and the borders | **built.** The styles a cell carries are read and imported — the font, the colour behind the text, how the text lies and the lines on the edges (§912) | §912 |
 | the **protection** of a sheet, and the **lock** of a cell | **built.** The protection of a sheet is read and imported — what may still be done to it — and a cell says of itself whether it is locked (§913) | §913 |
+| the **rows** and the **columns** of a sheet | **built.** The heights, the widths and the hiding of the rows and the columns of a sheet are read and imported (§914) | §914 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60224,5 +60225,58 @@ A sheet may be **protected**, and a cell may be **locked**.
   protects a sheet with a password is protected here without one, and
   the sheet may be unprotected by anyone.
 - **The ranges a protected sheet lets be edited** are not read.
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 914. The rows and the columns of a sheet: their heights, their widths and which are hidden
+
+A sheet is not only cells: its rows and its columns have a **height** and
+a **width**, and either of them may be **hidden**.
+
+### What was built
+
+- The **rows** of a sheet are read: the height of each row that has one,
+  and which of the rows are hidden.
+- The **columns** of a sheet are read: the width of each column that has
+  one, and which of the columns are hidden.
+- The **import carries them**: a row that is thirty points high in the
+  file is thirty points high here, and a hidden column is hidden here.
+
+### What the port found
+
+- **The tree's row and column are the sheet's own**, and so they are
+  here: the height of a row is in **points** in both trees, and the width
+  of a column is the number of **characters** of the face of the sheet in
+  both.
+- **A file says a span of columns at once**, and a span of ten columns
+  is ten columns here — and a span that runs past the edge of the grid is
+  clipped to it, as the tree's reader clips it.
+- **A row that says nothing of itself is not a row here.** The tree keeps
+  every row of the file, with its height of nothing; here a row that
+  says neither its height nor its hiding has nothing to say, and the
+  height of a row that says nothing is the sheet's own.
+- **A width is not a height**: the tree keeps the width of a column in
+  the **pixels** of the face of the sheet, and this tree keeps it in the
+  **characters** of it — so the number a file gives is the number this
+  tree carries, and the two trees do not measure a column the same way.
+
+### What it cost
+
+- **Two kinds** in the reader — the row and the column — and the reading
+  of them: about eighty lines.
+- **Two tests**: one in the reader's test file (the heights, the widths,
+  the hiding, and the span of columns) and one in the import's test file
+  (the rows and the columns are imported and read back).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The width of a column is the file's number, not this tree's
+  measure**: the tree's width is in pixels and this one's is in
+  characters, and the two do not agree.
+- **The default height of a row and the default width of a column are not
+  read**: a file that names neither keeps this tree's own defaults.
+- **The outline of a sheet is not read**: the groups of rows and columns
+  that a file folds together, and the summaries beneath them.
 - **A shared formula is still not filled in.**
 - **The workbook is still not written back.**
