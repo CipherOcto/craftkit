@@ -4377,6 +4377,7 @@ so.
 | the **colour** of a sheet's tab | **built.** The colour of the tab of a sheet is read and imported (§929) | §929 |
 | the **charts** of a sheet | **built.** The drawings of the cells of a sheet are read and imported as the tree's own charts — the kind, the title, the legend and the cells they read (§930) | §930 |
 | the **date** of a cell | **built.** A cell that holds a date in the file's own words is read as the number of the day, counted in the file's own system (§931) | §931 |
+| the **pivot tables** of a sheet | **built.** The pivots a sheet holds are read and imported as the tree's own pivots — the cells they read and the fields they gather them by (§932) | §932 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61219,4 +61220,65 @@ A cell may hold a date written as an ISO text, and not as a number.
   the format of the cell is a date's format, and that is the tree's
   own rule.
 - **A time zone is dropped**: the file's time is the time of the file.
+- **The workbook is still not written back.**
+
+## 932. The pivot tables of a sheet: the pivots the sheet holds
+
+A sheet may hold a **pivot**: a table gathered by a field, spread
+over another, and put together by a third.
+
+### What was built
+
+- The **pivot tables** of a sheet are read: the **name** of the pivot,
+  the **cells** it was made from, the **fields** it gathers the rows
+  by, the fields it spreads the groups over, and the field it puts
+  together with the **way** of putting it together.
+- The **import writes them as the tree's own pivots**: a pivot over
+  the range of the cells, with the tree's own fields.
+
+### What the port found
+
+- **A pivot table of a file is in a part of its own, and it names a
+  cache of its own**: the cache says where the cells come from and
+  what the fields are called, and the table says which of the fields
+  are gathered by, spread over and put together. The reader walks
+  that road.
+- **The tree's pivot gathers the rows by one field, spreads the
+  groups over one and puts one together**, so a pivot of a file that
+  has more of any of them is not a pivot of this tree — and it is
+  left out rather than half-carried.
+- **The fields of a file are named by the columns of its source**, and
+  the tree's fields are named by their **header**: so the field is
+  matched to the column whose header says its name, and a pivot whose
+  fields cannot be matched is left out. That is the tree's own rule
+  about what a field is.
+- **The tree's pivot is computed from the cells**, and so is the
+  pivot of the file: the import writes the pivot, and the tree works
+  it out from the cells it reads.
+- **The tree's reader reads much more of a pivot** — the groupings,
+  the filters, the orders and the ways of showing the values — and
+  this tree has no word for them.
+
+### What it cost
+
+- **One kind** in the reader — the pivot table — and the reading of
+  the pivot parts and of the caches: about a hundred and twenty lines.
+- **Two helpers** in the battery: the header of a column and the
+  column a field names.
+- **Two tests**: one in the reader's test file (the source and the
+  fields) and one in the import's test file (the pivot is the tree's
+  own).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The groupings, the filters, the orders and the ways of showing
+  the values are not read**: the tree's pivot has them, and a file's
+  pivot may have them, and they are not carried.
+- **A pivot that gathers the rows by more than one field, or that
+  spreads the groups over more than one, is not imported**: the tree's
+  pivot has one of each.
+- **The place of the pivot on the sheet is not read**: the pivot of a
+  file is drawn in a range of cells, and the tree's pivot is a
+  definition and not a drawing.
 - **The workbook is still not written back.**
