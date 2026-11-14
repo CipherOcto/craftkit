@@ -4367,6 +4367,7 @@ so.
 | the **shared formulas** of a sheet | **built.** A group of cells that shares one formula is read and filled in — the master's formula, moved to where each cell is (§919) | §919 |
 | the **data validations** of a sheet | **built.** The rules on what a cell may hold are read and imported as the tree's own rules — the kind, the operator, the formulas and the messages — and a custom rule is left out (§920) | §920 |
 | the **print area** and the **print titles** of a sheet | **built.** What a sheet prints and which of its lines repeat on every page are read and imported, and the built-in names that say so are not names a formula uses (§921) | §921 |
+| the **outline** of a sheet | **built.** The groups of rows and of columns are read and imported — the level of each line in its group and where the summary sits (§922) | §922 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60696,4 +60697,62 @@ printed on every page.
   page breaks, and the tree has breaks of its own.
 - **A print area of one cell is refused**, as the tree's own command
   refuses it: an area of one cell is a cell, and a file may name one.
+- **The workbook is still not written back.**
+
+## 922. The outline of a sheet: the groups of rows and of columns
+
+A sheet may group its rows and its columns, so that a group may be
+folded away and its summary shown on its own.
+
+### What was built
+
+- The **outline level** of a row and of a column is read: how deep in
+  a group the row or the column is.
+- The **summary** of a group is read: whether the summary row sits
+  below its group and whether the summary column sits to the right of
+  it.
+- The **import writes them as the tree's own outline**: the levels of
+  the rows in `row_outline`, the levels of the columns in
+  `column_outline`, and the summary in `summary_below` and
+  `summary_right` — the keys the tree's own commands write.
+
+### What the port found
+
+- **A file says the level on the row and on the column**, and the
+  levels are the numbers the tree's own outline uses: one is the
+  top-level group.
+- **A file may say a deeper level than the tree has**, and the level
+  is capped at seven, as the tree's reader caps it.
+- **The summary of a group is said in the sheet's own part** — in the
+  `outlinePr` of the sheet's properties — and a file that says nothing
+  has the summary below and to the right. **What a file does not say
+  is not a fact of the file**, so those two are carried only when the
+  file names them.
+- **The tree's reader keeps a mark of its own for a collapsed group**,
+  and **this tree works the collapse out from the rows**: a group whose
+  rows are all hidden is a collapsed group. The file's own mark of a
+  collapsed group is therefore not carried, and the tree's own rule
+  says the same thing.
+
+### What it cost
+
+- **Two fields** in the reader — the level of a row and of a column —
+  and **two** in the sheet: the summary of the rows and of the
+  columns.
+- **Two tests**: one in the reader's test file (the levels of the rows
+  and the columns, and the summary) and one in the import's test file
+  (the levels are the tree's own).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The collapsed mark of a group is not carried**: the tree works the
+  collapse out from the rows that are hidden, and the hidden rows are
+  read.
+- **The depth of the outline of the sheet is not read**: a file says
+  how deep its outline is in the sheet's own format, and that is not
+  read.
+- **The rest of the outline settings of the sheet is not read**: a
+  file may say that the styles of the groups follow the outline, and
+  that is not read.
 - **The workbook is still not written back.**
