@@ -4371,6 +4371,7 @@ so.
 | the **replies** of a note | **built.** The threads of a sheet are read and imported — the note, the replies under it and whether it is resolved (§923) | §923 |
 | the **page setup** of a sheet | **built.** How a sheet prints is read and imported — the paper, the orientation, the margins, the scale and the fit (§924) | §924 |
 | the **array formula** of a cell | **built.** The kind of a formula is read, and a formula this tree does not have — an array or a data table — is left out rather than carried wrongly (§925) | §925 |
+| the **breaks** of the printing | **built.** The rows and the columns a page begins at are read and imported, and the pages of a sheet break where the file says they break (§926) | §926 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60925,4 +60926,51 @@ from a formula of the table.
 - **The cells of an array are not recalculated**: they keep the
   values the file cached for them, and the tree's own formulas are
   not run over them.
+- **The workbook is still not written back.**
+
+## 926. The breaks of the printing: the rows and the columns a page begins at
+
+A sheet may say where its pages break: the line after which a new page
+begins.
+
+### What was built
+
+- The **breaks** of the printing are read: the rows a page begins at,
+  and the columns a page begins at.
+- The **import writes them as the tree's own breaks**: the rows in
+  `row_breaks` and the columns in `column_breaks` — the keys the
+  tree's own command writes, so the pages of a sheet break where the
+  file says they break.
+
+### What the port found
+
+- **The file's break and the tree's break are the same line**: both
+  count the line a page begins at from zero, and the tree's own
+  command — which takes a row counted from one — stores the line
+  below it. So the file's number is the tree's number, with nothing
+  added and nothing taken away.
+- **A break is a row or a column and not both**, and the file says so
+  in two lists, and the tree says so in two lists.
+- **A break outside the grid of the sheet is not a break**: a sheet is
+  a million rows and sixteen thousand columns, and a break beyond
+  that is left out.
+- **The tree's reader keeps the breaks of the printing beside the
+  printing itself**, and so does this one: the page setup, the print
+  area, the titles and the breaks are all the printing of a sheet.
+
+### What it cost
+
+- **One kind** in the reader — the breaks — with its two lists: about
+  thirty lines.
+- **Two tests**: one in the reader's test file (the row and the column
+  a page begins at) and one in the import's test file (the breaks are
+  the tree's own).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The breaks that the sheet makes of its own are not read**: a file
+  may say that a break is automatic rather than put there by hand, and
+  that is not read.
+- **The headers and the footers of the printed page are not read.**
 - **The workbook is still not written back.**
