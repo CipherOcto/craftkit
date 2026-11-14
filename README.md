@@ -4358,6 +4358,7 @@ so.
 | the **comments** of a sheet: the notes a cell carries | **built.** The comments of a sheet are read and imported, and the author line a note begins with is dropped (§910) | §910 |
 | the **tables** of a sheet: the ranges with a name and a way of being totalled | **built.** The tables of a sheet are read and imported, and the way a column is totalled in is the way this tree has (§911) | §911 |
 | the **styles** of a cell: the font, the fill, the alignment and the borders | **built.** The styles a cell carries are read and imported — the font, the colour behind the text, how the text lies and the lines on the edges (§912) | §912 |
+| the **protection** of a sheet, and the **lock** of a cell | **built.** The protection of a sheet is read and imported — what may still be done to it — and a cell says of itself whether it is locked (§913) | §913 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60159,5 +60160,69 @@ A cell carries more than its value: it carries how it **looks**.
   is not carried here.
 - **The named styles of a workbook are not read**: the styles the file
   names, and the style a cell may name by name, are not imported.
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 913. The protection of a sheet, and the lock of a cell
+
+A sheet may be **protected**, and a cell may be **locked**.
+
+### What was built
+
+- The **protection** of a sheet is read: what may still be done to it
+  — the sorting, the filtering and the formatting — and that the cells
+  of it are locked.
+- The **lock** of a cell is read: whether it is locked, and whether
+  its text is hidden.
+- The **import carries both**: a sheet protected in the file is
+  protected here, and a cell that says of itself that it is unlocked
+  says so here too.
+
+### What the port found
+
+- **A file protects a sheet with an element that says it is
+  protected.** The element is there in many a file and means nothing
+  unless it says `sheet`; a file that writes the element without that
+  word has a sheet that is not protected, and so does this one.
+- **The tree's protection is a dozen flags and this one's is three.**
+  The tree keeps the selecting of locked and unlocked cells, the
+  formatting of cells, of columns and of rows, the inserting and the
+  deleting of columns and of rows, the sorting and the filtering; and
+  it keeps the **hash of a password**. This tree's protection says
+  what may still be done — the sorting, the filtering, the
+  formatting — and the cells are locked.
+- **The tree's flags say what is **not** allowed, and this tree's say
+  what **is**.** A file that forbids the sorting writes a flag, and
+  the tree turns that flag about as it reads it; here the flags are
+  turned about as the reader reads them, so the two trees agree on
+  what a protected sheet allows.
+- **The tree's lock is a style and this tree's lock is the cell's own
+  word.** The tree's cell is locked by the style it names; here a cell
+  that says of itself whether it is locked says more than the style,
+  and the cell's own word comes first — which is this tree's own rule
+  and the rule of §813.
+- **A cell's text may be hidden**: the tree keeps that in the same
+  protection as the lock, and so does the reader here; the battery does
+  not yet carry it into the sheet, and the import does not say it did.
+
+### What it cost
+
+- **One kind** in the reader — the protection, of the sheet and of the
+  cell — and the reading of it: about sixty lines.
+- **Three tests** in the reader's test file (the protection of a sheet
+  and what it allows; a sheet that is not protected; the lock of a cell
+  and the hiding of its text) and **one** in the import's test file
+  (the protection and the lock are imported and read back).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The hidden text of a cell is read but not carried**: the reader
+  knows that a cell's text is hidden, and the import does not put it
+  into the sheet.
+- **The password of a protected sheet is not read**: a file that
+  protects a sheet with a password is protected here without one, and
+  the sheet may be unprotected by anyone.
+- **The ranges a protected sheet lets be edited** are not read.
 - **A shared formula is still not filled in.**
 - **The workbook is still not written back.**
