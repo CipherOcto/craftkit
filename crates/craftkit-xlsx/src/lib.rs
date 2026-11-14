@@ -277,6 +277,28 @@ pub struct Sheet {
     /// The rows and the columns are two lists, and a break of the
     /// printing is a row or a column and not both.
     pub breaks: Breaks,
+    /// The **sparklines** of the sheet: the little drawings in its
+    /// cells.
+    pub sparklines: Vec<Sparkline>,
+}
+
+/// A **sparkline** of a sheet: a little drawing in a cell, taken from
+/// a range of cells.
+///
+/// A sparkline lives in the **extension list** of the sheet, and the
+/// names here are the file's own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sparkline {
+    /// The **cell** the sparkline is drawn in: the file's own address.
+    pub cell: String,
+    /// The **source**: the range it reads, as the file writes it.
+    pub source: String,
+    /// The **kind**: `line`, `column` or `stacked`.
+    pub kind: String,
+    /// The **colour** of the line, when the file names one.
+    pub colour: Option<String>,
+    /// Whether the **markers** are drawn.
+    pub markers: bool,
 }
 
 /// The **breaks** of the printing of a sheet.
@@ -286,6 +308,46 @@ pub struct Breaks {
     pub rows: Vec<u32>,
     /// The **columns** a page begins at.
     pub columns: Vec<u32>,
+}
+
+/// Read the **sparklines** of a sheet: the little drawings in its
+/// cells.
+///
+/// A file keeps them in the **extension list** of the sheet, and the
+/// names here are the file's own.
+pub fn read_sparklines(root: &craftkit_xml::El) -> Vec<Sparkline> {
+    let mut out = Vec::new();
+    for list in root.kids("extLst") {
+        for extension in list.kids("ext") {
+            let Some(groups) = extension.child("sparklineGroups") else { continue };
+            for group in groups.kids("sparklineGroup") {
+                let kind = match group.attr("type") {
+                    Some("column") => "column",
+                    Some("stacked") => "stacked",
+                    _ => "line",
+                };
+                let colour = group.child("colorSeries").and_then(crate::styles::read_colour);
+                let markers = group.flag("markers", false);
+                let Some(sparklines) = group.child("sparklines") else { continue };
+                for sparkline in sparklines.kids("sparkline") {
+                    let Some(cell) = sparkline.child("sqref") else { continue };
+                    let cell = cell.text.trim().to_string();
+                    if cell.is_empty() {
+                        continue;
+                    }
+                    let source = sparkline.child("f").map(|f| f.text.trim().to_string()).unwrap_or_default();
+                    out.push(Sparkline {
+                        cell,
+                        source,
+                        kind: kind.to_string(),
+                        colour: colour.clone(),
+                        markers,
+                    });
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The **page setup** of a sheet: the paper, the orientation, the
@@ -897,6 +959,9 @@ fn read_sheet(
     sheet.print = read_print(&root);
     // The **breaks** of the printing: the lines a page begins at.
     sheet.breaks = read_breaks(&root);
+    // The **sparklines** of the sheet: the little drawings in its
+    // cells. They live in the extension list of the sheet.
+    sheet.sparklines = read_sparklines(&root);
     // The **columns** of the sheet: their width and whether they are
     // hidden. A file says a span of columns at once, so one span of
     // ten columns is ten columns here.

@@ -1066,6 +1066,52 @@ fn the_breaks_of_the_printing_are_imported() {
     assert_eq!(node.data["column_breaks"][0].as_u64(), Some(2), "and the column a page begins at");
 }
 
+/// The **sparklines** of a sheet are imported: the little drawings in
+/// its cells.
+#[test]
+fn the_sparklines_of_a_sheet_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><extLst><ext uri="{05C60535-1F16-4fd2-B633-F4F36F0B64E0}"><x14:sparklineGroups xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:sparklineGroup type="column" markers="1"><x14:colorSeries rgb="FF376092"/><x14:sparklines><x14:sparkline><xm:f>One!B2:F2</xm:f><xm:sqref>G2</xm:sqref></x14:sparkline></x14:sparklines></x14:sparklineGroup></x14:sparklineGroups></ext></extLst></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["sparklines"].as_u64(), Some(1), "one sparkline was imported");
+    assert_eq!(outcome.data["unread_sparklines"].as_u64(), Some(0), "and none was left out");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let sparkline = &node.data["sparklines"]["G2"];
+    assert_eq!(sparkline["range"].as_str(), Some("B2:F2"), "the range it reads");
+    assert_eq!(sparkline["kind"].as_str(), Some("column"), "the kind of it");
+    assert_eq!(sparkline["markers"].as_bool(), Some(true), "and that its markers are drawn");
+    let colour = sparkline["colour"].as_array().expect("the colour is an array of numbers");
+    assert_eq!(colour.len(), 4, "with four parts");
+    // The tree's colours are in parts of a whole, and not in bytes.
+    let red = colour[0].as_f64().expect("the red is a number");
+    assert!((red - 0x37 as f64 / 255.0).abs() < 0.001, "the red of it: {red}");
+    let green = colour[1].as_f64().expect("the green is a number");
+    assert!((green - 0x60 as f64 / 255.0).abs() < 0.001, "the green: {green}");
+    let blue = colour[2].as_f64().expect("the blue is a number");
+    assert!((blue - 0x92 as f64 / 255.0).abs() < 0.001, "and the blue: {blue}");
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]

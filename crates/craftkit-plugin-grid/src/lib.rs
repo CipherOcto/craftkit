@@ -375,6 +375,10 @@
     clippy::unreachable
 )]
 #![forbid(unsafe_code)]
+// The **outcome** of the import of a workbook holds a key for every
+// thing it read, and the macro that writes it nests as it goes — so
+// the recursion is given room to nest.
+#![recursion_limit = "256"]
 
 mod advancedfilter;
 mod aggregates;

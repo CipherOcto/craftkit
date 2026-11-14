@@ -901,6 +901,38 @@ fn the_breaks_of_the_printing_are_read() {
     assert_eq!(breaks.columns, vec![2], "and the column a page begins at");
 }
 
+/// The **sparklines** of a sheet are read: the little drawings in its
+/// cells.
+#[test]
+fn the_sparklines_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><extLst><ext uri="{05C60535-1F16-4fd2-B633-F4F36F0B64E0}"><x14:sparklineGroups xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:sparklineGroup type="column" markers="1"><x14:colorSeries rgb="FF376092"/><x14:sparklines><x14:sparkline><xm:f>One!B2:F2</xm:f><xm:sqref>G2</xm:sqref></x14:sparkline></x14:sparklines></x14:sparklineGroup></x14:sparklineGroups></ext></extLst></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sparklines = &workbook.sheets[0].sparklines;
+    assert_eq!(sparklines.len(), 1, "one sparkline is read");
+    assert_eq!(sparklines[0].cell, "G2", "the cell it is drawn in");
+    assert_eq!(sparklines[0].source, "One!B2:F2", "the range it reads");
+    assert_eq!(sparklines[0].kind, "column", "and the kind of it");
+    assert_eq!(sparklines[0].colour.as_deref(), Some("#376092"), "and the colour of it");
+    assert!(sparklines[0].markers, "and that its markers are drawn");
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

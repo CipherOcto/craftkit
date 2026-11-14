@@ -167,6 +167,8 @@ commands! {
             let mut outlines = 0u64;
             let mut setups = 0u64;
             let mut breaks = 0u64;
+            let mut imported_sparklines = 0u64;
+            let mut unread_sparklines = 0u64;
             let mut arrays = 0u64;
             let mut data_tables = 0u64;
             let mut unread_setups = 0u64;
@@ -575,6 +577,57 @@ commands! {
                         Json::Array(sheet.breaks.columns.iter().map(|line| json!(line)).collect());
                     breaks += 1;
                 }
+                // The **sparklines** of the sheet: the little drawings
+                // in its cells.
+                if !sheet.sparklines.is_empty() {
+                    let mut sparklines = craftkit_sdk::serde_json::Map::new();
+                    for sparkline in &sheet.sparklines {
+                        let Some(cell) = crate::formula::CellRef::parse(sparkline.cell.trim()) else {
+                            unread_sparklines += 1;
+                            continue;
+                        };
+                        // The **range** it reads: the file's own words,
+                        // without the sheet it names and without the `$`
+                        // of an absolute address.
+                        let source = sparkline.source.trim();
+                        let own = source.rsplit_once('!').map(|(_, own)| own).unwrap_or(source);
+                        let own = own.replace('$', "");
+                        let Ok(area) = crate::fill::area_at(&own, &id) else {
+                            unread_sparklines += 1;
+                            continue;
+                        };
+                        if area.start == area.end {
+                            // The tree's own rule: a sparkline reads a
+                            // range, and a range of one cell is a cell.
+                            unread_sparklines += 1;
+                            continue;
+                        }
+                        // The **kind**: the file says `stacked` and the
+                        // tree says `win_loss`.
+                        let kind = match sparkline.kind.as_str() {
+                            "column" => "column",
+                            "stacked" => "win_loss",
+                            _ => "line",
+                        };
+                        let colour = match &sparkline.colour {
+                            Some(colour) => match craftkit_sdk::Colour::from_hex(colour) {
+                                Ok(colour) => json!([colour.0[0], colour.0[1], colour.0[2], colour.0[3]]),
+                                Err(_) => Json::Null,
+                            },
+                            None => Json::Null,
+                        };
+                        let mut one = craftkit_sdk::serde_json::Map::new();
+                        one.insert("range".to_string(), json!(area.to_text()));
+                        one.insert("kind".to_string(), json!(kind));
+                        one.insert("colour".to_string(), colour);
+                        one.insert("markers".to_string(), json!(sparkline.markers));
+                        sparklines.insert(cell.to_text(), Json::Object(one));
+                        imported_sparklines += 1;
+                    }
+                    if !sparklines.is_empty() {
+                        data["sparklines"] = Json::Object(sparklines);
+                    }
+                }
                 if !merges.is_empty() {
                     data["merges"] = Json::Array(merges.into_iter().map(Json::String).collect());
                 }
@@ -945,6 +998,8 @@ commands! {
                 "outlines": outlines,
                 "setups": setups,
                 "breaks": breaks,
+                "sparklines": imported_sparklines,
+                "unread_sparklines": unread_sparklines,
                 "arrays": arrays,
                 "data_tables": data_tables,
                 "unread_setups": unread_setups,

@@ -487,7 +487,7 @@ fn read_fill(element: &El) -> Fill {
 /// which is dropped — and a colour by its **number** in the old
 /// palette, which is the tree's own table. A **theme** colour is not
 /// a colour here: this tree has no theme.
-fn read_colour(element: &El) -> Option<String> {
+pub(crate) fn read_colour(element: &El) -> Option<String> {
     if element.flag("auto", false) {
         return None;
     }
