@@ -1112,6 +1112,41 @@ fn the_sparklines_of_a_sheet_are_imported() {
     assert!((blue - 0x92 as f64 / 255.0).abs() < 0.001, "and the blue: {blue}");
 }
 
+/// The **hidden sheets** of a workbook are imported: a sheet the file
+/// hides is hidden here too.
+#[test]
+fn the_hidden_sheets_of_a_workbook_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/><sheet name="Two" sheetId="2" state="hidden" r:id="rId2"/></sheets></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        ("xl/worksheets/sheet2.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["hidden_sheets"].as_u64(), Some(1), "one sheet was hidden");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let node = session.document().node(workbook).expect("the workbook is there");
+    let first = node.children[0].id;
+    let second = node.children[1].id;
+    let first = session.document().node(first).expect("the first sheet is there");
+    assert!(first.data.get("hidden").is_none(), "the first sheet is in sight");
+    let second = session.document().node(second).expect("the second sheet is there");
+    assert_eq!(second.data["hidden"].as_bool(), Some(true), "and the second is hidden");
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]

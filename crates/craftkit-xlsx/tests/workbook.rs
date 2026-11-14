@@ -933,6 +933,34 @@ fn the_sparklines_of_a_sheet_are_read() {
     assert!(sparklines[0].markers, "and that its markers are drawn");
 }
 
+/// The **hidden sheets** of a workbook are read: the state of each of
+/// them.
+#[test]
+fn the_hidden_sheets_of_a_workbook_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/><sheet name="Two" sheetId="2" state="hidden" r:id="rId2"/><sheet name="Three" sheetId="3" state="veryHidden" r:id="rId3"/></sheets></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        ("xl/worksheets/sheet2.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        ("xl/worksheets/sheet3.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.sheets.len(), 3, "three sheets are read");
+    assert_eq!(workbook.sheets[0].state, None, "the first is not hidden");
+    assert_eq!(workbook.sheets[1].state.as_deref(), Some("hidden"), "the second is hidden");
+    assert_eq!(workbook.sheets[2].state.as_deref(), Some("veryHidden"), "and the third very well");
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

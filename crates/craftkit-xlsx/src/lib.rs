@@ -217,6 +217,12 @@ pub struct Shared {
 pub struct Sheet {
     /// The name of the sheet.
     pub name: String,
+    /// The **state** of the sheet: `hidden` or `veryHidden`, when the
+    /// file hides it.
+    ///
+    /// A sheet that is not hidden says nothing, and that is not
+    /// carried.
+    pub state: Option<String>,
     /// The cells, in the order the file holds them.
     pub cells: Vec<Cell>,
     /// The **rows** of the sheet that say something of themselves: their
@@ -778,6 +784,9 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             &mut workbook.warnings,
         );
         sheet.name = name.clone();
+        // The **state** of the sheet: a file may hide a sheet, and it
+        // may hide it very well.
+        sheet.state = element.attr("state").map(str::to_string);
         if let Some((_, area, titles)) = prints.iter().find(|(sheet, _, _)| *sheet == name) {
             sheet.print_area = area.clone();
             sheet.print_titles = titles.clone();

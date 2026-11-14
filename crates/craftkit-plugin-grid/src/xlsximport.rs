@@ -174,8 +174,18 @@ commands! {
             let mut unread_setups = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
+            let mut hidden_sheets = 0u64;
+            let mut kept_sheets = 0u64;
             let mut taken: Vec<String> = Vec::new();
-            for sheet in &workbook.sheets {
+            // The **hidden sheets**: a file may hide a sheet, and the
+            // tree hides it too. A workbook must keep **one visible
+            // sheet** — the tree's own rule — so a file that hides
+            // them all keeps its first sheet in sight.
+            let all_hidden = !workbook.sheets.is_empty()
+                && workbook.sheets.iter().all(|sheet| {
+                    matches!(sheet.state.as_deref(), Some("hidden") | Some("veryHidden"))
+                });
+            for (index, sheet) in workbook.sheets.iter().enumerate() {
                 // The **name** of the sheet: the tree's rules, and the
                 // tree's uniqueness.
                 let mut sheet_name = sheet.name.clone();
@@ -696,6 +706,17 @@ commands! {
                     }
                     data["borders"] = Json::Object(borders);
                 }
+                // The **state** of the sheet: hidden or not.
+                if matches!(sheet.state.as_deref(), Some("hidden") | Some("veryHidden")) {
+                    if all_hidden && index == 0 {
+                        // The tree's own rule: a workbook keeps one
+                        // sheet in sight.
+                        kept_sheets += 1;
+                    } else {
+                        data["hidden"] = json!(true);
+                        hidden_sheets += 1;
+                    }
+                }
                 session.document_mut()?.add_node_with_under(
                     Some(workbook_id),
                     sheet_name,
@@ -1004,6 +1025,8 @@ commands! {
                 "data_tables": data_tables,
                 "unread_setups": unread_setups,
                 "names": names,
+                "hidden_sheets": hidden_sheets,
+                "kept_sheets": kept_sheets,
                 "unread_names": unread_names,
                 "filters": imported_filters,
                 "unread_filters": unread_filters,
