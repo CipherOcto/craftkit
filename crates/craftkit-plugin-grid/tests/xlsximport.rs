@@ -656,6 +656,44 @@ fn two_merges_that_touch_are_not_both_imported() {
     assert_eq!(outcome.data["unread_merges"].as_u64(), Some(1), "and one was left out");
 }
 
+/// The **view** of a sheet is imported: what is drawn of it, and what
+/// is not.
+#[test]
+fn the_view_of_a_sheet_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetViews><sheetView showGridLines="0" rightToLeft="1" showFormulas="1" zoomScale="150"><pane xSplit="2" ySplit="3" topLeftCell="C4" state="frozen"/></sheetView></sheetViews><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["views"].as_u64(), Some(1), "one view was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["view"]["gridlines"].as_bool(), Some(false), "the gridlines are not drawn");
+    assert_eq!(node.data["view"]["right_to_left"].as_bool(), Some(true), "and the sheet runs right to left");
+    assert_eq!(node.data["view"]["show_formulas"].as_bool(), Some(true), "and the formulas are shown");
+    assert_eq!(node.data["view"]["freeze"][0].as_u64(), Some(3), "and three rows are frozen");
+    assert_eq!(node.data["view"]["freeze"][1].as_u64(), Some(2), "and two columns");
+    assert_eq!(node.data["zoom"].as_u64(), Some(150), "and the sheet is at a hundred and fifty percent");
+}
+
 /// A file that is **not a workbook** is refused.
 #[test]
 fn a_file_that_is_not_a_workbook_is_refused() {

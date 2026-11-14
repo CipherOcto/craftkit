@@ -185,11 +185,42 @@ pub struct Sheet {
     /// The ranges are the file's own words — `A1:B2` — and a range of
     /// one cell is not a merge and is not here.
     pub merges: Vec<String>,
+    /// The **view** of the sheet: what is drawn of it, and what is not.
+    ///
+    /// A sheet with no view of its own has the default one, and the
+    /// default one is not carried.
+    pub view: Option<SheetView>,
     /// The **protection** of the sheet, when the sheet is protected.
     ///
     /// A sheet that is not protected has none: a sheet that is not
     /// protected says nothing about what may be done to it.
     pub protection: Option<SheetProtection>,
+}
+
+/// The **view** of a sheet: what is drawn of it, and what is not.
+///
+/// The flags are the file's own, and the **frozen panes** are the rows
+/// above and the columns to the left of a cell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SheetView {
+    /// Whether the **gridlines** are drawn.
+    pub gridlines: bool,
+    /// Whether the **headings** — the row numbers and the column
+    /// letters — are drawn.
+    pub headings: bool,
+    /// Whether the **zeros** are shown.
+    pub zeros: bool,
+    /// Whether the sheet runs **right to left**.
+    pub right_to_left: bool,
+    /// Whether the **outline symbols** are drawn.
+    pub outline_symbols: bool,
+    /// Whether the **formulas** are shown instead of the values.
+    pub show_formulas: bool,
+    /// The **zoom** of the sheet, in percent, when the file names one.
+    pub zoom: Option<u32>,
+    /// The **frozen panes**: the rows above and the columns to the
+    /// left, when the sheet freezes any.
+    pub freeze: Option<(u32, u32)>,
 }
 
 /// A **row** of a sheet: its height, and whether it is hidden.
@@ -596,6 +627,8 @@ fn read_sheet(
     // The **merges** of the sheet: the ranges that are one cell. A
     // range of one cell is not a merge.
     sheet.merges = read_merges(&root);
+    // The **view** of the sheet: what is drawn of it, and what is not.
+    sheet.view = read_view(&root);
     // The **rows** of the sheet: their height and whether they are
     // hidden. A file says a row of its own, and this reader reads the
     // rows as it reads the cells.
@@ -691,6 +724,40 @@ fn read_sheet(
     }
     sheet.rows = rows;
     (sheet, filter, links, comments, tables)
+}
+
+/// Read the **view** of a sheet: what is drawn of it, and what is not.
+///
+/// A file names the view of a sheet in an element of its own, and a
+/// sheet with no such element has the default view.
+///
+/// The **frozen panes** are read from the pane of the view: a pane
+/// that is frozen holds the number of the rows and the columns that
+/// are frozen, and a pane that is split holds a measure in twips — a
+/// different thing — and is not read.
+fn read_view(root: &craftkit_xml::El) -> Option<SheetView> {
+    let views = root.child("sheetViews")?;
+    let view = views.child("sheetView")?;
+    let mut freeze = None;
+    if let Some(pane) = view.child("pane")
+        && pane.attr("state") == Some("frozen")
+    {
+        let cols = pane.attr_f64("xSplit").unwrap_or(0.0).clamp(0.0, (MAX_COLS - 1) as f64) as u32;
+        let rows = pane.attr_f64("ySplit").unwrap_or(0.0).clamp(0.0, (MAX_ROWS - 1) as f64) as u32;
+        if rows > 0 || cols > 0 {
+            freeze = Some((rows, cols));
+        }
+    }
+    Some(SheetView {
+        gridlines: view.flag("showGridLines", true),
+        headings: view.flag("showRowColHeaders", true),
+        zeros: view.flag("showZeros", true),
+        right_to_left: view.flag("rightToLeft", false),
+        outline_symbols: view.flag("showOutlineSymbols", true),
+        show_formulas: view.flag("showFormulas", false),
+        zoom: view.attr_u32("zoomScale").map(|zoom| zoom.clamp(10, 400)),
+        freeze,
+    })
 }
 
 /// Read the **merges** of a sheet: the ranges that are one cell.

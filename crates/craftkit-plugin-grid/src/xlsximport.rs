@@ -157,6 +157,7 @@ commands! {
             let mut protections = 0u64;
             let mut imported_merges = 0u64;
             let mut unread_merges = 0u64;
+            let mut views = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -379,6 +380,27 @@ commands! {
                     "view": crate::view::SheetView::default().to_json(),
                     "zoom": 100,
                 });
+                // The **view** of the sheet: what is drawn of it, and
+                // what is not. A sheet with no view of its own has the
+                // default one, and the default one is what is written.
+                if let Some(view) = &sheet.view {
+                    data["view"] = json!({
+                        "gridlines": view.gridlines,
+                        "headings": view.headings,
+                        "zeros": view.zeros,
+                        "right_to_left": view.right_to_left,
+                        "outline_symbols": view.outline_symbols,
+                        "show_formulas": view.show_formulas,
+                        "freeze": match view.freeze {
+                            Some((rows, cols)) => json!([rows, cols]),
+                            None => Json::Null,
+                        },
+                    });
+                    views += 1;
+                }
+                if let Some(zoom) = sheet.view.as_ref().and_then(|view| view.zoom) {
+                    data["zoom"] = json!(zoom);
+                }
                 if !row_heights.is_empty() {
                     data["rows"] = Json::Object(row_heights);
                 }
@@ -682,6 +704,7 @@ commands! {
                 "protections": protections,
                 "merges": imported_merges,
                 "unread_merges": unread_merges,
+                "views": views,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,

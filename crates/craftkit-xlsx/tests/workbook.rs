@@ -516,6 +516,63 @@ fn the_merges_of_a_sheet_are_read() {
     assert_eq!(merges[1], "C3:D4", "and the second is the second, without its dollars");
 }
 
+/// The **view** of a sheet is read: what is drawn of it, and what is
+/// not.
+#[test]
+fn the_view_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetViews><sheetView showGridLines="0" showRowColHeaders="0" showZeros="0" rightToLeft="1" showOutlineSymbols="0" showFormulas="1" zoomScale="120"><pane xSplit="2" ySplit="3" topLeftCell="C4" state="frozen"/></sheetView></sheetViews><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let view = workbook.sheets[0].view.as_ref().expect("the sheet has a view");
+    assert!(!view.gridlines, "the gridlines are not drawn");
+    assert!(!view.headings, "nor the headings");
+    assert!(!view.zeros, "nor the zeros");
+    assert!(view.right_to_left, "and the sheet runs right to left");
+    assert!(!view.outline_symbols, "and the outline symbols are not drawn");
+    assert!(view.show_formulas, "and the formulas are shown");
+    assert_eq!(view.zoom, Some(120), "and the sheet is at a hundred and twenty percent");
+    assert_eq!(view.freeze, Some((3, 2)), "and three rows and two columns are frozen");
+}
+
+/// A sheet with **no view** of its own has the default one, and the
+/// default one is not carried.
+#[test]
+fn a_sheet_with_no_view_has_the_default_one() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.sheets[0].view.is_none(), "the sheet has no view of its own");
+}
+
 /// The **names** of a workbook are read: the words its formulas use.
 #[test]
 fn the_names_of_a_workbook_are_read() {
