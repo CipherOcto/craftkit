@@ -4365,6 +4365,7 @@ so.
 | the **view** of a sheet | **built.** The gridlines, the headings, the zeros, the right-to-left, the formulas shown, the zoom and the frozen panes of a sheet are read and imported (§917) | §917 |
 | the **conditional formats** of a sheet | **built.** The rules that are about a range of cells are read and imported — the comparison, the look and the priority — and a rule this tree does not have is left out (§918) | §918 |
 | the **shared formulas** of a sheet | **built.** A group of cells that shares one formula is read and filled in — the master's formula, moved to where each cell is (§919) | §919 |
+| the **data validations** of a sheet | **built.** The rules on what a cell may hold are read and imported as the tree's own rules — the kind, the operator, the formulas and the messages — and a custom rule is left out (§920) | §920 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60574,4 +60575,68 @@ it.
 - **The table formula of a cell is not read**, for the same reason.
 - **A dynamic array formula is not read**: a file may mark a formula
   as one that spills, and the mark is not carried.
+- **The workbook is still not written back.**
+
+## 920. The data validations of a sheet: the rules on what a cell may hold
+
+A sheet may say what may be typed into it, and the file that holds the
+sheet says it in its own words.
+
+### What was built
+
+- The **validations** of a sheet are read: the **kind** of the rule, the
+  **operator**, the two **formulas**, whether a **blank** is allowed,
+  whether the list of a list rule is shown **in the cell**, and the
+  **input** and **error** messages with their titles and their style.
+- The **import writes them as the tree's own rules**: a sheet's rules
+  are the rules of `grid.validation.set`, and they check a value
+  through `grid.validation.check`.
+- The rules of the **extension list** are read too — the rules a file
+  puts beside the extension list rather than beside the cells.
+- A rule this tree does not have — a **custom** rule, which is a
+  formula of its own — is **left out**, and the import says how many it
+  could not read.
+
+### What the port found
+
+- **The tree's reader keeps one rule with several ranges and this
+  tree's rule is over one range.** A file names the ranges of a rule
+  in one list, and a rule over two ranges is two rules here, with the
+  same kind and the same formulas.
+- **The file's `showDropDown` hides the arrow**, and the tree's flag is
+  that the arrow is shown: the flag is **inverted** on the way in.
+- **The file's `none` is the tree's `any`**: a rule of no kind is a
+  rule about anything, and it is written in the tree's own word.
+- **The tree's reader writes a `=` before the reference of a list**,
+  and this tree's list rule reads the reference itself — so the `=` is
+  dropped on the way in.
+- **A list may be another sheet's cells**, and this tree's list rule
+  read the cells of the sheet the rule was **on**. A file's list names
+  the sheet it is in, so the rule now reads the cells of the sheet the
+  **reference** names. That is a change in the tree's own rule, and it
+  is made here because a file's list is very often of another sheet.
+- **The extension list writes the range as a child** and the formula
+  in a child of a child, and the reader reads both.
+
+### What it cost
+
+- **One kind** in the reader — the validation — and the reading of it:
+  about ninety lines.
+- **One change** in the tree's own rule: the sheet of a range.
+- **Three tests**: one in the reader's test file (the rules, the
+  messages and the rule of the extension list), one in the import's
+  test file (the rules are the tree's own, and they check a value) and
+  one in the validation test file (a list of another sheet's cells).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **A custom validation is not carried**: it is a formula of its own,
+  and this tree's rule is a kind with two formulas.
+- **The extension rules of the conditional formats are not read**: only
+  the extension validations are, and the extension list of a sheet may
+  hold both.
+- **A rule over a whole column or a whole row** — `A:A` — is carried as
+  the file writes it, and it does not apply: the tree's own range is a
+  cell to a cell.
 - **The workbook is still not written back.**
