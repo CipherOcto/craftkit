@@ -223,6 +223,8 @@ pub struct Sheet {
     /// A sheet that is not hidden says nothing, and that is not
     /// carried.
     pub state: Option<String>,
+    /// The **colour** of the sheet's tab, when the file gives it one.
+    pub tab_colour: Option<String>,
     /// The cells, in the order the file holds them.
     pub cells: Vec<Cell>,
     /// The **rows** of the sheet that say something of themselves: their
@@ -963,6 +965,10 @@ fn read_sheet(
     {
         sheet.summary_below = outline.attr_bool("summaryBelow");
         sheet.summary_right = outline.attr_bool("summaryRight");
+    }
+    // The **colour** of the sheet's tab, when the file gives it one.
+    if let Some(properties) = root.child("sheetPr") {
+        sheet.tab_colour = properties.child("tabColor").and_then(crate::styles::read_colour);
     }
     // The **page setup** of the sheet: how it prints.
     sheet.print = read_print(&root);

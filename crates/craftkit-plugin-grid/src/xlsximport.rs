@@ -176,6 +176,7 @@ commands! {
             let mut unread_names = 0u64;
             let mut hidden_sheets = 0u64;
             let mut kept_sheets = 0u64;
+            let mut tab_colours = 0u64;
             let mut taken: Vec<String> = Vec::new();
             // The **hidden sheets**: a file may hide a sheet, and the
             // tree hides it too. A workbook must keep **one visible
@@ -717,6 +718,11 @@ commands! {
                         hidden_sheets += 1;
                     }
                 }
+                // The **colour** of the sheet's tab.
+                if let Some(colour) = &sheet.tab_colour {
+                    data["tab_color"] = json!(colour);
+                    tab_colours += 1;
+                }
                 session.document_mut()?.add_node_with_under(
                     Some(workbook_id),
                     sheet_name,
@@ -1027,6 +1033,7 @@ commands! {
                 "names": names,
                 "hidden_sheets": hidden_sheets,
                 "kept_sheets": kept_sheets,
+                "tab_colours": tab_colours,
                 "unread_names": unread_names,
                 "filters": imported_filters,
                 "unread_filters": unread_filters,
