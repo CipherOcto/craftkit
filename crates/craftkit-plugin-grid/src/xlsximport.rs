@@ -778,8 +778,22 @@ commands! {
                     if !comment.author.is_empty() {
                         one.insert("author".to_string(), json!(comment.author.clone()));
                     }
-                    one.insert("resolved".to_string(), json!(false));
-                    one.insert("replies".to_string(), json!(Vec::<String>::new()));
+                    one.insert("resolved".to_string(), json!(comment.resolved));
+                    // The **replies** under the note: a thread of a
+                    // newer file.
+                    let replies: Vec<Json> = comment
+                        .replies
+                        .iter()
+                        .map(|reply| {
+                            let mut one = craftkit_sdk::serde_json::Map::new();
+                            one.insert("text".to_string(), json!(reply.text.clone()));
+                            if !reply.author.is_empty() {
+                                one.insert("author".to_string(), json!(reply.author.clone()));
+                            }
+                            craftkit_sdk::serde_json::Value::Object(one)
+                        })
+                        .collect();
+                    one.insert("replies".to_string(), Json::Array(replies));
                     map.insert(address, craftkit_sdk::serde_json::Value::Object(one));
                     imported_comments += 1;
                 }

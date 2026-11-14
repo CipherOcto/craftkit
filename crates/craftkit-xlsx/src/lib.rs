@@ -430,12 +430,26 @@ pub struct Table {
 /// A **comment** of a sheet: a note a cell carries.
 ///
 /// A comment has an **author** and a **text**, and it is on one cell.
+/// A note of a newer file is a **thread**: it has replies under it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Comment {
     /// The column of the cell, counted from zero.
     pub column: u32,
     /// The row of the cell, counted from zero.
     pub row: u32,
+    /// Who wrote it.
+    pub author: String,
+    /// What it says.
+    pub text: String,
+    /// The **replies** under it, in the order they were written.
+    pub replies: Vec<Reply>,
+    /// Whether the thread is **resolved**.
+    pub resolved: bool,
+}
+
+/// A **reply** to a comment: a note written under another note.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reply {
     /// Who wrote it.
     pub author: String,
     /// What it says.
@@ -633,8 +647,14 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             workbook.warnings.push(format!("the sheet \"{name}\" is a {} and was not read", relation.kind));
             continue;
         }
-        let (mut sheet, filter, links, comments, tables) =
-            read_sheet(&mut package, &relation.target, &strings, &styles, &mut workbook.warnings);
+        let (mut sheet, filter, links, comments, tables) = read_sheet(
+            &mut package,
+            &relation.target,
+            &strings,
+            &styles,
+            &workbook_rels,
+            &mut workbook.warnings,
+        );
         sheet.name = name.clone();
         if let Some((_, area, titles)) = prints.iter().find(|(sheet, _, _)| *sheet == name) {
             sheet.print_area = area.clone();
@@ -777,6 +797,7 @@ fn read_sheet(
     part: &str,
     strings: &[String],
     styles: &Styles,
+    workbook_rels: &[Rel],
     warnings: &mut Vec<String>,
 ) -> (Sheet, Option<AutoFilter>, Vec<Hyperlink>, Vec<Comment>, Vec<Table>) {
     let mut sheet = Sheet::default();
@@ -794,7 +815,7 @@ fn read_sheet(
     let links = read_links(&root, &sheet_rels);
     // The **comments** of the sheet: they are in a part of their own
     // that the sheet is related to, and not in the sheet itself.
-    let comments = read_comments(package, &sheet_rels);
+    let comments = read_comments(package, &sheet_rels, workbook_rels, warnings);
     // The **tables** of the sheet: they are in parts of their own
     // that the sheet names by a relationship.
     let tables = read_tables(package, &root, &sheet_rels);
@@ -1326,7 +1347,16 @@ fn read_sheet_protection(root: &craftkit_xml::El) -> Option<SheetProtection> {
 /// note written by a spreadsheet program often begins with the author
 /// and a colon — and that beginning is dropped, because the author is
 /// kept beside it.
-fn read_comments(package: &mut craftkit_zip::Package<'_>, sheet_rels: &[Rel]) -> Vec<Comment> {
+///
+/// A newer file writes its notes a second way: as **threads**, with the
+/// replies under them. Those are read too, and a thread is the truth
+/// about its cell.
+fn read_comments(
+    package: &mut craftkit_zip::Package<'_>,
+    sheet_rels: &[Rel],
+    workbook_rels: &[Rel],
+    warnings: &mut Vec<String>,
+) -> Vec<Comment> {
     let mut out = Vec::new();
     for relation in sheet_rels.iter().filter(|relation| relation.kind == "comments") {
         let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
@@ -1349,7 +1379,91 @@ fn read_comments(package: &mut craftkit_zip::Package<'_>, sheet_rels: &[Rel]) ->
             {
                 text = rest.strip_prefix('\n').unwrap_or(rest).to_string();
             }
-            out.push(Comment { column, row: row as u32, author, text });
+            out.push(Comment { column, row: row as u32, author, text, replies: Vec::new(), resolved: false });
+        }
+    }
+    // The **threads**: the notes of a newer file, with the replies
+    // under them. The people who wrote them are named in a part of the
+    // workbook's own.
+    let persons = read_persons(package, workbook_rels);
+    for relation in sheet_rels.iter().filter(|relation| relation.kind == "threadedComment") {
+        let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
+        let mut threads: Vec<(String, Comment)> = Vec::new();
+        // The notes themselves: a thread with no parent is a note.
+        for element in root.kids("threadedComment") {
+            if element.attr("parentId").is_some() {
+                continue;
+            }
+            let Some(address) = element.attr("ref") else { continue };
+            let Some((column, row)) = address_of(address.trim()) else { continue };
+            let Some(id) = element.attr("id") else { continue };
+            let author =
+                element.attr("personId").and_then(|person| persons.get(person)).cloned().unwrap_or_default();
+            let text = element.child("text").map(thread_text).unwrap_or_default();
+            let comment = Comment {
+                column,
+                row: row as u32,
+                author,
+                text,
+                replies: Vec::new(),
+                resolved: element.flag("done", false),
+            };
+            threads.push((id.to_string(), comment));
+        }
+        // The **replies**: a note under a note, in the order they were
+        // written. A reply to a note that is not there is not a reply.
+        for element in root.kids("threadedComment") {
+            let Some(parent) = element.attr("parentId") else { continue };
+            let Some((_, comment)) = threads.iter_mut().find(|(id, _)| id == parent) else {
+                warnings.push("a reply to a note that is not there was not read".to_string());
+                continue;
+            };
+            let author =
+                element.attr("personId").and_then(|person| persons.get(person)).cloned().unwrap_or_default();
+            let text = element.child("text").map(thread_text).unwrap_or_default();
+            comment.replies.push(Reply { author, text });
+        }
+        for (_, comment) in threads {
+            // A thread is the truth about its cell: the file writes the
+            // older note beside it for the readers that do not know
+            // threads, and the thread is the newer text.
+            match out.iter_mut().find(|old| old.column == comment.column && old.row == comment.row) {
+                Some(old) => *old = comment,
+                None => out.push(comment),
+            }
+        }
+    }
+    out
+}
+
+/// The text of a **thread's** note: the text of the element itself, or
+/// the text of its runs.
+fn thread_text(element: &craftkit_xml::El) -> String {
+    let mut text = element.text.clone();
+    for run in element.kids("r") {
+        if let Some(t) = run.child("t") {
+            text.push_str(&t.text);
+        }
+    }
+    text
+}
+
+/// The **people** of a workbook: the ones who wrote the notes of its
+/// threads.
+///
+/// The people are in a part of the workbook's own, and each one has an
+/// **id** that its notes name.
+fn read_persons(
+    package: &mut craftkit_zip::Package<'_>,
+    workbook_rels: &[Rel],
+) -> std::collections::HashMap<String, String> {
+    let mut out = std::collections::HashMap::new();
+    for relation in workbook_rels.iter().filter(|relation| relation.kind == "person") {
+        let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
+        for person in root.kids("person") {
+            let Some(id) = person.attr("id") else { continue };
+            let name = person.attr("displayName").unwrap_or("").to_string();
+            out.insert(id.to_string(), name);
         }
     }
     out

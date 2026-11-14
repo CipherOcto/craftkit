@@ -918,6 +918,51 @@ fn the_comments_of_a_sheet_are_read() {
     assert_eq!(comments[0].column, 0, "and the cell it is on");
 }
 
+/// The **threads** of a sheet are read: the notes of a newer file, with
+/// the replies under them.
+#[test]
+fn the_threads_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2017/10/relationships/person" Target="persons/person.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2017/10/relationships/threadedComment" Target="../threadedComments/threadedComment1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/persons/person.xml",
+            r#"<personList><person id="{p1}" displayName="ann"/><person id="{p2}" displayName="bob"/></personList>"#,
+        ),
+        (
+            "xl/threadedComments/threadedComment1.xml",
+            r#"<ThreadedComments><threadedComment ref="B2" dT="2024-01-01T00:00:00.00" personId="{p1}" id="{t1}" done="1"><text>the first</text></threadedComment><threadedComment ref="B2" dT="2024-01-02T00:00:00.00" personId="{p2}" id="{t2}" parentId="{t1}"><text>the answer</text></threadedComment></ThreadedComments>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.comments.len(), 1, "one sheet has comments");
+    let (_, comments) = &workbook.comments[0];
+    assert_eq!(comments.len(), 1, "one comment");
+    assert_eq!(comments[0].author, "ann", "its author");
+    assert_eq!(comments[0].text, "the first", "and its text");
+    assert_eq!(comments[0].column, 1, "and the cell it is on");
+    assert_eq!(comments[0].row, 1, "and the row of it");
+    assert!(comments[0].resolved, "and the thread is resolved");
+    assert_eq!(comments[0].replies.len(), 1, "and it has a reply");
+    assert_eq!(comments[0].replies[0].author, "bob", "written by");
+    assert_eq!(comments[0].replies[0].text, "the answer", "and saying");
+}
+
 /// The **tables** of a sheet are read: they are in parts of their own
 /// that the sheet names by a relationship.
 #[test]
