@@ -4379,6 +4379,7 @@ so.
 | the **date** of a cell | **built.** A cell that holds a date in the file's own words is read as the number of the day, counted in the file's own system (§931) | §931 |
 | the **pivot tables** of a sheet | **built.** The pivots a sheet holds are read and imported as the tree's own pivots — the cells they read and the fields they gather them by (§932) | §932 |
 | the **conditional formats** of the extension list | **built.** The rules a file puts beside its extension list are not comparisons, and the reader says how many it left out rather than dropping them in silence (§933) | §933 |
+| the **PDF writer** | **built.** A file is written as a PDF — pages drawn with vectors, text in the standard faces, pictures and links (§934) | §934 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61328,3 +61329,71 @@ list** of the sheet, beside the cells.
   sizes a sheet gives its rows and columns by default, the mark of a
   dynamic array, and the writing of a workbook back.
 - **The workbook is still not written back.**
+
+## 934. The PDF writer: a file written as a PDF
+
+A PDF file is not a tree either: it is an **object graph**. But there
+is another way to make one — **draw** it, and write the drawing out.
+
+### What was built
+
+- A new crate, **`craftkit-pdf-writer`**: it draws **pages** and gives
+  back the **bytes** of a PDF 1.7 file — the catalogue, the page tree,
+  the pages, the fonts they use, the pictures they hold and the
+  cross-reference table that says where each of those is.
+- **Vector drawing**: rectangles, lines (solid or dashed), polygons,
+  circles (four cubic Béziers) and clipping.
+- **Text** in one of the **twelve standard faces**, with the advance
+  widths of the faces, so that a caller can measure, align and wrap
+  text before it draws it.
+- **Pictures**, as RGB image XObjects with a soft mask for the alpha.
+- **Links**: an area that goes to a URI, or to a place on another page.
+- **Bounds, and they are named here**: `MAX_PAGE_CONTENT` (64 MB of
+  content on one page), `MAX_IMAGE_PIXELS` (40 million pixels in one
+  picture), `MAX_PAGE_LINKS` (4096 links on one page) and
+  `MAX_LINK_URI_BYTES` (4096 bytes in one URI).
+
+### What the port found
+
+- **The tree already had a PDF writer**, and it is a different one: the
+  PDF battery writes a **document** back out — its dictionaries, its
+  streams and its references (§771). This writer **draws**. One
+  serialises an object graph and the other makes a page; they are not
+  the same job, and the tree has room for both.
+- **A writer is not a plugin**: it draws pages and gives back bytes, and
+  it knows nothing about a document, a canvas or the kit. So it is a
+  **library** at L0, and a battery may use it — which matters, because
+  a plugin may not depend on another plugin.
+- **The characters a standard face cannot hold**: WinAnsiEncoding is one
+  byte per character, and a Chinese character has no byte. Those are set
+  in a **predefined, non-embedded Adobe-GB1 CID font** with the
+  `UniGB-UTF16-H` CMap, in UTF-16BE. That is carried — **and the limit
+  is named**: GB1 is a **Chinese** collection, so Chinese text is set
+  correctly and Japanese, Korean and emoji are written in it as well,
+  which a reader may show wrongly. Writing them as `?` would be worse,
+  so they are not written as `?`.
+- **The file is written plainly**: the content of a page is not
+  compressed, and the bytes of a picture are run-length encoded — a
+  filter every reader has. So the crate needs **no dependencies** at
+  all, and it sits at the bottom of the tree.
+
+### What it cost
+
+- **A new crate**: about 900 lines of writer and 350 lines of tests.
+- **Sixteen tests**, and they read the file **back**: the
+  cross-reference table is parsed, and every entry in it is checked
+  against the bytes of the file, so a file that says one thing and
+  holds another is caught.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **Nothing draws a sheet into it yet.** The writer draws pages; what a
+  sheet looks like on paper — the widths of the columns, the heights of
+  the rows, the text a cell shows — is the grid battery's business, and
+  that is not here.
+- **The faces are the ones a reader is required to have**: no font is
+  embedded, so a file drawn in the standard faces looks the same
+  everywhere, and a file that wants another face has to embed it.
+- **The file it writes is a plain file**: it is not encrypted, and it
+  has no object stream.
