@@ -4368,6 +4368,7 @@ so.
 | the **data validations** of a sheet | **built.** The rules on what a cell may hold are read and imported as the tree's own rules — the kind, the operator, the formulas and the messages — and a custom rule is left out (§920) | §920 |
 | the **print area** and the **print titles** of a sheet | **built.** What a sheet prints and which of its lines repeat on every page are read and imported, and the built-in names that say so are not names a formula uses (§921) | §921 |
 | the **outline** of a sheet | **built.** The groups of rows and of columns are read and imported — the level of each line in its group and where the summary sits (§922) | §922 |
+| the **replies** of a note | **built.** The threads of a sheet are read and imported — the note, the replies under it and whether it is resolved (§923) | §923 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60755,4 +60756,61 @@ folded away and its summary shown on its own.
 - **The rest of the outline settings of the sheet is not read**: a
   file may say that the styles of the groups follow the outline, and
   that is not read.
+- **The workbook is still not written back.**
+
+## 923. The replies of a note: the thread under a comment
+
+A newer file writes its notes as **threads**: a note, and the replies
+written under it.
+
+### What was built
+
+- The **threads** of a sheet are read: the note, the **replies** under
+  it, and whether the thread is **resolved**.
+- The **people** who wrote them are read: a thread names a person by
+  an id, and the name of the person is in a part of the workbook's
+  own.
+- The **import writes them as the tree's own threads**: the replies in
+  `replies` and the mark in `resolved` — the keys the tree's own
+  commands write.
+
+### What the port found
+
+- **A file writes a note twice**: once the old way, in the part of the
+  comments, and once the new way, in a part of the threads. **The
+  thread is the truth about its cell** — the old note is written for
+  the readers that do not know threads — and the thread replaces it.
+- **The replies name their note** by an id, and a reply to a note that
+  is not there is not a reply: it is left out, and the workbook says
+  so.
+- **The text of a thread's note is written directly**, while the text
+  of the old note is written in **runs** — and the reader reads both
+  ways.
+- **The people are in the workbook's own part**, not in the sheet's:
+  the sheet names the notes, and the workbook names the people.
+- **The tree's reader keeps the dates of a thread** — the day the note
+  was written and the day of each reply — and **this tree keeps none**:
+  a note in the tree has a text, an author, its replies and whether it
+  is resolved, and a date is not one of them.
+
+### What it cost
+
+- **Two fields** in the reader's comment — the replies and the
+  resolved mark — and **one kind**: the reply.
+- **Two parts** read that were not read before: the threads of a sheet
+  and the people of a workbook.
+- **Two tests**: one in the reader's test file (the thread, the reply
+  and the resolved mark) and one in the import's test file (the thread
+  is the tree's own).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The dates of a thread are not carried**: the tree's note has no
+  date, and the dates of the file are left out.
+- **The shape of the note is not read**: a file may say how big the
+  note of a cell is, and that is not read.
+- **A note that is written in the old way only** — a file with no
+  thread part — has no replies, and the tree's own command may put
+  them there.
 - **The workbook is still not written back.**
