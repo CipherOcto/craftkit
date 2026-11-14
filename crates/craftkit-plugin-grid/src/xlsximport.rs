@@ -209,6 +209,20 @@ commands! {
                         } else {
                             unread += 1;
                         }
+                    } else if let Some(shared) = &cell.shared {
+                        // The cell **shares** a formula with the cells
+                        // of its group: the master's text, moved by the
+                        // distance from the master. A text that cannot
+                        // be moved is not a formula, and the cell keeps
+                        // the value the file cached for it.
+                        let text = tree_formula(&shared.text);
+                        match crate::formula::shift_in_formula(&text, shared.row_delta, shared.column_delta) {
+                            Some(shifted) if crate::formula::parse(&shifted).is_ok() => {
+                                entry.insert("formula".to_string(), json!(shifted));
+                                formulas += 1;
+                            }
+                            _ => unread += 1,
+                        }
                     }
                     let value = value_of(cell.value.clone());
                     if let Some(value) = value {

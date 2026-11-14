@@ -39,11 +39,14 @@
 //!
 //! - It does not **write** a workbook. A writer is a different
 //!   program.
-//! - It does not read the **styles**: a cell's number format is not
-//!   read here, and so a date is a number and not a date. The battery
-//!   that owns the spreadsheet model reads the formats itself.
-//! - It does not fill in **shared formulas**: a cell that shares a
-//!   formula with another cell keeps its value and has no formula.
+//! - It does not **shift** a formula: a cell that shares a formula
+//!   with other cells is given the master's text and the distance
+//!   from the master, and the battery that owns the spreadsheet model
+//!   moves the text — the reader knows the file's words, and the
+//!   moving is the model's.
+//! - It does not read the **theme**: a colour that a file names by its
+//!   theme is not a colour here, and a cell that names one has no
+//!   colour.
 
 #![deny(
     clippy::unwrap_used,
@@ -165,6 +168,25 @@ pub struct Cell {
     /// whether its text is hidden, when the cell names a style of its
     /// own and that style says so.
     pub protection: Option<Protection>,
+    /// The **shared formula** of the cell, when the cell shares a
+    /// formula with other cells.
+    ///
+    /// A shared formula is written once in the cell at the top left of
+    /// its group and the other cells of the group name it. The text
+    /// here is the **master's** text, and the deltas say how far this
+    /// cell is from the master.
+    pub shared: Option<Shared>,
+}
+
+/// A **shared formula**: a group of cells that share one formula.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Shared {
+    /// The **text** of the master: the formula as the file writes it.
+    pub text: String,
+    /// How many rows this cell is **below** the master.
+    pub row_delta: i64,
+    /// How many columns this cell is to the **right** of the master.
+    pub column_delta: i64,
 }
 
 /// A **sheet** of a workbook: a name and its cells.
@@ -677,6 +699,11 @@ fn read_sheet(
     let mut next_row: u64 = 0;
     let mut dropped = 0u64;
     let mut next_column: u32;
+    // The **masters** of the shared formulas: by the number of the
+    // group, the cell that wrote the formula, and the formula.
+    let mut masters: std::collections::BTreeMap<u32, (u32, u32, String)> = std::collections::BTreeMap::new();
+    // The cells that **name** a shared formula without writing it.
+    let mut pending: Vec<(usize, u32)> = Vec::new();
 
     for row in data.kids("row") {
         let row_index = match row.attr_u32("r") {
@@ -719,7 +746,27 @@ fn read_sheet(
             }
             next_column = column + 1;
             let value = value_of(cell, strings);
+            // The **formula** of the cell: the file's own text. A cell
+            // that **shares** a formula with other cells writes the
+            // formula once, in the cell at the top left of its group,
+            // and the other cells name it; so a cell that names a
+            // shared formula without writing it is remembered here,
+            // and the group is filled in below.
+            let shared_with = cell.child("f").and_then(|f| {
+                if f.attr("t") != Some("shared") {
+                    return None;
+                }
+                f.attr_u32("si")
+            });
             let formula = cell.child("f").map(|f| f.text.trim().to_string()).filter(|text| !text.is_empty());
+            let shared_master = match (shared_with, &formula) {
+                (Some(index), Some(text)) => {
+                    masters.insert(index, (column, row_index as u32, text.clone()));
+                    None
+                }
+                (Some(index), None) => Some(index),
+                _ => None,
+            };
             let style = cell.attr_u32("s");
             let format = styles.format(style).map(|code| code.to_string());
             // The **font**, the **fill** and the **alignment** of the
@@ -748,8 +795,33 @@ fn read_sheet(
                 align,
                 borders,
                 protection,
+                shared: None,
             });
+            if let Some(index) = shared_master {
+                // The cell names a shared formula: the group's master
+                // may not have been read yet, so the name is kept and
+                // the group is filled in below.
+                pending.push((sheet.cells.len() - 1, index));
+            }
         }
+    }
+
+    // The **shared formulas**: the cells that name a formula the
+    // group's master wrote. The master's text and the distance from
+    // the master are what the caller needs, and the shifting of the
+    // text is the caller's own — the reader knows the file's words,
+    // and the shifting is the model's.
+    for (at, index) in pending {
+        let Some((master_column, master_row, text)) = masters.get(&index) else {
+            continue;
+        };
+        let cell = &sheet.cells[at];
+        let shared = Shared {
+            text: text.clone(),
+            row_delta: cell.row as i64 - i64::from(*master_row),
+            column_delta: cell.column as i64 - i64::from(*master_column),
+        };
+        sheet.cells[at].shared = Some(shared);
     }
 
     if dropped > 0 {

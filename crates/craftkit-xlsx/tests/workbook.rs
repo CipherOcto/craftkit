@@ -618,6 +618,44 @@ fn the_conditional_formats_of_a_sheet_are_read() {
     assert_eq!(rules[2].op, "=", "with the same criterion");
 }
 
+/// The **shared formulas** of a sheet are read: a group of cells that
+/// share one formula, and the distance of each of them from the master.
+#[test]
+fn the_shared_formulas_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="B1"><f t="shared" ref="B1:B3" si="0">A1*2</f><v>2</v></c><c r="C1"><f t="shared" si="1">A1*3</f><v>3</v></c></row><row r="2"><c r="B2"><f t="shared" si="0"/><v>4</v></c></row><row r="3"><c r="B3"><f t="shared" si="0"/><v>6</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let cells = &workbook.sheets[0].cells;
+    // The master writes the formula.
+    assert_eq!(cells[0].formula.as_deref(), Some("A1*2"), "the master writes the formula");
+    assert!(cells[0].shared.is_none(), "and it shares nothing");
+    // The followers name it.
+    let follower = cells[2].shared.as_ref().expect("the cell shares a formula");
+    assert_eq!(follower.text, "A1*2", "the master's text");
+    assert_eq!(follower.row_delta, 1, "and it is one row below the master");
+    assert_eq!(follower.column_delta, 0, "and in the same column");
+    let last = cells[3].shared.as_ref().expect("the cell shares a formula");
+    assert_eq!(last.row_delta, 2, "and it is two rows below the master");
+    // A group of its own is a group of its own.
+    assert_eq!(cells[1].formula.as_deref(), Some("A1*3"), "the other master writes its formula");
+}
+
 /// The **names** of a workbook are read: the words its formulas use.
 #[test]
 fn the_names_of_a_workbook_are_read() {
