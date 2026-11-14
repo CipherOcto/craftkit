@@ -352,6 +352,39 @@ commands! {
                     node.data["links"] = craftkit_sdk::serde_json::Value::Object(map);
                 }
             }
+            // The **comments** of the sheets: the notes their cells
+            // carry.
+            let mut imported_comments = 0u64;
+            for (sheet_name, comments) in &workbook.comments {
+                let Some(sheet_id) = session
+                    .document()
+                    .walk()
+                    .find(|node| node.kind == "grid.sheet" && node.name == *sheet_name)
+                    .map(|node| node.id)
+                else {
+                    continue;
+                };
+                if comments.is_empty() {
+                    continue;
+                }
+                let mut map = craftkit_sdk::serde_json::Map::new();
+                for comment in comments {
+                    let address =
+                        crate::formula::CellRef { col: comment.column, row: comment.row }.to_text();
+                    let mut one = craftkit_sdk::serde_json::Map::new();
+                    one.insert("text".to_string(), json!(comment.text.clone()));
+                    if !comment.author.is_empty() {
+                        one.insert("author".to_string(), json!(comment.author.clone()));
+                    }
+                    one.insert("resolved".to_string(), json!(false));
+                    one.insert("replies".to_string(), json!(Vec::<String>::new()));
+                    map.insert(address, craftkit_sdk::serde_json::Value::Object(one));
+                    imported_comments += 1;
+                }
+                if let Some(node) = session.document_mut()?.node_mut(sheet_id) {
+                    node.data["comments"] = craftkit_sdk::serde_json::Value::Object(map);
+                }
+            }
             let mut summary = format!("imported {filled} cell(s) into the workbook `{name}`");
             if unread > 0 {
                 summary.push_str(&format!("; {unread} formula(s) could not be read and were not imported"));
@@ -386,6 +419,7 @@ commands! {
                 "unread_filters": unread_filters,
                 "links": imported_links,
                 "dropped_links": dropped_links,
+                "comments": imported_comments,
                 "system": system.name(),
                 "warnings": workbook.warnings,
             })))

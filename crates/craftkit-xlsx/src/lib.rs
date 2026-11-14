@@ -165,6 +165,21 @@ pub enum DateSystem {
     Y1904,
 }
 
+/// A **comment** of a sheet: a note a cell carries.
+///
+/// A comment has an **author** and a **text**, and it is on one cell.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Comment {
+    /// The column of the cell, counted from zero.
+    pub column: u32,
+    /// The row of the cell, counted from zero.
+    pub row: u32,
+    /// Who wrote it.
+    pub author: String,
+    /// What it says.
+    pub text: String,
+}
+
 /// A **link** of a sheet: a place a cell goes to.
 ///
 /// The link is over a **range** of cells: a file may put one link on
@@ -268,6 +283,8 @@ pub struct Workbook {
     pub filters: Vec<(String, AutoFilter)>,
     /// The **links** of each sheet, by the name of the sheet.
     pub links: Vec<(String, Vec<Hyperlink>)>,
+    /// The **comments** of each sheet, by the name of the sheet.
+    pub comments: Vec<(String, Vec<Comment>)>,
     /// The date system the numbers of the cells are counted in.
     pub system: DateSystem,
     /// The **warnings**: what could not be read, and what was kept
@@ -349,7 +366,7 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             workbook.warnings.push(format!("the sheet \"{name}\" is a {} and was not read", relation.kind));
             continue;
         }
-        let (mut sheet, filter, links) =
+        let (mut sheet, filter, links, comments) =
             read_sheet(&mut package, &relation.target, &strings, &styles, &mut workbook.warnings);
         sheet.name = name;
         if let Some(filter) = filter {
@@ -357,6 +374,9 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
         }
         if !links.is_empty() {
             workbook.links.push((sheet.name.clone(), links));
+        }
+        if !comments.is_empty() {
+            workbook.comments.push((sheet.name.clone(), comments));
         }
         workbook.sheets.push(sheet);
         let _ = index;
@@ -436,11 +456,11 @@ fn read_sheet(
     strings: &[String],
     styles: &Styles,
     warnings: &mut Vec<String>,
-) -> (Sheet, Option<AutoFilter>, Vec<Hyperlink>) {
+) -> (Sheet, Option<AutoFilter>, Vec<Hyperlink>, Vec<Comment>) {
     let mut sheet = Sheet::default();
     let Some(root) = read_xml(package, part).ok().flatten() else {
         warnings.push(format!("the part {part} could not be read; the sheet is empty"));
-        return (sheet, None, Vec::new());
+        return (sheet, None, Vec::new(), Vec::new());
     };
     // The **filter** of the sheet: the rows it hides.
     let filter = root.child("autoFilter").map(read_filter);
@@ -450,8 +470,11 @@ fn read_sheet(
     // own part.
     let sheet_rels = rels_of(package, part).unwrap_or_default();
     let links = read_links(&root, &sheet_rels);
+    // The **comments** of the sheet: they are in a part of their own
+    // that the sheet is related to, and not in the sheet itself.
+    let comments = read_comments(package, &sheet_rels);
     let Some(data) = root.child("sheetData") else {
-        return (sheet, filter, links);
+        return (sheet, filter, links, comments);
     };
 
     // The row the reader is on: a row that does not say which row it is
@@ -504,7 +527,43 @@ fn read_sheet(
             "the sheet holds {dropped} cells or rows outside the {MAX_ROWS} × {MAX_COLS} grid; they were dropped"
         ));
     }
-    (sheet, filter, links)
+    (sheet, filter, links, comments)
+}
+
+/// Read the **comments** of a sheet.
+///
+/// The comments are in a part of their own, and the sheet is related
+/// to that part. A comment has an author and a text, and the text of a
+/// note written by a spreadsheet program often begins with the author
+/// and a colon — and that beginning is dropped, because the author is
+/// kept beside it.
+fn read_comments(package: &mut craftkit_zip::Package<'_>, sheet_rels: &[Rel]) -> Vec<Comment> {
+    let mut out = Vec::new();
+    for relation in sheet_rels.iter().filter(|relation| relation.kind == "comments") {
+        let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
+        let authors: Vec<String> = root
+            .child("authors")
+            .map(|authors| authors.kids("author").map(|author| author.text.clone()).collect())
+            .unwrap_or_default();
+        let Some(list) = root.child("commentList") else { continue };
+        for comment in list.kids("comment") {
+            let Some(address) = comment.attr("ref") else { continue };
+            let Some((column, row)) = address_of(address.trim()) else { continue };
+            let author = comment
+                .attr_u32("authorId")
+                .and_then(|index| authors.get(index as usize))
+                .cloned()
+                .unwrap_or_default();
+            let mut text = comment.child("text").map(rich_text).unwrap_or_default();
+            if !author.is_empty()
+                && let Some(rest) = text.strip_prefix(&format!("{author}:"))
+            {
+                text = rest.strip_prefix('\n').unwrap_or(rest).to_string();
+            }
+            out.push(Comment { column, row: row as u32, author, text });
+        }
+    }
+    out
 }
 
 /// Read the **links** of a sheet: the places its cells go to.

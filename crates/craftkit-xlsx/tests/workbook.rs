@@ -307,6 +307,42 @@ fn the_links_of_a_sheet_are_read() {
     assert!(!links[1].external, "and it is not outside");
 }
 
+/// The **comments** of a sheet are read: they are in a part of their
+/// own that the sheet is related to.
+#[test]
+fn the_comments_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/comments1.xml",
+            r#"<comments><authors><author>ann</author></authors><commentList><comment ref="A1" authorId="0"><text><r><t>ann:</t></r><r><t>&#10;the text</t></r></text></comment></commentList></comments>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.comments.len(), 1, "one sheet has comments");
+    let (_, comments) = &workbook.comments[0];
+    assert_eq!(comments.len(), 1, "one comment");
+    assert_eq!(comments[0].author, "ann", "its author");
+    assert_eq!(comments[0].text, "the text", "and its text, without the author line");
+    assert_eq!(comments[0].column, 0, "and the cell it is on");
+}
+
 /// A package with **no workbook** is refused.
 #[test]
 fn a_package_with_no_workbook_is_refused() {
