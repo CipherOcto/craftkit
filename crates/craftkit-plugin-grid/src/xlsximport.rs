@@ -166,6 +166,8 @@ commands! {
             let mut unread_prints = 0u64;
             let mut outlines = 0u64;
             let mut setups = 0u64;
+            let mut arrays = 0u64;
+            let mut data_tables = 0u64;
             let mut unread_setups = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
@@ -205,30 +207,41 @@ commands! {
                 for cell in &sheet.cells {
                     let address = CellRef { col: cell.column, row: cell.row }.to_text();
                     let mut entry = craftkit_sdk::serde_json::Map::new();
-                    if let Some(formula) = &cell.formula {
-                        let text = tree_formula(formula);
-                        // A formula the tree cannot read is not a
-                        // formula: the cell keeps the value the file
+                    match cell.formula_kind {
+                        // A formula this tree does not have — an
+                        // **array**, which fills a range of cells, or a
+                        // what-if **data table** — is not a formula of a
+                        // cell here: the cell keeps the value the file
                         // cached for it, and the import says so.
-                        if crate::formula::parse(&text).is_ok() {
-                            entry.insert("formula".to_string(), json!(text));
-                            formulas += 1;
-                        } else {
-                            unread += 1;
-                        }
-                    } else if let Some(shared) = &cell.shared {
-                        // The cell **shares** a formula with the cells
-                        // of its group: the master's text, moved by the
-                        // distance from the master. A text that cannot
-                        // be moved is not a formula, and the cell keeps
-                        // the value the file cached for it.
-                        let text = tree_formula(&shared.text);
-                        match crate::formula::shift_in_formula(&text, shared.row_delta, shared.column_delta) {
-                            Some(shifted) if crate::formula::parse(&shifted).is_ok() => {
-                                entry.insert("formula".to_string(), json!(shifted));
-                                formulas += 1;
+                        Some(craftkit_xlsx::FormulaKind::Array) => arrays += 1,
+                        Some(craftkit_xlsx::FormulaKind::DataTable) => data_tables += 1,
+                        None => {
+                            if let Some(formula) = &cell.formula {
+                                let text = tree_formula(formula);
+                                // A formula the tree cannot read is not a
+                                // formula: the cell keeps the value the file
+                                // cached for it, and the import says so.
+                                if crate::formula::parse(&text).is_ok() {
+                                    entry.insert("formula".to_string(), json!(text));
+                                    formulas += 1;
+                                } else {
+                                    unread += 1;
+                                }
+                            } else if let Some(shared) = &cell.shared {
+                                // The cell **shares** a formula with the cells
+                                // of its group: the master's text, moved by the
+                                // distance from the master. A text that cannot
+                                // be moved is not a formula, and the cell keeps
+                                // the value the file cached for it.
+                                let text = tree_formula(&shared.text);
+                                match crate::formula::shift_in_formula(&text, shared.row_delta, shared.column_delta) {
+                                    Some(shifted) if crate::formula::parse(&shifted).is_ok() => {
+                                        entry.insert("formula".to_string(), json!(shifted));
+                                        formulas += 1;
+                                    }
+                                    _ => unread += 1,
+                                }
                             }
-                            _ => unread += 1,
                         }
                     }
                     let value = value_of(cell.value.clone());
@@ -876,6 +889,16 @@ commands! {
                     "; {unread_aligns} alignment(s) could not be read and were not imported"
                 ));
             }
+            if arrays > 0 {
+                summary.push_str(&format!(
+                    "; {arrays} array formula(s) are not formulas of a cell here and were not imported"
+                ));
+            }
+            if data_tables > 0 {
+                summary.push_str(&format!(
+                    "; {data_tables} data table(s) were not imported and their values were kept"
+                ));
+            }
             if unread_prints > 0 {
                 summary.push_str(&format!(
                     "; {unread_prints} printing(s) could not be read and were not imported"
@@ -908,6 +931,8 @@ commands! {
                 "unread_prints": unread_prints,
                 "outlines": outlines,
                 "setups": setups,
+                "arrays": arrays,
+                "data_tables": data_tables,
                 "unread_setups": unread_setups,
                 "names": names,
                 "unread_names": unread_names,

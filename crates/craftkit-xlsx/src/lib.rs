@@ -145,6 +145,15 @@ pub struct Cell {
     /// differently, and the battery that owns the spreadsheet model
     /// knows how to read those.
     pub formula: Option<String>,
+    /// The **kind** of the formula, when the file names one that is not
+    /// an ordinary formula.
+    ///
+    /// A file says of a formula that it is an **array** — it fills a
+    /// range of cells — or that it is a what-if **data table**. The
+    /// text of such a formula is not the text of a formula of a cell.
+    pub formula_kind: Option<FormulaKind>,
+    /// The **range** of an array formula, when the file names one.
+    pub array_range: Option<String>,
     /// The **number format** of the cell, when it has one.
     ///
     /// The code is the file's own, and a cell with no format of its own
@@ -180,6 +189,16 @@ pub struct Cell {
     /// here is the **master's** text, and the deltas say how far this
     /// cell is from the master.
     pub shared: Option<Shared>,
+}
+
+/// The **kind** of a formula: what the file says the formula is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FormulaKind {
+    /// A formula that **fills a range of cells**: an array.
+    Array,
+    /// A what-if **data table**: a range of cells filled from a
+    /// formula of the table.
+    DataTable,
 }
 
 /// A **shared formula**: a group of cells that share one formula.
@@ -951,6 +970,21 @@ fn read_sheet(
                 f.attr_u32("si")
             });
             let formula = cell.child("f").map(|f| f.text.trim().to_string()).filter(|text| !text.is_empty());
+            // The **kind** of the formula: an **array** fills a range of
+            // cells, and a **data table** is a what-if table of values.
+            // The text of such a formula is not the text of a formula
+            // of a cell, and the battery is told which it is.
+            let formula_kind = cell.child("f").and_then(|f| match f.attr("t").unwrap_or("normal") {
+                "array" => Some(FormulaKind::Array),
+                "dataTable" => Some(FormulaKind::DataTable),
+                _ => None,
+            });
+            let array_range = match formula_kind {
+                Some(FormulaKind::Array) => {
+                    cell.child("f").and_then(|f| f.attr("ref")).map(|range| range.replace('$', ""))
+                }
+                _ => None,
+            };
             let shared_master = match (shared_with, &formula) {
                 (Some(index), Some(text)) => {
                     masters.insert(index, (column, row_index as u32, text.clone()));
@@ -981,6 +1015,8 @@ fn read_sheet(
                 row: row_index as u32,
                 value,
                 formula,
+                formula_kind,
+                array_range,
                 format,
                 font,
                 fill,

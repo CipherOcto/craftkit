@@ -1,6 +1,6 @@
 //! The **workbook reader**: a workbook file, read as a workbook.
 
-use craftkit_xlsx::{DateSystem, Value, read};
+use craftkit_xlsx::{DateSystem, FormulaKind, Value, read};
 
 /// A **package** of parts, written by hand.
 ///
@@ -835,6 +835,42 @@ fn the_page_setup_of_a_sheet_is_read() {
     assert_eq!(print.scale, Some(80), "and the scale");
     assert_eq!(print.fit, Some((1, 2)), "and the fit");
     assert!(print.fit_to_page, "and that it prints to fit");
+}
+
+/// The **kind** of a formula is read: an **array** fills a range of
+/// cells, and a **data table** is a what-if table of values.
+#[test]
+fn the_kind_of_a_formula_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><f t="array" ref="$A$1:$A$2">SUM(B1:B2)</f><v>3</v></c><c r="A2"><v>3</v></c></row><row r="2"><c r="B2"><f t="dataTable" ref="B2:C3" dt2D="1" r1="B1"/><v>5</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let cells = &workbook.sheets[0].cells;
+    // The array: the text is the file's own, and the range it fills.
+    assert_eq!(cells[0].formula.as_deref(), Some("SUM(B1:B2)"), "the text of the array");
+    assert_eq!(cells[0].formula_kind, Some(FormulaKind::Array), "and that it is an array");
+    assert_eq!(cells[0].array_range.as_deref(), Some("A1:A2"), "and the range it fills");
+    // The cell of the array that holds only a value holds only a value.
+    assert!(cells[1].formula.is_none(), "the other cell of the array holds no formula");
+    assert_eq!(cells[1].formula_kind, None, "and is not of any kind");
+    // The data table: it has no text at all, and it says what it is.
+    assert_eq!(cells[2].formula_kind, Some(FormulaKind::DataTable), "the table says what it is");
+    assert!(cells[2].formula.is_none(), "and it holds no text");
 }
 
 /// The **filter** of a sheet is read: the range it is over, and the

@@ -991,6 +991,47 @@ fn the_page_setup_of_a_sheet_is_imported() {
     assert_eq!(setup["fit"]["tall"].as_f64(), Some(2.0), "and two pages tall");
 }
 
+/// A formula this tree does not have — an **array** or a what-if **data
+/// table** — is not imported: the cell keeps the value the file cached
+/// for it.
+#[test]
+fn an_array_formula_is_not_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><f t="array" ref="$A$1:$A$2">SUM(B1:B2)</f><v>3</v></c><c r="A2"><v>3</v></c></row><row r="2"><c r="B2"><f t="dataTable" ref="B2:C3" dt2D="1" r1="B1"/><v>5</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["arrays"].as_u64(), Some(1), "one array formula was left out");
+    assert_eq!(outcome.data["data_tables"].as_u64(), Some(1), "and one data table");
+    assert_eq!(outcome.data["formulas"].as_u64(), Some(0), "and no formula was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let cell = &node.data["cells"]["A1"];
+    assert!(cell.get("formula").is_none(), "the array is not a formula of the cell");
+    assert_eq!(cell["value"].as_f64(), Some(3.0), "and the cell keeps the value the file cached");
+    let cell = &node.data["cells"]["B2"];
+    assert!(cell.get("formula").is_none(), "the table is not a formula of the cell either");
+    assert_eq!(cell["value"].as_f64(), Some(5.0), "and its value is kept");
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]
