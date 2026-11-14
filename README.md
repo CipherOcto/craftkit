@@ -4362,6 +4362,7 @@ so.
 | the **rows** and the **columns** of a sheet | **built.** The heights, the widths and the hiding of the rows and the columns of a sheet are read and imported (§914) | §914 |
 | the **language server** of the tree | **built.** `rust-analyzer` is part of the pinned toolchain, `cargo xtask lsp` asks it where a thing is declared and what uses it, and the agents are told to ask before they grep (§915) | §915 |
 | the **merges** of a sheet | **built.** The ranges that are one cell are read and imported, and a merge with a value under it is left out rather than losing the value (§916) | §916 |
+| the **view** of a sheet | **built.** The gridlines, the headings, the zeros, the right-to-left, the formulas shown, the zoom and the frozen panes of a sheet are read and imported (§917) | §917 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60400,5 +60401,62 @@ A sheet may have **merged** cells: a range of cells that is one cell.
 - **The merges that touch are not both imported**: a file that names
   two merges over the same cell has a cell that is in two regions and
   in none of them, and the second one is not imported.
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 917. The view of a sheet: what is drawn of it, and what is not
+
+A sheet is not only its cells: it says how it is **drawn**.
+
+### What was built
+
+- The **view** of a sheet is read: whether the **gridlines** are drawn,
+  whether the **headings** are, whether the **zeros** are shown, whether
+  the sheet runs **right to left**, whether the **outline symbols** are
+  drawn, whether the **formulas** are shown instead of the values, the
+  **zoom** of the sheet, and the **frozen panes**.
+- The **import carries the view**: a sheet drawn without gridlines is
+  drawn without gridlines here, and a sheet with frozen panes has them
+  here.
+
+### What the port found
+
+- **The tree's view is a set of flags of the sheet, and this one's is
+  the same set** — the gridlines, the headings, the zeros, the
+  right-to-left, the outline symbols and the formulas shown. So the
+  flags are carried as they are.
+- **The tree's freeze is a cell and this one's is a count.** The tree's
+  command freezes at a cell — freezing at `B2` freezes the row above
+  it and the column to its left — and this tree's freeze is the number
+  of the rows and the columns that are frozen. A file says the count,
+  so the count is carried.
+- **A pane that is split is not a pane that is frozen.** A file's pane
+  that is frozen holds the number of the rows and the columns that are
+  frozen; a pane that is split holds a measure in twips — a different
+  thing — and it is not read. The tree reads both as counts, and the
+  count of a split pane is a number of twips read as a number of rows.
+- **The tree keeps the scroll position and the active cell of a
+  sheet**, and this tree does not: they are the front end's own, and
+  they are not facts of the sheet that the battery holds.
+- **The zoom of a sheet is bounded**: a file may name a zoom of a
+  thousand percent, and the tree keeps a zoom between ten and four
+  hundred — and so does this one.
+
+### What it cost
+
+- **One kind** in the reader — the view of a sheet — and the reading of
+  it: about fifty lines.
+- **Three tests**: two in the reader's test file (the flags, the zoom
+  and the frozen panes; and a sheet with no view of its own) and one in
+  the import's test file (the view is imported and read back).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The scroll position of a sheet and its active cell are not read**:
+  they are the front end's own.
+- **The mode of the view is not read**: a file may say the sheet is
+  shown as a page break preview or as a page layout, and this tree has
+  no such a mode.
 - **A shared formula is still not filled in.**
 - **The workbook is still not written back.**
