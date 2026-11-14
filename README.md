@@ -4373,6 +4373,7 @@ so.
 | the **array formula** of a cell | **built.** The kind of a formula is read, and a formula this tree does not have — an array or a data table — is left out rather than carried wrongly (§925) | §925 |
 | the **breaks** of the printing | **built.** The rows and the columns a page begins at are read and imported, and the pages of a sheet break where the file says they break (§926) | §926 |
 | the **sparklines** of a sheet | **built.** The little drawings in the cells of a sheet are read and imported — the range, the kind, the colour and the markers (§927) | §927 |
+| the **hidden sheets** of a workbook | **built.** The sheets a file hides are read and hidden here too, and a workbook keeps one sheet in sight (§928) | §928 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61026,4 +61027,46 @@ A sparkline is a small drawing in a cell, taken from a range of cells.
   way the series runs, and none of that is read.
 - **The colours of the negative points, of the markers and of the axis
   are not read**: only the colour of the line is.
+- **The workbook is still not written back.**
+
+## 928. The hidden sheets of a workbook: the sheets the file hides
+
+A file may hide a sheet — or hide it very well.
+
+### What was built
+
+- The **state** of a sheet is read: `hidden` or `veryHidden`, when the
+  file hides it.
+- The **import hides the sheet**: a sheet the file hides is hidden
+  here too.
+
+### What the port found
+
+- **The tree's reader has three states** — visible, hidden and very
+  hidden — and **the tree has one**: hidden. A sheet the file hides
+  very well is hidden here as well, and the difference between the two
+  is the difference between a sheet that is out of the way and a sheet
+  that cannot be unhidden by a person.
+- **A workbook must keep one sheet in sight**, and that is the tree's
+  own rule: the tree's command refuses to hide the last one. So a
+  file that hides every sheet of it keeps its **first** sheet in
+  sight, and the import says that it did.
+- **The state of a sheet is said in the workbook and not in the
+  sheet**: the sheet's own part says nothing about it.
+
+### What it cost
+
+- **One field** in the reader — the state of a sheet — and one line
+  in the import.
+- **Two tests**: one in the reader's test file (the states of the
+  sheets) and one in the import's test file (the sheet is hidden).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The difference between hidden and very hidden is not kept**: the
+  tree has one flag, and a sheet the file hides very well is hidden.
+- **The workbook that is looked at is not the workbook of the file**:
+  the import makes a workbook of its own, and the sheet that was
+  looked at is not named.
 - **The workbook is still not written back.**
