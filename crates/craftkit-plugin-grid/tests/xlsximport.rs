@@ -522,6 +522,45 @@ fn the_protection_of_a_sheet_is_imported() {
     assert_eq!(read.data["locked"].as_bool(), Some(false), "the cell is unlocked");
 }
 
+/// The **rows** and the **columns** of a sheet are imported: their
+/// heights, their widths and which of them are hidden.
+#[test]
+fn the_rows_and_the_columns_of_a_sheet_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><cols><col min="1" max="1" width="12.5" customWidth="1"/><col min="3" max="3" width="8" hidden="1"/></cols><sheetData><row r="1" ht="30" customHeight="1"><c r="A1" t="str"><v>x</v></c></row><row r="2" hidden="1"><c r="A2" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    // The **sheet** holds the height of the row, the width of the
+    // column, and the rows and the columns that are hidden.
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["rows"]["1"].as_f64(), Some(30.0), "the row is thirty points high");
+    assert_eq!(node.data["columns"]["A"].as_f64(), Some(12.5), "the column is twelve and a half wide");
+    assert_eq!(node.data["hidden_rows"].as_array().map(Vec::len), Some(1), "one row is hidden");
+    assert_eq!(node.data["hidden_rows"][0].as_u64(), Some(2), "and it is the second row");
+    assert_eq!(node.data["hidden_columns"].as_array().map(Vec::len), Some(1), "one column is hidden");
+    assert_eq!(node.data["hidden_columns"][0].as_str(), Some("C"), "and it is the third column");
+}
+
 /// A file that is **not a workbook** is refused.
 #[test]
 fn a_file_that_is_not_a_workbook_is_refused() {

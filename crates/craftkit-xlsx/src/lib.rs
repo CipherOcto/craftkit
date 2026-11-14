@@ -174,11 +174,47 @@ pub struct Sheet {
     pub name: String,
     /// The cells, in the order the file holds them.
     pub cells: Vec<Cell>,
+    /// The **rows** of the sheet that say something of themselves: their
+    /// height and whether they are hidden.
+    pub rows: Vec<Row>,
+    /// The **columns** of the sheet that say something of themselves:
+    /// their width and whether they are hidden.
+    pub columns: Vec<Column>,
     /// The **protection** of the sheet, when the sheet is protected.
     ///
     /// A sheet that is not protected has none: a sheet that is not
     /// protected says nothing about what may be done to it.
     pub protection: Option<SheetProtection>,
+}
+
+/// A **row** of a sheet: its height, and whether it is hidden.
+///
+/// The height is in **points**, as the file writes it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Row {
+    /// The **row**, counted from one.
+    pub row: u64,
+    /// The **height** of the row, in points, when the file gives one.
+    pub height: Option<f64>,
+    /// Whether the row is **hidden**.
+    pub hidden: bool,
+}
+
+/// A **column** of a sheet: its width, and whether it is hidden.
+///
+/// The width is the **file's** own: the number of characters of the
+/// face of the sheet, with the padding of the file in it. This tree's
+/// own column width is the number of characters of the **cell's** face,
+/// and the two are not the same measure — so the number is carried as
+/// the file gives it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Column {
+    /// The **column**, counted from zero.
+    pub column: u32,
+    /// The **width** of the column, when the file gives one.
+    pub width: Option<f64>,
+    /// Whether the column is **hidden**.
+    pub hidden: bool,
 }
 
 /// The **protection** of a sheet: what may still be done to it.
@@ -548,6 +584,14 @@ fn read_sheet(
     // protected, and the flags of that element say what is still
     // allowed.
     sheet.protection = read_sheet_protection(&root);
+    // The **columns** of the sheet: their width and whether they are
+    // hidden. A file says a span of columns at once, so one span of
+    // ten columns is ten columns here.
+    sheet.columns = read_columns(&root);
+    // The **rows** of the sheet: their height and whether they are
+    // hidden. A file says a row of its own, and this reader reads the
+    // rows as it reads the cells.
+    let mut rows: Vec<Row> = Vec::new();
     let Some(data) = root.child("sheetData") else {
         return (sheet, filter, links, comments, tables);
     };
@@ -573,6 +617,14 @@ fn read_sheet(
         }
         next_row = row_index + 1;
         next_column = 0;
+        // The **row** itself: its height and whether it is hidden. A
+        // row that says nothing of itself is not a row here: the
+        // height of a row that says nothing is the sheet's own.
+        let height = row.attr_f64("ht").filter(|height| *height > 0.0);
+        let hidden = row.flag("hidden", false);
+        if height.is_some() || hidden {
+            rows.push(Row { row: row_index + 1, height, hidden });
+        }
 
         for cell in row.kids("c") {
             let (column, row_index) = match cell.attr("r") {
@@ -629,7 +681,38 @@ fn read_sheet(
             "the sheet holds {dropped} cells or rows outside the {MAX_ROWS} × {MAX_COLS} grid; they were dropped"
         ));
     }
+    sheet.rows = rows;
     (sheet, filter, links, comments, tables)
+}
+
+/// Read the **columns** of a sheet: their width and whether they are
+/// hidden.
+///
+/// A file says a **span** of columns at once, and a span of ten
+/// columns is ten columns here. A span that is out of the grid is
+/// clipped to it, as the tree's reader clips it.
+fn read_columns(root: &craftkit_xml::El) -> Vec<Column> {
+    let mut columns = Vec::new();
+    let Some(cols) = root.child("cols") else { return columns };
+    for col in cols.kids("col") {
+        let (Some(min), Some(max)) = (col.attr_u32("min"), col.attr_u32("max")) else { continue };
+        if min == 0 || max < min {
+            continue;
+        }
+        let max = max.min(MAX_COLS as u32);
+        if u64::from(min) > MAX_COLS {
+            continue;
+        }
+        let width = col.attr_f64("width").filter(|width| *width > 0.0);
+        let hidden = col.flag("hidden", false);
+        if width.is_none() && !hidden {
+            continue;
+        }
+        for index in (min - 1)..max {
+            columns.push(Column { column: index, width, hidden });
+        }
+    }
+    columns
 }
 
 /// Read the **tables** of a sheet.

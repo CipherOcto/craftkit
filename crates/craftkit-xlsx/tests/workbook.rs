@@ -444,6 +444,50 @@ fn the_lock_of_a_cell_is_read() {
     assert!(second.hidden, "and its text is hidden");
 }
 
+/// The **rows** and the **columns** of a sheet are read: their heights,
+/// their widths and which of them are hidden.
+#[test]
+fn the_rows_and_the_columns_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><cols><col min="1" max="2" width="12.5" customWidth="1"/><col min="3" max="3" width="8" hidden="1"/></cols><sheetData><row r="1" ht="30" customHeight="1"><c r="A1" t="str"><v>x</v></c></row><row r="2" hidden="1"><c r="A2" t="str"><v>x</v></c></row><row r="3"><c r="A3" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    // The **rows**: the first has a height, the second is hidden, and
+    // the third says nothing of itself.
+    assert_eq!(sheet.rows.len(), 2, "two rows say something of themselves");
+    assert_eq!(sheet.rows[0].row, 1, "the first is the first row");
+    assert_eq!(sheet.rows[0].height, Some(30.0), "and it is thirty points high");
+    assert!(!sheet.rows[0].hidden, "and it is not hidden");
+    assert_eq!(sheet.rows[1].row, 2, "the second is the second row");
+    assert_eq!(sheet.rows[1].height, None, "and it has no height of its own");
+    assert!(sheet.rows[1].hidden, "and it is hidden");
+    // The **columns**: a span of two columns is two columns, and a
+    // hidden column is a column of its own.
+    assert_eq!(sheet.columns.len(), 3, "three columns say something of themselves");
+    assert_eq!(sheet.columns[0].column, 0, "the first is the first column");
+    assert_eq!(sheet.columns[0].width, Some(12.5), "and it is twelve and a half wide");
+    assert_eq!(sheet.columns[1].column, 1, "the second is the second column");
+    assert_eq!(sheet.columns[1].width, Some(12.5), "and it is as wide as the first");
+    assert_eq!(sheet.columns[2].column, 2, "the third is the third column");
+    assert!(sheet.columns[2].hidden, "and it is hidden");
+}
+
 /// The **names** of a workbook are read: the words its formulas use.
 #[test]
 fn the_names_of_a_workbook_are_read() {

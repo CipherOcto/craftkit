@@ -274,11 +274,50 @@ commands! {
                     }
                     cells.insert(address, craftkit_sdk::serde_json::Value::Object(entry));
                 }
+                // The **rows** of the sheet: the height of each row
+                // that has one, and the rows that are hidden.
+                let mut row_heights: craftkit_sdk::serde_json::Map<String, Json> =
+                    craftkit_sdk::serde_json::Map::new();
+                let mut hidden_rows: Vec<Json> = Vec::new();
+                for row in &sheet.rows {
+                    if let Some(height) = row.height {
+                        row_heights.insert(row.row.to_string(), json!(height));
+                    }
+                    if row.hidden {
+                        hidden_rows.push(json!(row.row));
+                    }
+                }
+                // The **columns** of the sheet: the width of each
+                // column that has one, and the columns that are hidden.
+                let mut column_widths: craftkit_sdk::serde_json::Map<String, Json> =
+                    craftkit_sdk::serde_json::Map::new();
+                let mut hidden_columns: Vec<Json> = Vec::new();
+                for column in &sheet.columns {
+                    let letter = crate::formula::CellRef::column_text(column.column);
+                    if let Some(width) = column.width {
+                        column_widths.insert(letter.clone(), json!(width));
+                    }
+                    if column.hidden {
+                        hidden_columns.push(json!(letter));
+                    }
+                }
                 let mut data = json!({
                     "cells": craftkit_sdk::serde_json::Value::Object(cells),
                     "view": crate::view::SheetView::default().to_json(),
                     "zoom": 100,
                 });
+                if !row_heights.is_empty() {
+                    data["rows"] = Json::Object(row_heights);
+                }
+                if !column_widths.is_empty() {
+                    data["columns"] = Json::Object(column_widths);
+                }
+                if !hidden_rows.is_empty() {
+                    data["hidden_rows"] = Json::Array(hidden_rows);
+                }
+                if !hidden_columns.is_empty() {
+                    data["hidden_columns"] = Json::Array(hidden_columns);
+                }
                 // The **protection** of the sheet: what may still be
                 // done to it. A file that protects a sheet says so,
                 // and the flags say what is still allowed.
