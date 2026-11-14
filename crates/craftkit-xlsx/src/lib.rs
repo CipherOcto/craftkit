@@ -59,7 +59,7 @@ mod rels;
 mod styles;
 
 pub use rels::{Rel, rels_of, resolve, split_dir};
-pub use styles::{Styles, read_styles};
+pub use styles::{Alignment, Border, Borders, Fill, Font, Styles, Underline, Vert, read_styles};
 
 /// The most **rows** a sheet may have: the tree's own bound.
 pub const MAX_ROWS: u64 = 1_048_576;
@@ -144,6 +144,23 @@ pub struct Cell {
     /// has none: the general format is the format of a cell that names
     /// nothing, and it is not carried.
     pub format: Option<String>,
+    /// The **font** of the cell, when the cell names a style of its
+    /// own.
+    ///
+    /// A cell that names no style has no font here: the font of a cell
+    /// that names nothing is the sheet's own, and a sheet's own is not
+    /// a cell's.
+    pub font: Option<Font>,
+    /// The **fill** of the cell: the colour behind its text, when the
+    /// cell names a style of its own and that style has a colour
+    /// behind the text.
+    pub fill: Option<Fill>,
+    /// The **alignment** of the cell, when the cell names a style of
+    /// its own and that style says how the text lies.
+    pub align: Option<Alignment>,
+    /// The **borders** of the cell: the lines on its edges, when the
+    /// cell names a style of its own and that style has lines.
+    pub borders: Option<Borders>,
 }
 
 /// A **sheet** of a workbook: a name and its cells.
@@ -546,8 +563,33 @@ fn read_sheet(
             next_column = column + 1;
             let value = value_of(cell, strings);
             let formula = cell.child("f").map(|f| f.text.trim().to_string()).filter(|text| !text.is_empty());
-            let format = styles.format(cell.attr_u32("s")).map(|code| code.to_string());
-            sheet.cells.push(Cell { column, row: row_index as u32, value, formula, format });
+            let style = cell.attr_u32("s");
+            let format = styles.format(style).map(|code| code.to_string());
+            // The **font**, the **fill** and the **alignment** of the
+            // cell: only when the cell names a style of its own. A
+            // cell that names no style has the sheet's own face, and
+            // the sheet's own face is not the cell's.
+            let (font, fill, align, borders) = if style.is_some() {
+                (
+                    styles.font(style).cloned(),
+                    styles.fill(style).cloned(),
+                    styles.align(style).cloned(),
+                    styles.borders(style).cloned(),
+                )
+            } else {
+                (None, None, None, None)
+            };
+            sheet.cells.push(Cell {
+                column,
+                row: row_index as u32,
+                value,
+                formula,
+                format,
+                font,
+                fill,
+                align,
+                borders,
+            });
         }
     }
 

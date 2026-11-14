@@ -47,6 +47,11 @@ const MAX_LINK_CELLS: u64 = 10_000;
 /// stay bounded.
 const MAX_LINK_BYTES: u64 = 8 * 1024 * 1024;
 
+/// The **colour** a border has when the file names none.
+///
+/// The tree's own colour: a line with no colour of its own is black.
+const DEFAULT_COLOUR: &str = "#000000";
+
 /// The **text of a file's formula**, as the tree reads it.
 ///
 /// A file spells some functions with a prefix — `_xlfn.` — and some
@@ -136,6 +141,11 @@ commands! {
             let mut unread = 0u64;
             let mut formats = 0u64;
             let mut unread_formats = 0u64;
+            let mut fonts = 0u64;
+            let mut fills = 0u64;
+            let mut aligns = 0u64;
+            let mut unread_aligns = 0u64;
+            let mut imported_borders = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -165,6 +175,12 @@ commands! {
                 taken.push(sheet_name.clone());
                 // The **cells**: the file's cells, read.
                 let mut cells = craftkit_sdk::serde_json::Map::new();
+                // The **borders** of the sheet: the lines on the edges
+                // of its cells, by the address of the cell they are on.
+                let mut borders_of_sheet: std::collections::BTreeMap<
+                    String,
+                    std::collections::BTreeMap<String, Json>,
+                > = std::collections::BTreeMap::new();
                 for cell in &sheet.cells {
                     let address = CellRef { col: cell.column, row: cell.row }.to_text();
                     let mut entry = craftkit_sdk::serde_json::Map::new();
@@ -198,16 +214,75 @@ commands! {
                     } else if cell.format.is_some() {
                         unread_formats += 1;
                     }
+                    // The **font** of the cell: the face of its text
+                    // and the marks on it.
+                    if let Some(font) = &cell.font {
+                        entry.insert("font".to_string(), font_of(font));
+                        fonts += 1;
+                    }
+                    // The **fill** of the cell: the colour behind its
+                    // text. A fill that is not a colour — a pattern —
+                    // is not carried.
+                    if let Some(fill) = &cell.fill
+                        && let Some(colour) = &fill.colour
+                    {
+                        entry.insert("fill".to_string(), json!(colour));
+                        fills += 1;
+                    }
+                    // The **alignment** of the cell: how its text lies.
+                    // An alignment this tree does not have is not
+                    // carried: a way of lying that is quietly wrong is
+                    // worse than one that is missing.
+                    if let Some(align) = &cell.align {
+                        match align_of(align) {
+                            Some(align) => {
+                                entry.insert("align".to_string(), align);
+                                aligns += 1;
+                            }
+                            None => unread_aligns += 1,
+                        }
+                    }
+                    // The **borders** of the cell: the lines on its
+                    // edges. They are the sheet's, and not the cell's,
+                    // as they are here.
+                    if let Some(borders) = &cell.borders {
+                        for border in &borders.edges {
+                            let edge = match border.edge.as_str() {
+                                "top" | "right" | "bottom" | "left" => border.edge.as_str(),
+                                _ => continue,
+                            };
+                            let colour = border.colour.clone().unwrap_or_else(|| DEFAULT_COLOUR.to_string());
+                            let line = json!({ "style": border.style.clone(), "colour": colour });
+                            let edges = borders_of_sheet
+                                .entry(address.clone())
+                                .or_default();
+                            edges.insert(edge.to_string(), line);
+                            imported_borders += 1;
+                        }
+                    }
                     if entry.is_empty() {
                         continue;
                     }
                     cells.insert(address, craftkit_sdk::serde_json::Value::Object(entry));
                 }
-                let data = json!({
+                let mut data = json!({
                     "cells": craftkit_sdk::serde_json::Value::Object(cells),
                     "view": crate::view::SheetView::default().to_json(),
                     "zoom": 100,
                 });
+                if !borders_of_sheet.is_empty() {
+                    let mut borders: craftkit_sdk::serde_json::Map<String, Json> =
+                        craftkit_sdk::serde_json::Map::new();
+                    for (address, edges) in borders_of_sheet {
+                        let mut one: craftkit_sdk::serde_json::Map<String, Json> =
+                            craftkit_sdk::serde_json::Map::new();
+                        for (edge, line) in edges {
+                            one.insert(edge, line);
+                        }
+                        borders.insert(address, Json::Object(one));
+                    }
+                    data["borders"] = Json::Object(borders);
+                }
                 session.document_mut()?.add_node_with_under(
                     Some(workbook_id),
                     sheet_name,
@@ -448,6 +523,11 @@ commands! {
                     "; {unread_filters} filter(s) could not be read and were not imported"
                 ));
             }
+            if unread_aligns > 0 {
+                summary.push_str(&format!(
+                    "; {unread_aligns} alignment(s) could not be read and were not imported"
+                ));
+            }
             Ok(Outcome::changed(summary).with_data(json!({
                 "id": workbook_id,
                 "name": name,
@@ -457,6 +537,11 @@ commands! {
                 "unread_formulas": unread,
                 "formats": formats,
                 "unread_formats": unread_formats,
+                "fonts": fonts,
+                "fills": fills,
+                "aligns": aligns,
+                "unread_aligns": unread_aligns,
+                "borders": imported_borders,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,
@@ -471,6 +556,67 @@ commands! {
 
         }
     }
+}
+
+/// The **font** of a cell, as this tree's font.
+///
+/// A file's font names the marks of the text in the file's own words:
+/// `singleAccounting` and `doubleAccounting`. This tree's words are
+/// `single-accounting` and `double-accounting`, and the names are
+/// changed here.
+fn font_of(font: &craftkit_xlsx::Font) -> Json {
+    let underline = match font.underline {
+        craftkit_xlsx::Underline::None => "none",
+        craftkit_xlsx::Underline::Single => "single",
+        craftkit_xlsx::Underline::Double => "double",
+        craftkit_xlsx::Underline::SingleAccounting => "single-accounting",
+        craftkit_xlsx::Underline::DoubleAccounting => "double-accounting",
+    };
+    let vert = match font.vert {
+        craftkit_xlsx::Vert::Baseline => "baseline",
+        craftkit_xlsx::Vert::Superscript => "superscript",
+        craftkit_xlsx::Vert::Subscript => "subscript",
+    };
+    json!({
+        "name": match &font.name {
+            Some(name) => json!(name),
+            None => Json::Null,
+        },
+        "size": match font.size {
+            Some(size) => json!(size),
+            None => Json::Null,
+        },
+        "bold": font.bold,
+        "italic": font.italic,
+        "strike": font.strike,
+        "underline": underline,
+        "vert": vert,
+        "colour": match &font.colour {
+            Some(colour) => json!(colour),
+            None => Json::Null,
+        },
+    })
+}
+
+/// The **alignment** of a cell, as this tree's alignment.
+///
+/// The names the reader gives are this tree's own, and an alignment
+/// this tree does not have is **nothing**: the cell keeps the
+/// alignment it had, which is none.
+fn align_of(align: &craftkit_xlsx::Alignment) -> Option<Json> {
+    let horizontal = align.horizontal.as_deref()?;
+    let vertical = align.vertical.as_deref()?;
+    if crate::formula::AlignH::parse(horizontal).is_none()
+        || crate::formula::AlignV::parse(vertical).is_none()
+    {
+        return None;
+    }
+    Some(json!({
+        "horizontal": horizontal,
+        "vertical": vertical,
+        "indent": align.indent,
+        "wrap": align.wrap,
+    }))
 }
 
 /// The **filter** of a sheet, as this tree's filter.

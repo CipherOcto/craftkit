@@ -422,6 +422,62 @@ fn the_tables_of_a_sheet_are_imported() {
     assert_eq!(ways[1]["way"].as_str(), Some("average"), "is totalled in the average");
 }
 
+/// The **styles** a cell carries are imported: the font of its text,
+/// the fill behind it, how its text lies and the lines on its edges.
+#[test]
+fn the_styles_of_a_cell_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FFFF0000"/><name val="Arial"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF0000FF"/></left></border></borders><cellXfs><xf fontId="0" fillId="0" borderId="0"/><xf fontId="1" fillId="1" borderId="1" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="1" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["fonts"].as_u64(), Some(1), "one font was imported");
+    assert_eq!(outcome.data["fills"].as_u64(), Some(1), "one fill was imported");
+    assert_eq!(outcome.data["aligns"].as_u64(), Some(1), "one alignment was imported");
+    assert_eq!(outcome.data["borders"].as_u64(), Some(1), "one border was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let read =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(read.data["font"]["name"].as_str(), Some("Arial"), "the face of the text");
+    assert_eq!(read.data["font"]["size"].as_f64(), Some(14.0), "the size of it");
+    assert_eq!(read.data["font"]["bold"].as_bool(), Some(true), "and it is bold");
+    assert_eq!(read.data["font"]["colour"].as_str(), Some("#ff0000"), "and red");
+    assert_eq!(read.data["fill"].as_str(), Some("#00ff00"), "the colour behind the text");
+    assert_eq!(
+        read.data["align"]["horizontal"].as_str(),
+        Some("center"),
+        "how the text lies across the cell"
+    );
+    assert_eq!(read.data["align"]["vertical"].as_str(), Some("middle"), "and how it lies down it");
+    let borders = session
+        .execute("grid.cell.border.get", &json!({ "sheet": sheet, "cell": "A1" }))
+        .expect("the borders are read");
+    assert_eq!(borders.data["borders"]["left"]["style"].as_str(), Some("thin"), "the line on the left");
+    assert_eq!(borders.data["borders"]["left"]["colour"].as_str(), Some("#0000ff"), "and it is blue");
+}
+
 /// A file that is **not a workbook** is refused.
 #[test]
 fn a_file_that_is_not_a_workbook_is_refused() {

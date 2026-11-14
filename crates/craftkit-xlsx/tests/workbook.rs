@@ -204,6 +204,155 @@ fn the_format_of_a_cell_is_read() {
     assert_eq!(cells[2].format, None, "and a cell with no style has no format");
 }
 
+/// The **font** of a cell is read: the face of its text, the size of
+/// it and the marks on it.
+#[test]
+fn the_font_of_a_cell_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><i/><strike/><u val="singleAccounting"/><vertAlign val="superscript"/><sz val="14"/><color rgb="FFFF0000"/><name val="Arial"/></font></fonts><cellXfs><xf fontId="0"/><xf fontId="1"/></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="1" t="str"><v>x</v></c><c r="B1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let cells = &workbook.sheets[0].cells;
+    let font = cells[0].font.as_ref().expect("the cell has a font");
+    assert_eq!(font.name, Some("Arial".to_string()), "the face of the text");
+    assert_eq!(font.size, Some(14.0), "the size of it");
+    assert!(font.bold, "and it is bold");
+    assert!(font.italic, "and italic");
+    assert!(font.strike, "and struck through");
+    assert_eq!(font.underline, craftkit_xlsx::Underline::SingleAccounting, "and underlined");
+    assert_eq!(font.vert, craftkit_xlsx::Vert::Superscript, "and above its line");
+    assert_eq!(font.colour, Some("#ff0000".to_string()), "and red");
+    assert!(cells[1].font.is_none(), "and a cell with no style has no font");
+}
+
+/// The **fill** of a cell is read: the colour behind its text. Only a
+/// **solid** fill is a colour.
+#[test]
+fn the_fill_of_a_cell_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill><fill><patternFill patternType="gray125"/></fill></fills><cellXfs><xf fillId="0"/><xf fillId="1"/><xf fillId="2"/></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="1" t="str"><v>x</v></c><c r="B1" s="2" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let cells = &workbook.sheets[0].cells;
+    assert_eq!(
+        cells[0].fill.as_ref().expect("the cell has a fill").colour,
+        Some("#00ff00".to_string()),
+        "the colour behind the text"
+    );
+    assert!(
+        cells[1].fill.as_ref().expect("the cell has a fill").colour.is_none(),
+        "and a pattern is not a colour"
+    );
+}
+
+/// The **alignment** of a cell is read: how its text lies across it
+/// and how it lies down it.
+#[test]
+fn the_alignment_of_a_cell_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><cellXfs><xf><alignment horizontal="centerContinuous" vertical="center" wrapText="1" indent="2"/></xf></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="0" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let align = workbook.sheets[0].cells[0].align.as_ref().expect("the cell has an alignment");
+    assert_eq!(align.horizontal, Some("center-across".to_string()), "how the text lies across the cell");
+    assert_eq!(align.vertical, Some("middle".to_string()), "and how it lies down it");
+    assert!(align.wrap, "and it wraps");
+    assert_eq!(align.indent, 2, "and it is indented");
+}
+
+/// The **borders** of a cell are read: the lines on its edges.
+#[test]
+fn the_borders_of_a_cell_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF0000FF"/></left><bottom style="mediumDashDot"/></border></borders><cellXfs><xf borderId="0"/><xf borderId="1"/></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="1" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let borders = workbook.sheets[0].cells[0].borders.as_ref().expect("the cell has borders");
+    assert_eq!(borders.edges.len(), 2, "two edges have a line");
+    assert_eq!(borders.edges[0].edge, "bottom", "the first is at the bottom");
+    assert_eq!(borders.edges[0].style, "mediumDashDot", "and it is a dashed dot");
+    assert!(borders.edges[0].colour.is_none(), "and it has no colour of its own");
+    assert_eq!(borders.edges[1].edge, "left", "the second is on the left");
+    assert_eq!(borders.edges[1].style, "thin", "and it is a thin line");
+    assert_eq!(borders.edges[1].colour, Some("#0000ff".to_string()), "and it is blue");
+}
+
 /// The **names** of a workbook are read: the words its formulas use.
 #[test]
 fn the_names_of_a_workbook_are_read() {
