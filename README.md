@@ -4375,6 +4375,7 @@ so.
 | the **sparklines** of a sheet | **built.** The little drawings in the cells of a sheet are read and imported — the range, the kind, the colour and the markers (§927) | §927 |
 | the **hidden sheets** of a workbook | **built.** The sheets a file hides are read and hidden here too, and a workbook keeps one sheet in sight (§928) | §928 |
 | the **colour** of a sheet's tab | **built.** The colour of the tab of a sheet is read and imported (§929) | §929 |
+| the **charts** of a sheet | **built.** The drawings of the cells of a sheet are read and imported as the tree's own charts — the kind, the title, the legend and the cells they read (§930) | §930 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61105,4 +61106,68 @@ A sheet's tab may be coloured, so that a sheet is easy to find.
 
 - **A colour by the theme of the workbook is not a colour here**:
   this tree has no theme, and a tab that names one has no colour.
+- **The workbook is still not written back.**
+
+## 930. The charts of a sheet: the drawings that are charts
+
+A sheet may show a drawing of some of its cells: a chart.
+
+### What was built
+
+- The **charts** of a sheet are read: the **kind** of the chart, its
+  **title**, where its **legend** is, whether its **data labels** are
+  shown, whether its **gridlines** are shown, the titles of its two
+  **axes**, and the **cells** it reads — the categories and each of
+  its series.
+- The **import writes them as the tree's own charts**: a chart node
+  under the sheet, reading the range of the cells, with the kind, the
+  title, the legend, the labels, the gridlines and the titles of the
+  axes.
+
+### What the port found
+
+- **A chart of a file is in a part of its own, and the sheet reaches
+  it through its drawing**: the sheet names a drawing, the drawing
+  holds a frame, and the frame names the chart. The reader walks that
+  road.
+- **The tree's chart reads one range**: the categories are its first
+  column and the series are the columns after it. A file's chart
+  names the categories and each of its series by a range of their
+  own, so the chart becomes the tree's chart **when those ranges are
+  a block** — the categories in the first column and the series in
+  the columns beside it — and it is **left out** when they are not.
+- **The tree has four kinds of chart and a file has more**: the area,
+  the scatter, the doughnut, the bubble, the radar and the stock. A
+  chart of a kind this tree does not have is not a chart here.
+- **A chart of a file may read the cells of another sheet**, and the
+  tree's chart reads the cells of the sheet it is in — so such a
+  chart is left out rather than read wrongly.
+- **The pictures of a drawing are not read**: this tree has no
+  images, and the reader says that it left them out.
+- **The tree's reader reads more of a chart than this tree has words
+  for**: the colours of the series, the trendlines, the second axis
+  and the style of the chart are not read.
+
+### What it cost
+
+- **The reader**: the drawing part, the chart parts and the chart
+  itself — about two hundred and fifty lines.
+- **A refactor of the reader's sheet**: the parts of a sheet are now a
+  **struct** of their own, because the tuple of six was more than the
+  compiler would read.
+- **Two tests**: one in the reader's test file (the kind, the title,
+  the legend, the axes and the cells) and one in the import's test
+  file (the chart is the tree's own).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The pictures of a sheet are not read**: this tree has no images.
+- **The look of a chart is mostly not read**: the colours of the
+  series, the trendlines, the second axis, the style and the shape of
+  the points are not read.
+- **A chart of a kind this tree does not have is not imported**, and a
+  chart that reads the cells of another sheet is not either.
+- **The place of the chart on the sheet is not read**: the tree's
+  chart is a node, and a node may have no place.
 - **The workbook is still not written back.**
