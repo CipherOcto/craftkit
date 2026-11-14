@@ -4361,6 +4361,7 @@ so.
 | the **protection** of a sheet, and the **lock** of a cell | **built.** The protection of a sheet is read and imported — what may still be done to it — and a cell says of itself whether it is locked (§913) | §913 |
 | the **rows** and the **columns** of a sheet | **built.** The heights, the widths and the hiding of the rows and the columns of a sheet are read and imported (§914) | §914 |
 | the **language server** of the tree | **built.** `rust-analyzer` is part of the pinned toolchain, `cargo xtask lsp` asks it where a thing is declared and what uses it, and the agents are told to ask before they grep (§915) | §915 |
+| the **merges** of a sheet | **built.** The ranges that are one cell are read and imported, and a merge with a value under it is left out rather than losing the value (§916) | §916 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60353,3 +60354,51 @@ the compiler thinks of every line.
 - **The server is not asked about the tree's rules**: the layering, the
   deny attribute and the "a front end is thin" are the gate's own checks,
   and the server knows nothing of them.
+
+## 916. The merges of a sheet: the ranges that are one cell
+
+A sheet may have **merged** cells: a range of cells that is one cell.
+
+### What was built
+
+- The **merges** of a sheet are read: the ranges that are one cell.
+- The **import carries them**: a range that is one cell in the file is
+  one cell here.
+
+### What the port found
+
+- **The tree's merge is a range and this one's is too.** The tree
+  merges the range that is chosen and unmerges it again; here the range
+  is given to `grid.merge.set` and `grid.merge.clear` by its own text,
+  and the range of a merge is exactly the range that was merged.
+- **The tree keeps the value of the region in the top left cell and
+  loses the others.** Here the merge is **refused** when the other
+  cells hold a value — the caller empties them first, and nothing is
+  lost quietly. So a file's merge that has a value under it is **not
+  imported**: the value would be lost, and the import says how many
+  merges it left out.
+- **A range of one cell is not a merge.** A cell is one cell already,
+  and the tree does not keep such a range, and so does this one.
+- **A file writes its ranges with dollars** — `$A$1:$B$2` — and this
+  tree writes a range without them.
+
+### What it cost
+
+- **One kind** in the reader — the merge — and the reading of it: about
+  thirty lines.
+- **Three tests**: one in the reader's test file (the ranges, and the
+  range of one cell that is not a merge) and two in the import's test
+  file (the merge is imported and read back; a merge with a value under
+  it is not, and neither are two that touch).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **A merge of more than ten thousand cells is not imported**: a file
+  may name a whole column as merged, and the walk of the cells of that
+  range would be a million cells for one merge.
+- **The merges that touch are not both imported**: a file that names
+  two merges over the same cell has a cell that is in two regions and
+  in none of them, and the second one is not imported.
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
