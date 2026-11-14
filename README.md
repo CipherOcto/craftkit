@@ -4366,6 +4366,7 @@ so.
 | the **conditional formats** of a sheet | **built.** The rules that are about a range of cells are read and imported — the comparison, the look and the priority — and a rule this tree does not have is left out (§918) | §918 |
 | the **shared formulas** of a sheet | **built.** A group of cells that shares one formula is read and filled in — the master's formula, moved to where each cell is (§919) | §919 |
 | the **data validations** of a sheet | **built.** The rules on what a cell may hold are read and imported as the tree's own rules — the kind, the operator, the formulas and the messages — and a custom rule is left out (§920) | §920 |
+| the **print area** and the **print titles** of a sheet | **built.** What a sheet prints and which of its lines repeat on every page are read and imported, and the built-in names that say so are not names a formula uses (§921) | §921 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60639,4 +60640,60 @@ sheet says it in its own words.
 - **A rule over a whole column or a whole row** — `A:A` — is carried as
   the file writes it, and it does not apply: the tree's own range is a
   cell to a cell.
+- **The workbook is still not written back.**
+
+## 921. The print area and the print titles of a sheet: what it prints and what repeats
+
+A sheet may say what part of it is printed, and which of its lines are
+printed on every page.
+
+### What was built
+
+- The **print area** of a sheet is read: the range the sheet prints.
+- The **print titles** of a sheet are read: the rows and the columns
+  that are printed on every page.
+- The **import writes them as the tree's own printing**: the area in
+  `print_area`, the rows in `title_rows` and the columns in
+  `title_columns` — the keys the tree's own commands write, so
+  `grid.print.area` and the titles of a sheet see what the file said.
+
+### What the port found
+
+- **A file says these with the built-in names** — `_xlnm.Print_Area`
+  and `_xlnm.Print_Titles` — and they are **not names**: a name is a
+  word a formula uses, and these say how a sheet is printed. The
+  reader had been dropping every `_xlnm.` name, and now it keeps the
+  two that are about printing and still drops the rest.
+- **The scope of a built-in name is the sheet it is about**, and the
+  number the file gives it counts the sheets of the file.
+- **The tree's reader keeps a range of titles as a span** — the first
+  line and the last — and **this tree keeps every line**: the tree's
+  own titles are a list of the rows and a list of the columns, so a
+  span of two rows is two rows.
+- **The rows of the file count from one and the tree's count from
+  zero**, and the columns count the same way in both.
+- **The tree's reader takes the first area of a print area**, and so
+  does this one: a file may name several, and the rest are of a range
+  that is not in one piece.
+
+### What it cost
+
+- **Two fields** in the reader — the print area and the print titles —
+  and the reading of the built-in names: about seventy lines.
+- **One helper** in the battery: the titles of a file's own text, read
+  into the tree's rows and columns.
+- **Two tests**: one in the reader's test file (the area, the titles
+  and the names that are still not names) and one in the import's test
+  file (the area and the titles of the sheet).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The printing of a sheet is not read from the sheet's own part**:
+  a file may hold the page setup, the margins and the scale of the
+  printing in the sheet, and none of that is read.
+- **The breaks of the printing are not read**: a file may say where a
+  page breaks, and the tree has breaks of its own.
+- **A print area of one cell is refused**, as the tree's own command
+  refuses it: an area of one cell is a cell, and a file may name one.
 - **The workbook is still not written back.**
