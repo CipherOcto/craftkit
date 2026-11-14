@@ -4370,6 +4370,7 @@ so.
 | the **outline** of a sheet | **built.** The groups of rows and of columns are read and imported — the level of each line in its group and where the summary sits (§922) | §922 |
 | the **replies** of a note | **built.** The threads of a sheet are read and imported — the note, the replies under it and whether it is resolved (§923) | §923 |
 | the **page setup** of a sheet | **built.** How a sheet prints is read and imported — the paper, the orientation, the margins, the scale and the fit (§924) | §924 |
+| the **array formula** of a cell | **built.** The kind of a formula is read, and a formula this tree does not have — an array or a data table — is left out rather than carried wrongly (§925) | §925 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60872,4 +60873,56 @@ the margins are, and whether it prints at a scale or to fit.
   file holds them, and the tree has no word for them.
 - **The breaks of the printing are not read**: a file may say where a
   page breaks, and the tree has breaks of its own.
+- **The workbook is still not written back.**
+
+## 925. The array formula of a cell: the formula that fills a range of cells
+
+Some formulas are not the formula of one cell: an **array** fills a
+range of cells, and a what-if **data table** fills a range of cells
+from a formula of the table.
+
+### What was built
+
+- The **kind** of a formula is read: a file says of a formula that it
+  is an array — and names the range it fills — or that it is a data
+  table.
+- **A formula this tree does not have is not imported**: the cell
+  keeps the value the file cached for it, and the import says how
+  many arrays and how many tables it left out.
+
+### What the port found
+
+- **The text of an array formula is not the text of a formula of a
+  cell**: the formula fills a range, and the cells of the range hold
+  the values the file cached for them.
+- **The tree's reader keeps the text of an array formula and marks it
+  with the range it fills**, and **this tree has no arrays**: its
+  evaluator says "not supported yet: an array". Carrying the text as
+  an ordinary formula would be a formula that is quietly wrong, and
+  the cell would show an error where the file had a value. So the
+  text is not carried, and the cell keeps the value.
+- **The tree's reader warns that what-if tables are not supported and
+  keeps their values**, and this tree does the same — and counts
+  them.
+- **A dynamic array is marked in the metadata of the cell**, and that
+  mark is not read: a cell of a dynamic array keeps the value the
+  file cached for it, as every other cell does.
+
+### What it cost
+
+- **One kind** in the reader — the kind of a formula — and two fields
+  on the cell: the kind and the range of an array.
+- **Two counters** in the import: the arrays and the tables.
+- **Two tests**: one in the reader's test file (the kind of a formula
+  and the range of an array) and one in the import's test file (the
+  array is not imported and the value is kept).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The mark of a dynamic array is not read**: the file says it in the
+  metadata of the cell, and the metadata is not read.
+- **The cells of an array are not recalculated**: they keep the
+  values the file cached for them, and the tree's own formulas are
+  not run over them.
 - **The workbook is still not written back.**
