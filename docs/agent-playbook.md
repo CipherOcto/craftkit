@@ -291,7 +291,36 @@ given. It is a program: it can be run again.
 
 ---
 
-## 7. When to use a sub-agent, and when not to
+## 7. The language server, before the grep
+
+The tree is a Rust tree, and it has a **language server**: `rust-analyzer`, a
+component of the toolchain the tree pins. It has read the whole tree, and it
+knows what every name means.
+
+```bash
+cargo xtask lsp symbols <text>                    # what is called that
+cargo xtask lsp definition <file> <line> <col>    # where it is declared
+cargo xtask lsp references <file> <line> <col>    # what else mentions it
+cargo xtask lsp hover <file> <line> <col>         # what it is
+cargo xtask lsp diagnostics <file>                # what the compiler says
+```
+
+A file is a path in the tree, and a line and a column are counted **from
+one**, the column in **characters**. The first load takes a minute or two,
+and after that it is seconds.
+
+**Why it matters:** a grep cannot tell a declaration from a use, and it
+cannot tell you what a name is. `references` before a rename is the whole
+list of places to touch; `hover` is the type and the docs of the thing; and
+`diagnostics` is the compiler's word on one file without building the tree.
+
+**What it is not:** the gate. `cargo xtask ci` is the word on the tree, and
+the server's word on a file is the compiler's — a check of the file, and not
+of the tree.
+
+---
+
+## 8. When to use a sub-agent, and when not to
 
 A sub-agent is a **round trip that costs money and returns an answer**. The
 rule is short, and it is a rule about the *brief*, not about the task:
@@ -322,7 +351,7 @@ could read directly.
 
 ---
 
-## 8. What to read when something does not work
+## 9. What to read when something does not work
 
 - `KNOWN-GAPS.md` — what this tree does not do, and what its gates cannot see.
 - `docs/architecture.md` — the layers and the seams.
@@ -330,7 +359,7 @@ could read directly.
 
 ---
 
-## 9. How the next session is measured
+## 10. How the next session is measured
 
 The plan's exit numbers are **session-side**: the calls, the round trips and
 the machine time are properties of the *session* that did the work, not of

@@ -4360,6 +4360,7 @@ so.
 | the **styles** of a cell: the font, the fill, the alignment and the borders | **built.** The styles a cell carries are read and imported — the font, the colour behind the text, how the text lies and the lines on the edges (§912) | §912 |
 | the **protection** of a sheet, and the **lock** of a cell | **built.** The protection of a sheet is read and imported — what may still be done to it — and a cell says of itself whether it is locked (§913) | §913 |
 | the **rows** and the **columns** of a sheet | **built.** The heights, the widths and the hiding of the rows and the columns of a sheet are read and imported (§914) | §914 |
+| the **language server** of the tree | **built.** `rust-analyzer` is part of the pinned toolchain, `cargo xtask lsp` asks it where a thing is declared and what uses it, and the agents are told to ask before they grep (§915) | §915 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60280,3 +60281,75 @@ a **width**, and either of them may be **hidden**.
   that a file folds together, and the summaries beneath them.
 - **A shared formula is still not filled in.**
 - **The workbook is still not written back.**
+
+## 915. The language server of the tree: `rust-analyzer`, asked about the tree
+
+This is a Rust tree, and a Rust tree has a **language server**: a program
+that knows what every name means, where every item was declared, and what
+the compiler thinks of every line.
+
+### What was built
+
+- The **server is part of the toolchain the tree pins**: `rust-analyzer` is
+  a component of it, and `rust-toolchain.toml` asks for it — so the server
+  that answers is the server of the toolchain this tree is developed
+  against, and not whatever the machine happens to have.
+- **The tree's own settings for the server** are in `.rust-analyzer.toml`:
+  every feature is on, so that the batteries that are off by default are
+  seen, and the build scripts run, so that the crates that generate code
+  have their code.
+- **`cargo xtask lsp` is the door to it**: it speaks the language server
+  protocol and answers five questions —
+  - **definition**: where the thing at that place is declared,
+  - **references**: what else mentions it,
+  - **hover**: what it is — its type and its own documentation,
+  - **diagnostics**: what the compiler says about a file,
+  - **symbols**: what is called that, in the tree as a whole.
+- **The agents are told to use it**: `AGENTS.md`, the two skills and the
+  agent playbook all say to ask the server before they grep.
+
+### What the port found
+
+- **This arc is not a port**: the reference tree has no language server
+  door, and this arc has no rule of its own from it. The rule it has is
+  the tree's own — *"the rules are written once"* — and so it is written
+  once: in the command, and named in the prose.
+- **The server answers before it has read the tree, and its answer is
+  then empty.** A symbol search finds nothing in a tree the server has
+  not read, and a client that asks straight away is told "nothing here"
+  about a thing that is there. So the client waits for the tree: it asks
+  a question every tree answers, and asks again until the answer is not
+  empty.
+- **The protocol counts a place in the units of a string**, and a person
+  counts a column in characters. The two differ on a character outside
+  the basic plane — one character, two units — so the file is read and
+  the place is found in the text as a person counts it.
+- **The server asks the client things too**: the settings it should use,
+  and the registrations it may make. The answer to both is "nothing" —
+  the settings of this tree are the server's own file, and a server that
+  is told nothing uses its defaults.
+
+### What it cost
+
+- **One command** in the outer gate — `cargo xtask lsp` — and the client
+  that speaks the protocol: about four hundred lines.
+- **Five tests** in the command's own module: the framing of a message,
+  the reading of one, the end of the output, and the counting of a place
+  in characters and in units.
+- **No new dependency**: the protocol is JSON over a pipe, and the tree
+  already has `serde_json`.
+
+### What it does not settle
+
+- **The server is not the gate.** `cargo xtask ci` is the word on the
+  tree, and the server's word is on a file: a check of the file, and not
+  of the tree.
+- **The command starts the server and stops it**: every invocation loads
+  the tree again, which is seconds after the first load and a minute or
+  two the first time.
+- **The diagnostics are the server's own**, and the server may be more
+  or less strict than the gate: the gate is the word, and the server is
+  the compiler's.
+- **The server is not asked about the tree's rules**: the layering, the
+  deny attribute and the "a front end is thin" are the gate's own checks,
+  and the server knows nothing of them.

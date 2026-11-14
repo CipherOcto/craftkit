@@ -46,7 +46,8 @@ There are two gate systems in this tree, and they are not the same thing.
   does not litter". Run it with `cargo test -p craftkit-gates`.
 - **The outer gate** is `xtask/`, reached as `cargo xtask <command>`. Its
   commands are `doctor`, `ci`, `layers`, `assets`, `cleanroom`, `lists`, `web`,
-  `wasm`, `deny`, `bundle` and `verify`. `cargo xtask ci` is the whole of it:
+  `wasm`, `deny`, `bundle`, `verify` and `lsp`. `cargo xtask ci` is the whole
+  of it:
   fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm.
   **`cargo xtask ci` checks the packages a change can break** — the ones the
   working tree changed and the ones that depend on them — and it **names the
@@ -56,6 +57,42 @@ There are two gate systems in this tree, and they are not the same thing.
 
 `KNOWN-GAPS.md` says what is true of each today. Read it before you trust
 either one to be green.
+
+---
+
+## The language server
+
+This is a Rust tree, and a Rust tree has a **language server**: a program
+that knows what every name means, where every item was declared, and what
+the compiler thinks of every line. It is `rust-analyzer`, and it is a
+component of the toolchain this tree pins — so it is here with
+`rustup component add rust-analyzer`, and the tree's own `rust-toolchain.toml`
+asks for it.
+
+**Ask it before you grep.** A grep cannot tell a *declaration* from a *use*,
+and it cannot tell you what a name *is*. The server can, and it has already
+read the whole tree. The door is `cargo xtask lsp`:
+
+```text
+cargo xtask lsp definition  <file> <line> <column>   where the thing is declared
+cargo xtask lsp references  <file> <line> <column>   what else mentions it
+cargo xtask lsp hover       <file> <line> <column>   what it is
+cargo xtask lsp diagnostics <file>                    what the compiler says
+cargo xtask lsp symbols     <text>                    what is called that
+```
+
+A file is a path in the tree (`crates/craftkit-xlsx/src/lib.rs`), and a line
+and a column are counted **from one**, the column in **characters**.
+
+**The first load is slow** — the server reads the whole tree before it can
+answer, and that is a minute or two the first time and seconds after that.
+The command says so while it waits, and a slow answer is not a hung one.
+
+**What the server is for:** finding where something is declared, finding
+every use of it, reading a type or a signature, and asking the compiler
+about a file without building the tree. **What it is not for:** the gate.
+`cargo xtask ci` is the word on the tree, and the server's word on one file
+is the compiler's — which is a check of the file, and not of the tree.
 
 ---
 

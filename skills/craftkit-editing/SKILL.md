@@ -28,7 +28,31 @@ exact code.
 
 ---
 
-## 2. The rules you are about to break if you are not careful
+## 2. Ask the language server before you grep
+
+This is a Rust tree, and the tree has a **language server** that has already
+read all of it. A grep cannot tell a *declaration* from a *use*; the server
+can.
+
+```bash
+cargo xtask lsp symbols <text>                    # what is called that
+cargo xtask lsp definition <file> <line> <col>    # where it is declared
+cargo xtask lsp references <file> <line> <col>    # what else mentions it
+cargo xtask lsp hover <file> <line> <col>         # what it is
+cargo xtask lsp diagnostics <file>                # what the compiler says
+```
+
+A line and a column are counted **from one**, the column in **characters**.
+The first load of the server takes a minute or two; after that it is seconds.
+
+**Use it** to find where a thing is declared, to find every use of a name
+before you change it, to read a type or a signature, and to ask the compiler
+about a file without building the tree. **Do not** use it as the gate:
+`cargo xtask ci` is the word on the tree.
+
+---
+
+## 3. The rules you are about to break if you are not careful
 
 - **No panics in non-test code.** No `unwrap()`, `expect()`, `panic!`,
   `todo!`, `unimplemented!`, `unreachable!`. Every crate root carries the same
@@ -47,7 +71,7 @@ exact code.
 
 ---
 
-## 3. The order of the work
+## 4. The order of the work
 
 1. **The rule, in one sentence.** If you cannot write it, the change is not
    ready.
@@ -61,7 +85,7 @@ exact code.
 
 ---
 
-## 4. The gates, before you commit
+## 5. The gates, before you commit
 
 ```bash
 cargo test -p <the crate you changed>
@@ -81,7 +105,7 @@ job is expensive, put it in CI.
 
 ---
 
-## 5. Before you commit, read this
+## 6. Before you commit, read this
 
 - Did the change add a **path** that is not a command? (It should not have.)
 - Does the new code **refuse** what it should, and **not clamp** it?

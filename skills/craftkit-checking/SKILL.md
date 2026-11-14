@@ -28,7 +28,29 @@ The repository root is the directory that holds `crates/`, `apps/` and
 
 ---
 
-## 2. The order
+## 2. Ask the language server
+
+The tree has a **language server**, and it has already read all of the tree.
+Before you grep for a name, or guess where a thing is declared, ask it:
+
+```bash
+cargo xtask lsp diagnostics <file>                # what the compiler says of it
+cargo xtask lsp definition <file> <line> <col>    # where the thing is declared
+cargo xtask lsp references <file> <line> <col>    # every use of it
+cargo xtask lsp hover <file> <line> <col>         # its type and its docs
+cargo xtask lsp symbols <text>                    # what is called that
+```
+
+A line and a column are counted **from one**, the column in **characters**.
+The first load takes a minute or two; after that it is seconds.
+
+**`diagnostics` is the cheap one** when a compile error names a line: it
+answers about one file without building the tree, and it is the compiler's
+own word.
+
+---
+
+## 3. The order
 
 1. **The machine.** `cargo xtask doctor` says whether this machine can build
    the project at all. A failure that is really the machine looks like a
@@ -49,7 +71,7 @@ run of the long suite is a CI job, not a local habit.
 
 ---
 
-## 3. How to read the results
+## 4. How to read the results
 
 - **A refusal is a result.** `refused: <why>` is the tree's rule working. Do
   not "fix" it by sending a value in range unless the rule says the value
@@ -66,7 +88,7 @@ run of the long suite is a CI job, not a local habit.
 
 ---
 
-## 4. Driving the kit to see the result
+## 5. Driving the kit to see the result
 
 `docs/agent-playbook.md` has the whole thing. The short version:
 
@@ -93,7 +115,7 @@ The methods are `engine.execute`, `engine.describe`, `session.state`,
 
 ---
 
-## 5. When you cannot find the cause
+## 6. When you cannot find the cause
 
 - `KNOWN-GAPS.md` — what this tree does not do, and what its gates cannot
   see. A missing feature and a broken gate look the same from the outside.
