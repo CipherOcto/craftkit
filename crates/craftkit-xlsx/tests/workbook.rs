@@ -1114,6 +1114,37 @@ fn the_pivot_tables_of_a_sheet_are_read() {
     );
 }
 
+/// The **conditional formats** of the extension list are not read,
+/// and the reader says so: they are not comparisons, and the tree's
+/// rule is a comparison.
+#[test]
+fn the_conditional_formats_of_the_extension_list_are_not_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}"><x14:conditionalFormattings xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:conditionalFormatting xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main"><x14:cfRule type="dataBar" id="{1}"><x14:dataBar><x14:cfvo type="min"/></x14:dataBar></x14:cfRule></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(
+        workbook.warnings.iter().any(|warning| warning.contains("1 conditional format(s)")),
+        "the reader says what it left out: {:?}",
+        workbook.warnings
+    );
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

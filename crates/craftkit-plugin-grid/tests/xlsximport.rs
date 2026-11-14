@@ -1321,6 +1321,41 @@ fn the_pivot_tables_of_a_sheet_are_imported() {
     assert_eq!(pivot["aggregate"].as_str(), Some("sum"), "and the way of putting it together");
 }
 
+/// The **conditional formats** of the extension list are not imported,
+/// and the import says so.
+#[test]
+fn the_conditional_formats_of_the_extension_list_are_not_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><extLst><ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}"><x14:conditionalFormattings xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:conditionalFormatting><x14:cfRule type="dataBar" id="{1}"/></x14:conditionalFormatting></x14:conditionalFormattings></ext></extLst></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let warnings = outcome.data["warnings"].as_array().expect("the import says what it left out");
+    assert!(
+        warnings.iter().any(|warning| {
+            warning.as_str().is_some_and(|warning| warning.contains("1 conditional format(s)"))
+        }),
+        "the import says what it left out: {warnings:?}"
+    );
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]

@@ -638,6 +638,26 @@ pub struct Breaks {
     pub columns: Vec<u32>,
 }
 
+/// The **conditional formats** of the extension list of a sheet: the
+/// rules a file puts beside the extension list.
+///
+/// These are not comparisons — they are bars of colour and marks of a
+/// scale — and the tree's rule is a comparison, so they are not read.
+/// The count is given, so that the reader may say how many it left
+/// out.
+fn extension_conditionals(root: &craftkit_xml::El) -> u64 {
+    let mut count = 0u64;
+    for list in root.kids("extLst") {
+        for extension in list.kids("ext") {
+            let Some(formats) = extension.child("conditionalFormattings") else { continue };
+            for format in formats.kids("conditionalFormatting") {
+                count += format.kids("cfRule").count() as u64;
+            }
+        }
+    }
+    count
+}
+
 /// Read the **sparklines** of a sheet: the little drawings in its
 /// cells.
 ///
@@ -1313,6 +1333,16 @@ fn read_sheet(
     // The **sparklines** of the sheet: the little drawings in its
     // cells. They live in the extension list of the sheet.
     sheet.sparklines = read_sparklines(&root);
+    // The **conditional formats** of the extension list: they are not
+    // comparisons, and the tree's rule is a comparison — so they are
+    // not read, and the reader says how many it left out.
+    let extension_conditionals = extension_conditionals(&root);
+    if extension_conditionals > 0 {
+        warnings.push(format!(
+            "{extension_conditionals} conditional format(s) of the extension list were not read: \
+             this tree has a rule but a comparison"
+        ));
+    }
     // The **columns** of the sheet: their width and whether they are
     // hidden. A file says a span of columns at once, so one span of
     // ten columns is ten columns here.
