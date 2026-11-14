@@ -986,6 +986,55 @@ fn the_colour_of_a_sheets_tab_is_read() {
     assert_eq!(workbook.sheets[0].tab_colour.as_deref(), Some("#00b050"), "the colour of the tab");
 }
 
+/// The **charts** of a sheet are read: the drawings of its cells.
+#[test]
+fn the_charts_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/><drawing r:id="rId2"/></worksheet>"#),
+        (
+            "xl/drawings/drawing1.xml",
+            r#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/charts/chart1.xml",
+            r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:title><c:tx><c:rich><a:p><a:r><a:t>The Sales</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:catAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Months</a:t></a:r></a:p></c:rich></c:tx></c:title></c:catAx><c:valAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Money</a:t></a:r></a:p></c:rich></c:tx></c:title><c:majorGridlines/></c:valAx><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea><c:legend><c:legendPos val="b"/></c:legend></c:chart></c:chartSpace>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.charts.len(), 1, "one sheet has charts");
+    let (_, charts) = &workbook.charts[0];
+    assert_eq!(charts.len(), 1, "one chart");
+    assert_eq!(charts[0].kind, "column", "the kind of it");
+    assert_eq!(charts[0].title.as_deref(), Some("The Sales"), "its title");
+    assert_eq!(charts[0].legend.as_deref(), Some("bottom"), "where its legend is");
+    assert_eq!(charts[0].x_title.as_deref(), Some("Months"), "the title of its axis of the categories");
+    assert_eq!(charts[0].y_title.as_deref(), Some("Money"), "and the title of the axis of the values");
+    assert!(charts[0].gridlines, "and that its gridlines are shown");
+    assert!(!charts[0].data_labels, "and that its data labels are not");
+    assert_eq!(charts[0].categories.as_deref(), Some("One!$A$2:$A$10"), "the cells of its categories");
+    assert_eq!(charts[0].series, vec!["One!$B$2:$B$10".to_string()], "and the cells of its series");
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

@@ -731,6 +731,62 @@ commands! {
                     data,
                 );
             }
+            // The **charts** of the sheets: the drawings of their
+            // cells.
+            //
+            // A chart of a file names the cells it reads by ranges of
+            // their own, and the tree's chart reads one range: the
+            // chart is imported when those ranges are a block, and it
+            // is left out when they are not.
+            let mut imported_charts = 0u64;
+            let mut unread_charts = 0u64;
+            for (sheet_name, charts) in &workbook.charts {
+                let Some(sheet_id) = session
+                    .document()
+                    .walk()
+                    .find(|node| node.kind == "grid.sheet" && node.name == *sheet_name)
+                    .map(|node| node.id)
+                else {
+                    continue;
+                };
+                for chart in charts {
+                    let Some(kind) = chart_kind(&chart.kind) else {
+                        unread_charts += 1;
+                        continue;
+                    };
+                    let Some(area) = chart_range(chart, sheet_name) else {
+                        unread_charts += 1;
+                        continue;
+                    };
+                    // The tree's own rule: a chart needs a name and
+                    // something to show.
+                    if area.start.row == area.end.row || area.start.col == area.end.col {
+                        unread_charts += 1;
+                        continue;
+                    }
+                    let legend = chart.legend.clone().unwrap_or_else(|| {
+                        if kind == "pie" {
+                            "right".to_string()
+                        } else {
+                            "bottom".to_string()
+                        }
+                    });
+                    let name = chart.title.clone().unwrap_or_else(|| "the chart".to_string());
+                    let node = json!({
+                        "range": area.to_text(),
+                        "kind": kind,
+                        "title": chart.title,
+                        "legend": legend,
+                        "dataLabels": chart.data_labels,
+                        "gridlines": chart.gridlines,
+                        "xTitle": chart.x_title,
+                        "yTitle": chart.y_title,
+                        "smooth": false,
+                    });
+                    session.document_mut()?.add_node_with_under(Some(sheet_id), name, "grid.chart", None, node);
+                    imported_charts += 1;
+                }
+            }
             // The **names** of the workbook: the words its formulas use.
             //
             // A name here stands for a **range**, and so a name whose
@@ -1041,6 +1097,8 @@ commands! {
                 "dropped_links": dropped_links,
                 "comments": imported_comments,
                 "tables": imported_tables,
+                "charts": imported_charts,
+                "unread_charts": unread_charts,
                 "system": system.name(),
                 "warnings": workbook.warnings,
             })))
@@ -1228,6 +1286,80 @@ fn print_titles_of(text: &str) -> (Vec<u32>, Vec<u32>) {
     rows.sort_unstable();
     columns.sort_unstable();
     (rows, columns)
+}
+
+/// The **kind** of a chart, as this tree's kind.
+///
+/// The tree has four kinds of chart, and a file has more: a chart of
+/// a kind this tree does not have is not a chart here.
+fn chart_kind(kind: &str) -> Option<&'static str> {
+    match kind {
+        "column" => Some("column"),
+        "bar" => Some("bar"),
+        "line" => Some("line"),
+        "pie" => Some("pie"),
+        _ => None,
+    }
+}
+
+/// The **range** a chart reads, as this tree's range.
+///
+/// The tree's chart reads **one** range: the categories are its first
+/// column and the series are the columns after it. A file's chart
+/// names the categories and each of its series by a range of their
+/// own, and those ranges must be a **block** — the categories in the
+/// first column, the series in the columns beside it — for the
+/// tree's chart to be the same drawing.
+fn chart_range(chart: &craftkit_xlsx::Chart, sheet: &str) -> Option<crate::formula::Area> {
+    let categories = chart_area(chart.categories.as_ref()?, sheet)?;
+    let mut column = categories.start.col;
+    let mut series = 0u32;
+    for values in &chart.series {
+        let area = chart_area(values, sheet)?;
+        // A **column** of the same rows, and the column beside the
+        // one before it.
+        if area.start.col != area.end.col {
+            return None;
+        }
+        if area.start.row != categories.start.row || area.end.row != categories.end.row {
+            return None;
+        }
+        if area.start.col != column + 1 {
+            return None;
+        }
+        column = area.end.col;
+        series += 1;
+    }
+    if series == 0 {
+        return None;
+    }
+    Some(crate::formula::Area::new(
+        categories.start,
+        crate::formula::CellRef { col: column, row: categories.end.row },
+    ))
+}
+
+/// The **area** a reference of a file names, when it names one of the
+/// cells of the sheet.
+///
+/// A file writes the cells a chart reads as a reference: the sheet
+/// they are in and the range of them. A reference to another sheet is
+/// not a range of this sheet.
+fn chart_area(text: &str, sheet: &str) -> Option<crate::formula::Area> {
+    let text = text.trim();
+    let own = match text.rsplit_once('!') {
+        Some((name, own)) => {
+            let name = name.trim().trim_matches('\'');
+            if !name.eq_ignore_ascii_case(sheet) {
+                return None;
+            }
+            own
+        }
+        None => text,
+    };
+    let own = own.replace('$', "");
+    let (_, area) = crate::merges::parse_area(&own)?;
+    Some(area)
 }
 
 /// The **kind** of a validation, as this tree's kind.

@@ -309,6 +309,233 @@ pub struct Sparkline {
     pub markers: bool,
 }
 
+/// The **parts** of a sheet: the things it holds in parts of their
+/// own.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Parts {
+    /// The **filter** of the sheet: the rows it hides.
+    pub filter: Option<AutoFilter>,
+    /// The **links** of the sheet: the places its cells go to.
+    pub links: Vec<Hyperlink>,
+    /// The **comments** of the sheet: the notes its cells carry.
+    pub comments: Vec<Comment>,
+    /// The **tables** of the sheet.
+    pub tables: Vec<Table>,
+    /// The **charts** of the sheet.
+    pub charts: Vec<Chart>,
+}
+
+/// A **chart** of a sheet: a drawing of some cells of it.
+///
+/// The names are the **file's** own, and the ranges are the file's
+/// own words — `Sheet1!$B$2:$B$10` — because the file may read the
+/// cells of another sheet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Chart {
+    /// The **kind** of the chart: `column`, `bar`, `line`, `pie`,
+    /// `area`, `scatter`, `doughnut`, `bubble`, `radar` or `stock`.
+    pub kind: String,
+    /// The **title** of the chart.
+    pub title: Option<String>,
+    /// The **legend**: where it is — `none`, `bottom`, `top`, `left`
+    /// or `right`.
+    pub legend: Option<String>,
+    /// Whether the **data labels** are shown.
+    pub data_labels: bool,
+    /// Whether the **gridlines** are shown.
+    pub gridlines: bool,
+    /// The **title** of the axis of the categories.
+    pub x_title: Option<String>,
+    /// The **title** of the axis of the values.
+    pub y_title: Option<String>,
+    /// The **categories**: the range the chart names its categories by.
+    pub categories: Option<String>,
+    /// The **series**: the ranges the chart names its series by.
+    pub series: Vec<String>,
+}
+
+/// Read the **charts** of a sheet.
+///
+/// A sheet names a **drawing** part, and the drawing holds the objects
+/// the sheet shows: the charts among them. A chart is in a part of its
+/// own, and the drawing names it.
+fn read_charts(
+    package: &mut craftkit_zip::Package<'_>,
+    root: &craftkit_xml::El,
+    sheet_rels: &[Rel],
+    warnings: &mut Vec<String>,
+) -> Vec<Chart> {
+    let mut out = Vec::new();
+    let Some(drawing) = root.child("drawing") else { return out };
+    let Some(id) = drawing.attr("id") else { return out };
+    let Some(relation) = sheet_rels.iter().find(|relation| relation.id == id) else { return out };
+    let Some(part) = read_xml(package, &relation.target).ok().flatten() else { return out };
+    let drawing_rels = rels_of(package, &relation.target).unwrap_or_default();
+    // The **objects** of the drawing: the frames that hold a chart and
+    // the pictures that hold an image.
+    let mut frames = Vec::new();
+    let mut pictures = Vec::new();
+    collect(&part, "graphicFrame", &mut frames);
+    collect(&part, "pic", &mut pictures);
+    let pictures = pictures.len() as u64;
+    if pictures > 0 {
+        warnings.push(format!("{pictures} picture(s) of the sheet were not read: this tree has no images"));
+    }
+    for frame in frames {
+        let Some(id) = frame
+            .child("graphic")
+            .and_then(|graphic| graphic.child("graphicData"))
+            .and_then(|data| data.child("chart"))
+            .and_then(|chart| chart.attr("id"))
+        else {
+            continue;
+        };
+        let Some(relation) = drawing_rels.iter().find(|relation| relation.id == id) else { continue };
+        let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
+        let Some(chart) = read_chart(&root) else { continue };
+        out.push(chart);
+    }
+    out
+}
+
+/// The **elements** of a part with a name, wherever they are.
+fn collect<'a>(element: &'a craftkit_xml::El, name: &str, out: &mut Vec<&'a craftkit_xml::El>) {
+    for child in &element.children {
+        if child.name == name {
+            out.push(child);
+        }
+        collect(child, name, out);
+    }
+}
+
+/// Read **one** chart of a file.
+///
+/// The chart is a **group** of series — a bar chart, a line chart, a
+/// pie chart — and the group says of itself what kind of drawing it is.
+fn read_chart(root: &craftkit_xml::El) -> Option<Chart> {
+    let chart = root.child("chart")?;
+    let plot = chart.child("plotArea")?;
+    // The **group**: the kind of drawing and its series.
+    let mut group: Option<(&craftkit_xml::El, &str)> = None;
+    for name in [
+        "barChart",
+        "lineChart",
+        "pieChart",
+        "doughnutChart",
+        "areaChart",
+        "scatterChart",
+        "bubbleChart",
+        "radarChart",
+        "stockChart",
+    ] {
+        if let Some(element) = plot.child(name) {
+            group = Some((element, name));
+            break;
+        }
+    }
+    let (element, name) = group?;
+    let kind = match name {
+        "barChart" => {
+            if element.child_val("barDir") == Some("bar") {
+                "bar"
+            } else {
+                "column"
+            }
+        }
+        "lineChart" => "line",
+        "pieChart" => "pie",
+        "doughnutChart" => "doughnut",
+        "areaChart" => "area",
+        "scatterChart" => "scatter",
+        "bubbleChart" => "bubble",
+        "radarChart" => "radar",
+        _ => "stock",
+    };
+    // The **series**: each of them names its categories and its
+    // values.
+    let mut categories: Option<String> = None;
+    let mut series: Vec<String> = Vec::new();
+    for serie in element.kids("ser") {
+        if categories.is_none() {
+            categories = data_ref(serie.child("cat")).or_else(|| data_ref(serie.child("xVal")));
+        }
+        let values = data_ref(serie.child("val")).or_else(|| data_ref(serie.child("yVal")));
+        if let Some(values) = values {
+            series.push(values);
+        }
+    }
+    // The **title**: the text of it, wherever it is written.
+    let title = chart.child("title").map(all_text).filter(|text| !text.is_empty());
+    // The **legend**: where it is.
+    let legend = match chart.child("legend") {
+        None => Some("none".to_string()),
+        Some(legend) => Some(
+            match legend.child_val("legendPos").unwrap_or("r") {
+                "b" => "bottom",
+                "t" => "top",
+                "l" => "left",
+                _ => "right",
+            }
+            .to_string(),
+        ),
+    };
+    // The **axes**: the axis of the categories and the axis of the
+    // values.
+    let categories_axis = plot.child("catAx").or_else(|| plot.child("dateAx"));
+    let values_axis = plot.child("valAx");
+    let x_title =
+        categories_axis.and_then(|axis| axis.child("title")).map(all_text).filter(|text| !text.is_empty());
+    let y_title =
+        values_axis.and_then(|axis| axis.child("title")).map(all_text).filter(|text| !text.is_empty());
+    // The **labels** of the data, and the **gridlines** of the values.
+    let data_labels = element.child("dLbls").is_some_and(|labels| labels.child_val("showVal") == Some("1"))
+        || element
+            .kids("ser")
+            .any(|serie| serie.child("dLbls").is_some_and(|labels| labels.child_val("showVal") == Some("1")));
+    let gridlines = values_axis.is_some_and(|axis| axis.child("majorGridlines").is_some());
+    Some(Chart {
+        kind: kind.to_string(),
+        title,
+        legend,
+        data_labels,
+        gridlines,
+        x_title,
+        y_title,
+        categories,
+        series,
+    })
+}
+
+/// The **range** an element names, when it names one.
+///
+/// A file writes the range of a series as a reference, and the
+/// reference is the file's own words.
+fn data_ref(element: Option<&craftkit_xml::El>) -> Option<String> {
+    let element = element?;
+    for name in ["numRef", "strRef", "multiLvlStrRef"] {
+        if let Some(reference) = element.child(name).and_then(|reference| reference.child("f")) {
+            let text = reference.text.trim();
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// The text of an element and of everything under it: the runs of a
+/// rich text.
+fn all_text(element: &craftkit_xml::El) -> String {
+    let mut text = String::new();
+    if let Some(run) = element.child("t") {
+        text.push_str(&run.text);
+    }
+    for child in &element.children {
+        text.push_str(&all_text(child));
+    }
+    text
+}
+
 /// The **breaks** of the printing of a sheet.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Breaks {
@@ -693,6 +920,8 @@ pub struct Workbook {
     pub comments: Vec<(String, Vec<Comment>)>,
     /// The **tables** of each sheet, by the name of the sheet.
     pub tables: Vec<(String, Vec<Table>)>,
+    /// The **charts** of each sheet, by the name of the sheet.
+    pub charts: Vec<(String, Vec<Chart>)>,
     /// The date system the numbers of the cells are counted in.
     pub system: DateSystem,
     /// The **warnings**: what could not be read, and what was kept
@@ -777,7 +1006,7 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             workbook.warnings.push(format!("the sheet \"{name}\" is a {} and was not read", relation.kind));
             continue;
         }
-        let (mut sheet, filter, links, comments, tables) = read_sheet(
+        let (mut sheet, parts) = read_sheet(
             &mut package,
             &relation.target,
             &strings,
@@ -793,17 +1022,20 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             sheet.print_area = area.clone();
             sheet.print_titles = titles.clone();
         }
-        if let Some(filter) = filter {
+        if let Some(filter) = parts.filter {
             workbook.filters.push((sheet.name.clone(), filter));
         }
-        if !links.is_empty() {
-            workbook.links.push((sheet.name.clone(), links));
+        if !parts.links.is_empty() {
+            workbook.links.push((sheet.name.clone(), parts.links));
         }
-        if !comments.is_empty() {
-            workbook.comments.push((sheet.name.clone(), comments));
+        if !parts.comments.is_empty() {
+            workbook.comments.push((sheet.name.clone(), parts.comments));
         }
-        if !tables.is_empty() {
-            workbook.tables.push((sheet.name.clone(), tables));
+        if !parts.tables.is_empty() {
+            workbook.tables.push((sheet.name.clone(), parts.tables));
+        }
+        if !parts.charts.is_empty() {
+            workbook.charts.push((sheet.name.clone(), parts.charts));
         }
         workbook.sheets.push(sheet);
         let _ = index;
@@ -932,11 +1164,11 @@ fn read_sheet(
     styles: &Styles,
     workbook_rels: &[Rel],
     warnings: &mut Vec<String>,
-) -> (Sheet, Option<AutoFilter>, Vec<Hyperlink>, Vec<Comment>, Vec<Table>) {
+) -> (Sheet, Parts) {
     let mut sheet = Sheet::default();
     let Some(root) = read_xml(package, part).ok().flatten() else {
         warnings.push(format!("the part {part} could not be read; the sheet is empty"));
-        return (sheet, None, Vec::new(), Vec::new(), Vec::new());
+        return (sheet, Parts::default());
     };
     // The **filter** of the sheet: the rows it hides.
     let filter = root.child("autoFilter").map(read_filter);
@@ -952,6 +1184,9 @@ fn read_sheet(
     // The **tables** of the sheet: they are in parts of their own
     // that the sheet names by a relationship.
     let tables = read_tables(package, &root, &sheet_rels);
+    // The **charts** of the sheet: they are in parts of their own,
+    // named by the drawing of the sheet.
+    let charts = read_charts(package, &root, &sheet_rels, warnings);
     // The **protection** of the sheet: what may still be done to it.
     // A file protects a sheet with an element that says it is
     // protected, and the flags of that element say what is still
@@ -997,7 +1232,7 @@ fn read_sheet(
     // rows as it reads the cells.
     let mut rows: Vec<Row> = Vec::new();
     let Some(data) = root.child("sheetData") else {
-        return (sheet, filter, links, comments, tables);
+        return (sheet, Parts { filter, links, comments, tables, charts });
     };
 
     // The row the reader is on: a row that does not say which row it is
@@ -1155,7 +1390,7 @@ fn read_sheet(
         ));
     }
     sheet.rows = rows;
-    (sheet, filter, links, comments, tables)
+    (sheet, Parts { filter, links, comments, tables, charts })
 }
 
 /// Read the **view** of a sheet: what is drawn of it, and what is not.
