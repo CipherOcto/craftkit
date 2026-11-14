@@ -4378,6 +4378,7 @@ so.
 | the **charts** of a sheet | **built.** The drawings of the cells of a sheet are read and imported as the tree's own charts — the kind, the title, the legend and the cells they read (§930) | §930 |
 | the **date** of a cell | **built.** A cell that holds a date in the file's own words is read as the number of the day, counted in the file's own system (§931) | §931 |
 | the **pivot tables** of a sheet | **built.** The pivots a sheet holds are read and imported as the tree's own pivots — the cells they read and the fields they gather them by (§932) | §932 |
+| the **conditional formats** of the extension list | **built.** The rules a file puts beside its extension list are not comparisons, and the reader says how many it left out rather than dropping them in silence (§933) | §933 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61281,4 +61282,49 @@ over another, and put together by a third.
 - **The place of the pivot on the sheet is not read**: the pivot of a
   file is drawn in a range of cells, and the tree's pivot is a
   definition and not a drawing.
+- **The workbook is still not written back.**
+
+## 933. The conditional formats of the extension list: the rules the tree does not have are reported
+
+A file may put its rules about a range of cells in the **extension
+list** of the sheet, beside the cells.
+
+### What was built
+
+- The reader **counts** the rules of the extension list and **says
+  how many it left out**, so that a file with them is never read as
+  if it had none.
+- The import carries that saying to the caller: the **warnings** of
+  the import say what the reader could not read.
+
+### What the port found
+
+- **The rules of the extension list are not comparisons**: they are
+  bars of colour and marks of a scale, and the tree's rule is a
+  comparison. So they are not carried — and saying so is better than
+  dropping them in silence.
+- **The rules of the extension list belong to a rule of the sheet**:
+  a file writes them beside the rule they belong to, and the tree's
+  rules are comparisons of their own, so a bar of colour has nothing
+  to belong to here.
+- **The reader already goes to the extension list** for the
+  validations of a newer file and for the sparklines, so this is the
+  same road and one more thing to see on it.
+
+### What it cost
+
+- **A count** in the reader and a warning: about thirty lines.
+- **Two tests**: one in the reader's test file (the warning) and one
+  in the import's test file (the import carries it).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The rules of the extension list are not read**: a bar of colour
+  and a mark of a scale are not rules of this tree.
+- **The rest of what a file can hold and this tree has no word for**
+  is named in the sections above: the theme, the pictures, the header
+  and the footer of the printed page, the options of the printing, the
+  sizes a sheet gives its rows and columns by default, the mark of a
+  dynamic array, and the writing of a workbook back.
 - **The workbook is still not written back.**
