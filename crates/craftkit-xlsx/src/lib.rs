@@ -195,6 +195,38 @@ pub struct Sheet {
     /// A sheet that is not protected has none: a sheet that is not
     /// protected says nothing about what may be done to it.
     pub protection: Option<SheetProtection>,
+    /// The **conditional formats** of the sheet: the rules that are
+    /// about a range of cells.
+    pub conditionals: Vec<Conditional>,
+}
+
+/// A **conditional format** of a sheet: a rule about a range of cells.
+///
+/// The rule is a **comparison**: the operation, the value, and the
+/// **look** of the cells that match. The kinds of rule this tree does
+/// not have — a colour scale, a data bar, an icon set, a formula — are
+/// not here.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Conditional {
+    /// The range of cells the rule is about.
+    pub range: String,
+    /// The **operation** the cell's value is judged by: `=`, `!=`,
+    /// `<`, `<=`, `>` or `>=`.
+    pub op: String,
+    /// The **value** the cell's value is compared with, as the file
+    /// writes it.
+    pub value: String,
+    /// The **number format** the matching cells are written with, when
+    /// the rule names one.
+    pub format: Option<String>,
+    /// The **colour** behind the matching cells, as `#rrggbb`, when the
+    /// rule names one.
+    pub fill: Option<String>,
+    /// Whether the rule **stops** the walk when it matched.
+    pub stop: Option<bool>,
+    /// The **priority** of the rule, when it names one: the lower the
+    /// number, the earlier the rule is tried.
+    pub priority: Option<u32>,
 }
 
 /// The **view** of a sheet: what is drawn of it, and what is not.
@@ -629,6 +661,9 @@ fn read_sheet(
     sheet.merges = read_merges(&root);
     // The **view** of the sheet: what is drawn of it, and what is not.
     sheet.view = read_view(&root);
+    // The **conditional formats** of the sheet: the rules that are
+    // about a range of cells.
+    sheet.conditionals = read_conditionals(&root, styles);
     // The **rows** of the sheet: their height and whether they are
     // hidden. A file says a row of its own, and this reader reads the
     // rows as it reads the cells.
@@ -758,6 +793,71 @@ fn read_view(root: &craftkit_xml::El) -> Option<SheetView> {
         zoom: view.attr_u32("zoomScale").map(|zoom| zoom.clamp(10, 400)),
         freeze,
     })
+}
+
+/// Read the **conditional formats** of a sheet: the rules that are
+/// about a range of cells.
+///
+/// A file names the ranges of a rule in one list, and this tree's rule
+/// is about **one** range — so a rule over two ranges is two rules
+/// here, with the same criterion and the same look.
+///
+/// A rule that is not a **comparison** — a colour scale, a data bar, an
+/// icon set, a formula, a text that contains something — is not a rule
+/// this tree has, and it is not here.
+fn read_conditionals(root: &craftkit_xml::El, styles: &Styles) -> Vec<Conditional> {
+    let mut formats = Vec::new();
+    for block in root.kids("conditionalFormatting") {
+        let Some(sqref) = block.attr("sqref") else { continue };
+        let ranges: Vec<&str> = sqref.split_whitespace().collect();
+        if ranges.is_empty() {
+            continue;
+        }
+        for rule in block.kids("cfRule") {
+            if rule.attr("type") != Some("cellIs") {
+                continue;
+            }
+            let Some(op) = rule.attr("operator").and_then(conditional_op) else { continue };
+            let Some(value) = rule.kids("formula").next().map(|formula| formula.text.trim().to_string())
+            else {
+                continue;
+            };
+            let dxf = styles.dxf(rule.attr_u32("dxfId"));
+            let format = dxf.and_then(|dxf| dxf.format.clone());
+            let fill = dxf.and_then(|dxf| dxf.fill.clone());
+            let stop = rule.attr("stopIfTrue").map(|stop| stop != "0");
+            let priority = rule.attr_u32("priority");
+            for range in &ranges {
+                formats.push(Conditional {
+                    range: range.replace('$', ""),
+                    op: op.to_string(),
+                    value: value.clone(),
+                    format: format.clone(),
+                    fill: fill.clone(),
+                    stop,
+                    priority,
+                });
+            }
+        }
+    }
+    formats
+}
+
+/// The **operation** a rule compares with, as this tree's own.
+///
+/// The tree's rules are comparisons of two values — *between* and *not
+/// between* — and this tree's criterion has one value, so those two
+/// are not here.
+fn conditional_op(operator: &str) -> Option<&'static str> {
+    match operator {
+        "equal" => Some("="),
+        "notEqual" => Some("!="),
+        "greaterThan" => Some(">"),
+        "lessThan" => Some("<"),
+        "greaterThanOrEqual" => Some(">="),
+        "lessThanOrEqual" => Some("<="),
+        _ => None,
+    }
 }
 
 /// Read the **merges** of a sheet: the ranges that are one cell.

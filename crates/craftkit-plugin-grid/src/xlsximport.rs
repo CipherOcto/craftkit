@@ -158,6 +158,8 @@ commands! {
             let mut imported_merges = 0u64;
             let mut unread_merges = 0u64;
             let mut views = 0u64;
+            let mut imported_conditionals = 0u64;
+            let mut unread_conditionals = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -415,6 +417,46 @@ commands! {
                 }
                 if !merges.is_empty() {
                     data["merges"] = Json::Array(merges.into_iter().map(Json::String).collect());
+                }
+                // The **conditional formats** of the sheet: the rules
+                // that are about a range of cells.
+                let mut conditionals: Vec<Json> = Vec::new();
+                for rule in &sheet.conditionals {
+                    if !crate::formula::Criterion::op_is_known(&rule.op) {
+                        unread_conditionals += 1;
+                        continue;
+                    }
+                    // The **format** of the rule: only when this tree's
+                    // format language can read it.
+                    let format = match &rule.format {
+                        Some(code) if crate::format::Format::parse(code).is_some() => Some(code.clone()),
+                        Some(_) => {
+                            unread_conditionals += 1;
+                            continue;
+                        }
+                        None => None,
+                    };
+                    let mut entry = craftkit_sdk::serde_json::Map::new();
+                    entry.insert("range".to_string(), json!(rule.range));
+                    entry.insert("op".to_string(), json!(rule.op));
+                    entry.insert("value".to_string(), json!(rule.value));
+                    if let Some(format) = format {
+                        entry.insert("format".to_string(), json!(format));
+                    }
+                    if let Some(fill) = &rule.fill {
+                        entry.insert("fill".to_string(), json!(fill));
+                    }
+                    if let Some(stop) = rule.stop {
+                        entry.insert("stop".to_string(), json!(stop));
+                    }
+                    if let Some(priority) = rule.priority {
+                        entry.insert("priority".to_string(), json!(priority));
+                    }
+                    conditionals.push(Json::Object(entry));
+                    imported_conditionals += 1;
+                }
+                if !conditionals.is_empty() {
+                    data["conditionals"] = Json::Array(conditionals);
                 }
                 // The **protection** of the sheet: what may still be
                 // done to it. A file that protects a sheet says so,
@@ -705,6 +747,8 @@ commands! {
                 "merges": imported_merges,
                 "unread_merges": unread_merges,
                 "views": views,
+                "conditionals": imported_conditionals,
+                "unread_conditionals": unread_conditionals,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,

@@ -196,6 +196,21 @@ pub struct Protection {
     pub hidden: bool,
 }
 
+/// A **differential format**: the look of a rule that is about a range
+/// of cells and not about a cell.
+///
+/// A differential format is the tree's `dxf`: the fill behind the
+/// cells a rule matched, and the number format they are written with.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Dxf {
+    /// The **number format** the cells are written with, when the
+    /// differential format names one.
+    pub format: Option<String>,
+    /// The **colour** behind the cells, as `#rrggbb`, when the
+    /// differential format names one.
+    pub fill: Option<String>,
+}
+
 /// The **styles** of a workbook: the format of each cell, by the
 /// number of the cell format.
 #[derive(Debug, Clone, Default)]
@@ -226,6 +241,10 @@ pub struct Styles {
     /// The **borders** of the workbook, in the order the file holds
     /// them.
     borders: Vec<Borders>,
+    /// The **differential formats** of the workbook, in the order the
+    /// file holds them: the looks of the rules that are about a range
+    /// of cells.
+    dxfs: Vec<Dxf>,
 }
 
 impl Styles {
@@ -275,6 +294,13 @@ impl Styles {
         self.protections.get(index).and_then(|protection| protection.as_ref())
     }
 
+    /// The **differential format** of that number: the look of a rule
+    /// that is about a range of cells.
+    pub fn dxf(&self, number: Option<u32>) -> Option<&Dxf> {
+        let index = number? as usize;
+        self.dxfs.get(index)
+    }
+
     /// Whether there are **no** styles at all: a workbook with no
     /// styles part has no formats.
     pub fn is_empty(&self) -> bool {
@@ -305,6 +331,10 @@ pub fn read_styles(root: &El) -> Styles {
         .child("borders")
         .map(|borders| borders.kids("border").map(read_borders).collect())
         .unwrap_or_default();
+    // The **differential formats** of the workbook: the looks of the
+    // rules that are about a range of cells.
+    let dxfs: Vec<Dxf> =
+        root.child("dxfs").map(|dxfs| dxfs.kids("dxf").map(read_dxf).collect()).unwrap_or_default();
     // The **cell formats**: each says which number format its cell is
     // written with, which font it is written in, which fill is behind
     // it and how its text lies.
@@ -331,7 +361,34 @@ pub fn read_styles(root: &El) -> Styles {
             protections.push(format.child("protection").map(read_protection));
         }
     }
-    Styles { formats, font_ids, fill_ids, aligns, border_ids, protections, fonts, fills, borders }
+    Styles { formats, font_ids, fill_ids, aligns, border_ids, protections, fonts, fills, borders, dxfs }
+}
+
+/// Read a **differential format**: the look of a rule that is about a
+/// range of cells.
+///
+/// A differential format names its fill the other way round: the colour
+/// is in the **background** of the fill, and the background of a fill
+/// that has no pattern is its colour.
+fn read_dxf(element: &El) -> Dxf {
+    let format = element.child("numFmt").and_then(|format| {
+        format.attr("formatCode").map(|code| code.to_string()).or_else(|| {
+            let id = format.attr_u32("numFmtId")?;
+            builtin_format(id).map(|code| code.to_string())
+        })
+    });
+    let fill = element.child("fill").and_then(|fill| {
+        let pattern = fill.child("patternFill")?;
+        let kind = pattern.attr("patternType").unwrap_or("none");
+        if kind != "none" && kind != "solid" {
+            return None;
+        }
+        pattern
+            .child("bgColor")
+            .and_then(read_colour)
+            .or_else(|| pattern.child("fgColor").and_then(read_colour))
+    });
+    Dxf { format, fill }
 }
 
 /// Read the **protection** of a cell format.

@@ -573,6 +573,51 @@ fn a_sheet_with_no_view_has_the_default_one() {
     assert!(workbook.sheets[0].view.is_none(), "the sheet has no view of its own");
 }
 
+/// The **conditional formats** of a sheet are read: the rules that are
+/// about a range of cells.
+#[test]
+fn the_conditional_formats_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r##"<styleSheet><dxfs count="1"><dxf><numFmt numFmtId="0" formatCode="#,##0.00"/><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>"##,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="cellIs" operator="greaterThan" priority="1" dxfId="0" stopIfTrue="1"><formula>10</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B2 C1:C2"><cfRule type="cellIs" operator="equal" priority="2"><formula>3</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let rules = &workbook.sheets[0].conditionals;
+    // The first rule: a comparison, with the look of the differential
+    // format it names.
+    assert_eq!(rules.len(), 3, "three rules are read");
+    assert_eq!(rules[0].range, "A1:A5", "the first is about the first range");
+    assert_eq!(rules[0].op, ">", "and it is a comparison");
+    assert_eq!(rules[0].value, "10", "against ten");
+    assert_eq!(rules[0].format.as_deref(), Some("#,##0.00"), "and the format of the look");
+    assert_eq!(rules[0].fill.as_deref(), Some("#ffc7ce"), "and the colour of it");
+    assert_eq!(rules[0].stop, Some(true), "and it stops the walk");
+    assert_eq!(rules[0].priority, Some(1), "and it is tried first");
+    // A rule over two ranges is two rules here.
+    assert_eq!(rules[1].range, "B1:B2", "the second is about the first of its ranges");
+    assert_eq!(rules[1].op, "=", "and it is an equality");
+    assert_eq!(rules[2].range, "C1:C2", "and the third is about the second");
+    assert_eq!(rules[2].op, "=", "with the same criterion");
+}
+
 /// The **names** of a workbook are read: the words its formulas use.
 #[test]
 fn the_names_of_a_workbook_are_read() {

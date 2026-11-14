@@ -694,6 +694,50 @@ fn the_view_of_a_sheet_is_imported() {
     assert_eq!(node.data["zoom"].as_u64(), Some(150), "and the sheet is at a hundred and fifty percent");
 }
 
+/// The **conditional formats** of a sheet are imported: the rules that
+/// are about a range of cells.
+#[test]
+fn the_conditional_formats_of_a_sheet_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r##"<styleSheet><dxfs count="1"><dxf><numFmt numFmtId="0" formatCode="#,##0.00"/><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>"##,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="cellIs" operator="greaterThan" priority="1" dxfId="0" stopIfTrue="1"><formula>10</formula></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["conditionals"].as_u64(), Some(1), "one rule was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let rule = &node.data["conditionals"][0];
+    assert_eq!(rule["range"].as_str(), Some("A1:A5"), "the range it is about");
+    assert_eq!(rule["op"].as_str(), Some(">"), "the operation");
+    assert_eq!(rule["value"].as_str(), Some("10"), "the value");
+    assert_eq!(rule["fill"].as_str(), Some("#ffc7ce"), "the colour behind the cells");
+    assert_eq!(rule["format"].as_str(), Some("#,##0.00"), "and the format they are written with");
+    assert_eq!(rule["stop"].as_bool(), Some(true), "and it stops the walk");
+    assert_eq!(rule["priority"].as_u64(), Some(1), "and it is tried first");
+}
+
 /// A file that is **not a workbook** is refused.
 #[test]
 fn a_file_that_is_not_a_workbook_is_refused() {
