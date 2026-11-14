@@ -4376,6 +4376,7 @@ so.
 | the **hidden sheets** of a workbook | **built.** The sheets a file hides are read and hidden here too, and a workbook keeps one sheet in sight (§928) | §928 |
 | the **colour** of a sheet's tab | **built.** The colour of the tab of a sheet is read and imported (§929) | §929 |
 | the **charts** of a sheet | **built.** The drawings of the cells of a sheet are read and imported as the tree's own charts — the kind, the title, the legend and the cells they read (§930) | §930 |
+| the **date** of a cell | **built.** A cell that holds a date in the file's own words is read as the number of the day, counted in the file's own system (§931) | §931 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61170,4 +61171,52 @@ A sheet may show a drawing of some of its cells: a chart.
   chart that reads the cells of another sheet is not either.
 - **The place of the chart on the sheet is not read**: the tree's
   chart is a node, and a node may have no place.
+- **The workbook is still not written back.**
+
+## 931. The date of a cell: the file's own way of writing a date
+
+A cell may hold a date written as an ISO text, and not as a number.
+
+### What was built
+
+- The **dates** of a sheet are read: a cell that holds a date in the
+  file's own words — `2024-01-01`, `2024-01-01T12:00:00`, or a time
+  alone — is read as the **number of the day**, counted in the file's
+  own system.
+- The **import carries the number**: the tree counts its days in
+  numbers too, and the cell of the tree holds the day.
+
+### What the port found
+
+- **A file writes a date in a cell in three ways**: a day, a day with
+  a time, and a time alone — and the time alone is a part of a day.
+- **The days are counted in the file's own system**, and the reader
+  must know the system before it reads the cells: the 1900 system
+  counts from the 31st of December 1899 and holds a day that never
+  was — the 29th of February 1900 — before the first of March; the
+  1904 system counts from the first of January 1904.
+- **The tree's reader reads the date and counts it in the reader**,
+  and this one does the same: the reader is the layer that knows the
+  file, and the file's days are the file's.
+- **A text that is not a date is nothing**: the cell keeps no value,
+  and the reader does not guess.
+
+### What it cost
+
+- **The date arithmetic** in the reader: the count of the days of the
+  Gregorian calendar and the two epochs — about seventy lines.
+- **The date system** is now given to the reader of a sheet, so that a
+  cell's date is counted in the system of its workbook.
+- **Two tests**: one in the reader's test file (the day, the day with
+  a time, the time alone and the text that is not a date) and one in
+  the import's test file (the cell holds the day).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The cell of a date shows a number and not a date** unless the cell
+  carries a format that says it is a date: the tree shows a date when
+  the format of the cell is a date's format, and that is the tree's
+  own rule.
+- **A time zone is dropped**: the file's time is the time of the file.
 - **The workbook is still not written back.**
