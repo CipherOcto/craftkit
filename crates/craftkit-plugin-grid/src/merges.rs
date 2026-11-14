@@ -490,7 +490,7 @@ commands! {
 }
 
 /// Whether two areas **touch**: they share a cell.
-fn areas_touch(one: &Area, other: &Area) -> bool {
+pub(crate) fn areas_touch(one: &Area, other: &Area) -> bool {
     let rows = one.start.row.max(other.start.row)..=one.end.row.min(other.end.row);
     let columns = one.start.col.max(other.start.col)..=one.end.col.min(other.end.col);
     rows.start() <= rows.end() && columns.start() <= columns.end()

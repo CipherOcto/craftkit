@@ -52,6 +52,13 @@ const MAX_LINK_BYTES: u64 = 8 * 1024 * 1024;
 /// The tree's own colour: a line with no colour of its own is black.
 const DEFAULT_COLOUR: &str = "#000000";
 
+/// The most **cells** one merge may cover.
+///
+/// A file may name a whole column as merged, and the walk of the cells
+/// of that range would be a million cells for one merge. A merge that
+/// covers more cells than this is not imported, and the import says so.
+const MAX_MERGE_CELLS: u64 = 10_000;
+
 /// The **text of a file's formula**, as the tree reads it.
 ///
 /// A file spells some functions with a prefix — `_xlfn.` — and some
@@ -148,6 +155,8 @@ commands! {
             let mut imported_borders = 0u64;
             let mut locks = 0u64;
             let mut protections = 0u64;
+            let mut imported_merges = 0u64;
+            let mut unread_merges = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -301,6 +310,70 @@ commands! {
                         hidden_columns.push(json!(letter));
                     }
                 }
+                // The **merges** of the sheet: the ranges that are one
+                // cell.
+                //
+                // A merge is refused when a cell of the range but the
+                // top left one holds a value — the value of a merged
+                // region is the value of its top left cell, and the
+                // values of the others would be lost. The file is
+                // right and the tree is careful, so a merge with a
+                // value under it is **not** imported, and the import
+                // says how many.
+                let mut merges: Vec<String> = Vec::new();
+                let mut merged_areas: Vec<crate::formula::Area> = Vec::new();
+                for range in &sheet.merges {
+                    let Some((_, area)) = crate::merges::parse_area(range) else {
+                        unread_merges += 1;
+                        continue;
+                    };
+                    if area.start == area.end {
+                        unread_merges += 1;
+                        continue;
+                    }
+                    let covered = area.count().saturating_sub(1);
+                    if covered > MAX_MERGE_CELLS {
+                        // A range of more cells than this is not
+                        // walked: the sheet may name a whole column,
+                        // and the walk would be a million cells for
+                        // one merge.
+                        unread_merges += 1;
+                        continue;
+                    }
+                    let mut holds = false;
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let cell = crate::formula::CellRef { col, row };
+                            if cell == area.start {
+                                continue;
+                            }
+                            if cells.get(&cell.to_text()).is_some_and(|entry| {
+                                entry.get("value").is_some_and(|value| !value.is_null())
+                                    || entry.get("formula").is_some()
+                            }) {
+                                holds = true;
+                                break;
+                            }
+                        }
+                        if holds {
+                            break;
+                        }
+                    }
+                    if holds {
+                        unread_merges += 1;
+                        continue;
+                    }
+                    // A merge that **touches** another one is not
+                    // imported either: a cell that is in two regions is
+                    // in none of them.
+                    if merged_areas.iter().any(|other| crate::merges::areas_touch(other, &area)) {
+                        unread_merges += 1;
+                        continue;
+                    }
+                    merged_areas.push(area);
+                    merges.push(format!("{}:{}", area.start.to_text(), area.end.to_text()));
+                    imported_merges += 1;
+                }
                 let mut data = json!({
                     "cells": craftkit_sdk::serde_json::Value::Object(cells),
                     "view": crate::view::SheetView::default().to_json(),
@@ -317,6 +390,9 @@ commands! {
                 }
                 if !hidden_columns.is_empty() {
                     data["hidden_columns"] = Json::Array(hidden_columns);
+                }
+                if !merges.is_empty() {
+                    data["merges"] = Json::Array(merges.into_iter().map(Json::String).collect());
                 }
                 // The **protection** of the sheet: what may still be
                 // done to it. A file that protects a sheet says so,
@@ -604,6 +680,8 @@ commands! {
                 "borders": imported_borders,
                 "locks": locks,
                 "protections": protections,
+                "merges": imported_merges,
+                "unread_merges": unread_merges,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,

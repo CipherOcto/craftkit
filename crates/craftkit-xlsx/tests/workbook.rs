@@ -488,6 +488,34 @@ fn the_rows_and_the_columns_of_a_sheet_are_read() {
     assert!(sheet.columns[2].hidden, "and it is hidden");
 }
 
+/// The **merges** of a sheet are read: the ranges that are one cell.
+#[test]
+fn the_merges_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><mergeCells count="3"><mergeCell ref="A1:B2"/><mergeCell ref="$C$3:$D$4"/><mergeCell ref="E5:E5"/></mergeCells></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let merges = &workbook.sheets[0].merges;
+    assert_eq!(merges.len(), 2, "two ranges are merges");
+    assert_eq!(merges[0], "A1:B2", "the first is the first range");
+    assert_eq!(merges[1], "C3:D4", "and the second is the second, without its dollars");
+}
+
 /// The **names** of a workbook are read: the words its formulas use.
 #[test]
 fn the_names_of_a_workbook_are_read() {

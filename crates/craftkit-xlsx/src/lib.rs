@@ -180,6 +180,11 @@ pub struct Sheet {
     /// The **columns** of the sheet that say something of themselves:
     /// their width and whether they are hidden.
     pub columns: Vec<Column>,
+    /// The **merges** of the sheet: the ranges that are **one cell**.
+    ///
+    /// The ranges are the file's own words — `A1:B2` — and a range of
+    /// one cell is not a merge and is not here.
+    pub merges: Vec<String>,
     /// The **protection** of the sheet, when the sheet is protected.
     ///
     /// A sheet that is not protected has none: a sheet that is not
@@ -588,6 +593,9 @@ fn read_sheet(
     // hidden. A file says a span of columns at once, so one span of
     // ten columns is ten columns here.
     sheet.columns = read_columns(&root);
+    // The **merges** of the sheet: the ranges that are one cell. A
+    // range of one cell is not a merge.
+    sheet.merges = read_merges(&root);
     // The **rows** of the sheet: their height and whether they are
     // hidden. A file says a row of its own, and this reader reads the
     // rows as it reads the cells.
@@ -683,6 +691,27 @@ fn read_sheet(
     }
     sheet.rows = rows;
     (sheet, filter, links, comments, tables)
+}
+
+/// Read the **merges** of a sheet: the ranges that are one cell.
+///
+/// A range of **one** cell is not a merge — a cell is one cell already
+/// — and it is not here. A range that is not a range of cells at all is
+/// not here either.
+fn read_merges(root: &craftkit_xml::El) -> Vec<String> {
+    let mut merges = Vec::new();
+    let Some(list) = root.child("mergeCells") else { return merges };
+    for merge in list.kids("mergeCell") {
+        let Some(range) = merge.attr("ref") else { continue };
+        let range = range.trim().replace('$', "");
+        let Some((first, second)) = range.split_once(':') else { continue };
+        let (Some(first), Some(second)) = (address_of(first), address_of(second)) else { continue };
+        if first == second {
+            continue;
+        }
+        merges.push(range);
+    }
+    merges
 }
 
 /// Read the **columns** of a sheet: their width and whether they are
