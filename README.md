@@ -4372,6 +4372,7 @@ so.
 | the **page setup** of a sheet | **built.** How a sheet prints is read and imported — the paper, the orientation, the margins, the scale and the fit (§924) | §924 |
 | the **array formula** of a cell | **built.** The kind of a formula is read, and a formula this tree does not have — an array or a data table — is left out rather than carried wrongly (§925) | §925 |
 | the **breaks** of the printing | **built.** The rows and the columns a page begins at are read and imported, and the pages of a sheet break where the file says they break (§926) | §926 |
+| the **sparklines** of a sheet | **built.** The little drawings in the cells of a sheet are read and imported — the range, the kind, the colour and the markers (§927) | §927 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60973,4 +60974,56 @@ begins.
   may say that a break is automatic rather than put there by hand, and
   that is not read.
 - **The headers and the footers of the printed page are not read.**
+- **The workbook is still not written back.**
+
+## 927. The sparklines of a sheet: the little drawings in its cells
+
+A sparkline is a small drawing in a cell, taken from a range of cells.
+
+### What was built
+
+- The **sparklines** of a sheet are read: the **cell** the drawing is
+  in, the **range** it reads, the **kind** of it, its **colour** and
+  whether its **markers** are drawn.
+- The **import writes them as the tree's own sparklines**: the range,
+  the kind, the colour and the markers — the shape the tree's own
+  command writes, so `grid.sparkline.read` sees what the file said.
+
+### What the port found
+
+- **The sparklines of a file live in the extension list of the sheet**,
+  not in the sheet itself, and the reader already goes there for the
+  validations of a newer file.
+- **A group of sparklines holds the kind, the colour and the markers**,
+  and each sparkline in it holds the cell and the range: the group is
+  the drawing's look, and the sparkline is where it is drawn.
+- **The file says `stacked` and the tree says `win_loss`**: a row of
+  wins and losses is a stacked drawing, and the tree's own word for
+  it is its own.
+- **The file's colour is a hex with an alpha byte in front of it**,
+  and the tree's colour is four parts of a whole — so the colour is
+  carried in the tree's own measure.
+- **A sparkline reads a range and not a cell**, as the tree's own
+  command says: a sparkline whose range is one cell is not imported.
+
+### What it cost
+
+- **One kind** in the reader — the sparkline — and the reading of the
+  extension list: about fifty lines.
+- **One attribute** in the reader's styles: the reading of a colour is
+  now shared with the sparklines.
+- **One line** in the battery's crate root: the macro that writes the
+  outcome of an import nests, and the nesting is given room.
+- **Two tests**: one in the reader's test file (the cell, the range,
+  the kind, the colour and the markers) and one in the import's test
+  file (the sparkline is the tree's own).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The rest of the look of a sparkline is not read**: a file may say
+  how the empty cells are shown, whether the axis is drawn, and which
+  way the series runs, and none of that is read.
+- **The colours of the negative points, of the markers and of the axis
+  are not read**: only the colour of the line is.
 - **The workbook is still not written back.**
