@@ -865,6 +865,43 @@ fn a_print_area_of_one_cell_is_not_imported() {
     assert!(node.data.get("print_area").is_none(), "and the sheet prints no area of its own");
 }
 
+/// The **outline** of a sheet is imported: the groups of rows and of
+/// columns, and where the summary of a group sits.
+#[test]
+fn the_outline_of_a_sheet_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetPr><outlinePr summaryBelow="0"/></sheetPr><cols><col min="3" max="3" outlineLevel="1"/></cols><sheetData><row r="2" hidden="1" outlineLevel="2"/><row r="3" outlineLevel="1"/></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["outlines"].as_u64(), Some(2), "the rows and the columns were imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["row_outline"]["2"].as_u64(), Some(2), "the second row is two deep");
+    assert_eq!(node.data["row_outline"]["3"].as_u64(), Some(1), "and the third is one deep");
+    assert_eq!(node.data["column_outline"]["C"].as_u64(), Some(1), "and the third column is one deep");
+    assert_eq!(node.data["summary_below"].as_bool(), Some(false), "the summary is above the group");
+    assert!(node.data.get("summary_right").is_none(), "and the file said nothing of the columns");
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]

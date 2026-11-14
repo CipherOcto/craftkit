@@ -164,6 +164,7 @@ commands! {
             let mut unread_validations = 0u64;
             let mut printed = 0u64;
             let mut unread_prints = 0u64;
+            let mut outlines = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -309,6 +310,8 @@ commands! {
                 let mut row_heights: craftkit_sdk::serde_json::Map<String, Json> =
                     craftkit_sdk::serde_json::Map::new();
                 let mut hidden_rows: Vec<Json> = Vec::new();
+                let mut row_outline: craftkit_sdk::serde_json::Map<String, Json> =
+                    craftkit_sdk::serde_json::Map::new();
                 for row in &sheet.rows {
                     if let Some(height) = row.height {
                         row_heights.insert(row.row.to_string(), json!(height));
@@ -316,12 +319,19 @@ commands! {
                     if row.hidden {
                         hidden_rows.push(json!(row.row));
                     }
+                    // The **outline level** of the row: how deep in a
+                    // group it is. A row in no group is not in the map.
+                    if row.outline > 0 {
+                        row_outline.insert(row.row.to_string(), json!(row.outline));
+                    }
                 }
                 // The **columns** of the sheet: the width of each
                 // column that has one, and the columns that are hidden.
                 let mut column_widths: craftkit_sdk::serde_json::Map<String, Json> =
                     craftkit_sdk::serde_json::Map::new();
                 let mut hidden_columns: Vec<Json> = Vec::new();
+                let mut column_outline: craftkit_sdk::serde_json::Map<String, Json> =
+                    craftkit_sdk::serde_json::Map::new();
                 for column in &sheet.columns {
                     let letter = crate::formula::CellRef::column_text(column.column);
                     if let Some(width) = column.width {
@@ -329,6 +339,9 @@ commands! {
                     }
                     if column.hidden {
                         hidden_columns.push(json!(letter));
+                    }
+                    if column.outline > 0 {
+                        column_outline.insert(letter.clone(), json!(column.outline));
                     }
                 }
                 // The **merges** of the sheet: the ranges that are one
@@ -432,6 +445,24 @@ commands! {
                 }
                 if !hidden_columns.is_empty() {
                     data["hidden_columns"] = Json::Array(hidden_columns);
+                }
+                // The **outline** of the sheet: the rows and the columns
+                // that are in a group, and how deep in it they are.
+                if !row_outline.is_empty() {
+                    data["row_outline"] = Json::Object(row_outline);
+                    outlines += 1;
+                }
+                if !column_outline.is_empty() {
+                    data["column_outline"] = Json::Object(column_outline);
+                    outlines += 1;
+                }
+                // Where the **summary** of a group sits: below the
+                // group, or to the right of it.
+                if let Some(below) = sheet.summary_below {
+                    data["summary_below"] = json!(below);
+                }
+                if let Some(right) = sheet.summary_right {
+                    data["summary_right"] = json!(right);
                 }
                 // The **validations** of the sheet: the rules on what a
                 // cell may hold.
@@ -854,6 +885,7 @@ commands! {
                 "unread_validations": unread_validations,
                 "prints": printed,
                 "unread_prints": unread_prints,
+                "outlines": outlines,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,

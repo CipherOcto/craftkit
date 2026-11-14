@@ -761,6 +761,46 @@ fn the_printing_of_a_sheet_is_read() {
     assert!(workbook.names.is_empty(), "and no name is read");
 }
 
+/// The **outline** of a sheet is read: the groups of rows and of
+/// columns, and where the summary of a group sits.
+#[test]
+fn the_outline_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetPr><outlinePr summaryBelow="0"/></sheetPr><cols><col min="3" max="3" outlineLevel="1"/></cols><sheetData><row r="2" hidden="1" outlineLevel="2"/><row r="3" outlineLevel="1"/></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    // The rows of the groups.
+    assert_eq!(sheet.rows.len(), 2, "two rows say something of themselves");
+    assert_eq!(sheet.rows[0].row, 2, "the first is the second row");
+    assert_eq!(sheet.rows[0].outline, 2, "and it is two deep in a group");
+    assert!(sheet.rows[0].hidden, "and it is hidden");
+    assert_eq!(sheet.rows[1].row, 3, "the second is the third row");
+    assert_eq!(sheet.rows[1].outline, 1, "and it is one deep in a group");
+    // The columns of the groups.
+    assert_eq!(sheet.columns.len(), 1, "one column says something of itself");
+    assert_eq!(sheet.columns[0].column, 2, "it is the third column");
+    assert_eq!(sheet.columns[0].outline, 1, "and it is one deep in a group");
+    // Where the summary sits.
+    assert_eq!(sheet.summary_below, Some(false), "the summary of a group is above it");
+    assert_eq!(sheet.summary_right, None, "and the file says nothing of the columns");
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

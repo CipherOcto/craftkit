@@ -77,6 +77,10 @@ pub const MAX_COLS: u64 = 16_384;
 /// read out of them.
 pub const MAX_SHEETS: usize = 1_024;
 
+/// The most **levels** an outline may have: a file may say more, and
+/// the tree's own outline is seven deep.
+pub const MAX_OUTLINE: u32 = 7;
+
 /// Why a workbook could not be read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
@@ -234,6 +238,15 @@ pub struct Sheet {
     /// The titles are the file's own text: the rows and the columns
     /// that repeat are said in the file's own way.
     pub print_titles: Option<String>,
+    /// Whether the **summary row** of a group of rows sits **below**
+    /// the group, when the file says.
+    ///
+    /// A file that says nothing has the summary below, and that is not
+    /// carried: what a file does not say is not a fact of the file.
+    pub summary_below: Option<bool>,
+    /// Whether the **summary column** of a group of columns sits to
+    /// the **right** of the group, when the file says.
+    pub summary_right: Option<bool>,
 }
 
 /// A **validation** of a sheet: a rule on what a cell may hold.
@@ -341,6 +354,10 @@ pub struct Row {
     pub height: Option<f64>,
     /// Whether the row is **hidden**.
     pub hidden: bool,
+    /// The **outline level** of the row: how deep in a group it is.
+    ///
+    /// A row that is in no group has the level **zero**.
+    pub outline: u8,
 }
 
 /// A **column** of a sheet: its width, and whether it is hidden.
@@ -358,6 +375,10 @@ pub struct Column {
     pub width: Option<f64>,
     /// Whether the column is **hidden**.
     pub hidden: bool,
+    /// The **outline level** of the column: how deep in a group it is.
+    ///
+    /// A column that is in no group has the level **zero**.
+    pub outline: u8,
 }
 
 /// The **protection** of a sheet: what may still be done to it.
@@ -782,6 +803,15 @@ fn read_sheet(
     // protected, and the flags of that element say what is still
     // allowed.
     sheet.protection = read_sheet_protection(&root);
+    // The **outline** of the sheet: where the summary of a group
+    // sits. A file that says nothing about it has the summary below
+    // and to the right, and that is not carried.
+    if let Some(properties) = root.child("sheetPr")
+        && let Some(outline) = properties.child("outlinePr")
+    {
+        sheet.summary_below = outline.attr_bool("summaryBelow");
+        sheet.summary_right = outline.attr_bool("summaryRight");
+    }
     // The **columns** of the sheet: their width and whether they are
     // hidden. A file says a span of columns at once, so one span of
     // ten columns is ten columns here.
@@ -836,8 +866,10 @@ fn read_sheet(
         // height of a row that says nothing is the sheet's own.
         let height = row.attr_f64("ht").filter(|height| *height > 0.0);
         let hidden = row.flag("hidden", false);
-        if height.is_some() || hidden {
-            rows.push(Row { row: row_index + 1, height, hidden });
+        // The **outline level** of the row: how deep in a group it is.
+        let outline = row.attr_u32("outlineLevel").unwrap_or(0).min(MAX_OUTLINE) as u8;
+        if height.is_some() || hidden || outline > 0 {
+            rows.push(Row { row: row_index + 1, height, hidden, outline });
         }
 
         for cell in row.kids("c") {
@@ -1180,11 +1212,14 @@ fn read_columns(root: &craftkit_xml::El) -> Vec<Column> {
         }
         let width = col.attr_f64("width").filter(|width| *width > 0.0);
         let hidden = col.flag("hidden", false);
-        if width.is_none() && !hidden {
+        // The **outline level** of the columns: how deep in a group they
+        // are.
+        let outline = col.attr_u32("outlineLevel").unwrap_or(0).min(MAX_OUTLINE) as u8;
+        if width.is_none() && !hidden && outline == 0 {
             continue;
         }
         for index in (min - 1)..max {
-            columns.push(Column { column: index, width, hidden });
+            columns.push(Column { column: index, width, hidden, outline });
         }
     }
     columns
