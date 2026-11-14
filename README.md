@@ -4363,6 +4363,7 @@ so.
 | the **language server** of the tree | **built.** `rust-analyzer` is part of the pinned toolchain, `cargo xtask lsp` asks it where a thing is declared and what uses it, and the agents are told to ask before they grep (§915) | §915 |
 | the **merges** of a sheet | **built.** The ranges that are one cell are read and imported, and a merge with a value under it is left out rather than losing the value (§916) | §916 |
 | the **view** of a sheet | **built.** The gridlines, the headings, the zeros, the right-to-left, the formulas shown, the zoom and the frozen panes of a sheet are read and imported (§917) | §917 |
+| the **conditional formats** of a sheet | **built.** The rules that are about a range of cells are read and imported — the comparison, the look and the priority — and a rule this tree does not have is left out (§918) | §918 |
 
 ### The list of things that are honestly not there: empty
 
@@ -60458,5 +60459,66 @@ A sheet is not only its cells: it says how it is **drawn**.
 - **The mode of the view is not read**: a file may say the sheet is
   shown as a page break preview or as a page layout, and this tree has
   no such a mode.
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 918. The conditional formats of a sheet: the rules that are about a range of cells
+
+A sheet may hold **conditional formats**: rules that are about a range
+of cells and say what the cells that match them look like.
+
+### What was built
+
+- The **conditional formats** of a sheet are read: the range each rule
+  is about, the **operation** a cell's value is judged by, the **value**
+  it is judged against, the **number format** the matching cells are
+  written with, the **colour** behind them, whether the rule **stops**
+  the walk, and its **priority**.
+- The **import carries them**: a rule in the file is a rule here.
+
+### What the port found
+
+- **The tree's rule is a style and this one's is a look.** The tree's
+  conditional format carries a style — a fill, a font colour, an icon
+  set — and the style is shared between cells. Here it carries a
+  **number format** and a **fill**: the format is a cell's own thing
+  and the fill is a cell's own thing too, and the tree's font colour
+  and its icon set are still not here.
+- **The tree's criteria are many and this one's is one.** The tree's
+  rule may be a comparison, a colour scale, a data bar, an icon set or
+  an expression; here a rule is a **comparison** — the same criterion
+  the filter of a sheet uses — and the other kinds are not here. A rule
+  that is not a comparison is **left out**, and the import says how
+  many it left out.
+- **The tree's *between* compares with two values and this tree's
+  criterion has one.** So *between* and *not between* are not carried:
+  a comparison with two values is not a comparison here.
+- **The look of a rule is in a part of its own**: the file's
+  **differential formats**, and a rule names one by its number. And a
+  differential format names its fill the other way round — the colour
+  is in the **background** of the fill — so that is where it is read
+  from.
+- **The tree's rule may be about several ranges at once**, and this
+  tree's rule is about **one**: so a rule over two ranges is two rules
+  here, with the same criterion and the same look.
+
+### What it cost
+
+- **Two kinds** in the reader — the conditional format and the
+  differential format — and the reading of them: about a hundred and
+  twenty lines.
+- **Two tests**: one in the reader's test file (the rule, its look and
+  its two ranges, and a rule that is not a comparison) and one in the
+  import's test file (the rule is imported and read back).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The colour scale, the data bar, the icon set and the expression are
+  not read**: they are rules this tree does not have, and the import
+  says how many it left out.
+- **The font colour of a rule is not read**: a differential format may
+  name one, and this tree's look is a format and a fill.
+- **The borders and the alignment of a rule are not read**: the same.
 - **A shared formula is still not filled in.**
 - **The workbook is still not written back.**
