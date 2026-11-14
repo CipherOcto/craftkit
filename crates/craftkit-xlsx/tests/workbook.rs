@@ -353,6 +353,97 @@ fn the_borders_of_a_cell_are_read() {
     assert_eq!(borders.edges[1].colour, Some("#0000ff".to_string()), "and it is blue");
 }
 
+/// The **protection** of a sheet is read: what may still be done to
+/// it, and the cells of it are locked.
+#[test]
+fn the_protection_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetProtection sheet="1" sort="0" autoFilter="0" formatCells="0"/><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let protection = workbook.sheets[0].protection.expect("the sheet is protected");
+    assert!(protection.sort, "the sorting is still allowed");
+    assert!(protection.filter, "and the filtering");
+    assert!(protection.format, "and the formatting");
+}
+
+/// A sheet whose protection does not say it is protected is **not**
+/// protected.
+#[test]
+fn a_sheet_that_is_not_protected_is_not_protected() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetProtection sheet="0" sort="0"/><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.sheets[0].protection.is_none(), "the sheet is not protected");
+}
+
+/// The **lock** of a cell is read: whether it is locked and whether
+/// its text is hidden.
+#[test]
+fn the_lock_of_a_cell_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><cellXfs><xf><protection locked="0"/></xf><xf><protection locked="1" hidden="1"/></xf></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="0" t="str"><v>x</v></c><c r="B1" s="1" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let cells = &workbook.sheets[0].cells;
+    let first = cells[0].protection.expect("the cell has a protection");
+    assert!(!first.locked, "the first cell is unlocked");
+    assert!(!first.hidden, "and its text is not hidden");
+    let second = cells[1].protection.expect("the cell has a protection");
+    assert!(second.locked, "the second cell is locked");
+    assert!(second.hidden, "and its text is hidden");
+}
+
 /// The **names** of a workbook are read: the words its formulas use.
 #[test]
 fn the_names_of_a_workbook_are_read() {

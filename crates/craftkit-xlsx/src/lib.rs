@@ -59,7 +59,7 @@ mod rels;
 mod styles;
 
 pub use rels::{Rel, rels_of, resolve, split_dir};
-pub use styles::{Alignment, Border, Borders, Fill, Font, Styles, Underline, Vert, read_styles};
+pub use styles::{Alignment, Border, Borders, Fill, Font, Protection, Styles, Underline, Vert, read_styles};
 
 /// The most **rows** a sheet may have: the tree's own bound.
 pub const MAX_ROWS: u64 = 1_048_576;
@@ -161,6 +161,10 @@ pub struct Cell {
     /// The **borders** of the cell: the lines on its edges, when the
     /// cell names a style of its own and that style has lines.
     pub borders: Option<Borders>,
+    /// The **protection** of the cell: whether it is locked and
+    /// whether its text is hidden, when the cell names a style of its
+    /// own and that style says so.
+    pub protection: Option<Protection>,
 }
 
 /// A **sheet** of a workbook: a name and its cells.
@@ -170,6 +174,26 @@ pub struct Sheet {
     pub name: String,
     /// The cells, in the order the file holds them.
     pub cells: Vec<Cell>,
+    /// The **protection** of the sheet, when the sheet is protected.
+    ///
+    /// A sheet that is not protected has none: a sheet that is not
+    /// protected says nothing about what may be done to it.
+    pub protection: Option<SheetProtection>,
+}
+
+/// The **protection** of a sheet: what may still be done to it.
+///
+/// The tree's own sheet protection is a dozen flags, and this one has
+/// four: the sorting, the filtering, the formatting and the lock of the
+/// cells.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SheetProtection {
+    /// Whether the **sorting** is still allowed.
+    pub sort: bool,
+    /// Whether the **filtering** is still allowed.
+    pub filter: bool,
+    /// Whether the **formatting** is still allowed.
+    pub format: bool,
 }
 
 /// The **date system** a workbook's numbers are counted in.
@@ -519,6 +543,11 @@ fn read_sheet(
     // The **tables** of the sheet: they are in parts of their own
     // that the sheet names by a relationship.
     let tables = read_tables(package, &root, &sheet_rels);
+    // The **protection** of the sheet: what may still be done to it.
+    // A file protects a sheet with an element that says it is
+    // protected, and the flags of that element say what is still
+    // allowed.
+    sheet.protection = read_sheet_protection(&root);
     let Some(data) = root.child("sheetData") else {
         return (sheet, filter, links, comments, tables);
     };
@@ -569,15 +598,16 @@ fn read_sheet(
             // cell: only when the cell names a style of its own. A
             // cell that names no style has the sheet's own face, and
             // the sheet's own face is not the cell's.
-            let (font, fill, align, borders) = if style.is_some() {
+            let (font, fill, align, borders, protection) = if style.is_some() {
                 (
                     styles.font(style).cloned(),
                     styles.fill(style).cloned(),
                     styles.align(style).cloned(),
                     styles.borders(style).cloned(),
+                    styles.protection(style).cloned(),
                 )
             } else {
-                (None, None, None, None)
+                (None, None, None, None, None)
             };
             sheet.cells.push(Cell {
                 column,
@@ -589,6 +619,7 @@ fn read_sheet(
                 fill,
                 align,
                 borders,
+                protection,
             });
         }
     }
@@ -673,6 +704,26 @@ fn totals_way(function: Option<&str>) -> Option<String> {
         _ => return None,
     };
     Some(way.to_string())
+}
+
+/// Read the **protection** of a sheet.
+///
+/// A file protects a sheet with an element that says it is protected,
+/// and the flags of that element say what is **not** allowed: a flag
+/// that is there and true forbids the thing, and a flag that is not
+/// there forbids nothing. This tree's protection is the other way
+/// round — it says what **is** allowed — so the flags are turned
+/// about here.
+fn read_sheet_protection(root: &craftkit_xml::El) -> Option<SheetProtection> {
+    let element = root.child("sheetProtection")?;
+    if !element.flag("sheet", false) {
+        return None;
+    }
+    Some(SheetProtection {
+        sort: !element.flag("sort", true),
+        filter: !element.flag("autoFilter", true),
+        format: !element.flag("formatCells", true),
+    })
 }
 
 /// Read the **comments** of a sheet.

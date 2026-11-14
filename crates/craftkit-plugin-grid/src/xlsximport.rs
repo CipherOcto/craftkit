@@ -146,6 +146,8 @@ commands! {
             let mut aligns = 0u64;
             let mut unread_aligns = 0u64;
             let mut imported_borders = 0u64;
+            let mut locks = 0u64;
+            let mut protections = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
             let mut taken: Vec<String> = Vec::new();
@@ -242,6 +244,13 @@ commands! {
                             None => unread_aligns += 1,
                         }
                     }
+                    // The **lock** of the cell: a cell that says of
+                    // itself whether it is locked says more than the
+                    // sheet, and so its own word comes first.
+                    if let Some(protection) = &cell.protection {
+                        entry.insert("locked".to_string(), json!(protection.locked));
+                        locks += 1;
+                    }
                     // The **borders** of the cell: the lines on its
                     // edges. They are the sheet's, and not the cell's,
                     // as they are here.
@@ -270,6 +279,18 @@ commands! {
                     "view": crate::view::SheetView::default().to_json(),
                     "zoom": 100,
                 });
+                // The **protection** of the sheet: what may still be
+                // done to it. A file that protects a sheet says so,
+                // and the flags say what is still allowed.
+                if let Some(protection) = &sheet.protection {
+                    data["protection"] = json!({
+                        "sort": protection.sort,
+                        "filter": protection.filter,
+                        "format": protection.format,
+                        "locked": true,
+                    });
+                    protections += 1;
+                }
                 if !borders_of_sheet.is_empty() {
                     let mut borders: craftkit_sdk::serde_json::Map<String, Json> =
                         craftkit_sdk::serde_json::Map::new();
@@ -542,6 +563,8 @@ commands! {
                 "aligns": aligns,
                 "unread_aligns": unread_aligns,
                 "borders": imported_borders,
+                "locks": locks,
+                "protections": protections,
                 "names": names,
                 "unread_names": unread_names,
                 "filters": imported_filters,

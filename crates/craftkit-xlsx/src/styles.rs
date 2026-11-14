@@ -182,6 +182,20 @@ pub struct Alignment {
     pub wrap: bool,
 }
 
+/// The **protection** of a cell: whether it is **locked**, and whether
+/// its text is **hidden**.
+///
+/// A cell that says nothing is locked, as the tree's reader has it: the
+/// lock of a cell is the lock of its style, and the style of a cell
+/// that names nothing is locked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Protection {
+    /// Whether the cell is **locked**.
+    pub locked: bool,
+    /// Whether the **text** of the cell is hidden.
+    pub hidden: bool,
+}
+
 /// The **styles** of a workbook: the format of each cell, by the
 /// number of the cell format.
 #[derive(Debug, Clone, Default)]
@@ -202,6 +216,9 @@ pub struct Styles {
     /// The **borders** of each cell format, by the number of the cell
     /// format: the number of the borders it names.
     border_ids: Vec<u32>,
+    /// The **protection** of each cell format, by the number of the
+    /// cell format.
+    protections: Vec<Option<Protection>>,
     /// The **fonts** of the workbook, in the order the file holds them.
     fonts: Vec<Font>,
     /// The **fills** of the workbook, in the order the file holds them.
@@ -252,6 +269,12 @@ impl Styles {
         self.borders.get(number)
     }
 
+    /// The **protection** of the style of that number.
+    pub fn protection(&self, style: Option<u32>) -> Option<&Protection> {
+        let index = style.unwrap_or(0) as usize;
+        self.protections.get(index).and_then(|protection| protection.as_ref())
+    }
+
     /// Whether there are **no** styles at all: a workbook with no
     /// styles part has no formats.
     pub fn is_empty(&self) -> bool {
@@ -290,6 +313,7 @@ pub fn read_styles(root: &El) -> Styles {
     let mut fill_ids = Vec::new();
     let mut aligns = Vec::new();
     let mut border_ids = Vec::new();
+    let mut protections = Vec::new();
     if let Some(cells) = root.child("cellXfs") {
         for format in cells.kids("xf") {
             let id = format.attr_u32("numFmtId").unwrap_or(0);
@@ -304,9 +328,19 @@ pub fn read_styles(root: &El) -> Styles {
             fill_ids.push(format.attr_u32("fillId").unwrap_or(0));
             aligns.push(format.child("alignment").map(read_alignment));
             border_ids.push(format.attr_u32("borderId").unwrap_or(0));
+            protections.push(format.child("protection").map(read_protection));
         }
     }
-    Styles { formats, font_ids, fill_ids, aligns, border_ids, fonts, fills, borders }
+    Styles { formats, font_ids, fill_ids, aligns, border_ids, protections, fonts, fills, borders }
+}
+
+/// Read the **protection** of a cell format.
+///
+/// A cell format that says nothing about its protection has no
+/// protection here: the lock of a cell that says nothing is the lock
+/// of its style, and a style that says nothing is locked.
+fn read_protection(element: &El) -> Protection {
+    Protection { locked: element.flag("locked", true), hidden: element.flag("hidden", false) }
 }
 
 /// The **styles** a border may have — the tree's own.

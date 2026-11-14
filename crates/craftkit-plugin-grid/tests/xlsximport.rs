@@ -478,6 +478,50 @@ fn the_styles_of_a_cell_are_imported() {
     assert_eq!(borders.data["borders"]["left"]["colour"].as_str(), Some("#0000ff"), "and it is blue");
 }
 
+/// The **protection** of a sheet and the **lock** of a cell are
+/// imported.
+#[test]
+fn the_protection_of_a_sheet_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r#"<styleSheet><cellXfs><xf><protection locked="0"/></xf></cellXfs></styleSheet>"#),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetProtection sheet="1" sort="0" autoFilter="0" formatCells="0"/><sheetData><row r="1"><c r="A1" s="0" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["protections"].as_u64(), Some(1), "one sheet was protected");
+    assert_eq!(outcome.data["locks"].as_u64(), Some(1), "one cell was locked");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    // The **sheet** is protected: the sorting, the filtering and the
+    // formatting are still allowed, and the cells are locked.
+    let read = session.execute("grid.sheet.get", &json!({ "sheet": sheet })).expect("the sheet is read");
+    assert_eq!(read.data["protection"]["sort"].as_bool(), Some(true), "the sorting is allowed");
+    assert_eq!(read.data["protection"]["filter"].as_bool(), Some(true), "and the filtering");
+    assert_eq!(read.data["protection"]["format"].as_bool(), Some(true), "and the formatting");
+    // The **cell** says of itself that it is unlocked, and its own word
+    // comes before the sheet's.
+    let read =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(read.data["locked"].as_bool(), Some(false), "the cell is unlocked");
+}
+
 /// A file that is **not a workbook** is refused.
 #[test]
 fn a_file_that_is_not_a_workbook_is_refused() {
