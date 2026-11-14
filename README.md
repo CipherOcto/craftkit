@@ -4355,6 +4355,7 @@ so.
 | the **defined names** of a workbook: the names the formulas use | **built.** The names of a workbook are read and imported, and a formula that uses one reads the range it stands for (§907) | §907 |
 | the **auto filter** of a sheet: the filter the file holds | **built.** The filter of a sheet is read and imported, and the column it judges is the column and not an offset in a range (§908) | §908 |
 | the **links** of a sheet: the places its cells go to | **built.** The links of a sheet are read and imported, and a link over a range is put on each of its cells (§909) | §909 |
+| the **comments** of a sheet: the notes a cell carries | **built.** The comments of a sheet are read and imported, and the author line a note begins with is dropped (§910) | §910 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59971,6 +59972,53 @@ A cell can go somewhere.
 
 ### What it does not settle
 
+- **The fonts, the fills and the borders are still not read.**
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
+
+## 910. The comments of a sheet: the notes a cell carries
+
+A cell can carry a note.
+
+### What was built
+
+- **The comments of a sheet** are read: who wrote each one and what it
+  says. They are in a **part of their own** that the sheet is related
+  to, and not in the sheet itself.
+- **The import carries the comments**: a cell that carries a note in
+  the file carries it here.
+
+### What the port found
+
+- **The tree's comments are a part of their own**, related to the
+  sheet by a relationship, and the sheet itself says nothing about
+  them. So the reader follows the sheet's relationships and reads the
+  part they name.
+- **The tree's comment has an author and a text, and this one has the
+  same two.** The tree's comment has more as well — the replies, the
+  dates, whether the thread is resolved, whether the note is shown,
+  and the box it is shown in — and those come from parts this reader
+  does not read: the **threaded comments**, the **persons** and the
+  **shapes**.
+- **A note begins with its author.** A spreadsheet program writes the
+  author in bold on the first line of the note, and the tree's reader
+  drops that line and keeps the author beside the text — and so does
+  this one, because an author written twice is an author twice.
+
+### What it cost
+
+- **One kind** in the reader — the comment — and the reading of it:
+  about sixty lines.
+- **Two tests**: one in the reader's test file (the author, the text
+  without the author line, and the cell) and one in the import's test
+  file (the comment is imported and reads back).
+- **No new command** and **no new dependency**: the comments are XML,
+  and the reader of §903 reads it.
+
+### What it does not settle
+
+- **The threaded comments are not read**: a reply to a comment, and
+  whether a thread is resolved, are not imported.
 - **The fonts, the fills and the borders are still not read.**
 - **A shared formula is still not filled in.**
 - **The workbook is still not written back.**
