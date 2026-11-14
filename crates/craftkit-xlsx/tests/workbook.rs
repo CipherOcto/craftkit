@@ -1065,6 +1065,55 @@ fn the_dates_of_a_sheet_are_read() {
     assert_eq!(cells[3].value, Value::Empty, "and a text that is not a date is nothing");
 }
 
+/// The **pivot tables** of a sheet are read: the cells they were made
+/// from, and the fields they gather them by.
+#[test]
+fn the_pivot_tables_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/pivotTables/pivotTable1.xml",
+            r#"<pivotTableDefinition name="The Pivot" cacheId="1"><location ref="A1:B5"/><rowFields count="1"><field x="0"/></rowFields><colFields count="1"><field x="1"/></colFields><dataFields count="1"><dataField name="Sum of Amount" fld="2" baseField="0" baseItem="0"/></dataFields></pivotTableDefinition>"#,
+        ),
+        (
+            "xl/pivotTables/_rels/pivotTable1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/pivotCacheDefinition1.xml",
+            r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Region"><sharedItems/></cacheField><cacheField name="Product"><sharedItems/></cacheField><cacheField name="Amount"><sharedItems/></cacheField></cacheFields></pivotCacheDefinition>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let pivots = &workbook.sheets[0].pivots;
+    assert_eq!(pivots.len(), 1, "one pivot table is read");
+    assert_eq!(pivots[0].name.as_deref(), Some("The Pivot"), "its name");
+    assert_eq!(pivots[0].source, "One!A1:C10", "the cells it was made from");
+    assert_eq!(pivots[0].row_fields, vec!["Region".to_string()], "the field it gathers the rows by");
+    assert_eq!(pivots[0].column_fields, vec!["Product".to_string()], "the field it spreads the groups over");
+    assert_eq!(
+        pivots[0].value,
+        Some(("Amount".to_string(), "sum".to_string())),
+        "and the field it puts together"
+    );
+}
+
 /// The **filter** of a sheet is read: the range it is over, and the
 /// criterion of each of its columns.
 #[test]

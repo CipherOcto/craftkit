@@ -288,6 +288,8 @@ pub struct Sheet {
     /// The **sparklines** of the sheet: the little drawings in its
     /// cells.
     pub sparklines: Vec<Sparkline>,
+    /// The **pivot tables** of the sheet: the pivots it holds.
+    pub pivots: Vec<PivotTable>,
 }
 
 /// A **sparkline** of a sheet: a little drawing in a cell, taken from
@@ -307,6 +309,27 @@ pub struct Sparkline {
     pub colour: Option<String>,
     /// Whether the **markers** are drawn.
     pub markers: bool,
+}
+
+/// A **pivot table** of a sheet: the cells it was made from, and the
+/// fields it gathers them by.
+///
+/// The names of the fields are the names of the columns of the source,
+/// as the file writes them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PivotTable {
+    /// The **name** of the pivot, when the file gives it one.
+    pub name: Option<String>,
+    /// The **source**: the range the pivot reads, and the sheet it is
+    /// in, as the file writes it — `Sheet1!$A$1:$C$10`.
+    pub source: String,
+    /// The **row fields**: the fields the rows are gathered by.
+    pub row_fields: Vec<String>,
+    /// The **column fields**: the fields the groups are spread over.
+    pub column_fields: Vec<String>,
+    /// The **value**: the field that is put together, and the way of
+    /// putting it together.
+    pub value: Option<(String, String)>,
 }
 
 /// The **parts** of a sheet: the things it holds in parts of their
@@ -406,6 +429,76 @@ fn collect<'a>(element: &'a craftkit_xml::El, name: &str, out: &mut Vec<&'a craf
         }
         collect(child, name, out);
     }
+}
+
+/// Read the **pivot tables** of a sheet.
+///
+/// A pivot table of a file is in a part of its own, and it names a
+/// **cache** of its own: the cache says where the cells come from and
+/// what the fields are called.
+fn read_pivots(
+    package: &mut craftkit_zip::Package<'_>,
+    sheet_rels: &[Rel],
+    warnings: &mut Vec<String>,
+) -> Vec<PivotTable> {
+    let mut out = Vec::new();
+    for relation in sheet_rels.iter().filter(|relation| relation.kind == "pivotTable") {
+        let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
+        // The **cache**: the part that says where the cells come from.
+        let cache_rels = rels_of(package, &relation.target).unwrap_or_default();
+        let Some(cache_relation) = cache_rels.iter().find(|relation| relation.kind == "pivotCacheDefinition")
+        else {
+            warnings.push("a pivot table has no cache of its own; it was not read".to_string());
+            continue;
+        };
+        let Some(cache) = read_xml(package, &cache_relation.target).ok().flatten() else { continue };
+        let Some(worksheet) = cache.child("cacheSource").and_then(|source| source.child("worksheetSource"))
+        else {
+            warnings.push("the cache of a pivot table has no worksheet source; it was not read".to_string());
+            continue;
+        };
+        let range = worksheet.attr("ref").unwrap_or("").replace('$', "");
+        if range.is_empty() {
+            warnings.push("the source of a pivot table is not a range; it was not read".to_string());
+            continue;
+        }
+        let sheet = worksheet.attr("sheet").unwrap_or("");
+        let source = if sheet.is_empty() { range } else { format!("{sheet}!{range}") };
+        // The **fields**: the names of the columns of the source, in
+        // the order of the cache.
+        let names: Vec<String> = cache
+            .child("cacheFields")
+            .map(|fields| {
+                fields.kids("cacheField").map(|field| field.attr("name").unwrap_or("").to_string()).collect()
+            })
+            .unwrap_or_default();
+        let name_of = |index: usize| -> String { names.get(index).cloned().unwrap_or_default() };
+        // The **axes**: the fields the rows are gathered by and the
+        // fields the groups are spread over.
+        let indexes = |list: Option<&craftkit_xml::El>| -> Vec<usize> {
+            list.map(|list| {
+                list.children
+                    .iter()
+                    .filter_map(|field| field.attr_u32("x"))
+                    .map(|index| index as usize)
+                    .collect()
+            })
+            .unwrap_or_default()
+        };
+        let row_fields: Vec<String> =
+            indexes(root.child("rowFields")).iter().map(|index| name_of(*index)).collect();
+        let column_fields: Vec<String> =
+            indexes(root.child("colFields")).iter().map(|index| name_of(*index)).collect();
+        // The **value**: the field that is put together, and the way
+        // of putting it together.
+        let value = root.child("dataFields").and_then(|fields| fields.child("dataField")).map(|field| {
+            let index = field.attr_u32("fld").unwrap_or(0) as usize;
+            (name_of(index), field.attr("subtotal").unwrap_or("sum").to_string())
+        });
+        let name = root.attr("name").map(|name| name.to_string());
+        out.push(PivotTable { name, source, row_fields, column_fields, value });
+    }
+    out
 }
 
 /// Read **one** chart of a file.
@@ -1192,6 +1285,9 @@ fn read_sheet(
     // The **charts** of the sheet: they are in parts of their own,
     // named by the drawing of the sheet.
     let charts = read_charts(package, &root, &sheet_rels, warnings);
+    // The **pivot tables** of the sheet: they are in parts of their
+    // own, and each of them names a cache of its own.
+    let pivots = read_pivots(package, &sheet_rels, warnings);
     // The **protection** of the sheet: what may still be done to it.
     // A file protects a sheet with an element that says it is
     // protected, and the flags of that element say what is still
@@ -1237,6 +1333,7 @@ fn read_sheet(
     // rows as it reads the cells.
     let mut rows: Vec<Row> = Vec::new();
     let Some(data) = root.child("sheetData") else {
+        sheet.pivots = pivots;
         return (sheet, Parts { filter, links, comments, tables, charts });
     };
 
@@ -1395,6 +1492,7 @@ fn read_sheet(
         ));
     }
     sheet.rows = rows;
+    sheet.pivots = pivots;
     (sheet, Parts { filter, links, comments, tables, charts })
 }
 

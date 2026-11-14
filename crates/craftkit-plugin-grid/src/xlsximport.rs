@@ -174,6 +174,8 @@ commands! {
             let mut unread_setups = 0u64;
             let mut names = 0u64;
             let mut unread_names = 0u64;
+            let mut imported_pivots = 0u64;
+            let mut unread_pivots = 0u64;
             let mut hidden_sheets = 0u64;
             let mut kept_sheets = 0u64;
             let mut tab_colours = 0u64;
@@ -437,11 +439,32 @@ commands! {
                     merges.push(format!("{}:{}", area.start.to_text(), area.end.to_text()));
                     imported_merges += 1;
                 }
+                // The **pivot tables** of the sheet: they become the
+                // tree's own pivots, when a pivot of this tree can be
+                // the same pivot.
+                let mut pivots: Vec<crate::pivots::Pivot> = Vec::new();
+                for pivot in &sheet.pivots {
+                    let Some(pivot) = pivot_of(pivot, &sheet.name, &cells) else {
+                        unread_pivots += 1;
+                        continue;
+                    };
+                    if pivots.iter().any(|other| other.name == pivot.name) {
+                        // Two pivots of one name are one pivot: the
+                        // tree's own rule.
+                        unread_pivots += 1;
+                        continue;
+                    }
+                    pivots.push(pivot);
+                    imported_pivots += 1;
+                }
                 let mut data = json!({
                     "cells": craftkit_sdk::serde_json::Value::Object(cells),
                     "view": crate::view::SheetView::default().to_json(),
                     "zoom": 100,
                 });
+                if !pivots.is_empty() {
+                    data["pivots"] = Json::Array(pivots.iter().map(crate::pivots::pivot_json).collect());
+                }
                 // The **view** of the sheet: what is drawn of it, and
                 // what is not. A sheet with no view of its own has the
                 // default one, and the default one is what is written.
@@ -1097,6 +1120,8 @@ commands! {
                 "dropped_links": dropped_links,
                 "comments": imported_comments,
                 "tables": imported_tables,
+                "pivots": imported_pivots,
+                "unread_pivots": unread_pivots,
                 "charts": imported_charts,
                 "unread_charts": unread_charts,
                 "system": system.name(),
@@ -1286,6 +1311,96 @@ fn print_titles_of(text: &str) -> (Vec<u32>, Vec<u32>) {
     rows.sort_unstable();
     columns.sort_unstable();
     (rows, columns)
+}
+
+/// The **header** of a column of a range: the text of the cell at the
+/// top of it.
+///
+/// A field of a pivot is named by its header, and this is the tree's
+/// own rule.
+fn header_of(
+    cells: &craftkit_sdk::serde_json::Map<String, Json>,
+    area: &crate::formula::Area,
+    column: u32,
+) -> Option<String> {
+    let address = crate::formula::CellRef { col: column, row: area.start.row }.to_text();
+    let text = cells.get(&address)?.get("value")?.as_str()?;
+    let text = text.trim();
+    if text.is_empty() { None } else { Some(text.to_string()) }
+}
+
+/// The **column** a field names, when a column of the range is named
+/// by it.
+fn column_of(
+    cells: &craftkit_sdk::serde_json::Map<String, Json>,
+    area: &crate::formula::Area,
+    name: &str,
+) -> Option<u32> {
+    let name = name.trim();
+    (area.start.col..=area.end.col).find(|column| header_of(cells, area, *column).as_deref() == Some(name))
+}
+
+/// The **pivot** of a file, as this tree's pivot.
+///
+/// The tree's pivot gathers the rows by **one** field, spreads the
+/// groups over one and puts one together — so a pivot of a file that
+/// has more of any of them is not a pivot of this tree.
+fn pivot_of(
+    pivot: &craftkit_xlsx::PivotTable,
+    sheet: &str,
+    cells: &craftkit_sdk::serde_json::Map<String, Json>,
+) -> Option<crate::pivots::Pivot> {
+    // The **source**: the range the pivot reads, in this sheet.
+    let source = pivot.source.trim();
+    let own = match source.rsplit_once('!') {
+        Some((name, own)) => {
+            let name = name.trim().trim_matches('\'');
+            if !name.eq_ignore_ascii_case(sheet) {
+                return None;
+            }
+            own
+        }
+        None => source,
+    };
+    let own = own.replace('$', "");
+    let (_, area) = crate::merges::parse_area(&own)?;
+    if area.start.row == area.end.row || area.start.col == area.end.col {
+        return None;
+    }
+    // The **row field**: the one the rows are gathered by.
+    let [row_field] = pivot.row_fields.as_slice() else { return None };
+    let row_field = column_of(cells, &area, row_field)?;
+    // The **column field**: the one the groups are spread over.
+    let column_field = match pivot.column_fields.as_slice() {
+        [] => None,
+        [name] => Some(column_of(cells, &area, name)?),
+        _ => return None,
+    };
+    // The **value**: the field that is put together, and the way of
+    // putting it together.
+    let (value_field, aggregate) = match &pivot.value {
+        None => (None, crate::pivots::Aggregate::Sum),
+        Some((name, way)) => {
+            let column = column_of(cells, &area, name)?;
+            let aggregate = crate::pivots::Aggregate::parse(way)?;
+            (Some(column), aggregate)
+        }
+    };
+    Some(crate::pivots::Pivot {
+        name: pivot.name.clone().unwrap_or_else(|| "the pivot".to_string()),
+        range: area,
+        row_field,
+        column_field,
+        value_field,
+        aggregate,
+        grand_totals_rows: true,
+        grand_totals_cols: true,
+        filter: None,
+        sort: None,
+        group: None,
+        show_as: crate::pivots::ShowAs::Normal,
+        subtotals: crate::pivots::Subtotals::None,
+    })
 }
 
 /// The **kind** of a chart, as this tree's kind.

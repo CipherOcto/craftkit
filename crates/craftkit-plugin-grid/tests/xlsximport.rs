@@ -1265,6 +1265,62 @@ fn the_dates_of_a_sheet_are_imported() {
     assert_eq!(node.data["cells"]["A1"]["value"].as_f64(), Some(45292.0), "the day is counted");
 }
 
+/// The **pivot tables** of a sheet are imported: they become the
+/// tree's own pivots.
+#[test]
+fn the_pivot_tables_of_a_sheet_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Region</t></is></c><c r="B1" t="inlineStr"><is><t>Product</t></is></c><c r="C1" t="inlineStr"><is><t>Amount</t></is></c></row></sheetData></worksheet>"#,
+        ),
+        (
+            "xl/pivotTables/pivotTable1.xml",
+            r#"<pivotTableDefinition name="The Pivot" cacheId="1"><location ref="A1:B5"/><rowFields count="1"><field x="0"/></rowFields><colFields count="1"><field x="1"/></colFields><dataFields count="1"><dataField name="Sum of Amount" fld="2" baseField="0" baseItem="0"/></dataFields></pivotTableDefinition>"#,
+        ),
+        (
+            "xl/pivotTables/_rels/pivotTable1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/pivotCacheDefinition1.xml",
+            r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Region"><sharedItems/></cacheField><cacheField name="Product"><sharedItems/></cacheField><cacheField name="Amount"><sharedItems/></cacheField></cacheFields></pivotCacheDefinition>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["pivots"].as_u64(), Some(1), "one pivot was imported");
+    assert_eq!(outcome.data["unread_pivots"].as_u64(), Some(0), "and none was left out");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let pivot = &node.data["pivots"][0];
+    assert_eq!(pivot["name"].as_str(), Some("The Pivot"), "the name of the pivot");
+    assert_eq!(pivot["range"].as_str(), Some("A1:C10"), "the cells it reads");
+    assert_eq!(pivot["row"].as_str(), Some("A"), "the field it gathers the rows by");
+    assert_eq!(pivot["column"].as_str(), Some("B"), "the field it spreads the groups over");
+    assert_eq!(pivot["value"].as_str(), Some("C"), "and the field it puts together");
+    assert_eq!(pivot["aggregate"].as_str(), Some("sum"), "and the way of putting it together");
+}
+
 /// The **shared formulas** of a sheet are imported: a cell that shares
 /// a formula with another cell gets the formula, moved to where it is.
 #[test]
