@@ -343,6 +343,101 @@ fn the_comments_of_a_sheet_are_read() {
     assert_eq!(comments[0].column, 0, "and the cell it is on");
 }
 
+/// The **tables** of a sheet are read: they are in parts of their own
+/// that the sheet names by a relationship.
+#[test]
+fn the_tables_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:C5" totalsRowCount="1"><tableColumns count="3"><tableColumn id="1" name="who"/><tableColumn id="2" name="amount" totalsRowFunction="sum" totalsRowLabel="Total"/><tableColumn id="3" name="when" totalsRowFunction="average"/></tableColumns></table>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.tables.len(), 1, "one sheet has tables");
+    let (sheet, tables) = &workbook.tables[0];
+    assert_eq!(sheet, "One", "the sheet they are on");
+    assert_eq!(tables.len(), 1, "one table");
+    let table = &tables[0];
+    assert_eq!(table.name, "Table1", "its name");
+    assert_eq!(table.range, "A1:C5", "the range it reaches");
+    assert!(table.totals, "and it has a total row");
+    assert_eq!(table.way, "sum", "the way the columns are totalled in");
+    assert_eq!(
+        table.ways,
+        vec![(1, "sum".to_string()), (2, "average".to_string())],
+        "and the ways of the columns that have one of their own"
+    );
+    assert_eq!(table.label, Some("Total".to_string()), "and the label of the total row");
+}
+
+/// A table whose way this tree does not have is **left out**, rather
+/// than given a name that means nothing here.
+#[test]
+fn a_way_this_tree_does_not_have_is_left_out() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:C5" totalsRowCount="1"><tableColumns count="3"><tableColumn id="1" name="who" totalsRowFunction="custom"/><tableColumn id="2" name="amount" totalsRowFunction="countNums"/><tableColumn id="3" name="when"/></tableColumns></table>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, tables) = &workbook.tables[0];
+    let table = &tables[0];
+    assert_eq!(table.ways, vec![(1, "count-numbers".to_string())], "only the way this tree has is kept");
+    assert_eq!(table.way, "count-numbers", "and it is the way of the table");
+    assert_eq!(table.label, None, "and there is no label");
+}
+
+/// A sheet with **no table parts** has no tables, and that is not an
+/// error.
+#[test]
+fn a_sheet_with_no_tables_is_empty() {
+    let bytes = a_workbook(r#"<worksheet><sheetData/></worksheet>"#, r#"<sst/>"#);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.tables.is_empty(), "no sheet has tables");
+}
+
 /// A package with **no workbook** is refused.
 #[test]
 fn a_package_with_no_workbook_is_refused() {

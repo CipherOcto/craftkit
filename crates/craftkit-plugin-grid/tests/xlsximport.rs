@@ -369,6 +369,59 @@ fn the_comments_of_a_sheet_are_imported() {
     assert_eq!(read.data["comment"]["author"].as_str(), Some("ann"), "and its author");
 }
 
+/// The **tables** of a sheet are imported: the ranges with a name and
+/// a way of being totalled.
+#[test]
+fn the_tables_of_a_sheet_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="$A$1:$C$5" totalsRowCount="1"><tableColumns count="3"><tableColumn id="1" name="who"/><tableColumn id="2" name="amount" totalsRowFunction="sum" totalsRowLabel="Total"/><tableColumn id="3" name="when" totalsRowFunction="average"/></tableColumns></table>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["tables"].as_u64(), Some(1), "one table was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let read = session.execute("grid.table.read", &json!({ "sheet": sheet })).expect("the tables are read");
+    let tables = read.data["tables"].as_array().expect("there are tables");
+    assert_eq!(tables.len(), 1, "one table");
+    assert_eq!(tables[0]["name"].as_str(), Some("Table1"), "its name");
+    assert_eq!(tables[0]["range"].as_str(), Some("A1:C5"), "the range it reaches");
+    assert_eq!(tables[0]["totals"].as_bool(), Some(true), "and it has a total row");
+    assert_eq!(tables[0]["way"].as_str(), Some("sum"), "the way the columns are totalled in");
+    assert_eq!(tables[0]["label"].as_str(), Some("Total"), "and the label of the total row");
+    let ways = tables[0]["ways"].as_array().expect("there are ways");
+    assert_eq!(ways.len(), 2, "two columns have a way of their own");
+    assert_eq!(ways[0]["column"].as_u64(), Some(1), "the second column");
+    assert_eq!(ways[0]["way"].as_str(), Some("sum"), "is totalled in the sum");
+    assert_eq!(ways[1]["column"].as_u64(), Some(2), "and the third column");
+    assert_eq!(ways[1]["way"].as_str(), Some("average"), "is totalled in the average");
+}
+
 /// A file that is **not a workbook** is refused.
 #[test]
 fn a_file_that_is_not_a_workbook_is_refused() {

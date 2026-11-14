@@ -385,6 +385,50 @@ commands! {
                     node.data["comments"] = craftkit_sdk::serde_json::Value::Object(map);
                 }
             }
+            // The **tables** of the sheets: the ranges with a name and
+            // a way of being totalled.
+            let mut imported_tables = 0u64;
+            for (sheet_name, tables) in &workbook.tables {
+                let Some(sheet_id) = session
+                    .document()
+                    .walk()
+                    .find(|node| node.kind == "grid.sheet" && node.name == *sheet_name)
+                    .map(|node| node.id)
+                else {
+                    continue;
+                };
+                if tables.is_empty() {
+                    continue;
+                }
+                let mut list: Vec<Json> = Vec::new();
+                for table in tables {
+                    // The **range** of the table: the file writes it
+                    // with its dollars, and a range here is written
+                    // without them.
+                    let range = table.range.replace('$', "");
+                    let Some((_, area)) = crate::merges::parse_area(&range) else { continue };
+                    let ways: Vec<Json> = table
+                        .ways
+                        .iter()
+                        .map(|(column, way)| json!({ "column": column, "way": way }))
+                        .collect();
+                    list.push(json!({
+                        "name": table.name,
+                        "range": area.to_text(),
+                        "totals": table.totals,
+                        "way": table.way,
+                        "label": table.label,
+                        "ways": ways,
+                    }));
+                    imported_tables += 1;
+                }
+                if list.is_empty() {
+                    continue;
+                }
+                if let Some(node) = session.document_mut()?.node_mut(sheet_id) {
+                    node.data["tables"] = Json::Array(list);
+                }
+            }
             let mut summary = format!("imported {filled} cell(s) into the workbook `{name}`");
             if unread > 0 {
                 summary.push_str(&format!("; {unread} formula(s) could not be read and were not imported"));
@@ -420,6 +464,7 @@ commands! {
                 "links": imported_links,
                 "dropped_links": dropped_links,
                 "comments": imported_comments,
+                "tables": imported_tables,
                 "system": system.name(),
                 "warnings": workbook.warnings,
             })))

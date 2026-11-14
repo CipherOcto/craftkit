@@ -165,6 +165,27 @@ pub enum DateSystem {
     Y1904,
 }
 
+/// A **table** of a sheet: a range of cells with a name and a way of
+/// being totalled.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Table {
+    /// The name of the table.
+    pub name: String,
+    /// The range it reaches, as the file writes it.
+    pub range: String,
+    /// Whether the table has a **total row**.
+    pub totals: bool,
+    /// The **way** the columns are totalled in, and the ways of the
+    /// columns that have one of their own: the index of the column in
+    /// the range and the way it is totalled in.
+    pub way: String,
+    /// The ways of the columns that have one of their own.
+    pub ways: Vec<(u32, String)>,
+    /// The **label** of the total row: the text it shows in its first
+    /// cell.
+    pub label: Option<String>,
+}
+
 /// A **comment** of a sheet: a note a cell carries.
 ///
 /// A comment has an **author** and a **text**, and it is on one cell.
@@ -285,6 +306,8 @@ pub struct Workbook {
     pub links: Vec<(String, Vec<Hyperlink>)>,
     /// The **comments** of each sheet, by the name of the sheet.
     pub comments: Vec<(String, Vec<Comment>)>,
+    /// The **tables** of each sheet, by the name of the sheet.
+    pub tables: Vec<(String, Vec<Table>)>,
     /// The date system the numbers of the cells are counted in.
     pub system: DateSystem,
     /// The **warnings**: what could not be read, and what was kept
@@ -366,7 +389,7 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             workbook.warnings.push(format!("the sheet \"{name}\" is a {} and was not read", relation.kind));
             continue;
         }
-        let (mut sheet, filter, links, comments) =
+        let (mut sheet, filter, links, comments, tables) =
             read_sheet(&mut package, &relation.target, &strings, &styles, &mut workbook.warnings);
         sheet.name = name;
         if let Some(filter) = filter {
@@ -377,6 +400,9 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
         }
         if !comments.is_empty() {
             workbook.comments.push((sheet.name.clone(), comments));
+        }
+        if !tables.is_empty() {
+            workbook.tables.push((sheet.name.clone(), tables));
         }
         workbook.sheets.push(sheet);
         let _ = index;
@@ -456,11 +482,11 @@ fn read_sheet(
     strings: &[String],
     styles: &Styles,
     warnings: &mut Vec<String>,
-) -> (Sheet, Option<AutoFilter>, Vec<Hyperlink>, Vec<Comment>) {
+) -> (Sheet, Option<AutoFilter>, Vec<Hyperlink>, Vec<Comment>, Vec<Table>) {
     let mut sheet = Sheet::default();
     let Some(root) = read_xml(package, part).ok().flatten() else {
         warnings.push(format!("the part {part} could not be read; the sheet is empty"));
-        return (sheet, None, Vec::new(), Vec::new());
+        return (sheet, None, Vec::new(), Vec::new(), Vec::new());
     };
     // The **filter** of the sheet: the rows it hides.
     let filter = root.child("autoFilter").map(read_filter);
@@ -473,8 +499,11 @@ fn read_sheet(
     // The **comments** of the sheet: they are in a part of their own
     // that the sheet is related to, and not in the sheet itself.
     let comments = read_comments(package, &sheet_rels);
+    // The **tables** of the sheet: they are in parts of their own
+    // that the sheet names by a relationship.
+    let tables = read_tables(package, &root, &sheet_rels);
     let Some(data) = root.child("sheetData") else {
-        return (sheet, filter, links, comments);
+        return (sheet, filter, links, comments, tables);
     };
 
     // The row the reader is on: a row that does not say which row it is
@@ -527,7 +556,81 @@ fn read_sheet(
             "the sheet holds {dropped} cells or rows outside the {MAX_ROWS} × {MAX_COLS} grid; they were dropped"
         ));
     }
-    (sheet, filter, links, comments)
+    (sheet, filter, links, comments, tables)
+}
+
+/// Read the **tables** of a sheet.
+///
+/// The tables are in parts of their own, and the sheet names them in
+/// its `tableParts`. A table has a name, a range, a header row, a
+/// total row, and a **way** each column is totalled in.
+fn read_tables(
+    package: &mut craftkit_zip::Package<'_>,
+    root: &craftkit_xml::El,
+    sheet_rels: &[Rel],
+) -> Vec<Table> {
+    let Some(parts) = root.child("tableParts") else { return Vec::new() };
+    let mut out = Vec::new();
+    for part in parts.kids("tablePart") {
+        let Some(relation) = part.attr("id").and_then(|id| sheet_rels.iter().find(|rel| rel.id == id)) else {
+            continue;
+        };
+        let Some(table) = read_xml(package, &relation.target).ok().flatten() else { continue };
+        let Some(range) = table.attr("ref") else { continue };
+        let name = table.attr("displayName").or_else(|| table.attr("name")).unwrap_or("Table").to_string();
+        let totals = table.attr_u32("totalsRowCount").unwrap_or(0) > 0;
+        // The **way** each column is totalled in, and the way of the
+        // table itself: the first column that has a way of its own
+        // gives the table its way, and every column that has one is
+        // kept.
+        let mut way = String::new();
+        let mut ways: Vec<(u32, String)> = Vec::new();
+        let mut label = None;
+        if let Some(columns) = table.child("tableColumns") {
+            for (index, column) in columns.kids("tableColumn").enumerate() {
+                let totals_way = totals_way(column.attr("totalsRowFunction"));
+                let Some(totals_way) = totals_way else { continue };
+                if totals_way != "none" {
+                    ways.push((index as u32, totals_way.clone()));
+                    if way.is_empty() {
+                        way = totals_way;
+                    }
+                }
+                // The **label** of the total row is the text in its
+                // first cell: the first column that has a label
+                // gives it.
+                if label.is_none()
+                    && let Some(text) = column.attr("totalsRowLabel")
+                {
+                    label = Some(text.to_string());
+                }
+            }
+        }
+        if way.is_empty() {
+            way = "sum".to_string();
+        }
+        out.push(Table { name, range: range.to_string(), totals, way, ways, label });
+    }
+    out
+}
+
+/// The **way** a column is totalled in, as this tree writes it.
+fn totals_way(function: Option<&str>) -> Option<String> {
+    let way = match function.unwrap_or("none") {
+        "average" => "average",
+        "count" => "count",
+        "countNums" => "count-numbers",
+        "max" => "max",
+        "min" => "min",
+        "sum" => "sum",
+        "stdDev" => "standard-deviation",
+        "var" => "variance",
+        "none" => "none",
+        // A way this tree does not have is not a way: the column is
+        // left out rather than given a name that means nothing here.
+        _ => return None,
+    };
+    Some(way.to_string())
 }
 
 /// Read the **comments** of a sheet.
