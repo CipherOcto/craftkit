@@ -4374,6 +4374,7 @@ so.
 | the **breaks** of the printing | **built.** The rows and the columns a page begins at are read and imported, and the pages of a sheet break where the file says they break (§926) | §926 |
 | the **sparklines** of a sheet | **built.** The little drawings in the cells of a sheet are read and imported — the range, the kind, the colour and the markers (§927) | §927 |
 | the **hidden sheets** of a workbook | **built.** The sheets a file hides are read and hidden here too, and a workbook keeps one sheet in sight (§928) | §928 |
+| the **colour** of a sheet's tab | **built.** The colour of the tab of a sheet is read and imported (§929) | §929 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61069,4 +61070,39 @@ A file may hide a sheet — or hide it very well.
 - **The workbook that is looked at is not the workbook of the file**:
   the import makes a workbook of its own, and the sheet that was
   looked at is not named.
+- **The workbook is still not written back.**
+
+## 929. The colour of a sheet's tab
+
+A sheet's tab may be coloured, so that a sheet is easy to find.
+
+### What was built
+
+- The **colour** of a sheet's tab is read: the file gives it in the
+  properties of the sheet.
+- The **import colours the tab**: the colour is written under
+  `tab_color`, the key the tree's own command writes.
+
+### What the port found
+
+- **The colour of the tab is said in the sheet's own part**, in the
+  properties of the sheet, and not in the workbook.
+- **The file's colour is a hex with an alpha byte in front of it**,
+  and the alpha byte is dropped — as it is everywhere else in this
+  reader: a colour is a colour, and not a colour with an alpha in it.
+- **A colour by the number of the old palette is a colour too**, and
+  the reader reads it as it reads every other colour of a file.
+
+### What it cost
+
+- **One field** in the reader — the colour of the tab — and one line
+  in the import.
+- **Two tests**: one in the reader's test file (the colour of the
+  tab) and one in the import's test file (the tab is coloured).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **A colour by the theme of the workbook is not a colour here**:
+  this tree has no theme, and a tab that names one has no colour.
 - **The workbook is still not written back.**
