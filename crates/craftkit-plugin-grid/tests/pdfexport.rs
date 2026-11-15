@@ -180,3 +180,42 @@ fn the_headings_of_the_sheet_are_drawn() {
     assert!(find(&with, b"(A) Tj").is_some(), "the name of the column is drawn");
     assert!(find(&with, b"(1) Tj").is_some(), "the number of the row is drawn");
 }
+
+/// A **link** to a web address is drawn over its cell.
+#[test]
+fn a_link_to_a_web_address_is_drawn() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute(
+            "grid.cell.link.set",
+            &json!({ "sheet": sheet, "cell": "A1", "target": "https://example.org/" }),
+        )
+        .expect("the link is set");
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (bytes, data) = exported(&mut session, sheet);
+    assert!(find(&bytes, b"/URI (https://example.org/)").is_some(), "the link is drawn");
+    assert_eq!(data["links"].as_u64(), Some(1), "the sheet has one link");
+    assert_eq!(data["links_drawn"].as_u64(), Some(1), "the link is drawn");
+    assert_eq!(data["links_undrawn"].as_u64(), Some(0), "no link is left out");
+}
+
+/// A **link** to a place inside the workbook is not drawn, and the
+/// answer says so.
+#[test]
+fn a_link_inside_the_workbook_is_not_drawn_and_is_counted() {
+    let mut session = session();
+    let (workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.sheet.add", &json!({ "workbook": workbook, "name": "Sheet2" }))
+        .expect("the second sheet is added");
+    session
+        .execute("grid.cell.link.set", &json!({ "sheet": sheet, "cell": "A1", "target": "Sheet2!A1" }))
+        .expect("the link is set");
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (bytes, data) = exported(&mut session, sheet);
+    assert!(find(&bytes, b"/Subtype /Link").is_none(), "the link is not drawn");
+    assert_eq!(data["links"].as_u64(), Some(1), "the sheet has one link");
+    assert_eq!(data["links_drawn"].as_u64(), Some(0), "the link is not drawn");
+    assert_eq!(data["links_undrawn"].as_u64(), Some(1), "the link is counted");
+}

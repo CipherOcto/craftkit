@@ -355,8 +355,22 @@ fn draw_header_footer(
     }
 }
 
+/// Whether a **target** is a URI that a PDF may carry.
+///
+/// The PDF writer takes a web address or a `mailto:` and refuses the
+/// rest, and so does this: a link to a file, and a link to a place
+/// inside the workbook, are not drawn.
+fn is_uri(target: &str) -> bool {
+    target.split_once(':').is_some_and(|(scheme, rest)| {
+        matches!(scheme.to_ascii_lowercase().as_str(), "http" | "https" | "mailto") && !rest.is_empty()
+    })
+}
+
 /// Draws one **page** of the sheet.
-fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32, u32))) {
+///
+/// The number it gives back is the number of **links** that were drawn
+/// on it.
+fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32, u32))) -> usize {
     let Drawing { session, sheet, node, cells, setup, pages, number, count } = drawing;
     let (session, sheet, node, cells, setup, pages) = (*session, *sheet, *node, *cells, *setup, *pages);
     let (number, count) = (*number, *count);
@@ -617,6 +631,28 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             page.restore();
         }
     }
+    // The **links** of the cells on this page: a link that goes to a
+    // web address or to a `mailto:` is drawn over its cell, and the
+    // others are not drawn at all.
+    let links = crate::links::links_of(node);
+    let mut drawn = 0usize;
+    for (address, link) in &links {
+        let Some(cell) = CellRef::parse(address) else { continue };
+        if !is_uri(&link.target) {
+            continue;
+        }
+        let Some(row_index) = rows.iter().position(|row| *row == cell.row) else { continue };
+        let Some(column_index) = columns.iter().position(|column| *column == cell.col) else {
+            continue;
+        };
+        let x = xs.get(column_index).copied().unwrap_or(origin_x);
+        let y = ys.get(row_index).copied().unwrap_or(origin_y);
+        let width = crate::printing::column_width(node, cell.col) * scale;
+        let height = crate::printing::row_height(node, cell.row) * scale;
+        page.link_uri(x as f32, y as f32, width as f32, height as f32, &link.target);
+        drawn += 1;
+    }
+    drawn
 }
 
 commands! {
@@ -662,6 +698,7 @@ commands! {
             doc.info.title = name.clone();
             let (width, height) = setup.page();
             let count = pages.bands.len();
+            let mut drawn = 0usize;
             for (number, band) in pages.bands.iter().enumerate() {
                 let page = doc.add_page(width as f32, height as f32);
                 let drawing = Drawing {
@@ -674,17 +711,23 @@ commands! {
                     number: number + 1,
                     count,
                 };
-                draw_page(page, &drawing, *band);
+                drawn += draw_page(page, &drawing, *band);
             }
             let bytes = doc.finish();
             std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
                 id: id.clone(),
                 message: format!("the file cannot be written to `{path}`: {error}"),
             })?;
+            // The **links** of the sheet: the ones that were drawn and the
+            // ones that were not, so that none is dropped in silence.
+            let links = crate::links::links_of(&node).len();
             Ok(Outcome::new(format!("wrote {} page(s)", pages.bands.len())).with_data(json!({
                 "sheet": sheet,
                 "path": path,
                 "pages": pages.bands.len(),
+                "links": links,
+                "links_drawn": drawn,
+                "links_undrawn": links.saturating_sub(drawn),
                 "area": pages.area.to_text(),
                 "paper": setup.paper,
                 "scale": (pages.scale * 10_000.0).round() / 100.0,
