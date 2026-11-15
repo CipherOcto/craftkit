@@ -4395,6 +4395,7 @@ so.
 | the **concatenation** of two texts | **built.** The `&` of a formula puts one text after the other, and a criterion may be built out of a cell (§947) | §947 |
 | the **rank**, the **analysis of variance**, the **regression** and the **smoothing** | **built.** The rank of a range, the variance of its groups, the line through its points and the smoothing of its series — all of them live (§948) | §948 |
 | the **forecast sheet** as a **table** and a **chart** | **built.** The forecast sheet is a named table, and it may hold a chart of the forecast (§949) | §949 |
+| the **review** of a workbook | **built.** The statistics of a workbook say how much is in it, and the accessibility check says what a reader may not be able to read (§950) | §950 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55935,7 +55936,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 205 |
+| grid | 207 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62150,9 +62151,9 @@ something a program can ask about.
 
 ### What was built
 
-- The forecast sheet is now a **named table** — `Table1`, or the first
-  name that is free — over its whole range, and it may be **left out**
-  (`table: false`).
+- The forecast sheet is now a **named table** — `Forecast`, or the
+  first name that is free — over its whole range, and it may be
+  **left out** (`table: false`).
 - The forecast sheet may hold a **chart** of itself: `chart: line` or
   `chart: column`. The chart reads the same range the table reaches
   over, so the series are the values, the forecast and the bounds.
@@ -62170,6 +62171,9 @@ something a program can ask about.
 - **The reference's table has a style** — `TableStyleMedium2` — and the
   tree's table has no style: a table is a name, a range and the way
   its columns are totalled.
+- **The reference's table is called `Table1`**, and the tree's name
+  rules say a table's name may not look like a cell — and `Table1`
+  does. So the tree's forecast table is called `Forecast`.
 
 ### What it cost
 
@@ -62184,3 +62188,49 @@ something a program can ask about.
 
 - **The chart is not drawn**: it is a model of a chart, as every chart
   in the tree is, and the tree's charts are read and set, not painted.
+
+## 950. The review of a workbook: the statistics and the accessibility
+
+How much is in a workbook, and what a reader may not be able to read.
+
+### What was built
+
+- A new command, **`grid.workbook.stats`**: the count of every
+  **sheet** — the cells with something in them, the formulas, the
+  tables, the charts, the comments, the notes, the merges and the
+  pictures — and the count of the whole **document**: the workbooks,
+  the sheets, the cells, the formulas, the tables, the charts, the
+  comments, the notes, the merges, the pictures and the names.
+- A new command, **`grid.workbook.accessibility`**: the **issues** of
+  the workbook — a picture with no **alternative text**, a sheet with
+  **merged cells**, and a sheet whose name is still the **default**
+  one.
+- A new module, **`src/review.rs`**.
+
+### What the port found
+
+- **The reference's statistics are of the active sheet and of the
+  workbook**, and the tree's are of **every sheet** of the document and
+  of the whole of it: the tree has no active sheet, and a document may
+  hold more than one workbook.
+- **The reference's accessibility check knows pictures and merges and
+  default names**, and so does the tree's — and the tree's merges are
+  the tree's own, which are areas of cells.
+- **The reference's statistics do not count the notes, the merges or
+  the pictures**, and the tree's do: a count is a count of what the
+  tree has.
+
+### What it cost
+
+- **Two commands**: the grid battery now carries **207** commands.
+- **Two tests**: the statistics count what is in the workbook, and the
+  accessibility of a workbook is a list of issues.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The accessibility check is a list and not a verdict**: a workbook
+  with issues is not refused, and a workbook without them is not
+  praised.
+- **The pictures are counted and not measured**: the tree's picture is
+  a file and a place, and the statistics say how many there are.
