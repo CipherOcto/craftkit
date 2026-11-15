@@ -178,3 +178,54 @@ fn clearing_the_cell_takes_the_comment_with_it() {
     let comment = comment_of(&mut session, sheet, "A1");
     assert_eq!(comment, Json::Null, "the comment is gone: {comment:?}");
 }
+
+/// The **next comment** of a sheet: the one after a cell, and the walk
+/// goes round.
+#[test]
+fn the_next_comment_of_a_sheet_is_the_one_after_the_cell() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for cell in ["A1", "C3", "B2"] {
+        session
+            .execute(
+                "grid.cell.comment.set",
+                &json!({ "sheet": sheet, "cell": cell, "text": "a note", "author": "ada" }),
+            )
+            .expect("the comment is written");
+    }
+    let next = |session: &mut Session, cell: &str| {
+        let outcome = session
+            .execute("grid.comment.next", &json!({ "sheet": sheet, "cell": cell }))
+            .expect("the next comment is found");
+        outcome.data["cell"].as_str().unwrap_or_default().to_string()
+    };
+    // The comments are walked in the order of the cells.
+    assert_eq!(next(&mut session, "A1"), "B2");
+    assert_eq!(next(&mut session, "B2"), "C3");
+    // And the walk goes round.
+    assert_eq!(next(&mut session, "C3"), "A1");
+}
+
+/// The **previous comment** of a sheet: the one before a cell.
+#[test]
+fn the_previous_comment_of_a_sheet_is_the_one_before_the_cell() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for cell in ["A1", "C3"] {
+        session
+            .execute(
+                "grid.cell.comment.set",
+                &json!({ "sheet": sheet, "cell": cell, "text": "a note", "author": "ada" }),
+            )
+            .expect("the comment is written");
+    }
+    let outcome = session
+        .execute("grid.comment.previous", &json!({ "sheet": sheet, "cell": "C3" }))
+        .expect("the previous comment is found");
+    assert_eq!(outcome.data["cell"], "A1");
+    // And there are no comments at all, the walk says so.
+    let (_workbook, empty) = a_sheet(&mut session);
+    let outcome =
+        session.execute("grid.comment.next", &json!({ "sheet": empty })).expect_err("there is no comment");
+    assert!(outcome.to_string().contains("no comments"), "the error says why: {outcome}");
+}

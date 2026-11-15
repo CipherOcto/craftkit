@@ -907,6 +907,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/protection.rs",
         section: "§951",
     },
+    Port {
+        rule: "the walk between the comments",
+        from: "gridcraft/crates/engine/src/cmd/review.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/comments.rs",
+        command: "grid.comment.next",
+        test: "crates/craftkit-plugin-grid/tests/comments.rs",
+        section: "§952",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

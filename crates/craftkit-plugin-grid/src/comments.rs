@@ -35,6 +35,8 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
+use crate::formula::CellRef;
+
 /// A **reply** in a thread: the text of it, and who wrote it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reply {
@@ -140,6 +142,77 @@ pub fn comment_of(comment: &Comment) -> Json {
         .collect();
     one.insert("replies".to_string(), Json::Array(replies));
     Json::Object(one)
+}
+
+/// The comment **after** a cell, or the one **before** it.
+///
+/// The comments of a sheet are walked in the order of the cells they
+/// are on, and the walk goes round the sheet: there is always a next
+/// comment and always a previous one, as long as there is a comment at
+/// all.
+fn step(
+    session: &craftkit_sdk::Session,
+    id: &str,
+    sheet: u64,
+    from: Option<&Text>,
+    forward: bool,
+) -> Result<Outcome, EngineError> {
+    let Some(node) = session.document().node(sheet) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no sheet `{sheet}`"),
+        });
+    };
+    if node.kind != "grid.sheet" {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+        });
+    }
+    // The **comments**, in the order of the cells they are on.
+    let mut cells: Vec<CellRef> =
+        comments_of(node).keys().filter_map(|address| CellRef::parse(address)).collect();
+    cells.sort_by_key(|cell| (cell.row, cell.col));
+    if cells.is_empty() {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "there are no comments in this sheet".to_string(),
+        });
+    }
+    // The **cell** the walk starts from.
+    let start = match from {
+        None => None,
+        Some(cell) => Some(crate::cell_at(cell.0.trim(), id)?),
+    };
+    let target = match start {
+        None => {
+            if forward {
+                cells.first().copied()
+            } else {
+                cells.last().copied()
+            }
+        }
+        Some(start) => {
+            let after = cells.iter().position(|cell| *cell > start);
+            let before = cells.iter().rposition(|cell| *cell < start);
+            if forward {
+                after.map(|index| cells[index]).or_else(|| cells.first().copied())
+            } else {
+                before.map(|index| cells[index]).or_else(|| cells.last().copied())
+            }
+        }
+    };
+    let Some(target) = target else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "there are no comments in this sheet".to_string(),
+        });
+    };
+    let address = target.to_text();
+    Ok(Outcome::new(format!("{address} holds a comment")).with_data(json!({
+        "sheet": sheet,
+        "cell": address,
+    })))
 }
 
 commands! {
@@ -395,6 +468,53 @@ commands! {
                 Outcome::new(format!("{address} held no comment"))
             };
             Ok(outcome.with_data(json!({ "sheet": sheet, "cell": address, "was_there": was_there })))
+
+
+        }
+    }
+
+    /// The **next comment** of a sheet: the one after a cell.
+    ///
+    /// The comments are walked in the order of the cells they are on,
+    /// and the walk goes round: the comment after the last one is the
+    /// first one.
+    grid.comment.next {
+        area: "grid",
+        layer: "grid",
+        icon: "arrow",
+        params: {
+            /// The sheet it is in.
+            sheet: NodeRef,
+            /// The cell the walk starts from. Without it, the walk
+            /// starts before the first comment.
+            cell: Option<Text>,
+        },
+        run: {
+            let id = "grid.comment.next".to_string();
+            step(session, &id, self.sheet.0, self.cell.as_ref(), true)
+
+        }
+    }
+
+    /// The **previous comment** of a sheet: the one before a cell.
+    ///
+    /// The comments are walked in the order of the cells they are on,
+    /// and the walk goes round: the comment before the first one is the
+    /// last one.
+    grid.comment.previous {
+        area: "grid",
+        layer: "grid",
+        icon: "arrow",
+        params: {
+            /// The sheet it is in.
+            sheet: NodeRef,
+            /// The cell the walk starts from. Without it, the walk
+            /// starts after the last comment.
+            cell: Option<Text>,
+        },
+        run: {
+            let id = "grid.comment.previous".to_string();
+            step(session, &id, self.sheet.0, self.cell.as_ref(), false)
 
         }
     }
