@@ -754,6 +754,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/spelling.rs",
         section: "§944",
     },
+    Port {
+        rule: "the words the user taught, and the thesaurus",
+        from: "gridcraft/crates/engine/src/cmd/spelling.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/spelling.rs",
+        command: "grid.spelling.add",
+        test: "crates/craftkit-plugin-grid/tests/spelling.rs",
+        section: "§945",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

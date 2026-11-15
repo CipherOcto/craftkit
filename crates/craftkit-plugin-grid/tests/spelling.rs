@@ -142,3 +142,54 @@ fn a_word_list_that_cannot_be_read_is_refused() {
     let message = outcome.to_string();
     assert!(message.contains("could not be read"), "the refusal says why: {message}");
 }
+
+/// A word the user **taught** the workbook is a word.
+#[test]
+fn a_word_the_user_taught_is_a_word() {
+    let mut session = session();
+    let (workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("teh cat"));
+    let list = a_word_list(&["cat"]);
+    // Without the teaching, the word is an issue.
+    let found = issues(&mut session, sheet, &list);
+    assert_eq!(found.as_array().map(|issues| issues.len()), Some(1), "the word is an issue: {found}");
+    session
+        .execute("grid.spelling.add", &json!({ "workbook": workbook, "word": "teh" }))
+        .expect("the workbook learns the word");
+    // And with it, it is not.
+    let found = issues(&mut session, sheet, &list);
+    assert_eq!(found.as_array().map(|issues| issues.len()), Some(0), "the word is not an issue: {found}");
+}
+
+/// A word the workbook already knows is not taught twice.
+#[test]
+fn a_word_the_workbook_knows_is_not_taught_twice() {
+    let mut session = session();
+    let (workbook, _sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.spelling.add", &json!({ "workbook": workbook, "word": "teh" }))
+        .expect("the workbook learns the word");
+    let outcome = session
+        .execute("grid.spelling.add", &json!({ "workbook": workbook, "word": "TEH" }))
+        .expect("the word is taught again");
+    assert_eq!(outcome.data["words"].as_u64(), Some(1), "the word is taught once: {}", outcome.data);
+}
+
+/// The **thesaurus**: the words that share a stem with a word.
+#[test]
+fn the_thesaurus_gives_the_words_that_share_a_stem() {
+    let mut session = session();
+    let (_workbook, _sheet) = a_sheet(&mut session);
+    let list = a_word_list(&["cat", "cats", "cattle", "dog", "caterpillar"]);
+    let outcome = session
+        .execute("grid.thesaurus", &json!({ "word": "cat", "dictionary": list }))
+        .expect("the thesaurus is asked");
+    let related = outcome.data["related"].as_array().expect("the words are a list");
+    // The stem of `cat` is `cat`, and the words that begin with it and
+    // are no longer than seven letters are related.
+    let names: Vec<&str> = related.iter().filter_map(|word| word.as_str()).collect();
+    assert!(names.contains(&"cats"), "the words that share the stem are there: {names:?}");
+    assert!(names.contains(&"cattle"), "the words that share the stem are there: {names:?}");
+    assert!(!names.contains(&"caterpillar"), "a word that is too long is not related: {names:?}");
+    assert!(!names.contains(&"dog"), "a word that does not share the stem is not related: {names:?}");
+}

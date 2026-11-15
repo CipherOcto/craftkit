@@ -303,4 +303,117 @@ commands! {
 
         }
     }
+
+    /// **Teach** a workbook a word.
+    ///
+    /// The word is kept in the workbook, and the check reads it: a word
+    /// the user taught is a word.
+    grid.spelling.add {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook to teach.
+            workbook: NodeRef,
+            /// The word.
+            word: Text,
+        },
+        run: {
+            let id = "grid.spelling.add".to_string();
+            let workbook = self.workbook.0;
+            let word = self.word.0.trim().to_string();
+            if word.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a word is not empty".to_string(),
+                });
+            }
+            let Some(node) = session.document().node(workbook).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is not a workbook"),
+                });
+            }
+            let mut taught = taught_of(&node);
+            if taught.iter().any(|other| other.eq_ignore_ascii_case(&word)) {
+                return Ok(Outcome::new(format!("the workbook already knows `{word}`")).with_data(json!({
+                    "workbook": workbook,
+                    "word": word,
+                    "words": taught.len(),
+                })));
+            }
+            taught.push(word.clone());
+            if let Some(node) = session.document_mut()?.node_mut(workbook) {
+                node.data["dictionary"] = json!(taught);
+            }
+            Ok(Outcome::changed(format!("the workbook learns `{word}`")).with_data(json!({
+                "workbook": workbook,
+                "word": word,
+                "words": taught.len(),
+            })))
+
+        }
+    }
+
+    /// The **thesaurus**: the words that share a **stem** with a word.
+    ///
+    /// The stem of a word is the word without its last two letters, and
+    /// the related words are the words of the list that begin with it.
+    grid.thesaurus {
+        area: "grid",
+        layer: "grid",
+        icon: "search",
+        params: {
+            /// The word.
+            word: Text,
+            /// The **word list**: a file of one word a line. Without it,
+            /// the system's word list is used.
+            dictionary: Option<Text>,
+        },
+        run: {
+            let id = "grid.thesaurus".to_string();
+            let word = self.word.0.trim().to_lowercase();
+            let path = self.dictionary.as_ref().map(|path| path.0.trim().to_string());
+            let Some(words) = a_dictionary(path.as_deref()) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: match path {
+                        Some(path) => format!("the word list `{path}` could not be read"),
+                        None => "there is no word list on this machine".to_string(),
+                    },
+                });
+            };
+            if word.chars().count() < 3 {
+                return Ok(Outcome::new("the word is too short to have a stem").with_data(json!({
+                    "word": word,
+                    "related": Vec::<String>::new(),
+                })));
+            }
+            let stem: String =
+                word.chars().take(word.chars().count().saturating_sub(2).max(3)).collect();
+            let mut related: Vec<String> = words
+                .iter()
+                .filter(|other| {
+                    other.starts_with(&stem) && **other != word && other.len() <= word.len() + 4
+                })
+                .cloned()
+                .collect();
+            related.sort();
+            related.truncate(20);
+            Ok(Outcome::new(format!("{} related word(s)", related.len())).with_data(json!({
+                "word": word,
+                "stem": stem,
+                "related": related,
+            })))
+
+        }
+    }
 }
