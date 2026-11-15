@@ -718,6 +718,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/pdfexport.rs",
         section: "§940",
     },
+    Port {
+        rule: "the forecast sheet: a forecast from a history",
+        from: "gridcraft/crates/engine/src/cmd/forecast.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/forecast.rs",
+        command: "grid.forecast.sheet",
+        test: "crates/craftkit-plugin-grid/tests/forecast.rs",
+        section: "§941",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

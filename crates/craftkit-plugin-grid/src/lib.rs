@@ -423,6 +423,7 @@ mod finding;
 mod findspecial;
 mod flash;
 mod font;
+mod forecast;
 mod format;
 mod formatdecimals;
 mod formatnames;

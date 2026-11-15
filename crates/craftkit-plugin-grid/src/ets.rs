@@ -92,7 +92,7 @@ impl Default for Options {
 
 /// The **axis** of a series: how a time stamp maps to a place.
 #[derive(Clone, Copy, Debug)]
-enum Axis {
+pub(crate) enum Axis {
     /// A constant numeric step.
     Linear { t0: f64, step: f64 },
     /// Whole-day dates a constant number of calendar months apart.
@@ -109,6 +109,21 @@ fn month_parts(system: crate::dates::System, serial: f64) -> Option<(i64, f64)> 
 }
 
 impl Axis {
+    /// The **point** `steps` after a point of the axis.
+    ///
+    /// The axis is the tree's rule for what a **step** is: a constant
+    /// number for a linear axis, and a constant number of calendar
+    /// months for the axis of dates.
+    pub(crate) fn after_last(&self, system: crate::dates::System, last: f64, steps: u32) -> Option<f64> {
+        match *self {
+            Axis::Linear { step, .. } => {
+                let point = last + f64::from(steps) * step;
+                point.is_finite().then_some(point)
+            }
+            Axis::Months { step, .. } => crate::dates::add_months(last, i64::from(steps) * step, system),
+        }
+    }
+
     /// The **place** of a time stamp: zero is the first point.
     fn position(&self, system: crate::dates::System, t: f64) -> Option<f64> {
         match *self {
@@ -147,7 +162,7 @@ fn gcd(mut left: i64, mut right: i64) -> i64 {
 /// missing allowed — or, for whole-day dates, a constant number of
 /// calendar months, all on the same day of the month or all at the end
 /// of their month.
-fn detect_axis(system: crate::dates::System, times: &[f64]) -> Option<Axis> {
+pub(crate) fn detect_axis(system: crate::dates::System, times: &[f64]) -> Option<Axis> {
     let (&first, &second) = match (times.first(), times.get(1)) {
         (Some(a), Some(b)) => (a, b),
         _ => return None,
