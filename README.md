@@ -4398,6 +4398,7 @@ so.
 | the **review** of a workbook | **built.** The statistics of a workbook say how much is in it, and the accessibility check says what a reader may not be able to read (§950) | §950 |
 | the **structure** of a protected workbook | **built.** The sheets of a protected workbook may not be added, taken away, renamed or moved (§951) | §951 |
 | the **walk** between the **comments** | **built.** The next comment of a sheet is the one after a cell, and the walk goes round (§952) | §952 |
+| the chart that reads its range **the other way round** | **built.** A chart may read its range by rows — the first row holds the categories and the rows after it are the series (§953) | §953 |
 
 ### The list of things that are honestly not there: empty
 
@@ -62308,3 +62309,41 @@ The comments of a sheet, one after the other.
 
 - **The walk is of the comments that are open**: a resolved comment is
   still a comment of the cell, and the tree counts it as one.
+
+## 953. The chart that reads its range the other way round
+
+A block of numbers may be read down its columns or across its rows.
+
+### What was built
+
+- A chart may read its range **by rows**: the first row holds the
+  **categories** and the rows after it are the **series**. The
+  parameter is `switch_row_column` on `grid.chart.add` and on
+  `grid.chart.set`, and the trendline of the chart follows the way the
+  chart reads.
+- The reading is still **derived**: the data of the chart is computed
+  from the cells of the sheet every time it is asked for.
+
+### What the port found
+
+- **The reference's switch is a command of its own**
+  (`chart.switchRowColumn`), and the tree's is a **parameter**: the
+  tree's rule is that a command is a struct whose fields are its
+  parameters, and the way a chart reads is one of the things a chart
+  has.
+- **The reference's switch keeps the range and flips the flag**, and so
+  does the tree's: the range of the chart does not move, and the series
+  are read the other way round.
+
+### What it cost
+
+- **One parameter** on two commands and **no new command**: the grid
+  battery still carries **211** commands.
+- **Two tests**: a chart that reads its range by rows, and a chart whose
+  way of reading is changed after it is made.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's chart is a model and not a drawing**: switching the way
+  it reads changes what it says it shows, and nothing is painted.
