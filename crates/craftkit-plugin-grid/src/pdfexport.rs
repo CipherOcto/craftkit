@@ -445,6 +445,68 @@ struct Counts {
     links: usize,
     /// The pictures that were drawn.
     pictures: usize,
+    /// The borders that were drawn.
+    borders: usize,
+}
+
+/// The **width** of a line of a border, in points, and the **dashes** it
+/// has.
+///
+/// The widths are the tree's own (§ the borders of a cell): a thin line
+/// is a point, a medium one two and a thick one three, and the scale
+/// of the sheet moves them.
+fn line_of(style: &str, scale: f64) -> Option<(f64, Vec<f32>)> {
+    let unit = scale.max(0.2) as f32;
+    let width = match style.to_ascii_lowercase().as_str() {
+        "thin" | "hair" | "dashed" | "dotted" | "dashdot" | "dashdotdot" => 1.0,
+        "medium" | "mediumdashed" | "mediumdashdot" | "mediumdashdotdot" | "slantdashdot" => 2.0,
+        "thick" | "double" => 3.0,
+        _ => return None,
+    };
+    let dash = match style.to_ascii_lowercase().as_str() {
+        "dashed" | "mediumdashed" => vec![4.0 * unit, 2.0 * unit],
+        "dotted" => vec![unit, unit],
+        "hair" => vec![0.75 * unit, 0.75 * unit],
+        "dashdot" | "mediumdashdot" | "slantdashdot" => {
+            vec![4.0 * unit, 1.5 * unit, unit, 1.5 * unit]
+        }
+        "dashdotdot" | "mediumdashdotdot" => {
+            vec![4.0 * unit, 1.5 * unit, unit, 1.5 * unit, unit, 1.5 * unit]
+        }
+        _ => Vec::new(),
+    };
+    Some(((width * scale).clamp(0.25, 6.0), dash))
+}
+
+/// Draws one **edge** of a cell: the line of a border.
+fn draw_edge(page: &mut PdfPage, edge: &str, box_of: Rect, style: &str, colour: [u8; 3], scale: f64) -> bool {
+    let (x, y, width, height) = (box_of.x, box_of.y, box_of.width, box_of.height);
+    let Some((line, dash)) = line_of(style, scale) else { return false };
+    let line = line as f32;
+    let (start, end) = match edge {
+        "top" => (craftkit_pdf_writer::Point::new(x, y), craftkit_pdf_writer::Point::new(x + width, y)),
+        "bottom" => (
+            craftkit_pdf_writer::Point::new(x, y + height),
+            craftkit_pdf_writer::Point::new(x + width, y + height),
+        ),
+        "left" => (craftkit_pdf_writer::Point::new(x, y), craftkit_pdf_writer::Point::new(x, y + height)),
+        "right" => (
+            craftkit_pdf_writer::Point::new(x + width, y),
+            craftkit_pdf_writer::Point::new(x + width, y + height),
+        ),
+        _ => return false,
+    };
+    if style.eq_ignore_ascii_case("double") {
+        // A **double** line is two lines beside each other.
+        let offset = (scale.max(0.2) as f32).max(0.2);
+        let thin = (0.75 * scale as f32).max(0.2);
+        let (dx, dy) = if (start.y - end.y).abs() < f32::EPSILON { (0.0, offset) } else { (offset, 0.0) };
+        page.stroke_line(start.x - dx, start.y - dy, end.x - dx, end.y - dy, thin, colour);
+        page.stroke_line(start.x + dx, start.y + dy, end.x + dx, end.y + dy, thin, colour);
+        return true;
+    }
+    page.stroke_line_dashed(start, end, line, colour, &dash);
+    true
 }
 
 /// Draws one **page** of the sheet.
@@ -541,6 +603,7 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
     // The **header** and the **footer** of the page.
     let (page_width, page_height) = setup.page();
     draw_header_footer(page, node, number, count, setup, page_width, page_height);
+    let mut counts = Counts::default();
     // The **merges** of the sheet: a merged cell is drawn over the whole
     // of its region, and the cells it covers are not drawn at all.
     let merges = crate::merges::merges_of(node);
@@ -595,6 +658,15 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             // The **fill** of the cell.
             if let Some(fill) = look.fill.as_deref().and_then(rgb_of) {
                 page.fill_rect(left as f32, top as f32, width as f32, height as f32, fill);
+            }
+            // The **borders** of the cell: each edge of the cell is
+            // drawn with the line of its own border.
+            for (edge, border) in crate::borders::borders_of_cell(node, &cell.to_text()) {
+                let Some(colour) = rgb_of(&border.colour) else { continue };
+                let box_of = Rect::new(left as f32, top as f32, width as f32, height as f32);
+                if draw_edge(page, &edge, box_of, &border.style, colour, scale) {
+                    counts.borders += 1;
+                }
             }
             // The **text** of the cell.
             let text = crate::finding::text_of(session, sheet, &name, cells, cell, false);
@@ -716,7 +788,6 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
     // web address or to a `mailto:` is drawn over its cell, and the
     // others are not drawn at all.
     let links = crate::links::links_of(node);
-    let mut counts = Counts::default();
     for (address, link) in &links {
         let Some(cell) = CellRef::parse(address) else { continue };
         if !is_uri(&link.target) {
@@ -816,6 +887,7 @@ commands! {
                 let drawn = draw_page(page, &drawing, *band);
                 counts.links += drawn.links;
                 counts.pictures += drawn.pictures;
+                counts.borders += drawn.borders;
             }
             let bytes = doc.finish();
             std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
@@ -826,6 +898,10 @@ commands! {
             // ones that were not, so that none is dropped in silence.
             let links = crate::links::links_of(&node).len();
             let pictures = crate::pictures::pictures_of(&node).len();
+            let borders: usize = crate::borders::borders_of(&node)
+                .values()
+                .map(|edges| edges.len())
+                .sum();
             Ok(Outcome::new(format!("wrote {} page(s)", pages.bands.len())).with_data(json!({
                 "sheet": sheet,
                 "path": path,
@@ -836,6 +912,8 @@ commands! {
                 "pictures": pictures,
                 "pictures_drawn": counts.pictures,
                 "pictures_undrawn": pictures.saturating_sub(counts.pictures),
+                "borders": borders,
+                "borders_drawn": counts.borders,
                 "area": pages.area.to_text(),
                 "paper": setup.paper,
                 "scale": (pages.scale * 10_000.0).round() / 100.0,

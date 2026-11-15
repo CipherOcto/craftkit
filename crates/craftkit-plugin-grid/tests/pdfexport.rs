@@ -272,3 +272,39 @@ fn a_picture_that_cannot_be_decoded_is_counted() {
     assert_eq!(data["pictures_drawn"].as_u64(), Some(0), "the picture is not drawn");
     assert_eq!(data["pictures_undrawn"].as_u64(), Some(1), "the picture is counted");
 }
+
+/// The **borders** of a cell are drawn, with the line of their style.
+#[test]
+fn the_borders_of_a_cell_are_drawn() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute(
+            "grid.cell.border.set",
+            &json!({ "sheet": sheet, "cell": "A1", "edge": "top", "style": "dashed" }),
+        )
+        .expect("the border is set");
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (bytes, data) = exported(&mut session, sheet);
+    assert!(find(&bytes, b" l S").is_some(), "the border is drawn");
+    assert!(find(&bytes, b"[4 2] 0 d").is_some(), "the line is dashed");
+    assert_eq!(data["borders"].as_u64(), Some(1), "the sheet has one border");
+    assert_eq!(data["borders_drawn"].as_u64(), Some(1), "the border is drawn");
+}
+
+/// A **double** border is two lines beside each other.
+#[test]
+fn a_double_border_is_two_lines() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute(
+            "grid.cell.border.set",
+            &json!({ "sheet": sheet, "cell": "A1", "edge": "left", "style": "double" }),
+        )
+        .expect("the border is set");
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (bytes, _) = exported(&mut session, sheet);
+    let lines = bytes.windows(b" l S".len()).filter(|window| *window == b" l S").count();
+    assert_eq!(lines, 2, "the border is two lines");
+}

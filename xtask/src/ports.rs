@@ -700,6 +700,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/pdfexport.rs",
         section: "§938",
     },
+    Port {
+        rule: "the borders of the cells on the printed page",
+        from: "gridcraft/crates/engine/src/cmd/print/draw.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/pdfexport.rs",
+        command: "grid.export.pdf",
+        test: "crates/craftkit-plugin-grid/tests/pdfexport.rs",
+        section: "§939",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
