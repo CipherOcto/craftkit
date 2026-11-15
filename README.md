@@ -4397,6 +4397,7 @@ so.
 | the **forecast sheet** as a **table** and a **chart** | **built.** The forecast sheet is a named table, and it may hold a chart of the forecast (§949) | §949 |
 | the **review** of a workbook | **built.** The statistics of a workbook say how much is in it, and the accessibility check says what a reader may not be able to read (§950) | §950 |
 | the **structure** of a protected workbook | **built.** The sheets of a protected workbook may not be added, taken away, renamed or moved (§951) | §951 |
+| the **walk** between the **comments** | **built.** The next comment of a sheet is the one after a cell, and the walk goes round (§952) | §952 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55937,7 +55938,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 209 |
+| grid | 211 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62271,3 +62272,39 @@ A workbook may say that its shape is not to be changed.
 
 - **There is no password**: a protection that a program may lift is a
   protection that is a word and not a lock, and the tree says so.
+
+## 952. The walk between the comments
+
+The comments of a sheet, one after the other.
+
+### What was built
+
+- Two new commands, **`grid.comment.next`** and
+  **`grid.comment.previous`**: the comment of the sheet that is after a
+  cell, or before it. The comments are walked in the order of the cells
+  they are on, and the walk goes **round**: the comment after the last
+  one is the first one, and the comment before the first one is the
+  last one.
+
+### What the port found
+
+- **The reference walks the comments of the whole workbook**, and the
+  tree's walks the comments of **one sheet**: the tree's commands name
+  the sheet they are in, and the walk of a sheet is the walk of a
+  sheet.
+- **The reference moves the selection as it walks**, and the tree's
+  answers with the cell of the comment and leaves the selection of the
+  front end alone: the tree has no active cell, and a command that
+  reads does not move what another command reads.
+
+### What it cost
+
+- **Two commands**: the grid battery now carries **211** commands.
+- **Two tests**: the next comment of a sheet and the previous one, and
+  the sheet with no comments at all.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The walk is of the comments that are open**: a resolved comment is
+  still a comment of the cell, and the tree counts it as one.
