@@ -118,7 +118,8 @@ pub fn tables_of(node: &Node) -> Vec<Table> {
 }
 
 /// The **tables** of a sheet, as the sheet keeps them.
-fn tables_into(tables: &[Table]) -> craftkit_sdk::serde_json::Value {
+/// The **tables** of a sheet, as the data of the sheet holds them.
+pub(crate) fn tables_json(tables: &[Table]) -> craftkit_sdk::serde_json::Value {
     json!(tables.iter().map(|table| table.to_json()).collect::<Vec<_>>())
 }
 
@@ -392,7 +393,7 @@ commands! {
             let mut tables = tables;
             tables.push(table);
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
-                node.data["tables"] = tables_into(&tables);
+                node.data["tables"] = tables_json(&tables);
             }
             Ok(Outcome::changed(format!("the table `{name}` is made on {text}")).with_data(json!({
                 "sheet": sheet,
@@ -553,7 +554,7 @@ commands! {
                     message: format!("there is no sheet `{sheet}`"),
                 });
             };
-            sheet_node.data["tables"] = tables_into(&tables);
+            sheet_node.data["tables"] = tables_json(&tables);
             Ok(Outcome::changed(if totals {
                 format!("the table `{name}` has a total row, and it totals in `{way}`")
             } else {
@@ -656,7 +657,7 @@ commands! {
                     message: format!("there is no sheet `{sheet}`"),
                 });
             };
-            sheet_node.data["tables"] = tables_into(&tables);
+            sheet_node.data["tables"] = tables_json(&tables);
             Ok(Outcome::changed(format!("the column `{column}` of the table `{name}` is totalled in `{way}`"))
                 .with_data(json!({
                     "sheet": sheet,
@@ -709,7 +710,7 @@ commands! {
                 table.name = to.clone();
             }
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
-                node.data["tables"] = tables_into(&tables);
+                node.data["tables"] = tables_json(&tables);
             }
             Ok(Outcome::changed(format!("the table `{name}` is called `{to}` now")).with_data(json!({
                 "sheet": sheet,
@@ -793,7 +794,7 @@ commands! {
             table.range = area;
             table.ways = ways;
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
-                node.data["tables"] = tables_into(&tables);
+                node.data["tables"] = tables_json(&tables);
             }
             Ok(Outcome::changed(format!("the table `{name}` reaches {text} now")).with_data(json!({
                 "sheet": sheet,
@@ -830,7 +831,7 @@ commands! {
             let table = table_of(&tables, &name, &id)?;
             tables.retain(|other| other.name != name);
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
-                node.data["tables"] = tables_into(&tables);
+                node.data["tables"] = tables_json(&tables);
             }
             Ok(Outcome::changed(format!("the table `{name}` is taken away")).with_data(json!({
                 "sheet": sheet,
@@ -901,7 +902,7 @@ commands! {
                     message: format!("there is no sheet `{sheet}`"),
                 });
             };
-            sheet_node.data["tables"] = tables_into(&tables);
+            sheet_node.data["tables"] = tables_json(&tables);
             Ok(Outcome::changed(match &label {
                 Some(label) => format!("the total row of the table `{name}` says `{label}`"),
                 None => format!("the total row of the table `{name}` says nothing"),

@@ -263,3 +263,62 @@ fn an_end_before_the_last_point_is_refused() {
     let message = outcome.to_string();
     assert!(message.contains("after the last point"), "the refusal says why: {message}");
 }
+
+#[test]
+fn the_forecast_sheet_is_a_table() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_line(&mut session, sheet);
+    let (forecast_sheet, data) = forecast(&mut session, sheet, json!({}));
+    assert_eq!(data["table"], "Table");
+    // The table reaches over the whole of the forecast sheet.
+    let outcome =
+        session.execute("grid.table.read", &json!({ "sheet": forecast_sheet })).expect("the tables are read");
+    let tables = outcome.data["tables"].as_array().expect("the tables are a list");
+    assert_eq!(tables.len(), 1);
+    assert_eq!(tables[0]["name"], "Table");
+    assert_eq!(tables[0]["range"], "A1:C14");
+}
+
+#[test]
+fn the_forecast_sheet_may_hold_a_chart() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_line(&mut session, sheet);
+    let (_forecast_sheet, data) = forecast(&mut session, sheet, json!({ "chart": "column" }));
+    let chart = data["chart"].as_u64().expect("the forecast has a chart");
+    let outcome = session.execute("grid.chart.read", &json!({ "chart": chart })).expect("the chart is read");
+    assert_eq!(outcome.data["kind"], "column");
+    assert_eq!(outcome.data["range"], "A1:C14");
+}
+
+#[test]
+fn the_forecast_sheet_may_have_no_table() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_line(&mut session, sheet);
+    let (forecast_sheet, data) = forecast(&mut session, sheet, json!({ "table": false }));
+    assert_eq!(data["table"], json!(null));
+    let outcome =
+        session.execute("grid.table.read", &json!({ "sheet": forecast_sheet })).expect("the tables are read");
+    let tables = outcome.data["tables"].as_array().expect("the tables are a list");
+    assert!(tables.is_empty(), "the sheet has no table");
+}
+
+#[test]
+fn the_chart_of_the_forecast_sheet_is_line_or_column() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_line(&mut session, sheet);
+    let outcome = session.execute(
+        "grid.forecast.sheet",
+        &json!({
+            "sheet": sheet,
+            "timeline": "A1:A10",
+            "values": "B1:B10",
+            "chart": "pie",
+        }),
+    );
+    let error = outcome.expect_err("the forecast is refused").to_string();
+    assert!(error.contains("line"), "the error names the kinds: {error}");
+}

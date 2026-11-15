@@ -150,6 +150,12 @@ commands! {
             /// number or as a date, after its last point. The forecast
             /// runs that far.
             end: Option<Text>,
+            /// Whether the forecast sheet is a **table**: a named table
+            /// over its whole range. It is one by default.
+            table: Option<Bool>,
+            /// The **chart** of the forecast sheet: `line` or `column`.
+            /// Without it, the sheet has no chart.
+            chart: Option<Text>,
         },
         run: {
             let id = "grid.forecast.sheet".to_string();
@@ -530,9 +536,85 @@ commands! {
             if let Some(node) = session.document_mut()?.node_mut(new_sheet) {
                 node.data["cells"] = json_cells;
             }
+            // The **range** of the sheet: everything the forecast wrote.
+            let last_row = history + periods;
+            let range = format!(
+                "A1:{}{last_row}",
+                crate::formula::CellRef::column_text(width.saturating_sub(1))
+            );
+            // The **table**: a named table over the whole of it.
+            let table = if self.table.map(|table| table.0).unwrap_or(true) {
+                let taken: Vec<String> = session
+                    .document()
+                    .node(new_sheet)
+                    .map(|node| crate::tables::tables_of(node).iter().map(|table| table.name.clone()).collect())
+                    .unwrap_or_default();
+                let table_name = (1..1000)
+                    .map(|number| if number == 1 { "Table".to_string() } else { format!("Table{number}") })
+                    .find(|name| !taken.iter().any(|other| other.eq_ignore_ascii_case(name)))
+                    .unwrap_or_else(|| "Table".to_string());
+                let area = crate::merges::parse_area(&range)
+                    .map(|(_, area)| area)
+                    .ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the range of the forecast sheet ({range}) is not a range"),
+                    })?;
+                let table = crate::tables::Table {
+                    name: table_name.clone(),
+                    range: area,
+                    totals: false,
+                    label: None,
+                    way: "sum".to_string(),
+                    ways: Vec::new(),
+                };
+                if let Some(node) = session.document_mut()?.node_mut(new_sheet) {
+                    let mut tables = crate::tables::tables_of(node);
+                    tables.push(table);
+                    node.data["tables"] = crate::tables::tables_json(&tables);
+                }
+                Some(table_name)
+            } else {
+                None
+            };
+            // The **chart**: it reads the same range, so the series are
+            // the values, the forecast and the bounds.
+            let chart = match self.chart.as_ref().map(|chart| chart.0.trim().to_ascii_lowercase()) {
+                None => None,
+                Some(ref text) if text.is_empty() => None,
+                Some(ref text) if text == "line" || text == "column" => {
+                    let kind = if text == "line" { "line" } else { "column" };
+                    let chart = session.document_mut()?.add_node_with_under(
+                        Some(new_sheet),
+                        format!("Forecast of {values_name}"),
+                        "grid.chart",
+                        None,
+                        json!({
+                            "range": range,
+                            "kind": kind,
+                            "title": format!("Forecast of {values_name}"),
+                            "legend": "bottom",
+                            "dataLabels": false,
+                            "gridlines": true,
+                            "xTitle": Some(timeline_name.clone()),
+                            "yTitle": Some(values_name.clone()),
+                            "smooth": false,
+                        }),
+                    );
+                    Some(chart)
+                }
+                Some(ref text) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the chart is `line` or `column`, not `{text}`"),
+                    });
+                }
+            };
             Ok(Outcome::changed(format!("forecast {} rows into the sheet `{name}`", history)).with_data(json!({
                 "sheet": new_sheet,
                 "name": name,
+                "table": table,
+                "chart": chart,
+                "range": range,
                 "history": history,
                 "periods": periods,
                 "columns": width,
