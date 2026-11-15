@@ -270,13 +270,13 @@ fn the_forecast_sheet_is_a_table() {
     let (_workbook, sheet) = a_sheet(&mut session);
     a_line(&mut session, sheet);
     let (forecast_sheet, data) = forecast(&mut session, sheet, json!({}));
-    assert_eq!(data["table"], "Table");
+    assert_eq!(data["table"], "Forecast");
     // The table reaches over the whole of the forecast sheet.
     let outcome =
         session.execute("grid.table.read", &json!({ "sheet": forecast_sheet })).expect("the tables are read");
     let tables = outcome.data["tables"].as_array().expect("the tables are a list");
     assert_eq!(tables.len(), 1);
-    assert_eq!(tables[0]["name"], "Table");
+    assert_eq!(tables[0]["name"], "Forecast");
     assert_eq!(tables[0]["range"], "A1:C14");
 }
 

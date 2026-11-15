@@ -550,7 +550,13 @@ commands! {
                     .map(|node| crate::tables::tables_of(node).iter().map(|table| table.name.clone()).collect())
                     .unwrap_or_default();
                 let table_name = (1..1000)
-                    .map(|number| if number == 1 { "Table".to_string() } else { format!("Table{number}") })
+                    .map(|number| {
+                        if number == 1 {
+                            "Forecast".to_string()
+                        } else {
+                            format!("Forecast{number}")
+                        }
+                    })
                     .find(|name| !taken.iter().any(|other| other.eq_ignore_ascii_case(name)))
                     .unwrap_or_else(|| "Table".to_string());
                 let area = crate::merges::parse_area(&range)
