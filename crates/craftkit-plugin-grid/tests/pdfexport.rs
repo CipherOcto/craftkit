@@ -100,8 +100,53 @@ fn the_paper_of_the_file_is_the_paper_the_sheet_prints_with() {
     session.execute("grid.print.paper", &json!({ "sheet": sheet, "paper": "A4" })).expect("the paper is set");
     value(&mut session, sheet, "A1", json!("ann"));
     let (bytes, data) = exported(&mut session, sheet);
-    assert_eq!(data["paper"].as_str(), Some("A4"), "the answer names the paper");
+    assert_eq!(data["sheets"][0]["paper"].as_str(), Some("A4"), "the answer names the paper");
     assert!(find(&bytes, b"/MediaBox [0 0 595.28 841.89]").is_some(), "the page is an A4 page");
+}
+
+/// The whole **document** is written when no sheet is named.
+#[test]
+fn the_whole_document_is_written() {
+    let mut session = session();
+    let (workbook, first) = a_sheet(&mut session);
+    value(&mut session, first, "A1", json!("ann"));
+    let outcome = session
+        .execute("grid.sheet.add", &json!({ "workbook": workbook, "name": "Sheet2" }))
+        .expect("the second sheet is added");
+    let second = outcome.data["id"].as_u64().expect("the sheet has an id");
+    value(&mut session, second, "A1", json!("bob"));
+    let path =
+        craftkit_scratch::file("craftkit-v2-grid-export-document.pdf").expect("the scratch gives a path");
+    let outcome = session
+        .execute("grid.export.pdf", &json!({ "path": path.to_string_lossy() }))
+        .expect("the document is exported");
+    let data = outcome.data.clone();
+    assert_eq!(data["count"].as_u64(), Some(2), "both sheets are written");
+    assert_eq!(data["pages"].as_u64(), Some(2), "the file has a page for each sheet");
+    assert_eq!(data["sheets"][1]["name"].as_str(), Some("Sheet2"), "the sheets are in order");
+    let bytes = std::fs::read(&path).expect("the file is there");
+    assert!(find(&bytes, b"(ann) Tj").is_some(), "the first sheet is drawn");
+    assert!(find(&bytes, b"(bob) Tj").is_some(), "the second sheet is drawn");
+}
+
+/// A sheet that holds **nothing** is skipped when the whole document is
+/// written, and the answer says so.
+#[test]
+fn an_empty_sheet_is_skipped_and_counted() {
+    let mut session = session();
+    let (workbook, first) = a_sheet(&mut session);
+    value(&mut session, first, "A1", json!("ann"));
+    session
+        .execute("grid.sheet.add", &json!({ "workbook": workbook, "name": "Empty" }))
+        .expect("the empty sheet is added");
+    let path =
+        craftkit_scratch::file("craftkit-v2-grid-export-skipped.pdf").expect("the scratch gives a path");
+    let outcome = session
+        .execute("grid.export.pdf", &json!({ "path": path.to_string_lossy() }))
+        .expect("the document is exported");
+    let data = outcome.data.clone();
+    assert_eq!(data["count"].as_u64(), Some(1), "the sheet with something in it is written");
+    assert_eq!(data["skipped"].as_u64(), Some(1), "the empty sheet is counted");
 }
 
 /// The **gridlines** are drawn when the sheet says they are printed.

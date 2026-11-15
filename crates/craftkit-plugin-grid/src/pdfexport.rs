@@ -997,24 +997,28 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
 }
 
 commands! {
-    /// **Write** a sheet as a **PDF file**.
+    /// **Write** a sheet — or a whole workbook — as a **PDF file**.
     ///
     /// The file is written where the caller says, and the answer says how
     /// many pages it has. The sheet is written as it **prints**: the
     /// paper, the margins, the scale and the pages are the sheet's own.
+    ///
+    /// Without a sheet, every sheet of the document is written, in the
+    /// order they are in, and the pages of the file are numbered
+    /// through the whole of it.
     grid.export.pdf {
         area: "grid",
         layer: "grid",
         icon: "file",
         params: {
-            /// The sheet to write.
-            sheet: NodeRef,
+            /// The sheet to write. Without it, every sheet of the
+            /// document is written.
+            sheet: Option<NodeRef>,
             /// Where to write the file.
             path: Text,
         },
         run: {
             let id = "grid.export.pdf".to_string();
-            let sheet = self.sheet.0;
             let path = self.path.0.trim().to_string();
             if path.is_empty() {
                 return Err(EngineError::Failed {
@@ -1022,60 +1026,126 @@ commands! {
                     message: "a file has a path".to_string(),
                 });
             }
-            let node = crate::printing::sheet_of(session, &id, sheet)?;
-            let name = node.name.clone();
-            let cells = crate::cells_of(&node);
-            let setup = Setup::of(&node);
-            // The **pages**: they are worked out in one place, and a
-            // sheet that holds nothing has none.
-            let Some(pages) = crate::printing::pages_of(&node, &setup, &cells, &id)? else {
+            let document = session.document();
+            // The **sheets**: the one that was asked for, or every sheet
+            // of the document.
+            let sheets: Vec<u64> = match self.sheet {
+                Some(sheet) => vec![sheet.0],
+                None => document
+                    .walk()
+                    .filter(|node| node.kind == "grid.sheet")
+                    .map(|node| node.id)
+                    .collect(),
+            };
+            if sheets.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the document holds no sheets to export".to_string(),
+                });
+            }
+            // The **pages** of every sheet: they are worked out in one
+            // place, and a sheet that holds nothing has none.
+            let mut laid_out: Vec<(u64, Node, crate::formula::Cells, Setup, crate::printing::Pages)> =
+                Vec::new();
+            let mut total = 0usize;
+            let mut skipped = 0usize;
+            for sheet in &sheets {
+                let Some(node) = document.node(*sheet).cloned() else { continue };
+                if node.kind != "grid.sheet" {
+                    continue;
+                }
+                let cells = crate::cells_of(&node);
+                let setup = Setup::of(&node);
+                let Some(pages) = crate::printing::pages_of(&node, &setup, &cells, &id)? else {
+                    skipped += 1;
+                    continue;
+                };
+                total += pages.bands.len();
+                laid_out.push((*sheet, node, cells, setup, pages));
+            }
+            if laid_out.is_empty() {
+                let name = sheets
+                    .first()
+                    .and_then(|sheet| document.node(*sheet))
+                    .map(|node| node.name.clone())
+                    .unwrap_or_default();
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!("the sheet `{name}` holds nothing to export"),
                 });
-            };
-            // The **file**: a page for each page of the sheet.
+            }
+            // The **file**: a page for each page of every sheet.
             let mut doc = PdfDoc::new();
-            doc.info.title = name.clone();
-            let (width, height) = setup.page();
-            let count = pages.bands.len();
+            let (first_sheet, first_node, _, _, _) = &laid_out[0];
+            doc.info.title = if laid_out.len() == 1 {
+                first_node.name.clone()
+            } else {
+                document
+                    .walk()
+                    .find(|node| node.children.iter().any(|child| child.id == *first_sheet))
+                    .map(|node| node.name.clone())
+                    .unwrap_or_else(|| first_node.name.clone())
+            };
             let mut counts = Counts::default();
-            for (number, band) in pages.bands.iter().enumerate() {
-                let page = doc.add_page(width as f32, height as f32);
-                let drawing = Drawing {
-                    session,
-                    sheet,
-                    node: &node,
-                    cells: &cells,
-                    setup: &setup,
-                    pages: &pages,
-                    number: number + 1,
-                    count,
-                };
-                let drawn = draw_page(page, &drawing, *band);
-                counts.links += drawn.links;
-                counts.pictures += drawn.pictures;
-                counts.borders += drawn.borders;
-                counts.sparklines += drawn.sparklines;
+            let mut number = 0usize;
+            let mut written: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+            let mut links = 0usize;
+            let mut pictures = 0usize;
+            let mut sparklines = 0usize;
+            let mut borders = 0usize;
+            for (sheet, node, cells, setup, pages) in &laid_out {
+                let (width, height) = setup.page();
+                for band in &pages.bands {
+                    number += 1;
+                    let page = doc.add_page(width as f32, height as f32);
+                    let drawing = Drawing {
+                        session,
+                        sheet: *sheet,
+                        node,
+                        cells,
+                        setup,
+                        pages,
+                        number,
+                        count: total,
+                    };
+                    let drawn = draw_page(page, &drawing, *band);
+                    counts.links += drawn.links;
+                    counts.pictures += drawn.pictures;
+                    counts.borders += drawn.borders;
+                    counts.sparklines += drawn.sparklines;
+                }
+                // The **links**, the **pictures**, the **sparklines** and
+                // the **borders** of the sheet: the ones that were drawn
+                // and the ones that were not, so that none is dropped
+                // in silence.
+                links += crate::links::links_of(node).len();
+                pictures += crate::pictures::pictures_of(node).len();
+                sparklines += crate::sparklines::sparklines_of(node).len();
+                borders += crate::borders::borders_of(node)
+                    .values()
+                    .map(|edges| edges.len())
+                    .sum::<usize>();
+                written.push(json!({
+                    "sheet": sheet,
+                    "name": node.name,
+                    "pages": pages.bands.len(),
+                    "area": pages.area.to_text(),
+                    "paper": setup.paper,
+                    "scale": (pages.scale * 10_000.0).round() / 100.0,
+                }));
             }
             let bytes = doc.finish();
             std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
                 id: id.clone(),
                 message: format!("the file cannot be written to `{path}`: {error}"),
             })?;
-            // The **links** of the sheet: the ones that were drawn and the
-            // ones that were not, so that none is dropped in silence.
-            let links = crate::links::links_of(&node).len();
-            let pictures = crate::pictures::pictures_of(&node).len();
-            let sparklines = crate::sparklines::sparklines_of(&node).len();
-            let borders: usize = crate::borders::borders_of(&node)
-                .values()
-                .map(|edges| edges.len())
-                .sum();
-            Ok(Outcome::new(format!("wrote {} page(s)", pages.bands.len())).with_data(json!({
-                "sheet": sheet,
+            Ok(Outcome::new(format!("wrote {total} page(s)")).with_data(json!({
+                "sheet": self.sheet.map(|sheet| sheet.0),
+                "sheets": written,
+                "count": laid_out.len(),
+                "skipped": skipped,
                 "path": path,
-                "pages": pages.bands.len(),
+                "pages": total,
                 "links": links,
                 "links_drawn": counts.links,
                 "links_undrawn": links.saturating_sub(counts.links),
@@ -1086,9 +1156,6 @@ commands! {
                 "borders_drawn": counts.borders,
                 "sparklines": sparklines,
                 "sparklines_drawn": counts.sparklines,
-                "area": pages.area.to_text(),
-                "paper": setup.paper,
-                "scale": (pages.scale * 10_000.0).round() / 100.0,
                 "bytes": bytes.len(),
             })))
 
