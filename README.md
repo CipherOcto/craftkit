@@ -4393,6 +4393,7 @@ so.
 | the **words** the user taught, and the **thesaurus** | **built.** A workbook is taught a word, and the thesaurus gives the words that share a stem (§945) | §945 |
 | the **analysis reports** of a range | **built.** A range becomes a report — the descriptive statistics, the histogram, the correlation, the covariance, the t-test and the F-test — and every report is live (§946) | §946 |
 | the **concatenation** of two texts | **built.** The `&` of a formula puts one text after the other, and a criterion may be built out of a cell (§947) | §947 |
+| the **rank**, the **analysis of variance**, the **regression** and the **smoothing** | **built.** The rank of a range, the variance of its groups, the line through its points and the smoothing of its series — all of them live (§948) | §948 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55933,7 +55934,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 200 |
+| grid | 205 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62073,3 +62074,70 @@ Two texts, one after the other.
 - **The tree's `&` does not spill and does not array**: `A1:A5&"x"` is
   not a thing, and a text of fifteen thousand characters is not a thing
   either.
+
+## 948. The rank, the analysis of variance, the regression and the smoothing
+
+The rest of the Analysis ToolPak: what a number is among its numbers,
+what the groups of a range differ by, what line goes through its
+points, and what a series becomes when it is smoothed.
+
+### What was built
+
+Five more commands in the same module, and every one of them a **live**
+report — formulas over the range, so an edit of the data is an edit of
+the report.
+
+- **`grid.analysis.rank`** — the **point** of every number of a range,
+  its **value**, its **rank** among the numbers of its variable and its
+  **percentile**.
+- **`grid.analysis.anova`** — the **summary** of every group of a
+  range (its count, its sum, its average and its variance) and the
+  **ANOVA** table: the sums of squares, the degrees of freedom, the
+  mean squares, the **F**, the **p-value** and the **F crit**.
+- **`grid.analysis.regression`** — the **statistics** of the fit (the
+  multiple R, the R square, the adjusted R square, the standard error
+  and the number of observations), the **ANOVA** table of the fit, the
+  **coefficients** with their standard errors, their t statistics and
+  their p-values, and, when they are asked for, the **residuals**.
+- **`grid.analysis.movingaverage`** — the **moving average** over the
+  last **interval** of the points of a series, and, when they are
+  asked for, its **standard error**.
+- **`grid.analysis.smoothing`** — the **smoothed** value of every point
+  of a series — the value before it, the smoothing before it and the
+  **damping** of the two — and, when they are asked for, its
+  **standard error**.
+
+### What the port found
+
+- **The reference computes the moving average and the smoothing in the
+  program**, and the tree writes them as formulas: the moving average
+  is `=AVERAGE(...)` over the last *interval* points, and the smoothed
+  value is `=(1-damping)*...+damping*...` over the point before it and
+  the smoothing before it.
+- **The reference's standard error is a running window of the squared
+  residuals**, and the tree's is `=SQRT(SUMXMY2(...)/k)` — the sum of
+  the squares of the differences of the two windows.
+- **The reference's regression takes up to sixteen variables of X**,
+  and the tree's takes **one**: the tree's report is made of formulas,
+  and a formula reads a range — it does not fit sixteen of them at
+  once.
+- **The reference's regression writes the residuals and the probability
+  output**, and the tree's writes the residuals when they are asked
+  for, and not the probability output: it is a table of the sorted
+  values, and the tree's rank report (§948) is that table already.
+
+### What it cost
+
+- **Five commands**: the grid battery now carries **205** commands.
+- **Five tests**: the rank of a range and its liveness, the F of the
+  analysis of variance and its p-value, the regression of a line, the
+  moving average of a series and the smoothing of a series.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The order of the rank report is the order of the values when the
+  report is made**: the values of the report are live, and their order
+  is not. A rank that is not the one of the row it is in is the truth
+  of the number, and not of the row.
+- **The regression is of one variable on another**, as above.
