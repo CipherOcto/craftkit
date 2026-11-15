@@ -70,6 +70,8 @@ commands! {
                     message: format!("the sheet `{sheet}` is in no workbook"),
                 });
             };
+            // The **structure** of a protected workbook is not changed.
+            crate::protection::refuse_structure(session, workbook, "grid.sheet.move")?;
             let to = self.to.0;
             if !to.is_finite() || to.fract() != 0.0 {
                 return Err(EngineError::Failed {

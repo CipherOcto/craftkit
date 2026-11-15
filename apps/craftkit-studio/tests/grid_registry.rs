@@ -239,7 +239,9 @@ const EXPECTED: &[&str] = &[
     r##"grid.workbook.get | Get | grid | command | grid | list | Read a **workbook**. | - | grid | workbook(node-ref)! help="The workbook to read." | mutates=false | undoable=false | journal=true | example=false"##,
     r##"grid.workbook.list.add | Add | grid | command | grid | plus | **Add** a **custom list** to a workbook. | - | grid | workbook(node-ref)! help="The workbook the list belongs to.",words(text)! help="The words of the list, one per line." | mutates=true | undoable=true | journal=true | example=false"##,
     r##"grid.workbook.list.remove | Remove | grid | command | grid | minus | **Take away** a **custom list** of a workbook. | - | grid | workbook(node-ref)! help="The workbook the list belongs to.",list(number)! help="Which list: the first is 1, the second is 2, and so on." | mutates=true | undoable=true | journal=true | example=false"##,
+    r##"grid.workbook.protect | Protect | grid | command | grid | lock | **Protect** the **structure** of a workbook: the sheets of it may not be added, taken away, renamed or moved. | - | grid | workbook(node-ref)! help="The workbook whose structure is protected." | mutates=true | undoable=true | journal=true | example=false"##,
     r##"grid.workbook.stats | Stats | grid | command | grid | list | The **statistics** of a workbook: how much is in it. | - | grid |  | mutates=false | undoable=false | journal=true | example=false"##,
+    r##"grid.workbook.unprotect | Unprotect | grid | command | grid | unlock | **Unprotect** the **structure** of a workbook: the sheets of it may be added, taken away, renamed and moved again. | - | grid | workbook(node-ref)! help="The workbook whose structure is not protected." | mutates=true | undoable=true | journal=true | example=false"##,
 ];
 
 /// The commands of the grid battery, in the order of their ids.

@@ -1225,6 +1225,8 @@ commands! {
         run: {
             let name = self.name.0.trim().to_string();
             let workbook = self.workbook.0;
+            // The **structure** of a protected workbook is not changed.
+            crate::protection::refuse_structure(session, workbook, "grid.sheet.add")?;
             // The **rules** of a sheet's name are the rules of the name and
             // not of the command that writes it: the tree's `check_sheet_name`
             // is used when a sheet is added and when it is renamed, and here

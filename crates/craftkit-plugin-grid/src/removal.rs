@@ -61,6 +61,8 @@ commands! {
                     message: format!("the sheet `{sheet}` is in no workbook"),
                 });
             };
+            // The **structure** of a protected workbook is not changed.
+            crate::protection::refuse_structure(session, workbook, "grid.sheet.remove")?;
             // The workbook must keep **one visible sheet**: the tree's rule,
             // and the rule the hiding of a sheet obeys. The tree counts the
             // sheets that are visible and refuses the taking away when

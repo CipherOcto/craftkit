@@ -139,6 +139,10 @@ commands! {
                 });
             }
             let old = node.name.clone();
+            // The **structure** of a protected workbook is not changed.
+            if let Some(workbook) = crate::tabs::workbook_of(session, sheet) {
+                crate::protection::refuse_structure(session, workbook, "grid.sheet.rename")?;
+            }
             let name = self.name.0.trim().to_string();
             let names = other_sheet_names(session, sheet);
             if let Some(reason) = why_not(&name, taken_by(&names, &name).as_deref()) {

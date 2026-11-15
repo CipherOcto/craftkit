@@ -117,6 +117,34 @@ pub fn is_locked(node: &Node, locks: &[(String, Option<bool>)], cell: CellRef) -
     }
 }
 
+/// Whether the **structure** of a workbook is protected: the sheets
+/// of it may not be added, taken away, renamed or moved.
+///
+/// The tree's protection has **no password**: it says what is
+/// protected and nothing more.
+pub fn structure_protected(node: &Node) -> bool {
+    node.data
+        .get("protection")
+        .and_then(|protection| protection.get("structure"))
+        .and_then(|structure| structure.as_bool())
+        .unwrap_or(false)
+}
+
+/// Refuse a change of the **structure** of a protected workbook.
+///
+/// A workbook that is not protected says nothing, and a change of the
+/// structure of a protected one is refused.
+pub fn refuse_structure(session: &craftkit_sdk::Session, workbook: u64, id: &str) -> Result<(), EngineError> {
+    let Some(node) = session.document().node(workbook) else { return Ok(()) };
+    if structure_protected(node) {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "the structure of the workbook is protected".to_string(),
+        });
+    }
+    Ok(())
+}
+
 /// Refuse a change to the **contents** of a cell of a locked sheet.
 ///
 /// A sheet that is not protected, or a protection that does not lock
@@ -456,6 +484,90 @@ commands! {
             Ok(Outcome::new(format!("the sheet `{sheet}` has {} edit range(s)", ranges.len())).with_data(json!({
                 "sheet": sheet,
                 "ranges": ranges,
+            })))
+
+        }
+    }
+
+    /// **Protect** the **structure** of a workbook: the sheets of it may
+    /// not be added, taken away, renamed or moved.
+    grid.workbook.protect {
+        area: "grid",
+        layer: "grid",
+        icon: "lock",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook whose structure is protected.
+            workbook: NodeRef,
+        },
+        run: {
+            let id = "grid.workbook.protect".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            node.data["protection"] = json!({ "structure": true });
+            Ok(Outcome::changed("the structure of the workbook is protected").with_data(json!({
+                "workbook": workbook,
+                "protection": { "structure": true },
+            })))
+
+        }
+    }
+
+    /// **Unprotect** the **structure** of a workbook: the sheets of it
+    /// may be added, taken away, renamed and moved again.
+    grid.workbook.unprotect {
+        area: "grid",
+        layer: "grid",
+        icon: "unlock",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook whose structure is not protected.
+            workbook: NodeRef,
+        },
+        run: {
+            let id = "grid.workbook.unprotect".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            node.data["protection"] = json!({ "structure": false });
+            Ok(Outcome::changed("the structure of the workbook is not protected").with_data(json!({
+                "workbook": workbook,
+                "protection": { "structure": false },
             })))
 
         }

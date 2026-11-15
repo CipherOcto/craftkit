@@ -151,3 +151,34 @@ fn a_node_that_is_not_a_sheet_is_refused() {
         session.execute("grid.sheet.unprotect", &json!({ "sheet": 9999 })).expect_err("it is refused");
     assert!(error.to_string().contains("there is no sheet"), "and there is none: {error}");
 }
+
+#[test]
+fn the_structure_of_a_protected_workbook_is_not_changed() {
+    let mut session = session();
+    let (workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.workbook.protect", &json!({ "workbook": workbook }))
+        .expect("the structure is protected");
+    // A sheet may not be added.
+    let outcome = session
+        .execute("grid.sheet.add", &json!({ "workbook": workbook, "name": "Another" }))
+        .expect_err("the sheet is refused");
+    assert!(outcome.to_string().contains("structure"), "the error says why: {outcome}");
+    // Nor renamed.
+    let outcome = session
+        .execute("grid.sheet.rename", &json!({ "sheet": sheet, "name": "Other" }))
+        .expect_err("the rename is refused");
+    assert!(outcome.to_string().contains("structure"), "the error says why: {outcome}");
+    // Nor moved.
+    let outcome = session
+        .execute("grid.sheet.move", &json!({ "sheet": sheet, "to": 1 }))
+        .expect_err("the move is refused");
+    assert!(outcome.to_string().contains("structure"), "the error says why: {outcome}");
+    // And the protection may be taken away again.
+    session
+        .execute("grid.workbook.unprotect", &json!({ "workbook": workbook }))
+        .expect("the structure is not protected");
+    session
+        .execute("grid.sheet.add", &json!({ "workbook": workbook, "name": "Another" }))
+        .expect("the sheet is added");
+}
