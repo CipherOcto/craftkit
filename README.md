@@ -4386,6 +4386,7 @@ so.
 | the **pictures** of a sheet on the printed page | **built.** A picture on a cell is drawn on the page at its own size, and the pictures that are not drawn are counted (§938) | §938 |
 | the **borders** of the cells on the printed page | **built.** A cell's borders are drawn with the width, the dashes and the colour of their style (§939) | §939 |
 | the **sparklines** of a sheet on the printed page | **built.** A sparkline is drawn in its cell — a line, a set of columns, or the wins and the losses (§940) | §940 |
+| the **forecast sheet** | **built.** A history becomes a new sheet with the forecast beside it — live formulas over the copied history, the bounds and the statistics (§941) | §941 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55926,7 +55927,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 190 |
+| grid | 191 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -61699,3 +61700,62 @@ the cell (§927).
   chart engine at all. The tree's chart is a **model** — a kind, a
   title and a range — and the export does not draw it.
 - **A note and a comment are not on the page.**
+
+## 941. The forecast sheet: a forecast from a history
+
+A history is a **timeline** — the times of the points — and the
+**values** at those times. A **forecast sheet** holds a copy of the
+history and, beside it, the **forecast**.
+
+### What was built
+
+- A new command, **`grid.forecast.sheet`**: a **new sheet** is made
+  with a copy of the history and, beside it, the forecast.
+- The forecast is **live**: the sheet holds formulas over the copied
+  history — `FORECAST.ETS` for the value and `FORECAST.ETS.CONFINT`
+  for the bounds — so an edit of the history is an edit of the
+  forecast.
+- The **bounds** of the confidence interval are written when a
+  confidence is asked for, and the **statistics** of the model when
+  they are asked for.
+- The **options** of the model are the tree's own: the length of the
+  season, how the gaps are filled, and how the points of the same
+  time are gathered.
+
+### What the port found
+
+- **The tree already had the model**: `FORECAST.ETS`,
+  `FORECAST.ETS.CONFINT`, `FORECAST.ETS.SEASONALITY` and
+  `FORECAST.ETS.STAT` are the tree's own (§ the ETS module), and what
+  was missing was the thing that **puts them in a sheet**.
+- **The tree's axis is the rule for what a step is**: a constant
+  number, or a constant number of calendar months for the dates. So
+  the points of the forecast are the steps of the tree's axis.
+- **The tree's timeline allows the points that are missing**: a
+  timeline of 1, 2, 4 and 8 is a timeline with gaps, and the model
+  fits it. So a timeline is refused only when its steps are not whole
+  multiples of the smallest one.
+- **The reference sorts the history by the timeline and so does this.**
+
+### What it cost
+
+- **A module** of about 400 lines, and **a command**: the grid battery
+  now carries **191** commands.
+- **Six tests**: the sheet holds the history and the forecast, the
+  forecast of a straight line is the line, the bounds are around the
+  forecast, the statistics are written, a timeline that is not a step
+  is refused, and a text first cell is a header.
+- **A small change in the ETS module**: the axis is now visible to the
+  battery, and it can say what is after the last point.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The forecast does not run backwards**: the reference may fit the
+  model to the points before a chosen one and forecast over the actuals
+  from there. Here the forecast runs after the history.
+- **The forecast sheet is not a table**: the reference's sheet holds
+  the history in a table, and the tree's tables are their own thing
+  (§911).
+- **The chart of the forecast sheet is not made**: the tree's chart is
+  a model and not a drawing (§935).
