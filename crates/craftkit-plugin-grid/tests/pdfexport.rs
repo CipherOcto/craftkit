@@ -219,3 +219,56 @@ fn a_link_inside_the_workbook_is_not_drawn_and_is_counted() {
     assert_eq!(data["links_drawn"].as_u64(), Some(0), "the link is not drawn");
     assert_eq!(data["links_undrawn"].as_u64(), Some(1), "the link is counted");
 }
+
+/// A **PNG file** of that many pixels across and down.
+///
+/// It is written with the tree's own writer, so the tree carries no
+/// artwork and the fixture is made here and not shipped.
+fn a_png_file(name: &str, width: usize, height: usize) -> String {
+    let mut image = craftkit_raster::Image::new(width, height, craftkit_sdk::document::Colour::WHITE);
+    image.blend(0, 0, craftkit_sdk::document::Colour::BLACK, craftkit_sdk::BlendMode::Normal);
+    let path =
+        craftkit_scratch::file(&format!("craftkit-v2-grid-export-{name}.png")).expect("the scratch is made");
+    std::fs::write(&path, image.to_png()).expect("the picture is written");
+    path.to_string_lossy().to_string()
+}
+
+/// A **picture** on a cell is drawn on the page.
+#[test]
+fn a_picture_on_a_cell_is_drawn_on_the_page() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let path = a_png_file("picture", 8, 8);
+    session
+        .execute("grid.picture.set", &json!({ "sheet": sheet, "cell": "A1", "path": path }))
+        .expect("the picture is set");
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (bytes, data) = exported(&mut session, sheet);
+    assert!(find(&bytes, b"/Subtype /Image").is_some(), "the picture is in the file");
+    assert_eq!(data["pictures"].as_u64(), Some(1), "the sheet has one picture");
+    assert_eq!(data["pictures_drawn"].as_u64(), Some(1), "the picture is drawn");
+    assert_eq!(data["pictures_undrawn"].as_u64(), Some(0), "no picture is left out");
+}
+
+/// A **picture** whose bytes are broken is not drawn, and the answer
+/// says so.
+///
+/// The head of the file is whole — so the tree can measure the picture —
+/// and the rest of it is cut off, so the pixels cannot be read.
+#[test]
+fn a_picture_that_cannot_be_decoded_is_counted() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let path = a_png_file("broken", 8, 8);
+    let bytes = std::fs::read(&path).expect("the picture is there");
+    std::fs::write(&path, &bytes[..40]).expect("the picture is cut short");
+    session
+        .execute("grid.picture.set", &json!({ "sheet": sheet, "cell": "A1", "path": path }))
+        .expect("the picture is set");
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (bytes, data) = exported(&mut session, sheet);
+    assert!(find(&bytes, b"/Subtype /Image").is_none(), "the picture is not in the file");
+    assert_eq!(data["pictures"].as_u64(), Some(1), "the sheet has one picture");
+    assert_eq!(data["pictures_drawn"].as_u64(), Some(0), "the picture is not drawn");
+    assert_eq!(data["pictures_undrawn"].as_u64(), Some(1), "the picture is counted");
+}

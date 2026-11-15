@@ -29,7 +29,7 @@
 
 use craftkit_derive::commands;
 
-use craftkit_pdf_writer::{Family, Font as PdfFont, Page as PdfPage, PdfDoc};
+use craftkit_pdf_writer::{Family, Font as PdfFont, Page as PdfPage, PdfDoc, Rect};
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Colour, EngineError, Node, NodeRef, Outcome, Session, Text};
 
@@ -74,6 +74,78 @@ const HEADER_SIZE: f64 = 10.0;
 
 /// The **most** lines a header or a footer may hold.
 const MAX_HEADER_LINES: usize = 20;
+
+/// The **most** bytes of a picture file that are read.
+const MAX_PICTURE_BYTES: u64 = 40 * 1024 * 1024;
+
+/// The **most** pixels a picture on a page may have.
+const MAX_PICTURE_PIXELS: u64 = 16_000_000;
+
+/// The **size of a pixel of a picture**, in points: the tree's own
+/// (a pixel is a pixel at ninety-six dots to the inch).
+const PIXEL: f64 = 0.75;
+
+/// The **pixels** of a picture file, as **RGBA**.
+///
+/// `None` when the file cannot be read, when it is not a picture this
+/// tree can decode, when it is too big, and when it is a picture in
+/// colours a PDF does not carry: the CMYK of a JPEG is one of them.
+fn pixels_of(path: &str) -> Option<(u32, u32, Vec<u8>)> {
+    let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(path), MAX_PICTURE_BYTES).ok()?;
+    if craftkit_image::is_png(&bytes) {
+        let picture = craftkit_png::read(&bytes, &craftkit_png::Limits::default()).ok()?;
+        let pixels = u64::from(picture.width) * u64::from(picture.height);
+        if pixels == 0 || pixels > MAX_PICTURE_PIXELS {
+            return None;
+        }
+        let mut rgba = Vec::with_capacity(pixels as usize * 4);
+        for pixel in picture.samples.chunks(picture.channels.max(1) as usize) {
+            match picture.channels {
+                1 => {
+                    let grey = pixel.first().copied().unwrap_or(0);
+                    rgba.extend_from_slice(&[grey, grey, grey, 255]);
+                }
+                3 => {
+                    rgba.extend_from_slice(&[
+                        pixel.first().copied().unwrap_or(0),
+                        pixel.get(1).copied().unwrap_or(0),
+                        pixel.get(2).copied().unwrap_or(0),
+                        255,
+                    ]);
+                }
+                4 => {
+                    rgba.extend_from_slice(&[
+                        pixel.first().copied().unwrap_or(0),
+                        pixel.get(1).copied().unwrap_or(0),
+                        pixel.get(2).copied().unwrap_or(0),
+                        pixel.get(3).copied().unwrap_or(0),
+                    ]);
+                }
+                _ => return None,
+            }
+        }
+        return Some((picture.width, picture.height, rgba));
+    }
+    if craftkit_image::is_jpeg(&bytes) {
+        let decoded = craftkit_jpeg::decode(&bytes, &craftkit_jpeg::Limits::default(), None).ok()?;
+        let pixels = u64::from(decoded.width) * u64::from(decoded.height);
+        if pixels == 0 || pixels > MAX_PICTURE_PIXELS || decoded.components != 3 {
+            return None;
+        }
+        let craftkit_jpeg::Samples::U8(samples) = decoded.samples else { return None };
+        let mut rgba = Vec::with_capacity(pixels as usize * 4);
+        for pixel in samples.chunks(3) {
+            rgba.extend_from_slice(&[
+                pixel.first().copied().unwrap_or(0),
+                pixel.get(1).copied().unwrap_or(0),
+                pixel.get(2).copied().unwrap_or(0),
+                255,
+            ]);
+        }
+        return Some((decoded.width, decoded.height, rgba));
+    }
+    None
+}
 
 /// A **colour** of the tree, as the three bytes a PDF wants.
 fn rgb_of(text: &str) -> Option<[u8; 3]> {
@@ -366,11 +438,20 @@ fn is_uri(target: &str) -> bool {
     })
 }
 
+/// What a page gives back: what was drawn on it.
+#[derive(Clone, Copy, Default)]
+struct Counts {
+    /// The links that were drawn.
+    links: usize,
+    /// The pictures that were drawn.
+    pictures: usize,
+}
+
 /// Draws one **page** of the sheet.
 ///
-/// The number it gives back is the number of **links** that were drawn
-/// on it.
-fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32, u32))) -> usize {
+/// The counts it gives back are the **links** and the **pictures** that
+/// were drawn on it.
+fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32, u32))) -> Counts {
     let Drawing { session, sheet, node, cells, setup, pages, number, count } = drawing;
     let (session, sheet, node, cells, setup, pages) = (*session, *sheet, *node, *cells, *setup, *pages);
     let (number, count) = (*number, *count);
@@ -635,7 +716,7 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
     // web address or to a `mailto:` is drawn over its cell, and the
     // others are not drawn at all.
     let links = crate::links::links_of(node);
-    let mut drawn = 0usize;
+    let mut counts = Counts::default();
     for (address, link) in &links {
         let Some(cell) = CellRef::parse(address) else { continue };
         if !is_uri(&link.target) {
@@ -650,9 +731,30 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
         let width = crate::printing::column_width(node, cell.col) * scale;
         let height = crate::printing::row_height(node, cell.row) * scale;
         page.link_uri(x as f32, y as f32, width as f32, height as f32, &link.target);
-        drawn += 1;
+        counts.links += 1;
     }
-    drawn
+    // The **pictures** of the cells on this page: a picture is drawn at
+    // its own size, from the top left of the cell it is on, and it is
+    // cut off at the edge of the block.
+    for (address, picture) in crate::pictures::pictures_of(node) {
+        let Some(cell) = CellRef::parse(&address) else { continue };
+        let Some(row_index) = rows.iter().position(|row| *row == cell.row) else { continue };
+        let Some(column_index) = columns.iter().position(|column| *column == cell.col) else {
+            continue;
+        };
+        let Some(path) = picture.get("path").and_then(|path| path.as_str()) else { continue };
+        let Some((width, height, rgba)) = pixels_of(path) else { continue };
+        let x = xs.get(column_index).copied().unwrap_or(origin_x);
+        let y = ys.get(row_index).copied().unwrap_or(origin_y);
+        let wide = f64::from(width) * PIXEL * scale;
+        let high = f64::from(height) * PIXEL * scale;
+        page.save();
+        page.clip_rect(origin_x as f32, origin_y as f32, block_width as f32, block_height as f32);
+        page.image_rgba(Rect::new(x as f32, y as f32, wide as f32, high as f32), &rgba, [width, height]);
+        page.restore();
+        counts.pictures += 1;
+    }
+    counts
 }
 
 commands! {
@@ -698,7 +800,7 @@ commands! {
             doc.info.title = name.clone();
             let (width, height) = setup.page();
             let count = pages.bands.len();
-            let mut drawn = 0usize;
+            let mut counts = Counts::default();
             for (number, band) in pages.bands.iter().enumerate() {
                 let page = doc.add_page(width as f32, height as f32);
                 let drawing = Drawing {
@@ -711,7 +813,9 @@ commands! {
                     number: number + 1,
                     count,
                 };
-                drawn += draw_page(page, &drawing, *band);
+                let drawn = draw_page(page, &drawing, *band);
+                counts.links += drawn.links;
+                counts.pictures += drawn.pictures;
             }
             let bytes = doc.finish();
             std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
@@ -721,13 +825,17 @@ commands! {
             // The **links** of the sheet: the ones that were drawn and the
             // ones that were not, so that none is dropped in silence.
             let links = crate::links::links_of(&node).len();
+            let pictures = crate::pictures::pictures_of(&node).len();
             Ok(Outcome::new(format!("wrote {} page(s)", pages.bands.len())).with_data(json!({
                 "sheet": sheet,
                 "path": path,
                 "pages": pages.bands.len(),
                 "links": links,
-                "links_drawn": drawn,
-                "links_undrawn": links.saturating_sub(drawn),
+                "links_drawn": counts.links,
+                "links_undrawn": links.saturating_sub(counts.links),
+                "pictures": pictures,
+                "pictures_drawn": counts.pictures,
+                "pictures_undrawn": pictures.saturating_sub(counts.pictures),
                 "area": pages.area.to_text(),
                 "paper": setup.paper,
                 "scale": (pages.scale * 10_000.0).round() / 100.0,

@@ -17,6 +17,10 @@ craftkit-xlsx = { workspace = true }
 # The **PDF writer**: a file written as a PDF. A **library**, and the
 # linker does not wire it in.
 craftkit-pdf-writer = { workspace = true }
+# The **readers of the pictures**: the bytes of a picture, and the
+# pixels in them. A **library**, and the linker does not wire it in.
+craftkit-png = { workspace = true }
+craftkit-jpeg = { workspace = true }
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
 
