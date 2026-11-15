@@ -4385,6 +4385,7 @@ so.
 | the **links** of a sheet on the printed page | **built.** A link on a cell is an area that is clickable on the page, and the links that are not drawn are counted (§937) | §937 |
 | the **pictures** of a sheet on the printed page | **built.** A picture on a cell is drawn on the page at its own size, and the pictures that are not drawn are counted (§938) | §938 |
 | the **borders** of the cells on the printed page | **built.** A cell's borders are drawn with the width, the dashes and the colour of their style (§939) | §939 |
+| the **sparklines** of a sheet on the printed page | **built.** A sparkline is drawn in its cell — a line, a set of columns, or the wins and the losses (§940) | §940 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61654,3 +61655,47 @@ and in a colour.
 
 - **The tree has no diagonal border**, so no diagonal is drawn.
 - **A chart, a note and a comment are still not on the page.**
+
+## 940. The sparklines of a sheet on the printed page
+
+A cell may hold a **sparkline**: a little chart of a range, drawn in
+the cell (§927).
+
+### What was built
+
+- A **sparkline** on a cell is drawn in that cell: a **line** through
+  the values, **columns** from the zero of the values, and **wins and
+  losses** — a column up for a win and a column down for a loss.
+- The line is **broken** where a value is missing.
+- The **markers** are drawn when the sparkline has them.
+- The answer says how many sparklines the sheet has and how many were
+  drawn.
+
+### What the port found
+
+- **The tree's sparkline has one colour** and the reference's has a
+  second one for a column that goes down. So here every bar is in the
+  sparkline's own colour, and what says which way a bar goes is the
+  zero line it stands on.
+- **The reference measures a sparkline in the sheet's pixels and this
+  tree's cell is in points**, so the tree's own measures are used: the
+  padding is a tenth of the height of the cell and the line is a point
+  and a quarter.
+- **A cell that holds only a sparkline is not in the range the sheet
+  uses**, so it is not printed: the tree's rule for the area of a sheet
+  is the range its cells use, and a sparkline is not a value.
+
+### What it cost
+
+- **Two functions**, and **no new command**.
+- **Two tests**: a line sparkline is drawn, and a column sparkline is
+  drawn as bars.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The charts of a sheet are not on the page**: the reference's charts
+  are a whole engine — axes, legends, labels — and the tree has no
+  chart engine at all. The tree's chart is a **model** — a kind, a
+  title and a range — and the export does not draw it.
+- **A note and a comment are not on the page.**
