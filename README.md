@@ -4396,6 +4396,7 @@ so.
 | the **rank**, the **analysis of variance**, the **regression** and the **smoothing** | **built.** The rank of a range, the variance of its groups, the line through its points and the smoothing of its series — all of them live (§948) | §948 |
 | the **forecast sheet** as a **table** and a **chart** | **built.** The forecast sheet is a named table, and it may hold a chart of the forecast (§949) | §949 |
 | the **review** of a workbook | **built.** The statistics of a workbook say how much is in it, and the accessibility check says what a reader may not be able to read (§950) | §950 |
+| the **structure** of a protected workbook | **built.** The sheets of a protected workbook may not be added, taken away, renamed or moved (§951) | §951 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55936,7 +55937,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 207 |
+| grid | 209 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62234,3 +62235,39 @@ How much is in a workbook, and what a reader may not be able to read.
   praised.
 - **The pictures are counted and not measured**: the tree's picture is
   a file and a place, and the statistics say how many there are.
+
+## 951. The structure of a protected workbook
+
+A workbook may say that its shape is not to be changed.
+
+### What was built
+
+- Two new commands, **`grid.workbook.protect`** and
+  **`grid.workbook.unprotect`**: the **structure** of a workbook is
+  protected, and it is not.
+- While the structure is protected, the sheets of the workbook may not
+  be **added**, **taken away**, **renamed** or **moved** — the four
+  commands that change the shape of a workbook say why they refuse.
+
+### What the port found
+
+- **The reference's protection of a workbook has a password**, and the
+  tree's protection has **none**: the tree's sheet protection has none
+  either, and a protection that says what is protected and nothing more
+  is the tree's own rule (§ the tree's protection).
+- **The reference protects the structure of a workbook**, and so does
+  the tree's — and the tree's rule is the same rule as the sheet's: the
+  protection is a word on the workbook, and the commands that would
+  break it are the ones that refuse.
+
+### What it cost
+
+- **Two commands**: the grid battery now carries **209** commands.
+- **One test**: the structure of a protected workbook is not changed,
+  and it may be unprotected again.
+- **No new dependency**.
+
+### What it does not settle
+
+- **There is no password**: a protection that a program may lift is a
+  protection that is a word and not a lock, and the tree says so.
