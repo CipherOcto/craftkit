@@ -57,6 +57,24 @@ const MAX_CHARS: usize = 10_000;
 /// The **most** cells a cell's text may run over.
 const MAX_SPILL: u32 = 64;
 
+/// The **fill of a heading**: the tree's own pale grey.
+const HEADING_FILL: [u8; 3] = [242, 242, 242];
+
+/// The **line around a heading**.
+const HEADING_LINE: [u8; 3] = [160, 160, 160];
+
+/// The **text of a heading**.
+const HEADING_TEXT: [u8; 3] = [64, 64, 64];
+
+/// The **size of the text of a heading**, in points.
+const HEADING_SIZE: f64 = 9.0;
+
+/// The **size of the text of a header or of a footer**, in points.
+const HEADER_SIZE: f64 = 10.0;
+
+/// The **most** lines a header or a footer may hold.
+const MAX_HEADER_LINES: usize = 20;
+
 /// A **colour** of the tree, as the three bytes a PDF wants.
 fn rgb_of(text: &str) -> Option<[u8; 3]> {
     let colour = Colour::from_hex(text).ok()?;
@@ -192,12 +210,156 @@ struct Drawing<'a> {
     cells: &'a crate::formula::Cells,
     setup: &'a Setup,
     pages: &'a Pages,
+    /// The number of this page, from one.
+    number: usize,
+    /// The number of pages of the sheet.
+    count: usize,
+}
+
+/// The **place of the rows and the columns** of a page.
+struct Places<'a> {
+    pages: &'a Pages,
+    node: &'a Node,
+    rows: &'a [u32],
+    columns: &'a [u32],
+    xs: &'a [f64],
+    ys: &'a [f64],
+    /// The left margin: where the strip of the row numbers is.
+    left: f64,
+    /// The top margin: where the strip of the column names is.
+    top: f64,
+}
+
+/// Draws the **headings** of the sheet: the number of each row down the
+/// left and the name of each column across the top.
+///
+/// The headings take their room from the page, so they are drawn in the
+/// room the page set aside for them.
+fn draw_headings(page: &mut PdfPage, places: &Places<'_>) {
+    let Places { pages, node, rows, columns, xs, ys, left, top } = places;
+    let (pages, node) = (*pages, *node);
+    let (left, top) = (*left, *top);
+    let (heading_width, heading_height) = pages.heading_room;
+    if heading_width <= 0.0 || heading_height <= 0.0 {
+        return;
+    }
+    let scale = pages.scale;
+    let size = (HEADING_SIZE * scale).clamp(1.0, 400.0);
+    let face = PdfFont::styled(Family::Sans, false, false);
+    let line = (0.35 * scale).clamp(0.1, 0.5);
+    // The **columns**: their names across the top.
+    for (index, column) in columns.iter().enumerate() {
+        let x = xs.get(index).copied().unwrap_or(left);
+        let width = crate::printing::column_width(node, *column) * scale;
+        page.fill_rect(x as f32, top as f32, width as f32, heading_height as f32, HEADING_FILL);
+        page.rect_stroke(
+            x as f32,
+            top as f32,
+            width as f32,
+            heading_height as f32,
+            line as f32,
+            HEADING_LINE,
+        );
+        let text = CellRef::column_text(*column);
+        let measured = width_of(face, size, &text);
+        page.text(
+            (x + (width - measured) / 2.0) as f32,
+            (top + heading_height / 2.0 + size * 0.35) as f32,
+            size as f32,
+            face,
+            HEADING_TEXT,
+            &text,
+        );
+    }
+    // The **rows**: their numbers down the left.
+    for (index, row) in rows.iter().enumerate() {
+        let y = ys.get(index).copied().unwrap_or(top);
+        let height = crate::printing::row_height(node, *row) * scale;
+        page.fill_rect(left as f32, y as f32, heading_width as f32, height as f32, HEADING_FILL);
+        page.rect_stroke(
+            left as f32,
+            y as f32,
+            heading_width as f32,
+            height as f32,
+            line as f32,
+            HEADING_LINE,
+        );
+        let text = (row + 1).to_string();
+        let measured = width_of(face, size, &text);
+        page.text(
+            (left + (heading_width - measured) / 2.0) as f32,
+            (y + height / 2.0 + size * 0.35) as f32,
+            size as f32,
+            face,
+            HEADING_TEXT,
+            &text,
+        );
+    }
+}
+
+/// Draws the **header** and the **footer** of a page.
+///
+/// The header is above the grid, inside the top margin, and the footer
+/// is below it, inside the bottom margin. The three sections of each are
+/// at the left, in the middle and at the right of the page.
+fn draw_header_footer(
+    page: &mut PdfPage,
+    node: &Node,
+    number: usize,
+    count: usize,
+    setup: &Setup,
+    page_width: f64,
+    page_height: f64,
+) {
+    let (header, footer) = crate::headers::of_page(node, number, count);
+    let margins = setup.margins;
+    let size = HEADER_SIZE;
+    let left = margins[0];
+    let right = page_width - margins[1];
+    // The **header**: the last of its lines sits just above the grid.
+    for (index, section) in [&header.left, &header.centre, &header.right].iter().enumerate() {
+        if section.text.trim().is_empty() {
+            continue;
+        }
+        let face = PdfFont::styled(Family::Sans, section.bold, section.italic);
+        let lines: Vec<&str> = section.text.split('\n').take(MAX_HEADER_LINES).collect();
+        let count = lines.len() as f64;
+        for (line_number, line) in lines.iter().enumerate() {
+            let measured = width_of(face, size, line);
+            let x = match index {
+                0 => left,
+                1 => (page_width - measured) / 2.0,
+                _ => right - measured,
+            };
+            let y = margins[2] - size * 0.22 - (count - 1.0 - line_number as f64) * size * 1.2;
+            page.text(x as f32, y as f32, size as f32, face, [0, 0, 0], line);
+        }
+    }
+    // The **footer**: the first of its lines sits just below the grid.
+    for (index, section) in [&footer.left, &footer.centre, &footer.right].iter().enumerate() {
+        if section.text.trim().is_empty() {
+            continue;
+        }
+        let face = PdfFont::styled(Family::Sans, section.bold, section.italic);
+        let lines: Vec<&str> = section.text.split('\n').take(MAX_HEADER_LINES).collect();
+        for (line_number, line) in lines.iter().enumerate() {
+            let measured = width_of(face, size, line);
+            let x = match index {
+                0 => left,
+                1 => (page_width - measured) / 2.0,
+                _ => right - measured,
+            };
+            let y = page_height - margins[3] + size * 0.8 + line_number as f64 * size * 1.2;
+            page.text(x as f32, y as f32, size as f32, face, [0, 0, 0], line);
+        }
+    }
 }
 
 /// Draws one **page** of the sheet.
 fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32, u32))) {
-    let Drawing { session, sheet, node, cells, setup, pages } = drawing;
+    let Drawing { session, sheet, node, cells, setup, pages, number, count } = drawing;
     let (session, sheet, node, cells, setup, pages) = (*session, *sheet, *node, *cells, *setup, *pages);
+    let (number, count) = (*number, *count);
     let scale = pages.scale;
     let name = node.name.clone();
     let margins = setup.margins;
@@ -266,6 +428,24 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             GRIDLINE,
         );
     }
+    // The **headings**: the numbers of the rows and the names of the
+    // columns, in the room the page set aside for them.
+    if pages.headings {
+        let places = Places {
+            pages,
+            node,
+            rows: &rows,
+            columns: &columns,
+            xs: &xs,
+            ys: &ys,
+            left: margins[0],
+            top: margins[2],
+        };
+        draw_headings(page, &places);
+    }
+    // The **header** and the **footer** of the page.
+    let (page_width, page_height) = setup.page();
+    draw_header_footer(page, node, number, count, setup, page_width, page_height);
     // The **merges** of the sheet: a merged cell is drawn over the whole
     // of its region, and the cells it covers are not drawn at all.
     let merges = crate::merges::merges_of(node);
@@ -481,7 +661,8 @@ commands! {
             let mut doc = PdfDoc::new();
             doc.info.title = name.clone();
             let (width, height) = setup.page();
-            for band in &pages.bands {
+            let count = pages.bands.len();
+            for (number, band) in pages.bands.iter().enumerate() {
                 let page = doc.add_page(width as f32, height as f32);
                 let drawing = Drawing {
                     session,
@@ -490,6 +671,8 @@ commands! {
                     cells: &cells,
                     setup: &setup,
                     pages: &pages,
+                    number: number + 1,
+                    count,
                 };
                 draw_page(page, &drawing, *band);
             }

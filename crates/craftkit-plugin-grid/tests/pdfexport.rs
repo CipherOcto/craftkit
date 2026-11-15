@@ -137,3 +137,46 @@ fn a_number_that_does_not_fit_is_drawn_as_hashes() {
 fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
     hay.windows(needle.len()).position(|window| window == needle)
 }
+
+/// The **header** of the page is drawn.
+#[test]
+fn the_header_of_the_page_is_drawn() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.print.header", &json!({ "sheet": sheet, "text": "&Lthe book&Rpage &P of &N" }))
+        .expect("the header is set");
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (bytes, _) = exported(&mut session, sheet);
+    assert!(find(&bytes, b"(the book) Tj").is_some(), "the left section is drawn");
+    assert!(find(&bytes, b"(page 1 of 1) Tj").is_some(), "the codes are worked out");
+}
+
+/// The **footer** of the page is drawn.
+#[test]
+fn the_footer_of_the_page_is_drawn() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.print.footer", &json!({ "sheet": sheet, "text": "&Cthe end" }))
+        .expect("the footer is set");
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (bytes, _) = exported(&mut session, sheet);
+    assert!(find(&bytes, b"(the end) Tj").is_some(), "the footer is drawn");
+}
+
+/// The **headings** of the sheet are drawn when the sheet says they are.
+#[test]
+fn the_headings_of_the_sheet_are_drawn() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (without, _) = exported(&mut session, sheet);
+    assert!(find(&without, b"(A) Tj").is_none(), "no headings without them");
+    session
+        .execute("grid.print.headings", &json!({ "sheet": sheet, "on": true }))
+        .expect("the headings are printed");
+    let (with, _) = exported(&mut session, sheet);
+    assert!(find(&with, b"(A) Tj").is_some(), "the name of the column is drawn");
+    assert!(find(&with, b"(1) Tj").is_some(), "the number of the row is drawn");
+}
