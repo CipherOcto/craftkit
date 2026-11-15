@@ -4392,6 +4392,7 @@ so.
 | the **spelling** of a sheet | **built.** The words of a sheet that the word list does not hold are found, with the cells and the suggestions (§944) | §944 |
 | the **words** the user taught, and the **thesaurus** | **built.** A workbook is taught a word, and the thesaurus gives the words that share a stem (§945) | §945 |
 | the **analysis reports** of a range | **built.** A range becomes a report — the descriptive statistics, the histogram, the correlation, the covariance, the t-test and the F-test — and every report is live (§946) | §946 |
+| the **concatenation** of two texts | **built.** The `&` of a formula puts one text after the other, and a criterion may be built out of a cell (§947) | §947 |
 
 ### The list of things that are honestly not there: empty
 
@@ -62034,3 +62035,41 @@ something.
 - **The matrix is the lower triangle of a square**, as in the
   reference: the upper triangle is empty, and the whole of the square
   is not written twice.
+
+## 947. The concatenation of two texts
+
+Two texts, one after the other.
+
+### What was built
+
+- **The `&` of a formula**: `="n="&A1` is the text `n=` and then
+  whatever `A1` holds. A number is written as a formula writes a
+  number, a boolean is `TRUE` or `FALSE`, and a cell that holds
+  nothing is nothing at all.
+- The `&` binds **tighter** than a comparison and looser than a sum,
+  so `="a"&"b"="ab"` is a comparison of a concatenation with a text.
+
+### What the port found
+
+- **The tree had no way to build a criterion out of a cell.** A
+  criterion is a text — `">3"` — and without a concatenation there was
+  no way to write `">"&A1`, so a count that depended on a cell was not
+  expressible. The Analysis ToolPak's counts are exactly that, and the
+  tree's own `COUNTIFS` reads a criterion that is a text.
+- **This is a gap in the tree and not a port of the reference**: the
+  reference computes its counts in the program, and never needs the
+  `&`. The tree writes its reports as formulas, and so needs it.
+
+### What it cost
+
+- **One operator** in the formula engine: the parser, the printer and
+  the evaluator.
+- **Seven tests**: two texts, a number, a boolean, an empty cell, the
+  precedence, an error, and a copied formula that keeps its `&`.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's `&` does not spill and does not array**: `A1:A5&"x"` is
+  not a thing, and a text of fifteen thousand characters is not a thing
+  either.
