@@ -4391,6 +4391,7 @@ so.
 | the **export** of a whole workbook as a PDF file | **built.** Every sheet of the document is written into one file, and the pages are numbered through the whole of it (§943) | §943 |
 | the **spelling** of a sheet | **built.** The words of a sheet that the word list does not hold are found, with the cells and the suggestions (§944) | §944 |
 | the **words** the user taught, and the **thesaurus** | **built.** A workbook is taught a word, and the thesaurus gives the words that share a stem (§945) | §945 |
+| the **analysis reports** of a range | **built.** A range becomes a report — the descriptive statistics, the histogram, the correlation, the covariance, the t-test and the F-test — and every report is live (§946) | §946 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55931,7 +55932,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 194 |
+| grid | 200 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -61937,3 +61938,99 @@ A word the user says is a word should be a word.
   machine does not know it. The reference's words are the machine's,
   and every workbook of it knows them.
 - **The change of a spelling is the tree's `grid.replace`**, as above.
+
+## 946. The analysis reports of a range
+
+A range of numbers is more than a list of numbers: it has a shape, and
+two ranges of numbers are more than two lists: they move together, or
+they do not.
+
+### What was built
+
+A new module, **`src/analysis.rs`**, and six new commands — every one
+of them a report of a range, and every one of them **live**: its
+values are **formulas** over the range, so an edit of the data is an
+edit of the report.
+
+- **`grid.analysis.descriptive`** — the report of a range: the
+  **mean**, the **standard error**, the **median**, the **mode**, the
+  **standard deviation**, the **sample variance**, the **kurtosis**,
+  the **skewness**, the **range**, the **minimum**, the **maximum**,
+  the **sum** and the **count** of every variable of the range, and —
+  when they are asked for — the **largest** and the **smallest** values
+  and the **confidence level** of the mean.
+- **`grid.analysis.histogram`** — the **bins** of a range and their
+  **frequencies**, and — when they are asked for — the **cumulative**
+  percentage and the **pareto**, the same bins in the order of their
+  frequencies. The bins are evenly spaced from the smallest number to
+  the largest, and they are live: each edge is a formula over the data.
+- **`grid.analysis.correlation`** and **`grid.analysis.covariance`** —
+  the **matrix** of the variables of a range: the names of the
+  variables in the first row and in the first column, and the
+  statistic of each pair of them in the square they make.
+- **`grid.analysis.ttest`** (`kind` is `paired`, `equal` or
+  `unequal`) and **`grid.analysis.ftest`** — the report of a test of
+  two samples: the **means**, the **variances**, the **observations**,
+  the **degrees of freedom**, the **t statistic** (or the **F**), the
+  **p-values** and the **critical values**.
+
+The reports go to a **range** of a sheet, or to a **new sheet** of
+their own, and they **refuse** to be written over cells that hold
+something.
+
+### What the port found
+
+- **The reference writes its reports as static values**, and this tree
+  writes them as **formulas**: a derived value is derived, and a report
+  that is a table of numbers taken at one moment goes stale the moment
+  the data moves. The tree's own functions do the work — `AVERAGE`,
+  `STDEV.S`, `KURT`, `T.INV.2T`, `CORREL`, `COVARIANCE.P`,
+  `T.DIST.2T`, `F.DIST.RT` — so the tree's own rules about them hold: a
+  spread of fewer than two numbers is `#DIV/0!`, and a `k` that is not
+  in the numbers is `#NUM!`.
+- **The reference has one command with a `tool` parameter** for its
+  whole Analysis ToolPak, and this tree has **one command per
+  report**: a command is a struct whose fields are its parameters, and
+  a report of one kind has parameters of its own.
+- **The reference computes the t statistic of a paired test from the
+  differences of the two samples**, and the tree cannot write the
+  differences of two ranges as a formula: a formula reads a range, it
+  does not zip two of them. The tree writes the same number another
+  way — the variance of the differences is the sum of the two
+  variances less twice their covariance, and the covariance is the
+  correlation times the two standard deviations — so the number is the
+  same and the formula is the tree's.
+- **The reference's F-test picks the tail by the value of F**, and the
+  tree's formula picks it with an `IF`, so the tail follows the data.
+- **The reference's range may be any shape**, and the tree's range of a
+  histogram or of a test is **one row or one column**: a histogram of
+  a block of cells has no order to count along, and a test of two
+  blocks has no order to pair them in.
+
+### What it cost
+
+- **Six commands**: the grid battery now carries **200** commands.
+- **Twenty-two tests**: the report goes to a new sheet, it is live, it
+  goes to a range, it refuses to write over what is there, the names of
+  the variables are the first row, the variables may be the rows, a
+  text in the range is refused, the confidence, the largest and the
+  smallest are written when they are asked for, the histogram counts
+  its bins, the cumulative percentage and the pareto are written when
+  they are asked for, the bins may be given, the matrix holds the
+  correlation and the covariance, and the t-test and the F-test hold
+  their statistics.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A report is a table of formulas**, and a reader who opens the file
+  sees the formulas and not the numbers.
+- **The order of the pareto is the order of the frequencies when the
+  report is made**: the values of the pareto are live, and its order is
+  not. A tie of two frequencies puts the first of them first, in both
+  the tree and the reference.
+- **A blank cell is skipped in every report**: the reference refuses a
+  blank in a paired test.
+- **The matrix is the lower triangle of a square**, as in the
+  reference: the upper triangle is empty, and the whole of the square
+  is not written twice.
