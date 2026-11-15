@@ -4384,6 +4384,7 @@ so.
 | the **header**, the **footer** and the **headings** of the printed page | **built.** A printed page carries its header, its footer and the headings of the sheet, and the codes in them are worked out for the page they are on (§936) | §936 |
 | the **links** of a sheet on the printed page | **built.** A link on a cell is an area that is clickable on the page, and the links that are not drawn are counted (§937) | §937 |
 | the **pictures** of a sheet on the printed page | **built.** A picture on a cell is drawn on the page at its own size, and the pictures that are not drawn are counted (§938) | §938 |
+| the **borders** of the cells on the printed page | **built.** A cell's borders are drawn with the width, the dashes and the colour of their style (§939) | §939 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61610,4 +61611,46 @@ inside it (§480).
   cell runs over the cells beside it: the tree has no rule for the size
   of a picture in a cell.
 - **A picture in CMYK is not drawn**, as above.
+- **A chart, a note and a comment are still not on the page.**
+
+## 939. The borders of the cells on the printed page
+
+A cell may have **borders**: a line on each of its edges, in a style
+and in a colour.
+
+### What was built
+
+- The **borders** of a cell are drawn: each edge of the cell is drawn
+  with the line of its own border.
+- The **width** of the line is the tree's own: a thin line is a point, a
+  medium one two and a thick one three, and the scale of the sheet
+  moves them.
+- The **dashes** are the tree's own too: a dashed line is four units on
+  and two off, a dotted one a unit and a unit, and a dash-dot one four
+  on, one and a half off, one on and one and a half off.
+- A **double** line is two lines beside each other.
+- The answer says how many borders the sheet has and how many were
+  drawn.
+
+### What the port found
+
+- **The reference draws each cell's own four edges**, and not the edge
+  between two cells: a border is drawn by the cell that has it, and a
+  border that two cells share is drawn twice, which is the same line.
+  So the tree's rule — a border belongs to a cell and to an edge of it
+  — is the rule the drawing follows.
+- **The reference measures a line in points at ninety-six dots to the
+  inch** and this tree's cell is already in points, so the tree's widths
+  are the widths of the lines: a thin border is a point.
+
+### What it cost
+
+- **Two functions**, and **no new command**.
+- **Two tests**: a border is drawn with the dashes of its style, and a
+  double border is two lines.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree has no diagonal border**, so no diagonal is drawn.
 - **A chart, a note and a comment are still not on the page.**
