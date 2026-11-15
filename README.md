@@ -4380,6 +4380,7 @@ so.
 | the **pivot tables** of a sheet | **built.** The pivots a sheet holds are read and imported as the tree's own pivots — the cells they read and the fields they gather them by (§932) | §932 |
 | the **conditional formats** of the extension list | **built.** The rules a file puts beside its extension list are not comparisons, and the reader says how many it left out rather than dropping them in silence (§933) | §933 |
 | the **PDF writer** | **built.** A file is written as a PDF — pages drawn with vectors, text in the standard faces, pictures and links (§934) | §934 |
+| the **export** of a sheet as a PDF file | **built.** A sheet is written as a PDF file — the pages are the sheet's own, and the cells are drawn with their fills, their text and their gridlines (§935) | §935 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55920,7 +55921,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 189 |
+| grid | 190 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -61397,3 +61398,77 @@ is another way to make one — **draw** it, and write the drawing out.
   everywhere, and a file that wants another face has to embed it.
 - **The file it writes is a plain file**: it is not encrypted, and it
   has no object stream.
+
+## 935. The export of a sheet as a PDF file
+
+A sheet is printed on paper, and a **PDF file** is a way of writing a
+printed page down. So a sheet may be **exported** as one.
+
+### What was built
+
+- A new command, **`grid.export.pdf`**: the sheet is written as a PDF
+  file, where the caller says, and the answer says how many pages it
+  has.
+- The **pages** are the sheet's own: the paper, the orientation, the
+  margins, the scale, the fit, the breaks, the titles and the headings
+  (§462–§472) are all worked out in the printing module — and that
+  module is now the **one place** that works them out, so the command
+  that reads the pages and the command that writes the file agree.
+- What is drawn on a page: the **fill** of each cell, the **text** the
+  cell shows (its value written with its format), the **gridlines**
+  when the sheet says they are printed, and the **merges** across the
+  region they cover.
+- The **look** of a cell is its own word first and the word of the
+  style it names second, and the fill of a **conditional rule** is on
+  top of both — the tree's rule, and the same one the cell's own
+  reading uses.
+- A **number** that does not fit in its cell is drawn as a row of `#`,
+  and **text** that does not fit runs over the cells beside it when
+  they are empty.
+
+### What the port found
+
+- **The tree already knew how a sheet is broken into pages** (§924,
+  §921, §926): the paper, the margins, the scale, the fit, the titles
+  and the breaks were all there, and the pages were worked out inside
+  the command that reads them. So the export does not work them out
+  again — it comes to the same place, which is why the printing module
+  was **split**: the pages are worked out in one function, and the two
+  commands that need them come to it.
+- **A PDF writer is not a plugin** (§934): the battery that draws a
+  sheet may not depend on the battery that writes a PDF file, so the
+  writer is a library at the bottom of the tree and the battery uses
+  it.
+- **The reference measures a page in pixels and this tree in points**:
+  the tree's row height is points and its column width is characters,
+  and the tree already works a column's width out in points when it
+  prints (§914). So the export uses the tree's own sizes and not the
+  reference's pixels.
+- **The reference's rules for the text of a cell are the tree's rules
+  already**: a general cell puts a number to the right, a truth in the
+  middle and text to the left; a long word is broken; a text that does
+  not fit runs over the empty cells beside it; and the underline and
+  the strike are drawn.
+
+### What it cost
+
+- **A module** of about 500 lines, and **a command**: the grid battery
+  now carries **190** commands.
+- **Six tests**: the file is a PDF file, the text of a cell is in it,
+  the paper is the sheet's paper, the gridlines are drawn when the
+  sheet says so, a number that does not fit is a row of hashes, and a
+  sheet with nothing in it is refused.
+- **A refactor** of the printing module: the pages are worked out in
+  one place now.
+- **No new dependency**: the writer was made in the arc before.
+
+### What it does not settle
+
+- **The header and the footer of the printed page are not drawn**:
+  the tree has the codes (§471) and works them out for each page, but
+  they are not written on the page yet.
+- **The headings of the sheet are not drawn**: the tree says whether
+  they are printed (§472) and they take their room from the page, but
+  they are not written on it.
+- **The cells of the sheet are all that is drawn**: a chart, a
+  picture, a note, a link and a comment are not on the page.
