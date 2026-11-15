@@ -4383,6 +4383,7 @@ so.
 | the **export** of a sheet as a PDF file | **built.** A sheet is written as a PDF file — the pages are the sheet's own, and the cells are drawn with their fills, their text and their gridlines (§935) | §935 |
 | the **header**, the **footer** and the **headings** of the printed page | **built.** A printed page carries its header, its footer and the headings of the sheet, and the codes in them are worked out for the page they are on (§936) | §936 |
 | the **links** of a sheet on the printed page | **built.** A link on a cell is an area that is clickable on the page, and the links that are not drawn are counted (§937) | §937 |
+| the **pictures** of a sheet on the printed page | **built.** A picture on a cell is drawn on the page at its own size, and the pictures that are not drawn are counted (§938) | §938 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61566,3 +61567,47 @@ it. On a printed page that is an area that is **clickable**.
   on it — is not in the PDF.
 - **A chart, a picture, a note and a comment are still not on the
   page.**
+
+## 938. The pictures of a sheet on the printed page
+
+A cell may hold a **picture**: a file beside the document, and a size
+inside it (§480).
+
+### What was built
+
+- A **picture** on a cell is drawn on the page: the bytes are read, the
+  pixels are decoded, and the picture is drawn at its own size from the
+  top left of the cell it is on.
+- A picture is **cut off** at the edge of the block, as a picture that
+  runs off the page is.
+- The answer says how many pictures the sheet has, how many were drawn
+  and **how many were not**.
+
+### What the port found
+
+- **The tree already had the readers**: the tree reads a PNG and a JPEG
+  (§539), and the tree's picture is a file beside the document with a
+  size in it. So the export reads the file the cell points at and
+  decodes it — the pixels are not kept in the document, and they are
+  not kept in the file either.
+- **The reference measures a picture in points at ninety-six dots to
+  the inch**, and so does this: a pixel is three quarters of a point.
+- **A picture in CMYK cannot be drawn**: the PDF writer writes RGB, and
+  the four components of a JPEG are inks. So a CMYK picture is not
+  drawn, and it is counted.
+
+### What it cost
+
+- **A function**, and **two dependencies** — the readers of the
+  pictures are already in the tree.
+- **Two tests**: a picture is drawn on the page, and a picture whose
+  bytes are broken is not drawn and is counted.
+- **No new command**.
+
+### What it does not settle
+
+- **A picture is drawn at its own size**, so a picture bigger than its
+  cell runs over the cells beside it: the tree has no rule for the size
+  of a picture in a cell.
+- **A picture in CMYK is not drawn**, as above.
+- **A chart, a note and a comment are still not on the page.**
