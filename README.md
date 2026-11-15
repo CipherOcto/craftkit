@@ -4389,6 +4389,7 @@ so.
 | the **forecast sheet** | **built.** A history becomes a new sheet with the forecast beside it — live formulas over the copied history, the bounds and the statistics (§941) | §941 |
 | the **start** and the **end** of a forecast | **built.** A forecast may start before the last point of the history and may end at a named one (§942) | §942 |
 | the **export** of a whole workbook as a PDF file | **built.** Every sheet of the document is written into one file, and the pages are numbered through the whole of it (§943) | §943 |
+| the **spelling** of a sheet | **built.** The words of a sheet that the word list does not hold are found, with the cells and the suggestions (§944) | §944 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55929,7 +55930,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 191 |
+| grid | 192 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -61841,3 +61842,56 @@ A file may hold more than one sheet, and a **workbook** is a file.
 
 - **The charts of the sheets are not on the page** (§935), and neither
   are the notes and the comments.
+
+## 944. The spelling of a sheet
+
+A sheet may hold words that are not words.
+
+### What was built
+
+- A new command, **`grid.spelling.check`**: the answer says the
+  **issues** — the words that the word list does not hold, with the
+  cells they are in and the **suggestions** for them.
+- The **suggestions** are the words of the list that are one edit away:
+  a letter added, a letter taken away, a letter changed, two letters
+  swapped. At most six of them, and the capitalisation of the word that
+  was written is kept.
+- The **word list** is the **system's** — the word list of the machine,
+  which is not in this tree — and a caller may name a file of one word
+  a line instead.
+- An **inflection** of a word the list holds is not an issue: a
+  plural, a past, a gerund, an adverb, a comparative — and the plural
+  of a word that ends in `y`.
+- A word that is not a word at all — a number, a single letter, an
+  acronym — is not an issue, and neither is a cell with a formula in
+  it.
+
+### What the port found
+
+- **The reference keeps the user's words in the preferences of the
+  program**, and this tree has no preferences: it has a document. So
+  the words the user taught are kept in the **workbook**, and they
+  travel with it and not with the machine.
+- **The reference's inflections are naive**, and so are these: the stem
+  of a gerund is the word without the `ing`, so `sitting` is not a word
+  to the tree unless `sitt` is in the list. That is the rule, and it
+  is the rule the reference has.
+- **The reference refuses when the machine has no word list**, and so
+  does this — and a caller may name a file of its own, which is how
+  the tree's own tests are written on a machine that has no list.
+
+### What it cost
+
+- **A module** of about 300 lines, and **a command**: the grid battery
+  now carries **192** commands.
+- **Six tests**: a misspelled word is an issue with a suggestion, a
+  word of the list is not, an inflection is not, a word that is not a
+  word is not, a cell with a formula is not checked, and a word list
+  that cannot be read is refused.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The words the user taught are read but there is no way to teach
+  one yet**: the command that adds a word to the workbook is not here.
+- **The thesaurus** — the words that share a stem — is not here.
