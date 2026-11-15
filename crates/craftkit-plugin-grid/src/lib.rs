@@ -383,6 +383,7 @@
 mod advancedfilter;
 mod aggregates;
 mod align;
+mod analysis;
 mod arithmetic;
 pub mod arrays;
 mod autofit;
