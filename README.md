@@ -4394,6 +4394,7 @@ so.
 | the **analysis reports** of a range | **built.** A range becomes a report — the descriptive statistics, the histogram, the correlation, the covariance, the t-test and the F-test — and every report is live (§946) | §946 |
 | the **concatenation** of two texts | **built.** The `&` of a formula puts one text after the other, and a criterion may be built out of a cell (§947) | §947 |
 | the **rank**, the **analysis of variance**, the **regression** and the **smoothing** | **built.** The rank of a range, the variance of its groups, the line through its points and the smoothing of its series — all of them live (§948) | §948 |
+| the **forecast sheet** as a **table** and a **chart** | **built.** The forecast sheet is a named table, and it may hold a chart of the forecast (§949) | §949 |
 
 ### The list of things that are honestly not there: empty
 
@@ -62141,3 +62142,45 @@ the report.
   is not. A rank that is not the one of the row it is in is the truth
   of the number, and not of the row.
 - **The regression is of one variable on another**, as above.
+
+## 949. The forecast sheet as a table and a chart
+
+A forecast sheet is a table of numbers, and a table of numbers is
+something a program can ask about.
+
+### What was built
+
+- The forecast sheet is now a **named table** — `Table1`, or the first
+  name that is free — over its whole range, and it may be **left out**
+  (`table: false`).
+- The forecast sheet may hold a **chart** of itself: `chart: line` or
+  `chart: column`. The chart reads the same range the table reaches
+  over, so the series are the values, the forecast and the bounds.
+- The answer says what was made: the **name** of the table and the
+  **id** of the chart.
+
+### What the port found
+
+- **The reference's forecast sheet always has a table and may have a
+  chart**, and so does the tree's — the table by default, and the chart
+  when it is asked for.
+- **The reference's chart is an object on the sheet**, with a place and
+  a size, and the tree's chart is a **model**: it reads a range and it
+  says what it shows, and nothing draws it (§ the tree's own charts).
+- **The reference's table has a style** — `TableStyleMedium2` — and the
+  tree's table has no style: a table is a name, a range and the way
+  its columns are totalled.
+
+### What it cost
+
+- **Two parameters** of `grid.forecast.sheet` (`table` and `chart`),
+  and **no new command**: the grid battery still carries **205**
+  commands.
+- **Four tests**: the forecast sheet is a table, it may hold a chart,
+  it may have no table, and the chart is a line or a column.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The chart is not drawn**: it is a model of a chart, as every chart
+  in the tree is, and the tree's charts are read and set, not painted.
