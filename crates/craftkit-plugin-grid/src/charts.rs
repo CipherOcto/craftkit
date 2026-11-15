@@ -117,11 +117,20 @@ pub struct Series {
     pub values: Vec<Option<f64>>,
 }
 
+/// Whether a chart reads its range **by rows**: the first row holds
+/// the categories and the rows after it are the series.
+pub fn reads_by_rows(chart: &Node) -> bool {
+    chart.data.get("rows").and_then(|rows| rows.as_bool()).unwrap_or(false)
+}
+
 /// The **data** of a chart: its categories and its series.
 ///
 /// The categories are the cells of the first column, and the series are
-/// the columns after it.
-pub fn data_of(sheet: &Node, area: &Area) -> (Vec<String>, Vec<Series>) {
+/// the columns after it — or, when the chart reads **by rows**, the
+/// categories are the cells of the first row and the series are the
+/// rows after it.
+/// The **data** of a chart, read by rows or by columns.
+pub fn data_of_rows(sheet: &Node, area: &Area, rows: bool) -> (Vec<String>, Vec<Series>) {
     let cells = crate::cells_of(sheet);
     let text_of = |cell: CellRef| -> String {
         match cells.get(cell).and_then(|cell| cell.value.clone()) {
@@ -144,6 +153,21 @@ pub fn data_of(sheet: &Node, area: &Area) -> (Vec<String>, Vec<Series>) {
             _ => None,
         }
     };
+    if rows {
+        // The **categories** are the cells of the first row, and the
+        // **series** are the rows after it.
+        let categories: Vec<String> = (area.start.col + 1..=area.end.col)
+            .map(|col| text_of(CellRef { col, row: area.start.row }))
+            .collect();
+        let mut series: Vec<Series> = Vec::new();
+        for row in area.start.row + 1..=area.end.row {
+            let name = text_of(CellRef { col: area.start.col, row });
+            let values: Vec<Option<f64>> =
+                (area.start.col + 1..=area.end.col).map(|col| number_of(CellRef { col, row })).collect();
+            series.push(Series { name, values });
+        }
+        return (categories, series);
+    }
     let categories: Vec<String> = (area.start.row + 1..=area.end.row)
         .map(|row| text_of(CellRef { col: area.start.col, row }))
         .collect();
@@ -158,8 +182,10 @@ pub fn data_of(sheet: &Node, area: &Area) -> (Vec<String>, Vec<Series>) {
 }
 
 /// The **data** of a chart, as it is reported.
-pub fn data_to_json(sheet: &Node, area: &Area) -> Json {
-    let (categories, series) = data_of(sheet, area);
+/// The **data** of a chart, as it is reported, read by rows or by
+/// columns.
+pub fn data_to_json_rows(sheet: &Node, area: &Area, rows: bool) -> Json {
+    let (categories, series) = data_of_rows(sheet, area, rows);
     let series: Vec<Json> = series
         .iter()
         .map(|series| {
@@ -232,6 +258,10 @@ commands! {
             x_title: Option<Text>,
             /// The title of the axis of the values.
             y_title: Option<Text>,
+            /// Whether the chart reads its range **by rows**: the first
+            /// row holds the categories and the rows after it are the
+            /// series.
+            switch_row_column: Option<Bool>,
         },
         run: {
             let id = "grid.chart.add".to_string();
@@ -316,6 +346,7 @@ commands! {
                     "xTitle": self.x_title.as_ref().map(|title| title.0.trim().to_string()),
                     "yTitle": self.y_title.as_ref().map(|title| title.0.trim().to_string()),
                     "smooth": false,
+                    "rows": self.switch_row_column.map(|flag| flag.0).unwrap_or(false),
                 }),
             );
             Ok(Outcome::changed(format!("the chart reads {}", area.to_text()))
@@ -354,7 +385,7 @@ commands! {
             let sheet = sheet_of(session, &id, chart)?;
             let area = area_of(&node);
             let data = match area {
-                Some(area) => data_to_json(&sheet, &area),
+                Some(area) => data_to_json_rows(&sheet, &area, reads_by_rows(&node)),
                 None => json!({ "categories": Vec::<Json>::new(), "series": Vec::<Json>::new() }),
             };
             let kind = kind_of_chart(&node);
@@ -406,6 +437,10 @@ commands! {
             x_title: Option<Text>,
             /// The title of the axis of the values.
             y_title: Option<Text>,
+            /// Whether the chart reads its range **by rows**: the first
+            /// row holds the categories and the rows after it are the
+            /// series.
+            switch_row_column: Option<Bool>,
         },
         run: {
             let id = "grid.chart.set".to_string();
@@ -491,6 +526,9 @@ commands! {
                 if let Some(text) = &self.y_title {
                     let text = text.0.trim().to_string();
                     node.data["yTitle"] = if text.is_empty() { Json::Null } else { json!(text) };
+                }
+                if let Some(flag) = self.switch_row_column {
+                    node.data["rows"] = json!(flag.0);
                 }
             }
             Ok(Outcome::changed(format!("the chart `{chart}` is set")).with_data(json!({

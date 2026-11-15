@@ -916,6 +916,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/comments.rs",
         section: "§952",
     },
+    Port {
+        rule: "the chart that reads its range the other way round",
+        from: "gridcraft/crates/engine/src/cmd/insert.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/charts.rs",
+        command: "grid.chart.set",
+        test: "crates/craftkit-plugin-grid/tests/charts.rs",
+        section: "§953",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

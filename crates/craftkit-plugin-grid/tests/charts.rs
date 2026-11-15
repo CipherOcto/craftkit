@@ -190,3 +190,50 @@ fn a_node_that_is_not_a_chart_is_refused() {
     let outcome = session.execute("grid.chart.read", &json!({ "chart": sheet }));
     assert!(outcome.is_err(), "a sheet is not a chart");
 }
+
+/// **A chart may read its range the other way round**: the first row
+/// holds the categories and the rows after it are the series.
+#[test]
+fn a_chart_may_read_its_range_by_rows() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "ann");
+    a_text(&mut session, sheet, "C1", "bob");
+    a_text(&mut session, sheet, "A2", "amount");
+    a_number(&mut session, sheet, "B2", 3.0);
+    a_number(&mut session, sheet, "C2", 5.0);
+    let outcome = session
+        .execute("grid.chart.add", &json!({ "sheet": sheet, "range": "A1:C2", "switch_row_column": true }))
+        .expect("the chart is added");
+    let chart = outcome.data["chart"].as_u64().expect("the chart has an id");
+    let read = chart_of(&mut session, chart);
+    // The **categories** are the cells of the first row, and the
+    // **series** are the rows after it.
+    assert_eq!(read["data"]["categories"], json!(["ann", "bob"]));
+    let series = read["data"]["series"].as_array().expect("the series are a list");
+    assert_eq!(series.len(), 1);
+    assert_eq!(series[0]["name"], json!("amount"));
+    assert_eq!(series[0]["values"], json!([3.0, 5.0]));
+}
+
+/// **The way a chart reads its range may be changed after it is made.**
+#[test]
+fn the_way_a_chart_reads_its_range_may_be_changed() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "ann");
+    a_text(&mut session, sheet, "A2", "amount");
+    a_number(&mut session, sheet, "B2", 3.0);
+    let chart = a_chart(&mut session, sheet, "A1:B2");
+    // By **columns**: the categories are the first column.
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["data"]["categories"], json!(["amount"]));
+    // Switched: the categories are the first row.
+    session
+        .execute("grid.chart.set", &json!({ "chart": chart, "switch_row_column": true }))
+        .expect("the chart is set");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["data"]["categories"], json!(["ann"]));
+}

@@ -34,7 +34,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
-use crate::charts::{Series, area_of, data_of, kind_of_chart, sheet_of};
+use crate::charts::{Series, area_of, data_of_rows, kind_of_chart, sheet_of};
 
 /// The **kinds** of fit there are.
 pub const KINDS: [&str; 6] =
@@ -475,7 +475,7 @@ commands! {
                     message: format!("the chart `{chart}` reads no range"),
                 });
             };
-            let (categories, series) = data_of(&sheet, &area);
+            let (categories, series) = data_of_rows(&sheet, &area, crate::charts::reads_by_rows(&node));
             let wanted = self.series.as_ref().map(|name| name.0.trim().to_string());
             let mut fitted: Vec<Json> = Vec::new();
             for one in &series {
