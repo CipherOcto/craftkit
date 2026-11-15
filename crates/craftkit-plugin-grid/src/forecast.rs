@@ -69,6 +69,24 @@ fn default_periods(history: usize) -> u32 {
     u32::try_from(history.div_ceil(3)).unwrap_or(u32::MAX).clamp(1, max_periods(history))
 }
 
+/// A **time** a caller gives: a number, or a date.
+fn a_time(text: &str, system: crate::dates::System) -> Option<f64> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    if let Ok(number) = text.parse::<f64>() {
+        return number.is_finite().then_some(number);
+    }
+    let (date, _) = crate::dates::parse(text, system)?;
+    crate::dates::to_serial(date.year, date.month, date.day, system)
+}
+
+/// Whether two points of a timeline are the **same** point.
+fn same_point(left: f64, right: f64) -> bool {
+    (left - right).abs() <= 1e-9 * left.abs().max(right.abs()).max(1.0)
+}
+
 /// The **name** of the forecast sheet: the first one that is free.
 fn a_free_name(taken: &[String]) -> String {
     for number in 1..1000 {
@@ -122,6 +140,16 @@ commands! {
             aggregate: Option<Text>,
             /// Whether the **statistics** of the model are written.
             statistics: Option<Bool>,
+            /// Where the forecast **starts**: a point of the timeline, as a
+            /// number or as a date, before its last point. The model is
+            /// then fit to the points before it and the forecast runs
+            /// over the actuals from there. Without it, the forecast
+            /// runs after the history.
+            start: Option<Text>,
+            /// Where the forecast **ends**: a point of the timeline, as a
+            /// number or as a date, after its last point. The forecast
+            /// runs that far.
+            end: Option<Text>,
         },
         run: {
             let id = "grid.forecast.sheet".to_string();
@@ -274,23 +302,87 @@ commands! {
                     Some(value)
                 }
             };
-            // The **periods**: how far the forecast runs.
-            let cap = max_periods(rows.len());
-            let periods = match self.periods {
-                Some(number) => {
-                    let value = number.0;
-                    if !value.is_finite() || value < 1.0 || value.ceil() > f64::from(cap) {
+            // The **last** point of the history.
+            let last = times.last().copied().unwrap_or(f64::NAN);
+            // Where the forecast **starts**: the index of the first
+            // forecast point, and the points before it are the ones the
+            // model is fit to.
+            let fit = match self.start.as_ref().map(|text| a_time(&text.0, system)) {
+                None => rows.len(),
+                Some(None) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the start of the forecast is not a number or a date".to_string(),
+                    });
+                }
+                Some(Some(start)) => {
+                    let Some(index) = times.iter().position(|time| same_point(*time, start)) else {
                         return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: format!("the periods are from 1 to {cap} for {} rows of history", rows.len()),
+                            message: "the start of the forecast is not a point of the timeline".to_string(),
+                        });
+                    };
+                    if index + 1 >= times.len() {
+                        // The last point of the history: the forecast
+                        // runs after the history.
+                        rows.len()
+                    } else {
+                        let values =
+                            rows.iter().take(index).filter(|(_, value)| value.is_some()).count();
+                        if values < 2 {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: "the start of the forecast needs at least two values before it to fit the model".to_string(),
+                            });
+                        }
+                        index
+                    }
+                }
+            };
+            // The **periods**: how far the forecast runs.
+            let cap = max_periods(rows.len());
+            let periods = match self.end.as_ref().map(|text| a_time(&text.0, system)) {
+                None => match self.periods {
+                    Some(number) => {
+                        let value = number.0;
+                        if !value.is_finite() || value < 1.0 || value.ceil() > f64::from(cap) {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("the periods are from 1 to {cap} for {} rows of history", rows.len()),
+                            });
+                        }
+                        value.ceil() as u32
+                    }
+                    None => default_periods(rows.len()),
+                },
+                Some(None) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the end of the forecast is not a number or a date".to_string(),
+                    });
+                }
+                Some(Some(end)) => {
+                    let steps = axis.steps_between(system, last, end).ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: "the end of the forecast is not on the timeline".to_string(),
+                    })?;
+                    if steps < 1.0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the end of the forecast must be after the last point of the timeline".to_string(),
                         });
                     }
-                    value.ceil() as u32
+                    let steps = steps.ceil();
+                    if steps > f64::from(cap) {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("at most {cap} forecast steps for this much history"),
+                        });
+                    }
+                    steps as u32
                 }
-                None => default_periods(rows.len()),
             };
             // The **future**: the points after the last one.
-            let last = times.last().copied().unwrap_or(f64::NAN);
             let mut future: Vec<f64> = Vec::with_capacity(periods as usize);
             for step in 1..=periods {
                 let Some(point) = axis.after_last(system, last, step) else {
@@ -336,13 +428,15 @@ commands! {
             let width = headers.len() as u32;
             // The **formulas**: the model over the copied history.
             let history = rows.len() as u32;
-            let last_row = history + 1;
+            // The **last point the model is fit to**: the point before
+            // the forecast starts.
+            let fit_last = fit as u32 + 1;
             let mut tail = format!("{seasonality},{fill}");
             if let Some(aggregate) = aggregate {
                 tail.push_str(&format!(",{aggregate}"));
             }
-            let timeline_range = format!("$A$2:$A${last_row}");
-            let values_range = format!("$B$2:$B${last_row}");
+            let timeline_range = format!("$A$2:$A${fit_last}");
+            let values_range = format!("$B$2:$B${fit_last}");
             let forecast_of = |row: u32| -> String {
                 format!("FORECAST.ETS(A{row},{values_range},{timeline_range},{tail})")
             };
@@ -384,25 +478,28 @@ commands! {
                     new_cells.set_format(CellRef { col: 1, row }, values_format.clone());
                 }
             }
-            // The **join**: the forecast starts at the last point of the
-            // history, so the two lines meet.
-            let join = last_row - 1;
-            new_cells.set_formula(CellRef { col: 2, row: join }, format!("=B{last_row}"));
+            // The **join**: the forecast starts at the last point the
+            // model is fit to, so the two lines meet.
+            let join = fit_last - 1;
+            new_cells.set_formula(CellRef { col: 2, row: join }, format!("=B{fit_last}"));
             new_cells.set_format(CellRef { col: 2, row: join }, values_format.clone());
             if confidence.is_some() {
-                new_cells.set_formula(CellRef { col: 3, row: join }, format!("=C{last_row}"));
-                new_cells.set_formula(CellRef { col: 4, row: join }, format!("=C{last_row}"));
+                new_cells.set_formula(CellRef { col: 3, row: join }, format!("=C{fit_last}"));
+                new_cells.set_formula(CellRef { col: 4, row: join }, format!("=C{fit_last}"));
                 new_cells.set_format(CellRef { col: 3, row: join }, values_format.clone());
                 new_cells.set_format(CellRef { col: 4, row: join }, values_format.clone());
             }
-            // The **forecast**: a row for each point after the history.
-            // The rows of the cells are counted from zero and the rows
-            // of the formulas from one.
-            for (index, point) in future.iter().enumerate() {
-                let row = last_row + index as u32;
+            // The **forecast**: a row for each point of the forecast —
+            // the actuals that follow the start, and then the points
+            // after the history. The rows of the cells are counted from
+            // zero and the rows of the formulas from one.
+            for row in (fit as u32 + 1)..=(history + periods) {
                 let number = row + 1;
-                new_cells.set_value(CellRef { col: 0, row }, Value::Number(*point));
-                new_cells.set_format(CellRef { col: 0, row }, timeline_format.clone());
+                if row > history {
+                    let Some(point) = future.get((row - history - 1) as usize) else { continue };
+                    new_cells.set_value(CellRef { col: 0, row }, Value::Number(*point));
+                    new_cells.set_format(CellRef { col: 0, row }, timeline_format.clone());
+                }
                 new_cells.set_formula(CellRef { col: 2, row }, format!("={}", forecast_of(number)));
                 new_cells.set_format(CellRef { col: 2, row }, values_format.clone());
                 if let Some(level) = confidence {

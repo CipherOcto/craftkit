@@ -124,6 +124,13 @@ impl Axis {
         }
     }
 
+    /// The **number of steps** from one point of the axis to another.
+    pub(crate) fn steps_between(&self, system: crate::dates::System, from: f64, to: f64) -> Option<f64> {
+        let start = self.position(system, from)?;
+        let end = self.position(system, to)?;
+        Some(end - start)
+    }
+
     /// The **place** of a time stamp: zero is the first point.
     fn position(&self, system: crate::dates::System, t: f64) -> Option<f64> {
         match *self {

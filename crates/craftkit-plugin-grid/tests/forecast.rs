@@ -196,3 +196,70 @@ fn a_text_first_cell_is_a_header() {
     let header = cell_of(&mut session, new_sheet, "A1");
     assert_eq!(header["value"].as_str(), Some("Month"), "the header names the column");
 }
+
+/// The forecast runs **to an end**: the periods are worked out from the
+/// steps of the timeline.
+#[test]
+fn the_forecast_runs_to_an_end() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_line(&mut session, sheet);
+    let (new_sheet, data) = forecast(&mut session, sheet, json!({ "end": "13" }));
+    assert_eq!(data["periods"].as_u64(), Some(3), "the forecast runs to the thirteenth point");
+    // The last point of the forecast is the end.
+    let value = computed(&mut session, new_sheet, "A14");
+    assert_eq!(value, json!(13.0), "the forecast ends at the point that was named");
+}
+
+/// The forecast may start **before the last point**: the model is fit
+/// to the points before it and the forecast runs over the actuals.
+#[test]
+fn the_forecast_may_start_before_the_last_point() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_line(&mut session, sheet);
+    let (new_sheet, _) = forecast(&mut session, sheet, json!({ "start": "6", "periods": 2 }));
+    // The model is fit to the points before the sixth.
+    let text = formula_of(&mut session, new_sheet, "C7");
+    assert!(text.contains("$A$2:$A$6"), "the model is fit to the points before the start: {text}");
+    // And the forecast runs over the actuals from there: the sixth
+    // point is forecast from the five before it, and the seventh from
+    // the same model.
+    for (cell, expected) in [("C7", 22.0), ("C8", 24.0)] {
+        let value = computed(&mut session, new_sheet, cell);
+        let number = value.as_f64().unwrap_or(f64::NAN);
+        assert!((number - expected).abs() < 1.0, "the forecast in {cell} is {expected}, and it is {number}");
+    }
+}
+
+/// A start that is **not a point** of the timeline is refused.
+#[test]
+fn a_start_that_is_not_a_point_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_line(&mut session, sheet);
+    let outcome = session
+        .execute(
+            "grid.forecast.sheet",
+            &json!({ "sheet": sheet, "timeline": "A1:A10", "values": "B1:B10", "start": "4.5" }),
+        )
+        .expect_err("a start that is not a point is refused");
+    let message = outcome.to_string();
+    assert!(message.contains("not a point"), "the refusal says why: {message}");
+}
+
+/// An end **before** the last point of the timeline is refused.
+#[test]
+fn an_end_before_the_last_point_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_line(&mut session, sheet);
+    let outcome = session
+        .execute(
+            "grid.forecast.sheet",
+            &json!({ "sheet": sheet, "timeline": "A1:A10", "values": "B1:B10", "end": "5" }),
+        )
+        .expect_err("an end before the last point is refused");
+    let message = outcome.to_string();
+    assert!(message.contains("after the last point"), "the refusal says why: {message}");
+}
