@@ -447,6 +447,8 @@ struct Counts {
     pictures: usize,
     /// The borders that were drawn.
     borders: usize,
+    /// The sparklines that were drawn.
+    sparklines: usize,
 }
 
 /// The **width** of a line of a border, in points, and the **dashes** it
@@ -506,6 +508,150 @@ fn draw_edge(page: &mut PdfPage, edge: &str, box_of: Rect, style: &str, colour: 
         return true;
     }
     page.stroke_line_dashed(start, end, line, colour, &dash);
+    true
+}
+
+/// The **most** points a sparkline may have.
+const MAX_SPARK_POINTS: usize = 10_000;
+
+/// The **colour** of the tree as four numbers between zero and one, as
+/// the three bytes a PDF wants.
+fn rgb_of_numbers(colour: &craftkit_sdk::serde_json::Value) -> Option<[u8; 3]> {
+    let channel = |index: usize| -> Option<u8> {
+        let value = colour.get(index)?.as_f64()?;
+        if !value.is_finite() {
+            return None;
+        }
+        Some((value.clamp(0.0, 1.0) * 255.0).round() as u8)
+    };
+    Some([channel(0)?, channel(1)?, channel(2)?])
+}
+
+/// A **sparkline** to draw: what it is and where it goes.
+struct Spark<'a> {
+    kind: &'a str,
+    values: &'a [Option<f64>],
+    colour: [u8; 3],
+    markers: bool,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+/// Draws a **sparkline** in a box of the page.
+///
+/// The rules: a **line** through the values, broken where a value is
+/// missing; **columns** from the zero of the values; and **wins and
+/// losses**, a column up for a win and a column down for a loss. The
+/// one colour of the sparkline is the colour of every bar.
+fn draw_sparkline(page: &mut PdfPage, sparkline: &Spark<'_>) -> bool {
+    let Spark { kind, values, colour, markers, x, y, width, height } = *sparkline;
+    let (kind, values, colour, markers) = (kind, values, colour, markers);
+    let (x, y, width, height) = (x, y, width, height);
+    if !(width.is_finite() && height.is_finite()) || width < 1.0 || height < 1.0 {
+        return false;
+    }
+    let values: Vec<Option<f64>> =
+        values.iter().take(MAX_SPARK_POINTS).map(|value| value.filter(|value| value.is_finite())).collect();
+    let count = values.len();
+    if count == 0 {
+        return false;
+    }
+    let pad = (height * 0.1).clamp(0.5, 2.0);
+    let (x0, y0) = (x + pad, y + pad);
+    let (inner_width, inner_height) = ((width - 2.0 * pad).max(0.5), (height - 2.0 * pad).max(0.5));
+    let (low, high) = values
+        .iter()
+        .flatten()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(low, high), value| (low.min(*value), high.max(*value)));
+    if !low.is_finite() {
+        return false;
+    }
+    let line_width = 1.25f32;
+    match kind {
+        "line" => {
+            let span = high - low;
+            let place_y = |value: f64| -> f32 {
+                let share = if span > 0.0 { ((value - low) / span) as f32 } else { 0.5 };
+                (y0 + inner_height - f64::from(share) * inner_height) as f32
+            };
+            let place_x = |index: usize| -> f32 {
+                if count > 1 {
+                    (x0 + index as f64 / (count - 1) as f64 * inner_width) as f32
+                } else {
+                    (x0 + inner_width / 2.0) as f32
+                }
+            };
+            // The line is broken where a value is missing.
+            let mut run: Vec<[f32; 2]> = Vec::new();
+            let flush = |run: &mut Vec<[f32; 2]>, page: &mut PdfPage| {
+                if run.len() >= 2 {
+                    page.polyline(run, line_width, colour, &[]);
+                }
+                run.clear();
+            };
+            for (index, value) in values.iter().enumerate() {
+                match value {
+                    Some(value) => run.push([place_x(index), place_y(*value)]),
+                    None => flush(&mut run, page),
+                }
+            }
+            flush(&mut run, page);
+            // The **markers**, when the sparkline has them.
+            if markers || count == 1 {
+                let radius = (height as f32 * 0.08).clamp(1.0, 3.0);
+                let step = (count / 500).max(1);
+                for (index, value) in values.iter().enumerate().step_by(step) {
+                    if let Some(value) = value {
+                        page.circle(place_x(index), place_y(*value), radius, Some(colour), None);
+                    }
+                }
+            }
+        }
+        "column" | "win_loss" => {
+            let slot = inner_width / count as f64;
+            let bar = (slot * 0.8).max(0.25);
+            let win = kind == "win_loss";
+            let (low, high) = if win { (-1.0, 1.0) } else { (low.min(0.0), high.max(0.0)) };
+            let span = high - low;
+            let place_y = |value: f64| -> f64 {
+                if span > 0.0 {
+                    y0 + inner_height - (value - low) / span * inner_height
+                } else {
+                    y0 + inner_height
+                }
+            };
+            let base = place_y(0.0);
+            for (index, value) in values.iter().enumerate() {
+                let Some(value) = value else { continue };
+                let value = if win {
+                    if *value > 0.0 {
+                        1.0
+                    } else if *value < 0.0 {
+                        -1.0
+                    } else {
+                        0.0
+                    }
+                } else {
+                    *value
+                };
+                if value == 0.0 && win {
+                    continue;
+                }
+                let top = place_y(value);
+                let (top, tall) = (top.min(base), (top - base).abs().max(0.5));
+                page.fill_rect(
+                    (x0 + index as f64 * slot + (slot - bar) / 2.0) as f32,
+                    top as f32,
+                    bar as f32,
+                    tall as f32,
+                    colour,
+                );
+            }
+        }
+        _ => return false,
+    }
     true
 }
 
@@ -804,6 +950,28 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
         page.link_uri(x as f32, y as f32, width as f32, height as f32, &link.target);
         counts.links += 1;
     }
+    // The **sparklines** of the cells on this page.
+    for (address, sparkline) in crate::sparklines::sparklines_of(node) {
+        let Some(cell) = CellRef::parse(&address) else { continue };
+        let Some(row_index) = rows.iter().position(|row| *row == cell.row) else { continue };
+        let Some(column_index) = columns.iter().position(|column| *column == cell.col) else {
+            continue;
+        };
+        let Some(range) = sparkline.get("range").and_then(|range| range.as_str()) else { continue };
+        let Some((_, area)) = crate::merges::parse_area(range) else { continue };
+        let kind = sparkline.get("kind").and_then(|kind| kind.as_str()).unwrap_or("line");
+        let colour = sparkline.get("colour").and_then(rgb_of_numbers).unwrap_or([21, 96, 130]);
+        let markers = sparkline.get("markers").and_then(|markers| markers.as_bool()).unwrap_or(false);
+        let values = crate::sparklines::values_of(node, &area);
+        let x = xs.get(column_index).copied().unwrap_or(origin_x);
+        let y = ys.get(row_index).copied().unwrap_or(origin_y);
+        let width = crate::printing::column_width(node, cell.col) * scale;
+        let height = crate::printing::row_height(node, cell.row) * scale;
+        let sparkline = Spark { kind, values: &values, colour, markers, x, y, width, height };
+        if draw_sparkline(page, &sparkline) {
+            counts.sparklines += 1;
+        }
+    }
     // The **pictures** of the cells on this page: a picture is drawn at
     // its own size, from the top left of the cell it is on, and it is
     // cut off at the edge of the block.
@@ -888,6 +1056,7 @@ commands! {
                 counts.links += drawn.links;
                 counts.pictures += drawn.pictures;
                 counts.borders += drawn.borders;
+                counts.sparklines += drawn.sparklines;
             }
             let bytes = doc.finish();
             std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
@@ -898,6 +1067,7 @@ commands! {
             // ones that were not, so that none is dropped in silence.
             let links = crate::links::links_of(&node).len();
             let pictures = crate::pictures::pictures_of(&node).len();
+            let sparklines = crate::sparklines::sparklines_of(&node).len();
             let borders: usize = crate::borders::borders_of(&node)
                 .values()
                 .map(|edges| edges.len())
@@ -914,6 +1084,8 @@ commands! {
                 "pictures_undrawn": pictures.saturating_sub(counts.pictures),
                 "borders": borders,
                 "borders_drawn": counts.borders,
+                "sparklines": sparklines,
+                "sparklines_drawn": counts.sparklines,
                 "area": pages.area.to_text(),
                 "paper": setup.paper,
                 "scale": (pages.scale * 10_000.0).round() / 100.0,

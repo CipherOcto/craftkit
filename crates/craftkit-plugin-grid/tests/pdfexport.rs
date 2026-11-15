@@ -308,3 +308,44 @@ fn a_double_border_is_two_lines() {
     let lines = bytes.windows(b" l S".len()).filter(|window| *window == b" l S").count();
     assert_eq!(lines, 2, "the border is two lines");
 }
+
+/// A **sparkline** on a cell is drawn on the page.
+#[test]
+fn a_sparkline_on_a_cell_is_drawn_on_the_page() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("the row"));
+    value(&mut session, sheet, "B1", json!(1));
+    value(&mut session, sheet, "B2", json!(5));
+    value(&mut session, sheet, "B3", json!(3));
+    session
+        .execute(
+            "grid.sparkline.set",
+            &json!({ "sheet": sheet, "cell": "A1", "range": "B1:B3", "kind": "line" }),
+        )
+        .expect("the sparkline is set");
+    let (bytes, data) = exported(&mut session, sheet);
+    assert!(find(&bytes, b"1 j").is_some(), "the line of the sparkline is drawn");
+    assert_eq!(data["sparklines"].as_u64(), Some(1), "the sheet has one sparkline");
+    assert_eq!(data["sparklines_drawn"].as_u64(), Some(1), "the sparkline is drawn");
+}
+
+/// A **column** sparkline is a column of bars.
+#[test]
+fn a_column_sparkline_is_drawn_as_bars() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("the row"));
+    value(&mut session, sheet, "B1", json!(1));
+    value(&mut session, sheet, "B2", json!(5));
+    value(&mut session, sheet, "B3", json!(3));
+    session
+        .execute(
+            "grid.sparkline.set",
+            &json!({ "sheet": sheet, "cell": "A1", "range": "B1:B3", "kind": "column" }),
+        )
+        .expect("the sparkline is set");
+    let (bytes, data) = exported(&mut session, sheet);
+    assert!(find(&bytes, b" re f").is_some(), "the bars are drawn");
+    assert_eq!(data["sparklines_drawn"].as_u64(), Some(1), "the sparkline is drawn");
+}
