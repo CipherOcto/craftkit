@@ -773,6 +773,15 @@ pub const PORTS: &[Port] = &[
         section: "§946",
     },
     Port {
+        rule: "the concatenation of two texts",
+        from: "gridcraft/crates/engine/src/cmd/analysis.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "craftkit-plugin-grid::formula",
+        test: "crates/craftkit-plugin-grid/tests/concatenation.rs",
+        section: "§947",
+    },
+    Port {
         rule: "the histogram of a range",
         from: "gridcraft/crates/engine/src/cmd/analysis.rs",
         to: "craftkit-plugin-grid",

@@ -841,27 +841,45 @@ impl Parser {
 
     /// An expression: a comparison.
     fn expression(&mut self) -> Result<Expr, FormulaError> {
-        let left = self.additive()?;
+        let left = self.concatenation()?;
         self.skip_spaces();
         for operator in ["<>", "<=", ">="] {
             if self.take_word(operator) {
-                let right = self.additive()?;
+                let right = self.concatenation()?;
                 return Ok(Expr::Binary(operator.to_string(), Box::new(left), Box::new(right)));
             }
         }
         if self.take('=') {
-            let right = self.additive()?;
+            let right = self.concatenation()?;
             return Ok(Expr::Binary("=".to_string(), Box::new(left), Box::new(right)));
         }
         if self.take('<') {
-            let right = self.additive()?;
+            let right = self.concatenation()?;
             return Ok(Expr::Binary("<".to_string(), Box::new(left), Box::new(right)));
         }
         if self.take('>') {
-            let right = self.additive()?;
+            let right = self.concatenation()?;
             return Ok(Expr::Binary(">".to_string(), Box::new(left), Box::new(right)));
         }
         Ok(left)
+    }
+
+    /// A **concatenation**: two texts, one after the other.
+    ///
+    /// The `&` of a formula: it binds tighter than a comparison and
+    /// looser than a sum, so `"a" & "b" = "c"` is a comparison of a
+    /// concatenation with a text.
+    fn concatenation(&mut self) -> Result<Expr, FormulaError> {
+        let mut left = self.additive()?;
+        loop {
+            self.skip_spaces();
+            if self.take('&') {
+                let right = self.additive()?;
+                left = Expr::Binary("&".to_string(), Box::new(left), Box::new(right));
+                continue;
+            }
+            return Ok(left);
+        }
     }
 
     /// A sum or a difference.
@@ -3301,6 +3319,26 @@ impl Book {
 }
 
 /// A binary operation on two values.
+/// A value, as the **text** of a concatenation.
+///
+/// A number is written as a formula writes a number, a boolean is
+/// `TRUE` or `FALSE`, and a cell that holds nothing is nothing at all.
+fn text_of(value: &Value) -> String {
+    match value {
+        Value::Text(text) => text.clone(),
+        Value::Number(number) => number_text(*number),
+        Value::Bool(flag) => {
+            if *flag {
+                "TRUE".to_string()
+            } else {
+                "FALSE".to_string()
+            }
+        }
+        Value::Empty => String::new(),
+        Value::Error(message) => message.clone(),
+    }
+}
+
 fn binary(operator: &str, left: &Value, right: &Value) -> Value {
     if let Value::Error(message) = left {
         return Value::Error(message.clone());
@@ -3332,6 +3370,12 @@ fn binary(operator: &str, left: &Value, right: &Value) -> Value {
         };
         return Value::Bool(result);
     }
+    if operator == "&" {
+        // The **concatenation** of two texts: a number is written as it
+        // is written in a formula, a boolean is `TRUE` or `FALSE`, and
+        // a cell that holds nothing is nothing at all.
+        return Value::Text(format!("{}{}", text_of(left), text_of(right)));
+    }
     let (Some(a), Some(b)) = (left.as_number(), right.as_number()) else {
         return Value::Error("#VALUE!".to_string());
     };
@@ -3360,14 +3404,16 @@ fn binary(operator: &str, left: &Value, right: &Value) -> Value {
 
 /// The precedence of a **comparison**.
 const COMPARISON: u8 = 1;
+/// The precedence of a **concatenation**.
+const CONCATENATION: u8 = 2;
 /// The precedence of a **sum** or a **difference**.
-const ADDITIVE: u8 = 2;
+const ADDITIVE: u8 = 3;
 /// The precedence of a **product** or a **quotient**.
-const MULTIPLICATIVE: u8 = 3;
+const MULTIPLICATIVE: u8 = 4;
 /// The precedence of a **power**.
-const POWER: u8 = 4;
+const POWER: u8 = 5;
 /// The precedence of a **negation**.
-const UNARY: u8 = 5;
+const UNARY: u8 = 6;
 
 impl Expr {
     /// The expression with the **sheet** renamed in it.
@@ -3747,6 +3793,7 @@ fn precedence(expression: &Expr) -> u8 {
     match expression {
         Expr::Binary(operator, _, _) => match operator.as_str() {
             "=" | "<>" | "<" | "<=" | ">" | ">=" => COMPARISON,
+            "&" => CONCATENATION,
             "+" | "-" => ADDITIVE,
             "*" | "/" => MULTIPLICATIVE,
             _ => POWER,
