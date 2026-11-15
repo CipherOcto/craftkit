@@ -4388,6 +4388,7 @@ so.
 | the **sparklines** of a sheet on the printed page | **built.** A sparkline is drawn in its cell — a line, a set of columns, or the wins and the losses (§940) | §940 |
 | the **forecast sheet** | **built.** A history becomes a new sheet with the forecast beside it — live formulas over the copied history, the bounds and the statistics (§941) | §941 |
 | the **start** and the **end** of a forecast | **built.** A forecast may start before the last point of the history and may end at a named one (§942) | §942 |
+| the **export** of a whole workbook as a PDF file | **built.** Every sheet of the document is written into one file, and the pages are numbered through the whole of it (§943) | §943 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61801,3 +61802,42 @@ always run for a number of periods.
 
 - **The forecast sheet is still not a table** and its **chart** is
   still not made (§941).
+
+## 943. The export of a whole workbook as a PDF file
+
+A file may hold more than one sheet, and a **workbook** is a file.
+
+### What was built
+
+- The export may write **the whole document**: without a sheet, every
+  sheet of the document is written, in the order they are in, and the
+  file holds a page for each page of each sheet.
+- The **pages of the file are numbered through the whole of it**, so the
+  header and the footer of a page say the page it is in the file and
+  how many pages the file has.
+- A sheet that holds **nothing** is **skipped**, and the answer says
+  how many were skipped.
+- The answer says **which sheets were written**, and each sheet's own
+  pages, area, paper and scale.
+
+### What the port found
+
+- **The reference prints several sheets in one file** and numbers the
+  pages through the whole of it, and so does this.
+- **The tree's pages are worked out in one place** (§935), so the
+  export of a sheet and the export of a document come to the same
+  place — and the difference between them is only **which sheets** are
+  written and **how many pages the file has**.
+
+### What it cost
+
+- **A parameter** that may be left out, and the command's answer says
+  more about the file.
+- **Two tests**: the whole document is written, and an empty sheet is
+  skipped and counted.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The charts of the sheets are not on the page** (§935), and neither
+  are the notes and the comments.
