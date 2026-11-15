@@ -4381,6 +4381,7 @@ so.
 | the **conditional formats** of the extension list | **built.** The rules a file puts beside its extension list are not comparisons, and the reader says how many it left out rather than dropping them in silence (§933) | §933 |
 | the **PDF writer** | **built.** A file is written as a PDF — pages drawn with vectors, text in the standard faces, pictures and links (§934) | §934 |
 | the **export** of a sheet as a PDF file | **built.** A sheet is written as a PDF file — the pages are the sheet's own, and the cells are drawn with their fills, their text and their gridlines (§935) | §935 |
+| the **header**, the **footer** and the **headings** of the printed page | **built.** A printed page carries its header, its footer and the headings of the sheet, and the codes in them are worked out for the page they are on (§936) | §936 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61472,3 +61473,53 @@ printed page down. So a sheet may be **exported** as one.
   they are not written on it.
 - **The cells of the sheet are all that is drawn**: a chart, a
   picture, a note, a link and a comment are not on the page.
+
+## 936. The header, the footer and the headings of the printed page
+
+A printed page is not only the grid: it carries a **header** above it,
+a **footer** below it, and the **headings** of the sheet beside it.
+
+### What was built
+
+- The **header** of the page is drawn: the three **sections** — the
+  left, the centre and the right — above the grid.
+- The **footer** is drawn below the grid, in the three sections as well.
+- The **codes** in them are the tree's own (§471): `&P` is the number
+  of the page being written, `&N` the number of pages, `&A` the name
+  of the sheet, `&L`, `&C` and `&R` the three sections, and `&B` and
+  `&I` make the text bold and italic.
+- The **headings** of the sheet are drawn when the sheet says they are
+  printed (§472): the number of each row down the left and the name of
+  each column across the top, in the room the page set aside for them.
+
+### What the port found
+
+- **The reference keeps six margins and this tree keeps four**: the
+  reference has a margin for the header and a margin for the footer
+  beside the four of the page, and the header sits between the top
+  margin and the grid. Here there are four, so the header is above the
+  grid **inside** the top margin and the footer is below it **inside**
+  the bottom margin — the tree's own margins say where they are.
+- **The reference's header may be scaled with the sheet or not**, and
+  the tree has no flag for it. So the header is drawn at ten points,
+  whatever the scale of the sheet is, which is the reference's own
+  default.
+- **The headings of the reference are pale grey with a line around
+  them**, and their text is a dark grey at nine points: carried as they
+  are.
+
+### What it cost
+
+- **Three functions** in the export module, and **no new command**.
+- **Three tests**: the header is drawn with its codes worked out, the
+  footer is drawn, and the headings are drawn when the sheet says they
+  are.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The header of the first page and of the even pages** is the tree's
+  own (§471): a kind of page that has a text of its own has it, and a
+  kind that has none falls back on the odd pages.
+- **A chart, a picture, a note, a link and a comment are still not on
+  the page**: the cells are all that is drawn.
