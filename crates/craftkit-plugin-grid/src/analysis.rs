@@ -69,16 +69,16 @@ fn qualified(name: &str, id: &str) -> Result<String, EngineError> {
 
 /// The **absolute** address of an area, as a formula reads it:
 /// `$A$2:$A$11`.
+///
+/// An area of **one cell** is the cell: `$A$2`.
 fn absolute(area: &Area) -> String {
     let first = CellRef { col: area.start.col, row: area.start.row };
     let last = CellRef { col: area.end.col, row: area.end.row };
-    format!(
-        "${}${}:${}${}",
-        CellRef::column_text(first.col),
-        first.row + 1,
-        CellRef::column_text(last.col),
-        last.row + 1
-    )
+    let start = format!("${}${}", CellRef::column_text(first.col), first.row + 1);
+    if first == last {
+        return start;
+    }
+    format!("{start}:${}${}", CellRef::column_text(last.col), last.row + 1)
 }
 
 /// The **cells** of a range that is one row or one column.
@@ -1623,6 +1623,1141 @@ commands! {
                 self.overwrite.map(|overwrite| overwrite.0).unwrap_or(false),
             )?;
             Ok(Outcome::changed("an F-test of two samples".to_string()).with_data(data))
+
+
+        }
+    }
+
+    /// The **rank** and the **percentile** of every number of a range.
+    ///
+    /// The report holds, for every variable of the range, the **point**
+    /// — the number of the point in the range — the **value**, the
+    /// **rank** of the value among the numbers of the variable, and its
+    /// **percentile**.
+    ///
+    /// The report is **live**: the value is a formula over the range,
+    /// and the rank and the percentile are formulas over it.
+    grid.analysis.rank {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the data is on.
+            sheet: NodeRef,
+            /// The **range** of the data: a column is a variable.
+            range: Text,
+            /// The **top-left cell** of the report, on the sheet. The
+            /// report goes to a new sheet without it.
+            output: Option<Text>,
+            /// The **name** of the new sheet the report goes to.
+            new_sheet: Option<Text>,
+            /// Whether the first row (or the first column) holds the
+            /// **names** of the variables.
+            labels: Option<Bool>,
+            /// Whether the variables are the **columns** (the default)
+            /// or the **rows** of the range.
+            grouped_by: Option<Text>,
+            /// Whether the report may be written over cells that hold
+            /// something.
+            overwrite: Option<Bool>,
+        },
+        run: {
+            let id = "grid.analysis.rank".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let area = crate::fill::area_at(&self.range.0, &id)?;
+            if area.count() > MAX_INPUT_CELLS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the range is too large (at most {MAX_INPUT_CELLS} cells)"),
+                });
+            }
+            let labels = self.labels.map(|labels| labels.0).unwrap_or(false);
+            let by_rows = match self.grouped_by.as_ref().map(|group| group.0.trim().to_ascii_lowercase()) {
+                None => false,
+                Some(ref text) if text.is_empty() || text == "columns" || text == "column" => false,
+                Some(ref text) if text == "rows" || text == "row" => true,
+                Some(ref text) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the variables are grouped by `columns` or by `rows`, not `{text}`"),
+                    });
+                }
+            };
+            let cells = crate::cells_of(&node);
+            let variables = variables_of(&area, by_rows, labels, &cells);
+            // The **points** of every variable: the numbers of it, with
+            // the cell each of them is in.
+            let mut points: Vec<Vec<(CellRef, f64)>> = Vec::new();
+            for (_, area) in &variables {
+                let mut numbers = Vec::new();
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        let cell = CellRef { col, row };
+                        match cells.get(cell).and_then(|entry| entry.value.clone()) {
+                            None | Some(Value::Empty) => continue,
+                            Some(Value::Number(number)) => numbers.push((cell, number)),
+                            Some(_) => {
+                                return Err(EngineError::Failed {
+                                    id: id.clone(),
+                                    message: format!(
+                                        "the range holds text ({} isn't a number)",
+                                        cell.to_text()
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
+                points.push(numbers);
+            }
+            // Where the report goes.
+            let target = target_of(
+                session,
+                &id,
+                sheet,
+                self.output.as_ref(),
+                self.new_sheet.as_ref(),
+                "Rank",
+            )?;
+            let origin = match &target {
+                Target::Range { at, .. } => *at,
+                Target::Sheet { .. } => CellRef { col: 0, row: 0 },
+            };
+            let prefix = match &target {
+                Target::Range { sheet: target_sheet, .. } if *target_sheet == sheet => String::new(),
+                _ => qualified(&node.name, &id)?,
+            };
+            // The **report**: the points of every variable, from the
+            // largest to the smallest.
+            let mut report = Cells::new();
+            let mut rows = 1;
+            for (index, (name, area)) in variables.iter().enumerate() {
+                let column = index as u32 * 4;
+                let range = format!("{prefix}{}", absolute(area));
+                report.set_value(CellRef { col: column, row: 0 }, Value::Text("Point".to_string()));
+                report.set_value(CellRef { col: column + 1, row: 0 }, Value::Text(name.clone()));
+                report.set_value(CellRef { col: column + 2, row: 0 }, Value::Text("Rank".to_string()));
+                report.set_value(CellRef { col: column + 3, row: 0 }, Value::Text("Percent".to_string()));
+                // The **order**: the largest value first, and the point
+                // before it when the values are the same.
+                let mut numbers = points[index].clone();
+                numbers.sort_by(|left, right| {
+                    right.1.total_cmp(&left.1).then(left.0.row.cmp(&right.0.row))
+                });
+                for (point, (cell, _value)) in numbers.iter().enumerate() {
+                    let row = point as u32 + 1;
+                    let value = format!("={prefix}{}", absolute(&Area::new(*cell, *cell)));
+                    report.set_value(CellRef { col: column, row }, Value::Number(point as f64 + 1.0));
+                    report.set_formula(CellRef { col: column + 1, row }, value);
+                    report.set_formula(
+                        CellRef { col: column + 2, row },
+                        format!("=RANK.EQ({},{})", address(column + 1, row, origin), range),
+                    );
+                    report.set_formula(
+                        CellRef { col: column + 3, row },
+                        format!("=PERCENTRANK.INC({},{})", range, address(column + 1, row, origin)),
+                    );
+                    rows = rows.max(row + 1);
+                }
+            }
+            let columns = variables.len() as u32 * 4;
+            let (sheet_id, sheet_name) = place_report(
+                session,
+                &id,
+                target,
+                &report,
+                rows,
+                columns,
+                self.overwrite.map(|overwrite| overwrite.0).unwrap_or(false),
+                sheet,
+            )?;
+            Ok(Outcome::changed(format!(
+                "the rank of {} variable(s) into the sheet `{sheet_name}`",
+                variables.len()
+            ))
+            .with_data(json!({
+                "tool": "rank",
+                "sheet": sheet_id,
+                "name": sheet_name,
+                "range": format!(
+                    "{}:{}",
+                    origin.to_text(),
+                    CellRef { col: origin.col + columns - 1, row: origin.row + rows - 1 }.to_text()
+                ),
+                "rows": rows,
+                "cols": columns,
+                "variables": variables.len(),
+            })))
+
+
+        }
+    }
+
+    /// The **analysis of variance** of one factor: the groups of a
+    /// range, and whether their means differ.
+    ///
+    /// The report holds the **summary** of every group — its count, its
+    /// sum, its average and its variance — and the **ANOVA** table: the
+    /// sums of squares, the degrees of freedom, the mean squares, the
+    /// **F**, the **p-value** and the **F crit**.
+    ///
+    /// The report is **live**: its values are formulas over the range.
+    grid.analysis.anova {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the data is on.
+            sheet: NodeRef,
+            /// The **range** of the data: a column is a group.
+            range: Text,
+            /// The **top-left cell** of the report, on the sheet. The
+            /// report goes to a new sheet without it.
+            output: Option<Text>,
+            /// The **name** of the new sheet the report goes to.
+            new_sheet: Option<Text>,
+            /// Whether the first row (or the first column) holds the
+            /// **names** of the groups.
+            labels: Option<Bool>,
+            /// Whether the groups are the **columns** (the default) or
+            /// the **rows** of the range.
+            grouped_by: Option<Text>,
+            /// The **alpha** of the test: `0.05` by default.
+            alpha: Option<Number>,
+            /// Whether the report may be written over cells that hold
+            /// something.
+            overwrite: Option<Bool>,
+        },
+        run: {
+            let id = "grid.analysis.anova".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let area = crate::fill::area_at(&self.range.0, &id)?;
+            if area.count() > MAX_INPUT_CELLS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the range is too large (at most {MAX_INPUT_CELLS} cells)"),
+                });
+            }
+            let labels = self.labels.map(|labels| labels.0).unwrap_or(false);
+            let by_rows = match self.grouped_by.as_ref().map(|group| group.0.trim().to_ascii_lowercase()) {
+                None => false,
+                Some(ref text) if text.is_empty() || text == "columns" || text == "column" => false,
+                Some(ref text) if text == "rows" || text == "row" => true,
+                Some(ref text) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the groups are grouped by `columns` or by `rows`, not `{text}`"),
+                    });
+                }
+            };
+            let cells = crate::cells_of(&node);
+            let groups = variables_of(&area, by_rows, labels, &cells);
+            if groups.len() < 2 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the analysis of variance needs at least two groups".to_string(),
+                });
+            }
+            for (_, area) in &groups {
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        match cells.get(CellRef { col, row }).and_then(|entry| entry.value.clone()) {
+                            None | Some(Value::Empty) => continue,
+                            Some(Value::Number(_)) => continue,
+                            Some(_) => {
+                                return Err(EngineError::Failed {
+                                    id: id.clone(),
+                                    message: format!(
+                                        "the range holds text ({} isn't a number)",
+                                        CellRef { col, row }.to_text()
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            let alpha = match self.alpha {
+                None => 0.05,
+                Some(number) => {
+                    let value = number.0;
+                    if !(value > 0.0 && value < 1.0) {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the alpha is between 0 and 1".to_string(),
+                        });
+                    }
+                    value
+                }
+            };
+            let target = target_of(
+                session,
+                &id,
+                sheet,
+                self.output.as_ref(),
+                self.new_sheet.as_ref(),
+                "Anova",
+            )?;
+            let origin = match &target {
+                Target::Range { at, .. } => *at,
+                Target::Sheet { .. } => CellRef { col: 0, row: 0 },
+            };
+            let prefix = match &target {
+                Target::Range { sheet: target_sheet, .. } if *target_sheet == sheet => String::new(),
+                _ => qualified(&node.name, &id)?,
+            };
+            let ranges: Vec<String> = groups
+                .iter()
+                .map(|(_, area)| format!("{prefix}{}", absolute(area)))
+                .collect();
+            let all = ranges.join(",");
+            let count = ranges.len();
+            let mut report = Cells::new();
+            report.set_value(CellRef { col: 0, row: 0 }, Value::Text("Anova: Single Factor".to_string()));
+            report.set_value(CellRef { col: 0, row: 2 }, Value::Text("SUMMARY".to_string()));
+            for (column, header) in ["Groups", "Count", "Sum", "Average", "Variance"].iter().enumerate() {
+                report.set_value(
+                    CellRef { col: column as u32, row: 3 },
+                    Value::Text((*header).to_string()),
+                );
+            }
+            for (index, (name, _)) in groups.iter().enumerate() {
+                let row = 4 + index as u32;
+                let range = &ranges[index];
+                report.set_value(CellRef { col: 0, row }, Value::Text(name.clone()));
+                report.set_formula(CellRef { col: 1, row }, format!("=COUNT({range})"));
+                report.set_formula(CellRef { col: 2, row }, format!("=SUM({range})"));
+                report.set_formula(CellRef { col: 3, row }, format!("=AVERAGE({range})"));
+                report.set_formula(CellRef { col: 4, row }, format!("=VAR.S({range})"));
+            }
+            // The **ANOVA** table.
+            let table = 4 + count as u32 + 2;
+            report.set_value(CellRef { col: 0, row: table }, Value::Text("ANOVA".to_string()));
+            for (column, header) in
+                ["Source of Variation", "SS", "df", "MS", "F", "P-value", "F crit"].iter().enumerate()
+            {
+                report.set_value(
+                    CellRef { col: column as u32, row: table + 1 },
+                    Value::Text((*header).to_string()),
+                );
+            }
+            // The **grand mean** of all the groups.
+            let grand = format!("AVERAGE({all})");
+            let between: Vec<String> = ranges
+                .iter()
+                .map(|range| {
+                    format!("COUNT({range})*(AVERAGE({range})-{grand})^2")
+                })
+                .collect();
+            let within: Vec<String> = ranges
+                .iter()
+                .map(|range| format!("(COUNT({range})-1)*VAR.S({range})"))
+                .collect();
+            let between_row = table + 2;
+            let within_row = table + 3;
+            report.set_value(CellRef { col: 0, row: between_row }, Value::Text("Between Groups".to_string()));
+            report.set_formula(CellRef { col: 1, row: between_row }, format!("={}", between.join("+")));
+            report.set_value(CellRef { col: 2, row: between_row }, Value::Number(count as f64 - 1.0));
+            report.set_formula(
+                CellRef { col: 3, row: between_row },
+                format!("={}/{}", address(1, between_row, origin), address(2, between_row, origin)),
+            );
+            report.set_value(CellRef { col: 0, row: within_row }, Value::Text("Within Groups".to_string()));
+            report.set_formula(CellRef { col: 1, row: within_row }, format!("={}", within.join("+")));
+            report.set_formula(
+                CellRef { col: 2, row: within_row },
+                format!("=COUNT({all})-{}", count),
+            );
+            report.set_formula(
+                CellRef { col: 3, row: within_row },
+                format!("={}/{}", address(1, within_row, origin), address(2, within_row, origin)),
+            );
+            // The **F** and its **p-value**.
+            let f_cell = address(3, between_row, origin);
+            let f_row = between_row;
+            report.set_formula(
+                CellRef { col: 4, row: f_row },
+                format!(
+                    "={}/{}",
+                    address(3, between_row, origin),
+                    address(3, within_row, origin)
+                ),
+            );
+            report.set_formula(
+                CellRef { col: 5, row: f_row },
+                format!(
+                    "=F.DIST.RT({f_cell},{},{})",
+                    address(2, between_row, origin),
+                    address(2, within_row, origin)
+                ),
+            );
+            report.set_formula(
+                CellRef { col: 6, row: f_row },
+                format!(
+                    "=F.INV.RT({alpha},{},{})",
+                    address(2, between_row, origin),
+                    address(2, within_row, origin)
+                ),
+            );
+            // The **total**.
+            let total_row = table + 5;
+            report.set_value(CellRef { col: 0, row: total_row }, Value::Text("Total".to_string()));
+            report.set_formula(
+                CellRef { col: 1, row: total_row },
+                format!(
+                    "={}+{}",
+                    address(1, between_row, origin),
+                    address(1, within_row, origin)
+                ),
+            );
+            report.set_formula(CellRef { col: 2, row: total_row }, format!("=COUNT({all})-1"));
+            let rows = total_row + 1;
+            let columns = 7;
+            let (sheet_id, sheet_name) = place_report(
+                session,
+                &id,
+                target,
+                &report,
+                rows,
+                columns,
+                self.overwrite.map(|overwrite| overwrite.0).unwrap_or(false),
+                sheet,
+            )?;
+            Ok(Outcome::changed(format!(
+                "the analysis of variance of {} group(s) into the sheet `{sheet_name}`",
+                count
+            ))
+            .with_data(json!({
+                "tool": "anova",
+                "sheet": sheet_id,
+                "name": sheet_name,
+                "range": format!(
+                    "{}:{}",
+                    origin.to_text(),
+                    CellRef { col: origin.col + columns - 1, row: origin.row + rows - 1 }.to_text()
+                ),
+                "rows": rows,
+                "cols": columns,
+                "groups": count,
+            })))
+
+
+        }
+    }
+
+    /// The **regression** of one variable on another.
+    ///
+    /// The report holds the **statistics** of the fit — the multiple
+    /// R, the R square, the adjusted R square, the standard error and
+    /// the number of observations — the **ANOVA** table of the fit, the
+    /// **coefficients** with their standard errors, their t statistics
+    /// and their p-values, and, when they are asked for, the
+    /// **residuals**.
+    ///
+    /// The report is **live**: its values are formulas over the two
+    /// ranges.
+    grid.analysis.regression {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the data is on.
+            sheet: NodeRef,
+            /// The **range** of the Y values: one row or one column.
+            input_y: Text,
+            /// The **range** of the X values: one row or one column.
+            input_x: Text,
+            /// The **top-left cell** of the report, on the sheet. The
+            /// report goes to a new sheet without it.
+            output: Option<Text>,
+            /// The **name** of the new sheet the report goes to.
+            new_sheet: Option<Text>,
+            /// The **confidence** level of the bounds: `95` by default.
+            confidence: Option<Number>,
+            /// Whether the **residuals** are written.
+            residuals: Option<Bool>,
+            /// Whether the report may be written over cells that hold
+            /// something.
+            overwrite: Option<Bool>,
+        },
+        run: {
+            let id = "grid.analysis.regression".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let cells = crate::cells_of(&node);
+            let y_area = crate::fill::area_at(&self.input_y.0, &id)?;
+            let x_area = crate::fill::area_at(&self.input_x.0, &id)?;
+            let y_cells = line_cells(&y_area, &id)?;
+            let x_cells = line_cells(&x_area, &id)?;
+            let y_numbers: Vec<CellRef> = y_cells
+                .iter()
+                .copied()
+                .filter(|cell| {
+                    matches!(
+                        cells.get(*cell).and_then(|entry| entry.value.clone()),
+                        Some(Value::Number(_))
+                    )
+                })
+                .collect();
+            let x_numbers: Vec<CellRef> = x_cells
+                .iter()
+                .copied()
+                .filter(|cell| {
+                    matches!(
+                        cells.get(*cell).and_then(|entry| entry.value.clone()),
+                        Some(Value::Number(_))
+                    )
+                })
+                .collect();
+            if y_numbers.len() != x_numbers.len() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the two ranges need the same number of numbers".to_string(),
+                });
+            }
+            if y_numbers.len() < 3 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the regression needs at least three points".to_string(),
+                });
+            }
+            for cell in y_numbers.iter().chain(&x_numbers) {
+                match cells.get(*cell).and_then(|entry| entry.value.clone()) {
+                    None | Some(Value::Empty) => continue,
+                    Some(Value::Number(_)) => continue,
+                    Some(_) => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the range holds text ({} isn't a number)", cell.to_text()),
+                        });
+                    }
+                }
+            }
+            let confidence = match self.confidence {
+                None => 95.0,
+                Some(number) => {
+                    let value = number.0;
+                    let value = if value > 0.0 && value < 1.0 { value * 100.0 } else { value };
+                    if !(value > 0.0 && value < 100.0) {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the confidence level is between 0 and 100".to_string(),
+                        });
+                    }
+                    value
+                }
+            };
+            let target = target_of(
+                session,
+                &id,
+                sheet,
+                self.output.as_ref(),
+                self.new_sheet.as_ref(),
+                "Regression",
+            )?;
+            let origin = match &target {
+                Target::Range { at, .. } => *at,
+                Target::Sheet { .. } => CellRef { col: 0, row: 0 },
+            };
+            let prefix = match &target {
+                Target::Range { sheet: target_sheet, .. } if *target_sheet == sheet => String::new(),
+                _ => qualified(&node.name, &id)?,
+            };
+            let y = format!("{prefix}{}", absolute(&Area::new(y_numbers[0], y_numbers[y_numbers.len() - 1])));
+            let x = format!("{prefix}{}", absolute(&Area::new(x_numbers[0], x_numbers[x_numbers.len() - 1])));
+            let mut report = Cells::new();
+            report.set_value(CellRef { col: 0, row: 0 }, Value::Text("SUMMARY OUTPUT".to_string()));
+            report.set_value(CellRef { col: 0, row: 2 }, Value::Text("Regression Statistics".to_string()));
+            let r_square_row = 4;
+            let observations_row = 7;
+            let statistics: [(&str, String); 5] = [
+                ("Multiple R", format!("=SQRT(RSQ({y},{x}))")),
+                ("R Square", format!("=RSQ({y},{x})")),
+                ("Adjusted R Square", format!("=1-(1-{})*(COUNT({y})-1)/(COUNT({y})-2)", address(1, r_square_row, origin))),
+                ("Standard Error", format!("=STEYX({y},{x})")),
+                ("Observations", format!("=COUNT({y})")),
+            ];
+            for (index, (label, formula)) in statistics.iter().enumerate() {
+                let row = 3 + index as u32;
+                report.set_value(CellRef { col: 0, row }, Value::Text((*label).to_string()));
+                report.set_formula(CellRef { col: 1, row }, formula.clone());
+            }
+            // The **ANOVA** of the fit.
+            report.set_value(CellRef { col: 0, row: 9 }, Value::Text("ANOVA".to_string()));
+            for (column, header) in ["df", "SS", "MS", "F", "Significance F"].iter().enumerate() {
+                report.set_value(
+                    CellRef { col: column as u32 + 1, row: 10 },
+                    Value::Text((*header).to_string()),
+                );
+            }
+            let regression_row = 11;
+            let residual_row = 12;
+            let total_row = 13;
+            report.set_value(CellRef { col: 0, row: regression_row }, Value::Text("Regression".to_string()));
+            report.set_value(CellRef { col: 1, row: regression_row }, Value::Number(1.0));
+            report.set_formula(CellRef { col: 2, row: regression_row }, format!("=RSQ({y},{x})*DEVSQ({y})"));
+            report.set_formula(CellRef { col: 3, row: regression_row }, format!("={}", address(2, regression_row, origin)));
+            report.set_value(CellRef { col: 0, row: residual_row }, Value::Text("Residual".to_string()));
+            report.set_formula(CellRef { col: 1, row: residual_row }, format!("=COUNT({y})-2"));
+            report.set_formula(CellRef { col: 2, row: residual_row }, format!("=(1-RSQ({y},{x}))*DEVSQ({y})"));
+            report.set_formula(
+                CellRef { col: 3, row: residual_row },
+                format!("={}/{}", address(2, residual_row, origin), address(1, residual_row, origin)),
+            );
+            report.set_value(CellRef { col: 0, row: total_row }, Value::Text("Total".to_string()));
+            report.set_formula(CellRef { col: 1, row: total_row }, format!("=COUNT({y})-1"));
+            report.set_formula(CellRef { col: 2, row: total_row }, format!("=DEVSQ({y})"));
+            // The **F** of the fit and its **p-value**.
+            report.set_formula(
+                CellRef { col: 4, row: regression_row },
+                format!(
+                    "={}/{}",
+                    address(3, regression_row, origin),
+                    address(3, residual_row, origin)
+                ),
+            );
+            report.set_formula(
+                CellRef { col: 5, row: regression_row },
+                format!(
+                    "=F.DIST.RT({},{1},{2})",
+                    address(4, regression_row, origin),
+                    address(1, regression_row, origin),
+                    address(1, residual_row, origin)
+                ),
+            );
+            // The **coefficients**.
+            let header_row = 15;
+            let lower = format!("Lower {confidence:.1}%");
+            let upper = format!("Upper {confidence:.1}%");
+            for (column, header) in
+                ["Coefficients", "Standard Error", "t Stat", "P-value", "Lower 95%", "Upper 95%", &lower, &upper]
+                    .iter()
+                    .enumerate()
+            {
+                report.set_value(
+                    CellRef { col: column as u32 + 1, row: header_row },
+                    Value::Text((*header).to_string()),
+                );
+            }
+            let residual_df = address(1, residual_row, origin);
+            // The **intercept** and the **slope**.
+            let coefficients: [(String, String, String); 2] = [
+                (
+                    "Intercept".to_string(),
+                    format!("=INTERCEPT({y},{x})"),
+                    format!("=STEYX({y},{x})*SQRT(1/COUNT({y})+AVERAGE({x})^2/DEVSQ({x}))"),
+                ),
+                (
+                    "X Variable 1".to_string(),
+                    format!("=SLOPE({y},{x})"),
+                    format!("=STEYX({y},{x})/SQRT(DEVSQ({x}))"),
+                ),
+            ];
+            for (index, (name, coefficient, error)) in coefficients.iter().enumerate() {
+                let row = 16 + index as u32;
+                report.set_value(CellRef { col: 0, row }, Value::Text(name.clone()));
+                report.set_formula(CellRef { col: 1, row }, coefficient.clone());
+                report.set_formula(CellRef { col: 2, row }, error.clone());
+                report.set_formula(
+                    CellRef { col: 3, row },
+                    format!("={}/{}", address(1, row, origin), address(2, row, origin)),
+                );
+                report.set_formula(
+                    CellRef { col: 4, row },
+                    format!("=T.DIST.2T(ABS({}),{residual_df})", address(3, row, origin)),
+                );
+                report.set_formula(
+                    CellRef { col: 5, row },
+                    format!("={}-T.INV.2T(0.05,{residual_df})*{}", address(1, row, origin), address(2, row, origin)),
+                );
+                report.set_formula(
+                    CellRef { col: 6, row },
+                    format!("={}+T.INV.2T(0.05,{residual_df})*{}", address(1, row, origin), address(2, row, origin)),
+                );
+                report.set_formula(
+                    CellRef { col: 7, row },
+                    format!(
+                        "={}-T.INV.2T(1-{}/100,{residual_df})*{}",
+                        address(1, row, origin),
+                        confidence,
+                        address(2, row, origin)
+                    ),
+                );
+                report.set_formula(
+                    CellRef { col: 8, row },
+                    format!(
+                        "={}+T.INV.2T(1-{}/100,{residual_df})*{}",
+                        address(1, row, origin),
+                        confidence,
+                        address(2, row, origin)
+                    ),
+                );
+            }
+            let mut rows = 18;
+            // The **residuals**.
+            if self.residuals.map(|residuals| residuals.0).unwrap_or(false) {
+                let residual_head = 21;
+                report.set_value(CellRef { col: 0, row: residual_head }, Value::Text("RESIDUAL OUTPUT".to_string()));
+                for (column, header) in ["Observation", "Predicted Y", "Residuals"].iter().enumerate() {
+                    report.set_value(
+                        CellRef { col: column as u32, row: residual_head + 2 },
+                        Value::Text((*header).to_string()),
+                    );
+                }
+                for (index, (y_cell, x_cell)) in y_numbers.iter().zip(&x_numbers).enumerate() {
+                    let row = residual_head + 3 + index as u32;
+                    let y_value = format!("{prefix}{}", absolute(&Area::new(*y_cell, *y_cell)));
+                    let x_value = format!("{prefix}{}", absolute(&Area::new(*x_cell, *x_cell)));
+                    report.set_value(CellRef { col: 0, row }, Value::Number(index as f64 + 1.0));
+                    report.set_formula(
+                        CellRef { col: 1, row },
+                        format!("=INTERCEPT({y},{x})+SLOPE({y},{x})*{x_value}"),
+                    );
+                    report.set_formula(
+                        CellRef { col: 2, row },
+                        format!("={y_value}-{}", address(1, row, origin)),
+                    );
+                    rows = rows.max(row + 1);
+                }
+                let _ = observations_row;
+            }
+            let columns = 9;
+            let (sheet_id, sheet_name) = place_report(
+                session,
+                &id,
+                target,
+                &report,
+                rows,
+                columns,
+                self.overwrite.map(|overwrite| overwrite.0).unwrap_or(false),
+                sheet,
+            )?;
+            Ok(Outcome::changed(format!(
+                "the regression of {} point(s) into the sheet `{sheet_name}`",
+                y_numbers.len()
+            ))
+            .with_data(json!({
+                "tool": "regression",
+                "sheet": sheet_id,
+                "name": sheet_name,
+                "range": format!(
+                    "{}:{}",
+                    origin.to_text(),
+                    CellRef { col: origin.col + columns - 1, row: origin.row + rows - 1 }.to_text()
+                ),
+                "rows": rows,
+                "cols": columns,
+                "points": y_numbers.len(),
+            })))
+
+
+        }
+    }
+
+    /// The **moving average** of a series of numbers.
+    ///
+    /// The report holds the **value** of every point of the series and
+    /// the **moving average** over the last **interval** of them, and,
+    /// when they are asked for, the **standard error** of it.
+    ///
+    /// The report is **live**: the moving average is a formula over
+    /// the series, and the standard error is a formula over it.
+    grid.analysis.movingaverage {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the data is on.
+            sheet: NodeRef,
+            /// The **range** of the series: one row or one column.
+            range: Text,
+            /// The **interval** of the moving average: `3` by default.
+            interval: Option<Number>,
+            /// Whether the **standard errors** are written.
+            standard_errors: Option<Bool>,
+            /// The **top-left cell** of the report, on the sheet. The
+            /// report goes to a new sheet without it.
+            output: Option<Text>,
+            /// The **name** of the new sheet the report goes to.
+            new_sheet: Option<Text>,
+            /// Whether the first cell of the range holds a **header**.
+            labels: Option<Bool>,
+            /// Whether the report may be written over cells that hold
+            /// something.
+            overwrite: Option<Bool>,
+        },
+        run: {
+            let id = "grid.analysis.movingaverage".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let cells = crate::cells_of(&node);
+            let area = crate::fill::area_at(&self.range.0, &id)?;
+            let mut data = line_cells(&area, &id)?;
+            if self.labels.map(|labels| labels.0).unwrap_or(false) && !data.is_empty() {
+                data.remove(0);
+            }
+            if data.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the range holds no numbers".to_string(),
+                });
+            }
+            for cell in &data {
+                match cells.get(*cell).and_then(|entry| entry.value.clone()) {
+                    Some(Value::Number(_)) => continue,
+                    _ => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the range must hold numbers ({} isn't one)", cell.to_text()),
+                        });
+                    }
+                }
+            }
+            let interval = match self.interval {
+                None => 3.0,
+                Some(number) => {
+                    let value = number.0;
+                    if !value.is_finite() || value < 1.0 || value.fract() != 0.0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the interval is a whole number from 1".to_string(),
+                        });
+                    }
+                    value
+                }
+            };
+            let interval = interval as usize;
+            if interval > data.len() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the interval is at most the {} numbers of the series", data.len()),
+                });
+            }
+            let errors = self.standard_errors.map(|errors| errors.0).unwrap_or(false);
+            let target = target_of(
+                session,
+                &id,
+                sheet,
+                self.output.as_ref(),
+                self.new_sheet.as_ref(),
+                "Moving Average",
+            )?;
+            let origin = match &target {
+                Target::Range { at, .. } => *at,
+                Target::Sheet { .. } => CellRef { col: 0, row: 0 },
+            };
+            let prefix = match &target {
+                Target::Range { sheet: target_sheet, .. } if *target_sheet == sheet => String::new(),
+                _ => qualified(&node.name, &id)?,
+            };
+            let mut report = Cells::new();
+            for (column, header) in ["Point", "Value", "Moving Average"].iter().enumerate() {
+                report.set_value(
+                    CellRef { col: column as u32, row: 0 },
+                    Value::Text((*header).to_string()),
+                );
+            }
+            if errors {
+                report.set_value(CellRef { col: 3, row: 0 }, Value::Text("Standard Error".to_string()));
+            }
+            for (index, cell) in data.iter().enumerate() {
+                let row = index as u32 + 1;
+                let value = format!("{prefix}{}", absolute(&Area::new(*cell, *cell)));
+                report.set_value(CellRef { col: 0, row }, Value::Number(index as f64 + 1.0));
+                report.set_formula(CellRef { col: 1, row }, value);
+                // The **moving average**: the last `interval` numbers.
+                if index + 1 >= interval {
+                    let window = &data[index + 1 - interval..=index];
+                    let range = format!(
+                        "{prefix}{}",
+                        absolute(&Area::new(window[0], window[window.len() - 1]))
+                    );
+                    report.set_formula(CellRef { col: 2, row }, format!("=AVERAGE({range})"));
+                }
+                // The **standard error**: the window of the residuals.
+                if errors && index + 1 >= 2 * interval - 1 {
+                    let window = &data[index + 1 - interval..=index];
+                    let actuals = format!(
+                        "{prefix}{}",
+                        absolute(&Area::new(window[0], window[window.len() - 1]))
+                    );
+                    let averages = format!(
+                        "{}:{}",
+                        address(2, row + 1 - interval as u32, origin),
+                        address(2, row, origin)
+                    );
+                    report.set_formula(
+                        CellRef { col: 3, row },
+                        format!("=SQRT(SUMXMY2({actuals},{averages})/{interval})"),
+                    );
+                }
+            }
+            let rows = data.len() as u32 + 1;
+            let columns = if errors { 4 } else { 3 };
+            let (sheet_id, sheet_name) = place_report(
+                session,
+                &id,
+                target,
+                &report,
+                rows,
+                columns,
+                self.overwrite.map(|overwrite| overwrite.0).unwrap_or(false),
+                sheet,
+            )?;
+            Ok(Outcome::changed(format!(
+                "the moving average of {} point(s) into the sheet `{sheet_name}`",
+                data.len()
+            ))
+            .with_data(json!({
+                "tool": "movingAverage",
+                "sheet": sheet_id,
+                "name": sheet_name,
+                "range": format!(
+                    "{}:{}",
+                    origin.to_text(),
+                    CellRef { col: origin.col + columns - 1, row: origin.row + rows - 1 }.to_text()
+                ),
+                "rows": rows,
+                "cols": columns,
+                "points": data.len(),
+            })))
+
+        }
+    }
+
+    /// The **exponential smoothing** of a series of numbers.
+    ///
+    /// The report holds the **value** of every point of the series and
+    /// its **smoothed** value — the last value, the value before it and
+    /// the smoothing before that — and, when they are asked for, the
+    /// **standard error** of it.
+    ///
+    /// The report is **live**: the smoothed value is a formula over the
+    /// series and over the report itself.
+    grid.analysis.smoothing {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the data is on.
+            sheet: NodeRef,
+            /// The **range** of the series: one row or one column.
+            range: Text,
+            /// The **damping** of the smoothing: `0.3` by default.
+            damping: Option<Number>,
+            /// Whether the **standard errors** are written.
+            standard_errors: Option<Bool>,
+            /// The **top-left cell** of the report, on the sheet. The
+            /// report goes to a new sheet without it.
+            output: Option<Text>,
+            /// The **name** of the new sheet the report goes to.
+            new_sheet: Option<Text>,
+            /// Whether the first cell of the range holds a **header**.
+            labels: Option<Bool>,
+            /// Whether the report may be written over cells that hold
+            /// something.
+            overwrite: Option<Bool>,
+        },
+        run: {
+            let id = "grid.analysis.smoothing".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let cells = crate::cells_of(&node);
+            let area = crate::fill::area_at(&self.range.0, &id)?;
+            let mut data = line_cells(&area, &id)?;
+            if self.labels.map(|labels| labels.0).unwrap_or(false) && !data.is_empty() {
+                data.remove(0);
+            }
+            if data.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the range holds no numbers".to_string(),
+                });
+            }
+            for cell in &data {
+                match cells.get(*cell).and_then(|entry| entry.value.clone()) {
+                    Some(Value::Number(_)) => continue,
+                    _ => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the range must hold numbers ({} isn't one)", cell.to_text()),
+                        });
+                    }
+                }
+            }
+            let damping = match self.damping {
+                None => 0.3,
+                Some(number) => {
+                    let value = number.0;
+                    if !(0.0..=1.0).contains(&value) {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the damping is between 0 and 1".to_string(),
+                        });
+                    }
+                    value
+                }
+            };
+            let errors = self.standard_errors.map(|errors| errors.0).unwrap_or(false);
+            let target = target_of(
+                session,
+                &id,
+                sheet,
+                self.output.as_ref(),
+                self.new_sheet.as_ref(),
+                "Smoothing",
+            )?;
+            let origin = match &target {
+                Target::Range { at, .. } => *at,
+                Target::Sheet { .. } => CellRef { col: 0, row: 0 },
+            };
+            let prefix = match &target {
+                Target::Range { sheet: target_sheet, .. } if *target_sheet == sheet => String::new(),
+                _ => qualified(&node.name, &id)?,
+            };
+            let mut report = Cells::new();
+            for (column, header) in ["Point", "Value", "Smoothed"].iter().enumerate() {
+                report.set_value(
+                    CellRef { col: column as u32, row: 0 },
+                    Value::Text((*header).to_string()),
+                );
+            }
+            if errors {
+                report.set_value(CellRef { col: 3, row: 0 }, Value::Text("Standard Error".to_string()));
+            }
+            for (index, cell) in data.iter().enumerate() {
+                let row = index as u32 + 1;
+                let value = format!("{prefix}{}", absolute(&Area::new(*cell, *cell)));
+                report.set_value(CellRef { col: 0, row }, Value::Number(index as f64 + 1.0));
+                report.set_formula(CellRef { col: 1, row }, value);
+                // The **smoothed** value: the value before it, the
+                // smoothing before it and the damping of the two.
+                if index == 1 {
+                    let first = format!("{prefix}{}", absolute(&Area::new(data[0], data[0])));
+                    report.set_formula(CellRef { col: 2, row }, format!("={first}"));
+                } else if index > 1 {
+                    let previous = data[index - 1];
+                    let before = format!("{prefix}{}", absolute(&Area::new(previous, previous)));
+                    report.set_formula(
+                        CellRef { col: 2, row },
+                        format!(
+                            "=(1-{damping})*{before}+{damping}*{}",
+                            address(2, row - 1, origin)
+                        ),
+                    );
+                }
+                // The **standard error**: the window of the residuals.
+                if errors && index >= 3 {
+                    let window = &data[index - 2..=index];
+                    let actuals =
+                        format!("{prefix}{}", absolute(&Area::new(window[0], window[window.len() - 1])));
+                    let smooths = format!(
+                        "{}:{}",
+                        address(2, row - 2, origin),
+                        address(2, row, origin)
+                    );
+                    report.set_formula(
+                        CellRef { col: 3, row },
+                        format!("=SQRT(SUMXMY2({actuals},{smooths})/3)"),
+                    );
+                }
+            }
+            let rows = data.len() as u32 + 1;
+            let columns = if errors { 4 } else { 3 };
+            let (sheet_id, sheet_name) = place_report(
+                session,
+                &id,
+                target,
+                &report,
+                rows,
+                columns,
+                self.overwrite.map(|overwrite| overwrite.0).unwrap_or(false),
+                sheet,
+            )?;
+            Ok(Outcome::changed(format!(
+                "the smoothing of {} point(s) into the sheet `{sheet_name}`",
+                data.len()
+            ))
+            .with_data(json!({
+                "tool": "exponentialSmoothing",
+                "sheet": sheet_id,
+                "name": sheet_name,
+                "range": format!(
+                    "{}:{}",
+                    origin.to_text(),
+                    CellRef { col: origin.col + columns - 1, row: origin.row + rows - 1 }.to_text()
+                ),
+                "rows": rows,
+                "cols": columns,
+                "points": data.len(),
+            })))
 
         }
     }

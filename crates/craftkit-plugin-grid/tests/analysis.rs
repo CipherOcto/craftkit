@@ -483,3 +483,146 @@ fn a_test_wants_a_line_of_numbers() {
     let error = outcome.expect_err("the test is refused").to_string();
     assert!(error.contains("one row or one column"), "the error names the shape: {error}");
 }
+
+#[test]
+fn the_rank_of_a_range_is_a_table() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for row in 1..=5 {
+        value(&mut session, sheet, &format!("A{row}"), json!(row));
+    }
+    let outcome = session
+        .execute("grid.analysis.rank", &json!({ "sheet": sheet, "range": "A1:A5" }))
+        .expect("the rank is made");
+    let report = outcome.data["sheet"].as_u64().expect("the report has a sheet");
+    assert_eq!(text_of(&mut session, report, "A1"), "Point");
+    assert_eq!(text_of(&mut session, report, "B1"), "Column1");
+    assert_eq!(text_of(&mut session, report, "C1"), "Rank");
+    assert_eq!(text_of(&mut session, report, "D1"), "Percent");
+    // The points, from the largest to the smallest.
+    assert_eq!(number(&mut session, report, "B2"), 5.0);
+    assert_eq!(number(&mut session, report, "B6"), 1.0);
+    // The **rank** of each of them.
+    assert_eq!(number(&mut session, report, "C2"), 1.0);
+    assert_eq!(number(&mut session, report, "C6"), 5.0);
+    // And the **percentile**: the largest is the hundredth.
+    assert_eq!(number(&mut session, report, "D2"), 1.0);
+    assert_eq!(number(&mut session, report, "D6"), 0.0);
+    // The value is a formula over the data.
+    assert_eq!(formula_of(&mut session, report, "B2"), "=Sheet1!$A$5");
+}
+
+#[test]
+fn the_rank_of_a_range_is_live() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for row in 1..=5 {
+        value(&mut session, sheet, &format!("A{row}"), json!(row));
+    }
+    let outcome = session
+        .execute("grid.analysis.rank", &json!({ "sheet": sheet, "range": "A1:A5" }))
+        .expect("the rank is made");
+    let report = outcome.data["sheet"].as_u64().expect("the report has a sheet");
+    // An edit of the data is an edit of the value and of the rank of
+    // it: the point keeps its place in the report, and the rank of the
+    // value is the rank it has now.
+    value(&mut session, sheet, "A5", json!(0.5));
+    assert_eq!(number(&mut session, report, "B2"), 0.5);
+    assert_eq!(number(&mut session, report, "C2"), 5.0);
+}
+
+#[test]
+fn the_analysis_of_variance_holds_the_f_and_its_p_value() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for row in 1..=3 {
+        value(&mut session, sheet, &format!("A{row}"), json!(row));
+        value(&mut session, sheet, &format!("B{row}"), json!(10.0 * f64::from(row)));
+    }
+    let outcome = session
+        .execute("grid.analysis.anova", &json!({ "sheet": sheet, "range": "A1:B3" }))
+        .expect("the analysis is made");
+    let report = outcome.data["sheet"].as_u64().expect("the report has a sheet");
+    assert_eq!(text_of(&mut session, report, "A1"), "Anova: Single Factor");
+    assert_eq!(text_of(&mut session, report, "A4"), "Groups");
+    assert_eq!(text_of(&mut session, report, "A5"), "Column1");
+    assert_eq!(number(&mut session, report, "B5"), 3.0);
+    assert_eq!(number(&mut session, report, "D5"), 2.0);
+    assert_eq!(number(&mut session, report, "D6"), 20.0);
+    // The **F**: the mean square between over the mean square within.
+    assert_eq!(text_of(&mut session, report, "A9"), "ANOVA");
+    assert_eq!(text_of(&mut session, report, "A11"), "Between Groups");
+    let f = number(&mut session, report, "E11");
+    assert!((f - 9.623762376237624).abs() < 1e-9, "the F is {f}");
+    let p = number(&mut session, report, "F11");
+    assert!(p > 0.0 && p < 0.05, "the p-value is {p}");
+}
+
+#[test]
+fn the_regression_of_a_line_is_the_line() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for t in 1..=5 {
+        value(&mut session, sheet, &format!("A{t}"), json!(t));
+        value(&mut session, sheet, &format!("B{t}"), json!(10.0 + 2.0 * f64::from(t)));
+    }
+    let outcome = session
+        .execute(
+            "grid.analysis.regression",
+            &json!({ "sheet": sheet, "input_y": "B1:B5", "input_x": "A1:A5" }),
+        )
+        .expect("the regression is made");
+    let report = outcome.data["sheet"].as_u64().expect("the report has a sheet");
+    assert_eq!(text_of(&mut session, report, "A1"), "SUMMARY OUTPUT");
+    assert_eq!(text_of(&mut session, report, "A4"), "Multiple R");
+    assert_eq!(text_of(&mut session, report, "A5"), "R Square");
+    assert_eq!(number(&mut session, report, "B5"), 1.0);
+    assert_eq!(number(&mut session, report, "B8"), 5.0);
+    // The **coefficients**: the intercept and the slope.
+    assert_eq!(text_of(&mut session, report, "A17"), "Intercept");
+    assert_eq!(number(&mut session, report, "B17"), 10.0);
+    assert_eq!(text_of(&mut session, report, "A18"), "X Variable 1");
+    assert_eq!(number(&mut session, report, "B18"), 2.0);
+}
+
+#[test]
+fn the_moving_average_is_the_average_of_the_last_points() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for row in 1..=5 {
+        value(&mut session, sheet, &format!("A{row}"), json!(row));
+    }
+    let outcome = session
+        .execute("grid.analysis.movingaverage", &json!({ "sheet": sheet, "range": "A1:A5", "interval": 3 }))
+        .expect("the moving average is made");
+    let report = outcome.data["sheet"].as_u64().expect("the report has a sheet");
+    assert_eq!(text_of(&mut session, report, "C1"), "Moving Average");
+    // The first two points have no moving average.
+    assert_eq!(text_of(&mut session, report, "C2"), "");
+    // And the rest have the average of the last three.
+    assert_eq!(number(&mut session, report, "C4"), 2.0);
+    assert_eq!(number(&mut session, report, "C5"), 3.0);
+    assert_eq!(number(&mut session, report, "C6"), 4.0);
+}
+
+#[test]
+fn the_smoothing_is_the_last_value_and_the_one_before_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for row in 1..=5 {
+        value(&mut session, sheet, &format!("A{row}"), json!(row));
+    }
+    let outcome = session
+        .execute("grid.analysis.smoothing", &json!({ "sheet": sheet, "range": "A1:A5", "damping": 0.3 }))
+        .expect("the smoothing is made");
+    let report = outcome.data["sheet"].as_u64().expect("the report has a sheet");
+    assert_eq!(text_of(&mut session, report, "C1"), "Smoothed");
+    // The first point has no smoothing, and the second is the first
+    // value.
+    assert_eq!(text_of(&mut session, report, "C2"), "");
+    assert_eq!(number(&mut session, report, "C3"), 1.0);
+    // And the rest are the value before and the smoothing before.
+    assert!((number(&mut session, report, "C4") - 1.7).abs() < 1e-9, "the smoothing");
+    assert!((number(&mut session, report, "C5") - 2.61).abs() < 1e-9, "the smoothing");
+    assert!((number(&mut session, report, "C6") - 3.583).abs() < 1e-9, "the smoothing");
+}
