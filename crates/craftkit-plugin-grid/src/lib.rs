@@ -475,6 +475,7 @@ mod solver;
 mod sorting;
 mod sparklines;
 mod special;
+mod spelling;
 mod statistics;
 mod storedtext;
 mod styles;
