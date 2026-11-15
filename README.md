@@ -4399,6 +4399,7 @@ so.
 | the **structure** of a protected workbook | **built.** The sheets of a protected workbook may not be added, taken away, renamed or moved (§951) | §951 |
 | the **walk** between the **comments** | **built.** The next comment of a sheet is the one after a cell, and the walk goes round (§952) | §952 |
 | the chart that reads its range **the other way round** | **built.** A chart may read its range by rows — the first row holds the categories and the rows after it are the series (§953) | §953 |
+| the **statistics** of a range | **built.** The count, the sum, the average, the smallest and the largest of a range are read in one call (§954) | §954 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55939,7 +55940,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 211 |
+| grid | 212 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62338,7 +62339,7 @@ A block of numbers may be read down its columns or across its rows.
 ### What it cost
 
 - **One parameter** on two commands and **no new command**: the grid
-  battery still carries **211** commands.
+  battery still carries **212** commands.
 - **Two tests**: a chart that reads its range by rows, and a chart whose
   way of reading is changed after it is made.
 - **No new dependency**.
@@ -62347,3 +62348,40 @@ A block of numbers may be read down its columns or across its rows.
 
 - **The tree's chart is a model and not a drawing**: switching the way
   it reads changes what it says it shows, and nothing is painted.
+
+## 954. The statistics of a range
+
+How much is in a range, read in one call.
+
+### What was built
+
+- A new command, **`grid.range.stats`**: the **count** of the cells
+  that hold something, the count of the **numbers** among them, their
+  **sum**, their **average**, their **smallest** and their **largest**.
+- The values are **derived**: a cell that holds a formula is counted
+  by what it computes.
+- A **hidden row** is not counted: a row that is hidden is a row that is
+  not there, as far as a summary is concerned.
+
+### What the port found
+
+- **The reference's statistics are of the selection**, and the tree's
+  are of a **range**: the tree has no selection — a program says what
+  it wants — and every command of the tree names the thing it is about.
+- **The reference's statistics are of the whole workbook**, and the
+  tree's are of one sheet: the tree's sheet is the unit, and the
+  statistics of a whole workbook are the statistics of its sheets added
+  up (§950).
+
+### What it cost
+
+- **One command**: the grid battery now carries **212** commands.
+- **Two tests**: the statistics of a range, and the hidden row that is
+  not counted.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The statistics do not spread**: there is no median, no variance and
+  no quartiles here — the tree's report of a range (§946) has them, and
+  it is a report and not a reading.
