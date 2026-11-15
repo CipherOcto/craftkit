@@ -4382,6 +4382,7 @@ so.
 | the **PDF writer** | **built.** A file is written as a PDF — pages drawn with vectors, text in the standard faces, pictures and links (§934) | §934 |
 | the **export** of a sheet as a PDF file | **built.** A sheet is written as a PDF file — the pages are the sheet's own, and the cells are drawn with their fills, their text and their gridlines (§935) | §935 |
 | the **header**, the **footer** and the **headings** of the printed page | **built.** A printed page carries its header, its footer and the headings of the sheet, and the codes in them are worked out for the page they are on (§936) | §936 |
+| the **links** of a sheet on the printed page | **built.** A link on a cell is an area that is clickable on the page, and the links that are not drawn are counted (§937) | §937 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61523,3 +61524,45 @@ a **footer** below it, and the **headings** of the sheet beside it.
   kind that has none falls back on the odd pages.
 - **A chart, a picture, a note, a link and a comment are still not on
   the page**: the cells are all that is drawn.
+
+## 937. The links of a sheet on the printed page
+
+A cell may hold a **link**: a place in the workbook, or a place outside
+it. On a printed page that is an area that is **clickable**.
+
+### What was built
+
+- A **link** on a cell becomes a **link annotation** over that cell in
+  the PDF: the area is clickable and it goes where the link goes.
+- A link that goes to a **web address** or to a `mailto:` is drawn.
+- The answer says how many links the sheet has, how many were drawn and
+  **how many were not** — so a link that is left out is never left out
+  in silence.
+
+### What the port found
+
+- **The reference draws the links of the cells as PDF annotations**, and
+  a link to a place inside the workbook is a link to a place on another
+  page of the same file. This tree writes **one sheet** in one file, so
+  a link to another sheet has no page to point at: it is not drawn, and
+  it is counted.
+- **The PDF writer refuses a link to a file**, and so does the export:
+  the tree's links may go to a place in the workbook or to a place
+  outside it, and only the outside ones that a PDF may carry are
+  drawn.
+
+### What it cost
+
+- **A function**, and **no new command**.
+- **Two tests**: a link to a web address is drawn over its cell, and a
+  link inside the workbook is not drawn and is counted.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A link to a place inside the workbook is not drawn**, as above: the
+  file holds one sheet, and the other sheet has no page in it.
+- **The tooltip of a link** — the words that show when the mouse rests
+  on it — is not in the PDF.
+- **A chart, a picture, a note and a comment are still not on the
+  page.**
