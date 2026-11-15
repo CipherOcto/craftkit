@@ -132,6 +132,121 @@ commands! {
             Ok(Outcome::new(format!("{name}!{} holds {count} cell(s)", area.to_text()))
                 .with_data(json!({ "sheet": sheet, "range": area.to_text(), "values": rows })))
 
+
+        }
+    }
+
+    /// The **statistics** of a range: how many cells hold something,
+    /// how many of them hold numbers, and what the numbers add up to.
+    ///
+    /// The values are **derived**: the book computes them, so a cell
+    /// that holds a formula is counted by what it computes.
+    ///
+    /// A **hidden row** is not counted: a row that is hidden is a row
+    /// that is not there, as far as a summary of the sheet is concerned.
+    grid.range.stats {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
+            sheet: NodeRef,
+            /// The range: `A1:D10`. Without it, the used range is read.
+            range: Option<Text>,
+        },
+        run: {
+            let id = "grid.range.stats".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let name = node.name.clone();
+            let cells = crate::cells_of(node);
+            let area = match &self.range {
+                Some(range) => crate::fill::area_at(&range.0, &id)?,
+                None => match used_range(&cells) {
+                    Some(area) => area,
+                    None => {
+                        return Ok(Outcome::new(format!("{name} holds nothing")).with_data(json!({
+                            "sheet": sheet,
+                            "range": Value::Empty.to_json(),
+                            "count": 0,
+                            "numeric": 0,
+                            "sum": 0.0,
+                            "average": Value::Empty.to_json(),
+                            "min": Value::Empty.to_json(),
+                            "max": Value::Empty.to_json(),
+                        })));
+                    }
+                },
+            };
+            // The **hidden rows**: they are not counted. The rows are
+            // counted from one, as the tree counts them.
+            let hidden = crate::hiding::hidden_rows(node);
+            // The **values**: the book computes them.
+            let book = crate::book_of(session.document());
+            let mut count = 0u64;
+            let mut numeric = 0u64;
+            let mut sum = 0.0;
+            let mut smallest: Option<f64> = None;
+            let mut largest: Option<f64> = None;
+            for row in area.start.row..=area.end.row {
+                if hidden.contains(&(u64::from(row) + 1)) {
+                    continue;
+                }
+                for col in area.start.col..=area.end.col {
+                    let cell = CellRef { col, row };
+                    let value = match cells.get(cell) {
+                        Some(entry) => match (&entry.value, &entry.formula) {
+                            (Some(value), _) => value.clone(),
+                            (None, Some(_)) => book.value_of(&name, cell),
+                            (None, None) => Value::Empty,
+                        },
+                        None => Value::Empty,
+                    };
+                    match value {
+                        Value::Empty => continue,
+                        Value::Number(number) => {
+                            count += 1;
+                            numeric += 1;
+                            sum += number;
+                            smallest = Some(smallest.map_or(number, |smallest| smallest.min(number)));
+                            largest = Some(largest.map_or(number, |largest| largest.max(number)));
+                        }
+                        _ => count += 1,
+                    }
+                }
+            }
+            let average = if numeric > 0 { Some(sum / numeric as f64) } else { None };
+            Ok(Outcome::new(format!("{count} cell(s) of {name} hold something")).with_data(json!({
+                "sheet": sheet,
+                "range": area.to_text(),
+                "count": count,
+                "numeric": numeric,
+                "sum": sum,
+                "average": match average {
+                    Some(average) => json!(average),
+                    None => Value::Empty.to_json(),
+                },
+                "min": match smallest {
+                    Some(smallest) => json!(smallest),
+                    None => Value::Empty.to_json(),
+                },
+                "max": match largest {
+                    Some(largest) => json!(largest),
+                    None => Value::Empty.to_json(),
+                },
+            })))
+
         }
     }
 }

@@ -152,3 +152,44 @@ fn a_node_that_is_not_a_sheet_is_refused() {
     let message = error.to_string();
     assert!(message.contains("there is no sheet"), "and there is none: {message}");
 }
+
+/// The **statistics** of a range: how many cells hold something, and
+/// what the numbers add up to.
+#[test]
+fn the_statistics_of_a_range_are_the_numbers_of_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for (cell, value) in [("A1", json!(1.0)), ("A2", json!(2.0)), ("A3", json!("three")), ("B1", json!(6.0))]
+    {
+        session
+            .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": cell, "value": value }))
+            .expect("the cell is set");
+    }
+    let outcome = session
+        .execute("grid.range.stats", &json!({ "sheet": sheet, "range": "A1:B3" }))
+        .expect("the statistics are read");
+    assert_eq!(outcome.data["count"], 4);
+    assert_eq!(outcome.data["numeric"], 3);
+    assert_eq!(outcome.data["sum"], 9.0);
+    assert_eq!(outcome.data["average"], 3.0);
+    assert_eq!(outcome.data["min"], 1.0);
+    assert_eq!(outcome.data["max"], 6.0);
+}
+
+/// A **hidden row** is not counted.
+#[test]
+fn a_hidden_row_is_not_counted() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for (cell, value) in [("A1", json!(1.0)), ("A2", json!(2.0))] {
+        session
+            .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": cell, "value": value }))
+            .expect("the cell is set");
+    }
+    session.execute("grid.row.hide", &json!({ "sheet": sheet, "row": 2 })).expect("the row is hidden");
+    let outcome = session
+        .execute("grid.range.stats", &json!({ "sheet": sheet, "range": "A1:A2" }))
+        .expect("the statistics are read");
+    assert_eq!(outcome.data["count"], 1);
+    assert_eq!(outcome.data["sum"], 1.0);
+}
