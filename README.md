@@ -4387,6 +4387,7 @@ so.
 | the **borders** of the cells on the printed page | **built.** A cell's borders are drawn with the width, the dashes and the colour of their style (§939) | §939 |
 | the **sparklines** of a sheet on the printed page | **built.** A sparkline is drawn in its cell — a line, a set of columns, or the wins and the losses (§940) | §940 |
 | the **forecast sheet** | **built.** A history becomes a new sheet with the forecast beside it — live formulas over the copied history, the bounds and the statistics (§941) | §941 |
+| the **start** and the **end** of a forecast | **built.** A forecast may start before the last point of the history and may end at a named one (§942) | §942 |
 
 ### The list of things that are honestly not there: empty
 
@@ -61759,3 +61760,44 @@ history and, beside it, the **forecast**.
   (§911).
 - **The chart of the forecast sheet is not made**: the tree's chart is
   a model and not a drawing (§935).
+
+## 942. The forecast sheet: where the forecast starts and where it ends
+
+A forecast does not always begin after the history, and it does not
+always run for a number of periods.
+
+### What was built
+
+- The forecast may **start before the last point** of the history: the
+  model is fit to the points before it, and the forecast runs over the
+  actuals from there.
+- The forecast may **end** at a named point: the periods are worked out
+  from the steps of the timeline between the last point and the end.
+- Both are given as a **number** or as a **date** — the tree's own
+  dates.
+
+### What the port found
+
+- **The tree's axis says how far a point is**: the number of steps
+  between two points is the difference of their places on the axis, so
+  a forecast that ends at a date runs for as many periods as the axis
+  says.
+- **A forecast that starts early is fit to the points before the
+  start**, and the forecast line joins the last of them: so the model
+  and the history meet, and the line does not jump.
+- **A start that is not a point of the timeline is refused**, and so is
+  an end that is not after its last point.
+
+### What it cost
+
+- **Two parameters**, and a **small change in the ETS module**: the
+  axis can now say how many steps are between two points.
+- **Four tests**: the forecast runs to an end, the forecast may start
+  before the last point, a start that is not a point is refused, and an
+  end before the last point is refused.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The forecast sheet is still not a table** and its **chart** is
+  still not made (§941).
