@@ -4390,6 +4390,7 @@ so.
 | the **start** and the **end** of a forecast | **built.** A forecast may start before the last point of the history and may end at a named one (§942) | §942 |
 | the **export** of a whole workbook as a PDF file | **built.** Every sheet of the document is written into one file, and the pages are numbered through the whole of it (§943) | §943 |
 | the **spelling** of a sheet | **built.** The words of a sheet that the word list does not hold are found, with the cells and the suggestions (§944) | §944 |
+| the **words** the user taught, and the **thesaurus** | **built.** A workbook is taught a word, and the thesaurus gives the words that share a stem (§945) | §945 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55930,7 +55931,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 192 |
+| grid | 194 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -61895,3 +61896,44 @@ A sheet may hold words that are not words.
 - **The words the user taught are read but there is no way to teach
   one yet**: the command that adds a word to the workbook is not here.
 - **The thesaurus** — the words that share a stem — is not here.
+
+## 945. The words the user taught, and the thesaurus
+
+A word the user says is a word should be a word.
+
+### What was built
+
+- A new command, **`grid.spelling.add`**: a word is taught to a
+  workbook, and the check reads it — a word the user taught is a word.
+- A new command, **`grid.thesaurus`**: the words that share a **stem**
+  with a word — the word without its last two letters.
+- The words are kept in the **workbook**, so they travel with it.
+
+### What the port found
+
+- **The reference keeps the user's words in the preferences of the
+  program**, and this tree has no preferences: it has a document. So
+  the words are kept in the workbook (§944).
+- **The reference's change of a spelling is not a command here**: the
+  reference changes the first occurrence of a word in a cell, and the
+  tree's own `grid.replace` changes every occurrence of a text in a
+  sheet, with the case as it is asked for. So the tree's rule is the
+  one that is used, and there is no second rule for the same thing.
+- **The reference's stem is the word without its last two letters**,
+  and a word of three letters keeps all three.
+
+### What it cost
+
+- **Two commands**: the grid battery now carries **194** commands.
+- **Three tests**: a word the user taught is a word, a word the
+  workbook knows is not taught twice, and the thesaurus gives the words
+  that share a stem.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The words are the workbook's and not the machine's**: a workbook
+  that is taught a word keeps it, and another workbook of the same
+  machine does not know it. The reference's words are the machine's,
+  and every workbook of it knows them.
+- **The change of a spelling is the tree's `grid.replace`**, as above.
