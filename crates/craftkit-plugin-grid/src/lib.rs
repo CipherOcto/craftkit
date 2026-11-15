@@ -451,6 +451,7 @@ mod notes;
 mod odds;
 mod outline;
 pub mod outside;
+mod pdfexport;
 mod pictures;
 mod pivotfields;
 mod pivots;

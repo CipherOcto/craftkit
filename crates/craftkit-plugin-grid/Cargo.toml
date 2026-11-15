@@ -14,6 +14,9 @@ craftkit-image = { workspace = true }
 # The **workbook reader**: a workbook file, read as a workbook. A
 # **library**, and the linker does not wire it in.
 craftkit-xlsx = { workspace = true }
+# The **PDF writer**: a file written as a PDF. A **library**, and the
+# linker does not wire it in.
+craftkit-pdf-writer = { workspace = true }
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
 

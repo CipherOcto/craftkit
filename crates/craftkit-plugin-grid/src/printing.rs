@@ -312,6 +312,107 @@ pub fn area_of(node: &Node) -> Option<Area> {
     Some(area)
 }
 
+/// The **pages** of a sheet: what is on each of them.
+///
+/// The pages are **derived**: they are worked out from the paper, the
+/// margins and the sizes of the rows and the columns, and they are
+/// never written down. So this is the one place that works them out,
+/// and every command that needs them comes here.
+pub(crate) struct Pages {
+    /// The area that is printed.
+    pub area: Area,
+    /// The scale the sheet prints at.
+    pub scale: f64,
+    /// Whether the fit the sheet was told to fit into is met.
+    pub fit_met: bool,
+    /// The rows and the columns that are printed on **every** page.
+    pub titles: (Vec<u32>, Vec<u32>),
+    /// The pages, in the order they are printed: the rows of each page
+    /// and the columns of it.
+    pub bands: Vec<((u32, u32), (u32, u32))>,
+    /// The room the **headings** take from the page, in points: the
+    /// width they take from the columns and the height from the rows.
+    pub heading_room: (f64, f64),
+    /// Whether the **gridlines** are printed.
+    pub gridlines: bool,
+    /// Whether the **headings** are printed.
+    pub headings: bool,
+}
+
+/// The **pages** of a sheet, worked out.
+///
+/// `None` when the sheet holds nothing to print.
+pub(crate) fn pages_of(
+    node: &Node,
+    setup: &Setup,
+    cells: &crate::formula::Cells,
+    id: &str,
+) -> Result<Option<Pages>, EngineError> {
+    // The **area** that is printed: the one that was set, or the used
+    // range of the sheet.
+    let Some(area) = area_of(node).or_else(|| crate::reading::used_range(cells)) else {
+        return Ok(None);
+    };
+    let (printable_width, printable_height) = setup.printable();
+    let (row_breaks, column_breaks) = breaks_of(node);
+    // The **titles**: the rows and the columns that are printed on every
+    // page. They are not part of the pages themselves, so they are left
+    // out of the bands.
+    let (title_rows, title_columns) = titles_of(node);
+    let content_rows: Vec<u32> =
+        (area.start.row..=area.end.row).filter(|row| !title_rows.contains(row)).collect();
+    let content_columns: Vec<u32> =
+        (area.start.col..=area.end.col).filter(|column| !title_columns.contains(column)).collect();
+    // The **scale** the sheet prints at: the scale of the setup, or the
+    // scale that fits it into the pages it was told to fit.
+    let content = crate::scaling::Content { rows: content_rows, columns: content_columns };
+    let (scale, fit_met) = crate::scaling::effective_scale(setup, node, &content);
+    // A sheet that is **fitted** is broken by the fit and not by hand:
+    // the fit is the way the pages are chosen.
+    let (row_breaks, column_breaks) =
+        if setup.fit.is_some() { (Vec::new(), Vec::new()) } else { (row_breaks, column_breaks) };
+    // The **headings** take room from the page: the rows are one heading
+    // shorter and the columns one heading narrower.
+    let digits = (area.end.row + 1).to_string().len() as u32;
+    let heading_room = crate::marks::room_of(node, digits);
+    let rows = bands(
+        &content.rows,
+        |row| row_height(node, row),
+        (printable_height / scale - heading_room.1).max(1.0),
+        &row_breaks,
+    );
+    let columns = bands(
+        &content.columns,
+        |column| column_width(node, column),
+        (printable_width / scale - heading_room.0).max(1.0),
+        &column_breaks,
+    );
+    let mut bands_of_pages: Vec<((u32, u32), (u32, u32))> = Vec::new();
+    for (first_row, last_row) in &rows {
+        for (first_column, last_column) in &columns {
+            if bands_of_pages.len() >= MAX_PAGES {
+                return Err(EngineError::Failed {
+                    id: id.to_string(),
+                    message: format!(
+                        "the sheet is more than {MAX_PAGES} pages, and a sheet is not that long"
+                    ),
+                });
+            }
+            bands_of_pages.push(((*first_row, *last_row), (*first_column, *last_column)));
+        }
+    }
+    Ok(Some(Pages {
+        area,
+        scale,
+        fit_met,
+        titles: (title_rows, title_columns),
+        bands: bands_of_pages,
+        heading_room,
+        gridlines: crate::marks::gridlines_of(node),
+        headings: crate::marks::headings_of(node),
+    }))
+}
+
 /// The **bands** of a set of lines: the lines that go on one page.
 ///
 /// A line that is wider than the page is on a page of its own, and a
@@ -561,78 +662,25 @@ commands! {
             let node = sheet_of(session, &id, sheet)?;
             let setup = Setup::of(&node);
             let cells = crate::cells_of(&node);
-            // The **area** that is printed: the one that was set, or the
-            // used range of the sheet.
-            let area = match area_of(&node) {
-                Some(area) => area,
-                None => match crate::reading::used_range(&cells) {
-                    Some(area) => area,
-                    None => {
-                        return Ok(Outcome::new("the sheet holds nothing to print").with_data(json!({
-                            "sheet": sheet,
-                            "pages": Vec::<craftkit_sdk::serde_json::Value>::new(),
-                            "count": 0,
-                        })));
-                    }
-                },
+            // The **pages** are worked out in one place, and every
+            // command that needs them comes to it.
+            let Some(pages) = pages_of(&node, &setup, &cells, &id)? else {
+                return Ok(Outcome::new("the sheet holds nothing to print").with_data(json!({
+                    "sheet": sheet,
+                    "pages": Vec::<craftkit_sdk::serde_json::Value>::new(),
+                    "count": 0,
+                })));
             };
-            let (printable_width, printable_height) = setup.printable();
-            let (row_breaks, column_breaks) = breaks_of(&node);
-            // The **titles**: the rows and the columns that are printed on
-            // every page. They are not part of the pages themselves, so
-            // they are left out of the bands.
-            let (title_rows, title_columns) = titles_of(&node);
-            let content_rows: Vec<u32> =
-                (area.start.row..=area.end.row).filter(|row| !title_rows.contains(row)).collect();
-            let content_columns: Vec<u32> =
-                (area.start.col..=area.end.col).filter(|column| !title_columns.contains(column)).collect();
-            // The **scale** the sheet prints at: the scale of the setup, or
-            // the scale that fits it into the pages it was told to fit.
-            let content = crate::scaling::Content { rows: content_rows, columns: content_columns };
-            let (scale, fit_met) = crate::scaling::effective_scale(&setup, &node, &content);
-            // A sheet that is **fitted** is broken by the fit and not by
-            // hand: the fit is the way the pages are chosen.
-            let (row_breaks, column_breaks) =
-                if setup.fit.is_some() { (Vec::new(), Vec::new()) } else { (row_breaks, column_breaks) };
-            // The **headings** take room from the page: the rows are one
-            // heading shorter and the columns one heading narrower.
-            let digits = (area.end.row + 1).to_string().len() as u32;
-            let (heading_width, heading_height) = crate::marks::room_of(&node, digits);
-            let rows = bands(
-                &content.rows,
-                |row| row_height(&node, row),
-                (printable_height / scale - heading_height).max(1.0),
-                &row_breaks,
-            );
-            let columns = bands(
-                &content.columns,
-                |column| column_width(&node, column),
-                (printable_width / scale - heading_width).max(1.0),
-                &column_breaks,
-            );
-            let mut bands_of_pages: Vec<((u32, u32), (u32, u32))> = Vec::new();
-            for (first_row, last_row) in &rows {
-                for (first_column, last_column) in &columns {
-                    if bands_of_pages.len() >= MAX_PAGES {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!(
-                                "the sheet is more than {MAX_PAGES} pages, and a sheet is not that long"
-                            ),
-                        });
-                    }
-                    bands_of_pages.push(((*first_row, *last_row), (*first_column, *last_column)));
-                }
-            }
+            let (title_rows, title_columns) = &pages.titles;
             // The **header** and the **footer** of each page: the codes in
             // them are worked out for the page they are on.
-            let count = bands_of_pages.len();
-            let mut pages: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+            let count = pages.bands.len();
+            let mut list: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
             for (number, ((first_row, last_row), (first_column, last_column))) in
-                bands_of_pages.iter().enumerate()
+                pages.bands.iter().enumerate()
             {
                 let (header, footer) = crate::headers::of_page(&node, number + 1, count);
-                pages.push(json!({
+                list.push(json!({
                     "number": number + 1,
                     "rows": [first_row + 1, last_row + 1],
                     "columns": [
@@ -646,17 +694,17 @@ commands! {
                         .collect::<Vec<String>>(),
                     "header": header.to_json(),
                     "footer": footer.to_json(),
-                    "gridlines": crate::marks::gridlines_of(&node),
-                    "headings": crate::marks::headings_of(&node),
+                    "gridlines": pages.gridlines,
+                    "headings": pages.headings,
                 }));
             }
-            Ok(Outcome::new(format!("the sheet is {} page(s)", pages.len())).with_data(json!({
+            Ok(Outcome::new(format!("the sheet is {} page(s)", list.len())).with_data(json!({
                 "sheet": sheet,
-                "area": area.to_text(),
-                "scale": (scale * 10_000.0).round() / 100.0,
-                "fit_met": fit_met,
-                "pages": pages,
-                "count": pages.len(),
+                "area": pages.area.to_text(),
+                "scale": (pages.scale * 10_000.0).round() / 100.0,
+                "fit_met": pages.fit_met,
+                "pages": list,
+                "count": list.len(),
             })))
 
         }
