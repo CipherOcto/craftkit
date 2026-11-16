@@ -4430,6 +4430,7 @@ so.
 | the **region of a cell** | **built.** The block of filled cells a cell is in is found and given, and it is derived and not stored (§982) | §982 |
 | the **labels of a range make the names** | **built.** The labels of one edge of a range name the cells beside them, and a label that is not a name is skipped and reported (§983) | §983 |
 | the **range a pivot reads may be changed** | **built.** A field follows its name into the new range, a field that is not there is taken away, and the summary is derived (§984) | §984 |
+| a **range may be pasted transposed** | **built.** The rows of the clipboard become the columns of the block, the formulas move with their cells, and a cell may not land off the sheet (§985) | §985 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64157,3 +64158,61 @@ always the range it was made from.
   away rather than pointed somewhere else.
 - **The tree does not keep a copy of the summary**: the summary is
   worked out every time it is asked for, so it cannot be out of date.
+
+## 985. A range may be pasted transposed
+
+A table that is taller than it is wide is often wanted the other way
+round: the rows become the columns, and the columns become the rows.
+
+### What was built
+
+- The command **`grid.range.paste`** takes a **`transpose`** now: the
+  rows of the clipboard become the columns of the block, and the
+  columns become the rows.
+- A **formula** moves with its cell, and it is shifted as the cell
+  moved: a relative reference follows the cell, and an absolute one
+  stays where it is.
+- A cell may not land **off the sheet**: a sheet has so many rows and
+  so many columns, and a paste that would land outside is refused by
+  name.
+- The paste of **values** (§981) and the transpose are one another:
+  the values of a transposed paste are the values of the cells that
+  were transposed.
+
+### What the port found
+
+- **The reference's transpose is one of the eleven kinds of its paste
+  special**, and it is a dialog with a tick in it. Here it is a
+  **parameter** of the paste: the tree's paste is one command, and
+  what it does is named in the call.
+- **The reference's transpose moves the formulas with the cells**, and
+  so does this tree: a formula that reads another cell of the block
+  reads the cell that came with it, and not the cell that was in that
+  place before.
+- **The reference may paste into a place that is not there** — a
+  paste of a block that does not fit is refused by the program, not by
+  the sheet. Here the sheet's own bound is the rule (§961): a cell
+  may not be pushed off the sheet, and the refusal says which cell
+  would have.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` takes the
+  transpose, and the grid battery carries **235** commands.
+- **One rule that was already there**: a pasted formula keeps its
+  shape, and the rule of a cell that may not be pushed off the sheet.
+- **Three tests** (`tests/clipboard.rs`): the rows pasted into the
+  columns, the formula moved with its cell, and a paste that would
+  land off the sheet.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not transpose the clipboard itself**: the
+  clipboard holds the cells as they were copied, and the transpose is
+  a thing the paste does.
+- **The tree does not transpose the formats alone**: a transposed
+  paste carries the look of each cell with it, as every paste does.
+- **The tree does not paste into a place that is not a cell**: the
+  place the paste lands on is a cell of the sheet, and a block that
+  does not fit is refused.
