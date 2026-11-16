@@ -84,7 +84,7 @@ fn moved_cells(
     band: &Area,
     way: Way,
     insert: bool,
-) -> Vec<(CellRef, crate::formula::Cell)> {
+) -> Result<Vec<(CellRef, crate::formula::Cell)>, String> {
     let at = match way {
         Way::Columns => band.start.col as u64 + 1,
         Way::Rows => band.start.row as u64 + 1,
@@ -119,9 +119,13 @@ fn moved_cells(
                         // The cell is **before** the band: it stays.
                         cell
                     } else if column + count > crate::formula::MAX_COLS {
-                        // The cell would be pushed off the sheet: it
-                        // is left where it is, and the sheet says so.
-                        continue;
+                        // The cell would be pushed **off** the sheet,
+                        // and the tree refuses rather than leave a cell
+                        // behind (§962).
+                        return Err(format!(
+                            "the cell {} would be pushed off the sheet, and a cell may not be lost",
+                            CellRef { col: (column - 1) as u32, row: cell.row }.to_text()
+                        ));
                     } else {
                         CellRef { col: (column + count - 1) as u32, row: cell.row }
                     }
@@ -141,7 +145,10 @@ fn moved_cells(
                         // The cell is **before** the band: it stays.
                         cell
                     } else if row + count > crate::formula::MAX_ROWS {
-                        continue;
+                        return Err(format!(
+                            "the cell {} would be pushed off the sheet, and a cell may not be lost",
+                            CellRef { col: cell.col, row: (row - 1) as u32 }.to_text()
+                        ));
                     } else {
                         CellRef { col: cell.col, row: (row + count - 1) as u32 }
                     }
@@ -156,7 +163,7 @@ fn moved_cells(
         };
         moved.push((cell, entry.clone()));
     }
-    moved
+    Ok(moved)
 }
 
 /// The **facts of a sheet** that name cells, moved with the cells.
@@ -357,7 +364,7 @@ fn move_cells(
     // again — once, over every sheet of the workbook, because a
     // formula may name this sheet from another one.
     let cells = crate::cells_of(&sheet_node);
-    let moved = moved_cells(&cells, &band, way, insert);
+    let moved = moved_cells(&cells, &band, way, insert)?;
     let mut new_cells = crate::formula::Cells::new();
     for (cell, entry) in moved {
         new_cells.set_entry(cell, entry);

@@ -214,3 +214,19 @@ fn a_way_that_is_not_a_way_is_refused() {
         .expect_err("the range is refused");
     assert!(error.to_string().contains("not a range of cells"), "the refusal says why: {error}");
 }
+
+/// **A cell may not be pushed off the sheet**: the tree refuses the
+/// insert rather than leave a cell behind.
+#[test]
+fn a_cell_may_not_be_pushed_off_the_sheet() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    // The **last** column of a sheet: a cell inserted before it would
+    // push it off.
+    set_number(&mut session, sheet, "XFD1", 1.0);
+    let error = session
+        .execute("grid.cell.insert", &json!({ "sheet": sheet, "range": "XFD1", "shift": "right" }))
+        .expect_err("the insert is refused");
+    assert!(error.to_string().contains("pushed off the sheet"), "the refusal says why: {error}");
+    assert_eq!(cell_of(&mut session, sheet, "XFD1")["value"], json!(1.0), "and the cell is still there");
+}
