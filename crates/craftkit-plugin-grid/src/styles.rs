@@ -533,4 +533,88 @@ commands! {
 
         }
     }
+
+    /// **Make** a style from the look of a cell.
+    ///
+    /// The style takes the **format**, the **font** and the
+    /// **alignment** of the cell — the three the look has and the style
+    /// carries. The look is the one the cell is **shown** with: the
+    /// cell's own, and the style the cell names when it has none of
+    /// its own.
+    ///
+    /// The **lock** is not taken: a lock is the sheet's protection and
+    /// not a look.
+    grid.style.from {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook the style belongs to.
+            workbook: NodeRef,
+            /// The name of the style.
+            name: Text,
+            /// The sheet the cell is in.
+            sheet: NodeRef,
+            /// The cell the look is taken from.
+            cell: Text,
+        },
+        run: {
+            let id = "grid.style.from".to_string();
+            let workbook = the_workbook(session, self.workbook.0, &id)?;
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed { id, message: "a style has a name".to_string() });
+            }
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let Some(sheet_node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if sheet_node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
+            if styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the style `{name}` is already in the workbook"),
+                });
+            }
+            let cells = crate::cells_of(sheet_node);
+            let Some(entry) = cells.get(cell) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("there is no cell `{}` to take a look from", cell.to_text()),
+                });
+            };
+            // The **style** the cell names, and the look it carries.
+            let named = entry
+                .style
+                .as_deref()
+                .and_then(|name| styles.iter().find(|style| style.name == name));
+            let format = crate::format_code_of(session, sheet, &cells, cell)
+                .unwrap_or_else(|| "general".to_string());
+            let font = entry.font.clone().or_else(|| named.and_then(|style| style.font.clone()));
+            let align = entry.align.or_else(|| named.and_then(|style| style.align));
+            let mut styles = styles.iter().map(Style::to_json).collect::<Vec<_>>();
+            styles.push(
+                Style { name: name.clone(), format: format.clone(), locked: None, align, font }
+                    .to_json(),
+            );
+            if let Some(node) = session.document_mut()?.node_mut(workbook) {
+                node.data["styles"] = json!(styles);
+            }
+            Ok(Outcome::changed(format!("the style `{name}` is in the workbook"))
+                .with_data(json!({ "workbook": workbook, "name": name, "format": format })))
+
+        }
+    }
 }

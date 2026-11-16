@@ -1240,6 +1240,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/clipboard.rs",
         section: "§988",
     },
+    Port {
+        rule: "a style may be made from the look of a cell",
+        from: "gridcraft/crates/engine/src/cmd/extra/cells.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/styles.rs",
+        command: "grid.style.from",
+        test: "crates/craftkit-plugin-grid/tests/stylefrom.rs",
+        section: "§989",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
