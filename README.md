@@ -4429,6 +4429,7 @@ so.
 | a **range may be pasted as its values** | **built.** The formulas are dropped and what they give is pasted, computed where the formula was (§981) | §981 |
 | the **region of a cell** | **built.** The block of filled cells a cell is in is found and given, and it is derived and not stored (§982) | §982 |
 | the **labels of a range make the names** | **built.** The labels of one edge of a range name the cells beside them, and a label that is not a name is skipped and reported (§983) | §983 |
+| the **range a pivot reads may be changed** | **built.** A field follows its name into the new range, a field that is not there is taken away, and the summary is derived (§984) | §984 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55969,7 +55970,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 234 |
+| grid | 235 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -64094,3 +64095,65 @@ the names of the columns.
   in it is not a name, and it is reported and left alone.
 - **The tree does not ask before it replaces a name**: that is the
   tree's rule for writing a name, and the answer says what it did.
+
+## 984. The range a pivot reads may be changed
+
+A pivot is a summary of a range, and the range it summarises is not
+always the range it was made from.
+
+### What was built
+
+- A new command: **`grid.pivot.source`**.
+- A field follows its **name** into the new range: the fields of a
+  pivot are named by the header of their column, and a field whose
+  name is in the new range moves to the column that carries it.
+- A field whose name is **not in the new range** is taken away — the
+  column the pivot spreads the groups over, the column it puts
+  together, and the field it filters, sorts and groups by — and the
+  answer says which fields were taken.
+- The column the pivot gathers the rows by may **not** be taken away:
+  a pivot without it is not a pivot, and that is refused by name.
+- The **way** of putting numbers together needs the column it puts
+  together: that is the tree's rule, and it is the rule of making a
+  pivot.
+- A range of **one cell** is refused: a pivot reads more than one
+  cell.
+- The summary is **derived**: the fields of a pivot are worked out
+  from the cells of the sheet as they are, so the pivot follows the
+  new range and cannot be out of date.
+
+### What the port found
+
+- **The reference's change of source takes a range with a sheet in
+  front of it** — `Sheet1!$A$1:$E$300` — and it may take the name of
+  a table. Here the **range is named** and the sheet is the sheet the
+  pivot is on: the tree's pivot reads a range of its own sheet.
+- **The reference's fields are removed when the new source does not
+  have them**, and so are the fields of this tree — except the field
+  the pivot gathers the rows by, which is refused here rather than
+  removed: a pivot without it has nothing to gather.
+- **The reference's fields follow their name into the new source**,
+  and so do the fields of this tree: a field is a name, and the column
+  that carries the name is where the field is.
+
+### What it cost
+
+- **One command** in a module that was already there (`src/pivots.rs`):
+  the grid battery now carries **235** commands.
+- **One rule that was already there**: the rule that a field is named
+  by the header of its column, and the rule that the summary is
+  derived.
+- **Five tests** (`tests/pivotsource.rs`): the pivot reading the new
+  range, a field taken away, the field that may not be taken away, a
+  range of one cell, and a pivot that is not there.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree reads a range of its own sheet**: the reference may read
+  a range of another sheet, or the rows of a table.
+- **The tree does not change the fields of a pivot by hand**: the
+  fields follow their names, and a field that is not there is taken
+  away rather than pointed somewhere else.
+- **The tree does not keep a copy of the summary**: the summary is
+  worked out every time it is asked for, so it cannot be out of date.
