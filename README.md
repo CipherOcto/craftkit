@@ -4412,6 +4412,7 @@ so.
 | the **default size** of a sheet | **built.** A sheet has a default width and a default height, a column that has no width of its own has the sheet's, and a file that says one is read (§964) | §964 |
 | the **header** and the **footer** of a file | **built.** The six texts of a file are read and printed, and one the tree cannot print is counted and left out (§965) | §965 |
 | the **centre** of a sheet on the page | **built.** A sheet may be centred sideways and down the page, and a file that centres its sheet has a sheet that is centred (§966) | §966 |
+| the **protection** of a workbook | **built.** A file that locks the structure of its workbook has a workbook whose structure is locked, and a password is counted and left out (§967) | §967 |
 
 ### The list of things that are honestly not there: empty
 
@@ -63096,3 +63097,52 @@ The sheet in the middle of the paper, and not in the corner of it.
 - **The tree does not print a sheet that is bigger than the page in
   the middle of it**: the room that is left over is never negative,
   and a sheet that does not fit is in the corner.
+
+## 967. The protection of a workbook is read
+
+A file that locks its structure has a workbook whose structure is locked.
+
+### What was built
+
+- The **protection** of a workbook is read: the file's
+  `workbookProtection` says whether the structure of it is locked.
+- An imported workbook that is **protected** is protected in the tree
+  too: its sheets may not be added, taken away, renamed or moved, and
+  a change of its structure is **refused** — the tree's own rule of
+  §951, and now it is the file's rule as well.
+- A file that names a **password** for its protection has a password
+  the tree has **no word for**: it is not carried, and the import says
+  how many were left out.
+
+### What the port found
+
+- **The reference's reader reads the lock and leaves the password**:
+  the hash of a password is not the password, and a program that
+  checks it needs the password itself. Here the password is not even
+  read into the document: the tree's protection says what is protected
+  and nothing more, so a file's password is counted and left out.
+- **The reference keeps a hash in its model** and its reader does not
+  fill it. Here the model has no such field at all, and what is
+  missing is said rather than kept.
+
+### What it cost
+
+- **No new command**: the tree already had the protection — the
+  commands of §951 — and this arc is what was missing was the way
+  **into** it.
+- **One rule that was already there**: the structure of a protected
+  workbook may not change — the tree's own — and it is now the rule of
+  the file as well.
+- **Four tests**: the protection that is read, the workbook that has
+  none, the protection that is imported, and the sheet that may not be
+  renamed.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree keeps no password**: a file whose structure is locked with
+  a password becomes a workbook whose structure is locked without one,
+  and the import says that a password was left out. A program that
+  wants the password of a file has to read it itself.
+- **The tree does not unlock anything**: a workbook that is protected
+  may be unprotected by a program that says so, exactly as §951 says.
