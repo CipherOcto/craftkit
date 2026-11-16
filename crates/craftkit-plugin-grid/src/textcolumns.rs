@@ -11,6 +11,9 @@
 //!   is a tab unless the file says otherwise; a delimiter of more than
 //!   one character is **refused**, because a delimiter that is a word
 //!   is a guess;
+//! - the parts may be separated by a **set of delimiters** instead: each
+//!   character of it is a delimiter of its own, and the set and the one
+//!   delimiter may not both be given;
 //! - the **qualifier** marks a part that holds the delimiter itself,
 //!   and the qualifier is removed from the part — a double quote
 //!   unless the file says otherwise;
@@ -29,11 +32,11 @@ use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{CellRef, MAX_COLS, Value};
 
-/// The **parts** a text holds, cut at the delimiter.
+/// The **parts** a text holds, cut at the delimiters.
 ///
 /// A part that is wrapped in the qualifier is one part, whatever it
 /// holds, and the qualifier is taken away.
-pub fn split(text: &str, delimiter: char, qualifier: char, treat_consecutive: bool) -> Vec<String> {
+pub fn split(text: &str, delimiters: &[char], qualifier: char, treat_consecutive: bool) -> Vec<String> {
     let mut parts: Vec<String> = Vec::new();
     let mut current = String::new();
     let mut quoted = false;
@@ -43,11 +46,11 @@ pub fn split(text: &str, delimiter: char, qualifier: char, treat_consecutive: bo
             quoted = !quoted;
             continue;
         }
-        if character == delimiter && !quoted {
+        if delimiters.contains(&character) && !quoted {
             // A run of delimiters is one delimiter when the file says
             // so.
             if treat_consecutive {
-                while characters.peek() == Some(&delimiter) {
+                while characters.peek().is_some_and(|next| delimiters.contains(next)) {
                     characters.next();
                 }
             }
@@ -93,6 +96,11 @@ commands! {
             ///
             /// It is a tab unless the file says otherwise.
             delimiter: Option<Text>,
+            /// The **characters** the parts are separated by.
+            ///
+            /// Each character is a delimiter of its own, so `,;` is a comma
+            /// and a semicolon. It may not be given with the delimiter.
+            delimiters: Option<Text>,
             /// The character that marks a part that holds the delimiter.
             ///
             /// It is a double quote unless the file says otherwise.
@@ -114,9 +122,23 @@ commands! {
                 id: id.clone(),
                 message: format!("`{}` is not a column", self.column.0.trim()),
             })?;
-            let delimiter = match &self.delimiter {
-                None => '\t',
-                Some(text) => {
+            let delimiters = match (&self.delimiter, &self.delimiters) {
+                (Some(_), Some(_)) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "name one delimiter or a set of them, and not both".to_string(),
+                    });
+                }
+                (None, Some(text)) => {
+                    if text.0.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the delimiters are empty".to_string(),
+                        });
+                    }
+                    text.0.chars().collect::<Vec<char>>()
+                }
+                (Some(text), None) => {
                     let mut characters = text.0.chars();
                     let Some(first) = characters.next() else {
                         return Err(EngineError::Failed {
@@ -130,8 +152,9 @@ commands! {
                             message: format!("the delimiter `{}` is more than one character", text.0),
                         });
                     }
-                    first
+                    vec![first]
                 }
+                (None, None) => vec!['\t'],
             };
             let qualifier = match &self.qualifier {
                 None => '"',
@@ -189,7 +212,7 @@ commands! {
                 let cell = CellRef { col: source, row };
                 let Some(entry) = cells.get(cell) else { continue };
                 let Some(Value::Text(text)) = entry.value.clone() else { continue };
-                let parts = split(&text, delimiter, qualifier, treat_consecutive);
+                let parts = split(&text, &delimiters, qualifier, treat_consecutive);
                 // The parts are written into the columns from the
                 // destination on, and a sheet has so many columns.
                 if destination as u64 + parts.len() as u64 > MAX_COLS {

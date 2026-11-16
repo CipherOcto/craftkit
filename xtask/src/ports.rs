@@ -1123,6 +1123,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/textwidths.rs",
         section: "§975",
     },
+    Port {
+        rule: "the parts of a text may be separated by more than one delimiter",
+        from: "gridcraft/crates/engine/src/cmd/data/tools.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/textcolumns.rs",
+        command: "grid.text.columns",
+        test: "crates/craftkit-plugin-grid/tests/textcolumns.rs",
+        section: "§976",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

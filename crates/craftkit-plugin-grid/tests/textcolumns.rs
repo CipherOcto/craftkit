@@ -161,3 +161,58 @@ fn a_column_that_is_not_a_column_is_refused() {
     let outcome = session.execute("grid.text.columns", &json!({ "sheet": sheet, "column": "1" }));
     assert!(outcome.is_err(), "a number is not a column");
 }
+
+/// The parts may be separated by **more than one delimiter**.
+#[test]
+fn the_parts_may_be_separated_by_more_than_one_delimiter() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("one,two;three"));
+    session
+        .execute("grid.text.columns", &json!({ "sheet": sheet, "column": "A", "delimiters": ",;" }))
+        .expect("the text is cut");
+    let values = values_of(&mut session, sheet, "A1:C1");
+    assert_eq!(values[0][0], json!("one"), "the first part is the first");
+    assert_eq!(values[0][1], json!("two"), "the second part is the second");
+    assert_eq!(values[0][2], json!("three"), "and the third is the third");
+}
+
+/// A **run of delimiters** of a set is one delimiter when the file says
+/// so.
+#[test]
+fn a_run_of_the_delimiters_of_a_set_is_one_delimiter() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("one,,;two"));
+    session
+        .execute(
+            "grid.text.columns",
+            &json!({ "sheet": sheet, "column": "A", "delimiters": ",;", "treat_consecutive": true }),
+        )
+        .expect("the text is cut");
+    let values = values_of(&mut session, sheet, "A1:B1");
+    assert_eq!(values[0][0], json!("one"), "the first part is one");
+    assert_eq!(values[0][1], json!("two"), "and the empty parts are gone");
+}
+
+/// The **delimiter and the delimiters** may not both be given.
+#[test]
+fn the_delimiter_and_the_delimiters_may_not_both_be_given() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let outcome = session.execute(
+        "grid.text.columns",
+        &json!({ "sheet": sheet, "column": "A", "delimiter": ",", "delimiters": ",;" }),
+    );
+    assert!(outcome.is_err(), "one delimiter or a set of them, and not both");
+}
+
+/// A **set of delimiters** that is empty is refused.
+#[test]
+fn a_set_of_delimiters_that_is_empty_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let outcome =
+        session.execute("grid.text.columns", &json!({ "sheet": sheet, "column": "A", "delimiters": "" }));
+    assert!(outcome.is_err(), "there is no delimiter in an empty set");
+}
