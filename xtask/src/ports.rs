@@ -952,6 +952,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/workbookreading.rs",
         section: "§956",
     },
+    Port {
+        rule: "the moving of a column",
+        from: "gridcraft/crates/engine/src/cmd/sheet.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/columnmoving.rs",
+        command: "grid.column.move",
+        test: "crates/craftkit-plugin-grid/tests/columnmoving.rs",
+        section: "§958",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

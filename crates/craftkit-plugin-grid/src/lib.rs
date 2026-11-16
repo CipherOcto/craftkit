@@ -398,6 +398,7 @@ mod clearing;
 mod colours;
 mod columndeleting;
 mod columninserting;
+mod columnmoving;
 mod combinations;
 mod comments;
 mod complex;
@@ -517,6 +518,7 @@ pub use clearing::{GridCellClearContents, GridCellClearFormat};
 pub use colours::{GridCellFill, GridCellFontColour};
 pub use columndeleting::GridColumnDelete;
 pub use columninserting::GridColumnInsert;
+pub use columnmoving::GridColumnMove;
 pub use comments::{
     GridCellCommentDelete, GridCellCommentGet, GridCellCommentReply, GridCellCommentResolve,
     GridCellCommentSet,

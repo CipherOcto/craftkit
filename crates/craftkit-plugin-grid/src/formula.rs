@@ -147,6 +147,27 @@ pub struct Anchor {
     pub col_abs: bool,
 }
 
+/// The **column** a number is, when a column moves.
+///
+/// The column that moves goes from `from` to `to`, and the columns
+/// between them shift by one: the ones **between** `from` and `to` move
+/// **left** when the column moves to the right, and **right** when it
+/// moves to the left.
+///
+/// The columns are counted from **one**, as the tree counts them.
+pub fn moved_column_number(col: u64, from: u64, to: u64) -> u64 {
+    if col == from {
+        return to;
+    }
+    if to > from && col > from && col <= to {
+        return col - 1;
+    }
+    if to < from && col >= to && col < from {
+        return col + 1;
+    }
+    col
+}
+
 impl Anchor {
     /// The address **moved**: the parts that are not anchored move.
     ///
@@ -255,6 +276,26 @@ impl Anchor {
             });
         }
         Some(*self)
+    }
+
+    /// The anchor with the column **moved**.
+    ///
+    /// The column that moves goes from `from` to `to`, and the columns
+    /// between them shift by one: the ones between `from` and `to` move
+    /// **left** when the column moves to the right, and **right** when
+    /// it moves to the left.
+    ///
+    /// **The `$` does not stop a move.** The `$` says a reference does
+    /// not move when a column is **inserted** — and a move is not an
+    /// insertion: the cell moves, and a reference names a cell.
+    pub fn moved_column(&self, from: u64, to: u64) -> Anchor {
+        let col = self.cell.col as u64 + 1;
+        let moved = moved_column_number(col, from, to);
+        Anchor {
+            cell: CellRef { col: moved as u32 - 1, row: self.cell.row },
+            row_abs: self.row_abs,
+            col_abs: self.col_abs,
+        }
     }
 
     pub fn to_text(self) -> String {
@@ -1858,6 +1899,24 @@ impl Cells {
             renamed += 1;
         }
         renamed
+    }
+
+    /// **Move** the column in every formula that names the sheet.
+    ///
+    /// A formula is **text**, so the text is parsed, the column is moved
+    /// and the expression is printed. A formula that does not name the
+    /// sheet is left exactly as the caller wrote it.
+    ///
+    /// The answer is how many formulas were rewritten.
+    pub fn moved_column(&mut self, sheet: &str, from: u64, to: u64) -> usize {
+        let mut moved = 0usize;
+        for entry in self.cells.values_mut() {
+            let Some(text) = &entry.formula else { continue };
+            let Some(rewritten) = moved_column_in_formula(text, sheet, from, to) else { continue };
+            entry.formula = Some(rewritten);
+            moved += 1;
+        }
+        moved
     }
 
     /// How many cells there are.
@@ -3696,6 +3755,75 @@ impl Expr {
         }
     }
 
+    /// The expression with the column **moved**.
+    ///
+    /// **A reference follows the cells it names.** A reference to a
+    /// **cell** of the column that moves names the cell it moved to, and
+    /// a reference to a cell of the band between names the cell it
+    /// shifted to.
+    ///
+    /// A reference to an **area** that lies **wholly** in the column that
+    /// moves follows it. A reference to an area with an **edge on** the
+    /// column that moves names a column that is not there any more, and
+    /// it becomes the **error** `#REF!` — which is what the tree writes
+    /// where a reference names a column that is gone.
+    ///
+    /// A reference that names **another sheet** does not move: the
+    /// columns of that sheet are not the columns that moved.
+    pub fn moved_column(&self, sheet: &str, from: u64, to: u64) -> Expr {
+        let names_this_sheet = |named: &Option<String>| match named {
+            None => true,
+            Some(name) => name.eq_ignore_ascii_case(sheet),
+        };
+        match self {
+            Expr::Cell { sheet: named, anchor } => {
+                if names_this_sheet(named) {
+                    Expr::Cell { sheet: named.clone(), anchor: anchor.moved_column(from, to) }
+                } else {
+                    self.clone()
+                }
+            }
+            Expr::Range { sheet: named, start, end } => {
+                if !names_this_sheet(named) {
+                    return self.clone();
+                }
+                let first = start.cell.col as u64 + 1;
+                let last = end.cell.col as u64 + 1;
+                // The area lies **wholly** in the column that moves: it
+                // follows it.
+                if first == from && last == from {
+                    return Expr::Range {
+                        sheet: named.clone(),
+                        start: start.moved_column(from, to),
+                        end: end.moved_column(from, to),
+                    };
+                }
+                // An **edge** on the column that moves: the area names a
+                // column that is not there any more.
+                if first == from || last == from {
+                    return Expr::Error(REF_ERROR.to_string());
+                }
+                Expr::Range {
+                    sheet: named.clone(),
+                    start: start.moved_column(from, to),
+                    end: end.moved_column(from, to),
+                }
+            }
+            Expr::Name(name) => Expr::Name(name.clone()),
+            Expr::Call(name, arguments) => Expr::Call(
+                name.clone(),
+                arguments.iter().map(|argument| argument.moved_column(sheet, from, to)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(inner.moved_column(sheet, from, to))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
+                operator.clone(),
+                Box::new(left.moved_column(sheet, from, to)),
+                Box::new(right.moved_column(sheet, from, to)),
+            ),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => self.clone(),
+        }
+    }
+
     /// The formula's **text**: the expression written out.
     ///
     /// The tree's printer writes an expression back out, and a copied
@@ -3785,6 +3913,25 @@ pub fn delete_column_in_formula(text: &str, sheet: &str, at: u64, count: u64) ->
     let expression = parse(text).ok()?;
     let deleted = expression.deleted_column(sheet, at, count);
     let printed = deleted.to_text();
+    Some(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
+}
+
+/// The formula's **text** with the column **moved**.
+///
+/// The text is parsed, the column is moved and the expression is
+/// printed. A reference that names the column that moves follows it, and
+/// a reference to an area with an edge on it becomes the error `#REF!`.
+///
+/// A formula that does not parse is `None`: a formula that cannot be
+/// read is not changed. A formula that does not name the sheet is `None`
+/// as well: it says nothing about the column that moved.
+pub fn moved_column_in_formula(text: &str, sheet: &str, from: u64, to: u64) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let moved = expression.moved_column(sheet, from, to);
+    if moved == expression {
+        return None;
+    }
+    let printed = moved.to_text();
     Some(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
 }
 
