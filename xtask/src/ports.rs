@@ -1168,6 +1168,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/sums.rs",
         section: "§980",
     },
+    Port {
+        rule: "a range may be pasted as its values",
+        from: "gridcraft/crates/engine/src/cmd/edit.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/clipboard.rs",
+        command: "grid.range.paste",
+        test: "crates/craftkit-plugin-grid/tests/clipboard.rs",
+        section: "§981",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

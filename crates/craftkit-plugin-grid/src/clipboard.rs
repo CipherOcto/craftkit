@@ -28,6 +28,11 @@
 //!   paste is told to **overwrite**;
 //! - the cells that are pasted keep their **format**, their **font**
 //!   and their **alignment**: a cell is more than its value.
+//!
+//! And a paste may be a paste of **values**: the formulas are dropped
+//! and what they give is pasted instead. The value is computed in the
+//! sheet the cells were copied from, because the value of a formula is
+//! derived, and it is derived where the formula is.
 
 use craftkit_derive::commands;
 
@@ -70,6 +75,11 @@ fn clipboard_of(node: &Node) -> Option<(Cells, CellRef)> {
         held.set_entry(cell, crate::cell_from(entry));
     }
     Some((held, first))
+}
+
+/// The **sheet** the cells of the clipboard were copied from.
+fn clipboard_sheet(node: &Node) -> Option<u64> {
+    node.data.get("clipboard")?.get("sheet")?.as_u64()
 }
 
 /// Put the **cells** into the clipboard of a workbook.
@@ -250,6 +260,9 @@ commands! {
             at: Text,
             /// Whether the cells that are there may be **overwritten**.
             overwrite: Option<Bool>,
+            /// Whether the **formulas** are dropped and the **values** they
+            /// give are pasted.
+            values: Option<Bool>,
         },
         run: {
             let id = "grid.range.paste".to_string();
@@ -292,10 +305,50 @@ commands! {
             };
             let row_delta = at.row as i64 - from.row as i64;
             let col_delta = at.col as i64 - from.col as i64;
+            // The **values**: a paste of values drops the formulas and
+            // pastes what they give, and the value is computed in the
+            // sheet the cells were copied from — the value of a formula
+            // is derived, and it is derived where the formula is.
+            let values = matches!(self.values, Some(Bool(true)));
+            let source = if values {
+                let Some(source) = clipboard_sheet(&book) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the clipboard does not say which sheet its cells came from".to_string(),
+                    });
+                };
+                let Some(node) = session.document().node(source) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the sheet `{source}` the cells were copied from is not there"),
+                    });
+                };
+                node.name.clone()
+            } else {
+                String::new()
+            };
+            let book_of_values = if values { Some(crate::book_of(session.document())) } else { None };
             // The cells that are pasted: they land at the place that
             // is named, and their formulas are shifted.
             let mut pasted = Vec::new();
             for (cell, entry) in held.iter() {
+                if values {
+                    if entry.formula.is_none() {
+                        pasted.push((cell, entry.clone()));
+                        continue;
+                    }
+                    // The **value** the formula gives, and no formula.
+                    let mut entry = entry.clone();
+                    entry.formula = None;
+                    entry.value = Some(
+                        book_of_values
+                            .as_ref()
+                            .map(|book| book.value_of(&source, cell))
+                            .unwrap_or(crate::formula::Value::Empty),
+                    );
+                    pasted.push((cell, entry));
+                    continue;
+                }
                 let Some(formula) = &entry.formula else {
                     pasted.push((cell, entry.clone()));
                     continue;
@@ -345,6 +398,7 @@ commands! {
                     "at": at.to_text(),
                     "workbook": workbook,
                     "pasted": count,
+                    "values": values,
                 })))
 
         }

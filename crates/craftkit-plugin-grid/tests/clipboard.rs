@@ -181,3 +181,61 @@ fn an_empty_clipboard_has_nothing_to_paste() {
         .expect_err("the paste is refused");
     assert!(error.to_string().contains("clipboard is empty"), "the refusal says why: {error}");
 }
+
+/// A paste of **values** drops the formulas and pastes what they give.
+#[test]
+fn a_paste_of_values_drops_the_formulas() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 2.0);
+    set_formula(&mut session, sheet, "A2", "A1 * 3");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1:A2" }))
+        .expect("the cells are copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "values": true }))
+        .expect("the values are pasted");
+    let cell = cell_of(&mut session, sheet, "C2");
+    assert_eq!(cell["value"], json!(6.0), "the value is what the formula gives");
+    assert_eq!(cell["formula"], Json::Null, "and the formula is not there");
+}
+
+/// The value is computed in the sheet the cells were **copied from**.
+#[test]
+fn the_value_is_computed_in_the_sheet_the_cells_were_copied_from() {
+    let mut session = session();
+    let (workbook, sheet) = a_sheet(&mut session);
+    let other = another_sheet(&mut session, workbook);
+    set_number(&mut session, sheet, "A1", 4.0);
+    set_formula(&mut session, sheet, "A2", "A1 * 5");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A2" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": other, "at": "B1", "values": true }))
+        .expect("the value is pasted");
+    let cell = cell_of(&mut session, other, "B1");
+    assert_eq!(cell["value"], json!(20.0), "the value is the one of the sheet it came from");
+    assert_eq!(cell["formula"], Json::Null, "and there is no formula");
+}
+
+/// The pasted cell keeps its **look**.
+#[test]
+fn the_pasted_cell_keeps_its_look() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 2.0);
+    set_formula(&mut session, sheet, "A2", "A1 * 3");
+    session
+        .execute("grid.cell.font.bold", &json!({ "sheet": sheet, "cell": "A2", "on": true }))
+        .expect("the font is bold");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A2" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "values": true }))
+        .expect("the value is pasted");
+    let cell = cell_of(&mut session, sheet, "C1");
+    assert_eq!(cell["value"], json!(6.0), "the value is there");
+    assert_eq!(cell["font"]["bold"], json!(true), "and the cell is still bold");
+}
