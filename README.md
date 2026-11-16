@@ -4426,6 +4426,7 @@ so.
 | the **notes of a sheet become comments** | **built.** Every note of a sheet becomes the first comment of its cell, and the note is taken away (§978) | §978 |
 | a **range of cells is given a border** | **built.** The preset says which edges of which cells get the line — all of them, the outside, the inside, or one edge on its own (§979) | §979 |
 | a **cell may be given the sum of the numbers above it** | **built.** The run of numbers above a cell, or beside it, is summed into it as a formula (§980) | §980 |
+| a **range may be pasted as its values** | **built.** The formulas are dropped and what they give is pasted, computed where the formula was (§981) | §981 |
 
 ### The list of things that are honestly not there: empty
 
@@ -63907,3 +63908,63 @@ sum beside it.
   finish it, and here the formula is written whole or not at all.
 - **The tree does not sum the cells of a range that hold text**: a
   cell that holds text is not a number, and the run ends there.
+
+## 981. A range may be pasted as its values
+
+A range of formulas may be pasted as the **values** those formulas
+give: the numbers are put in the cells and the formulas are left
+behind.
+
+### What was built
+
+- The command **`grid.range.paste`** takes a **`values`** now: the
+  formulas are dropped and what they give is pasted instead.
+- The value is computed in the sheet the cells were **copied from**:
+  the value of a formula is derived, and it is derived where the
+  formula is.
+- The pasted cell keeps its **format**, its **font** and its
+  **alignment**: that is the rule of every paste, and a paste of
+  values is a paste.
+- A sheet that is **not there** any more is refused by name: the
+  clipboard says which sheet its cells came from, and without it the
+  value cannot be computed.
+
+### What the port found
+
+- **The reference's paste special is a dialog with eleven kinds of
+  paste** — all, formulas, values, formats, comments, validation,
+  borders, column widths and the mixtures of them — and it can add,
+  subtract, multiply and divide as it pastes, and it can transpose
+  what it pastes, and it can link to the cells it came from. Here one
+  kind of paste is added to the tree's paste: the **values**. The
+  rest of the reference's dialog is not a rule of a spreadsheet and
+  it is not here.
+- **The reference's paste of values uses the value the formula had
+  when it was copied**, because the clipboard carries it. Here the
+  clipboard carries the **cells** and not their values — a value is
+  derived and is not stored — so the value is computed **when it is
+  pasted**, and it is the value the formula gives at that moment.
+- **The reference pastes into the cell that is picked**, and here the
+  cell is named, as every command of this tree names what it acts on.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` takes the
+  values, and the grid battery carries **232** commands.
+- **One rule that was already there**: the value of a formula cell is
+  computed by the tree's evaluator, and the paste of values asks that
+  evaluator and nothing else.
+- **Three tests** (`tests/clipboard.rs`): the formulas dropped, the
+  value computed in the sheet the cells came from, and the look of the
+  cell kept.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree pastes the values and nothing else**: the formats of a
+  paste on their own, the comments, the validation and the column
+  widths are not pastes here.
+- **The tree does not add and subtract as it pastes**: the value that
+  is pasted is the value the formula gives.
+- **The tree does not transpose**: the cells land where they are told
+  to land.
