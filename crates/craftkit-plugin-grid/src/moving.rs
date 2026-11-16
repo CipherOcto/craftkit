@@ -25,16 +25,14 @@
 
 use craftkit_sdk::serde_json::{Map, Value as Json};
 
-use crate::formula::{Anchor, CellRef};
+use crate::formula::{Anchor, CellRef, band_holds};
 
 /// The way a fact moves: with the **rows**, or with the **columns**.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Way {
-    /// With the rows.
-    Rows,
-    /// With the columns.
-    Columns,
-}
+///
+/// The type lives with the **formula**, because a reference moves with
+/// the rows or with the columns as well, and the rule of the band
+/// (§961) needs both at once.
+pub use crate::formula::Way;
 
 /// The **corners** of an area, from the text that names one.
 ///
@@ -71,6 +69,57 @@ pub fn covers_inside(start: CellRef, end: CellRef, way: Way, at: u64, count: u64
     let first = number(start, way);
     let last = number(end, way);
     first < at + count && last >= at
+}
+
+/// The **area** a text names, moved by cells that are inserted or
+/// deleted.
+///
+/// The shift is **within the band**: the rows of the band when the
+/// cells shift sideways, and the columns of it when they shift down.
+/// An area that reaches outside the band does not move at all.
+pub fn moved_area_in_band(text: &str, band: &crate::formula::Area, way: Way, insert: bool) -> Option<String> {
+    let (first, last) = corners(text)?;
+    let top = first.row.min(last.row) as u64;
+    let bottom = first.row.max(last.row) as u64;
+    if !band_holds(band, way, top, bottom) {
+        return Some(text.trim().to_string());
+    }
+    let at = match way {
+        Way::Columns => band.start.col as u64 + 1,
+        Way::Rows => band.start.row as u64 + 1,
+    };
+    let count = match way {
+        Way::Columns => (band.end.col - band.start.col + 1) as u64,
+        Way::Rows => (band.end.row - band.start.row + 1) as u64,
+    };
+    moved_area(text, way, at, count, insert)
+}
+
+/// The **address** of a cell, moved by cells that are inserted or
+/// deleted.
+///
+/// The address moves only when the cell is **within the band**: the
+/// rows of the band when the cells shift sideways, and the columns of
+/// it when they shift down.
+pub fn moved_address_in_band(
+    address: &str,
+    band: &crate::formula::Area,
+    way: Way,
+    insert: bool,
+) -> Option<String> {
+    let cell = CellRef::parse(address)?;
+    if !band_holds(band, way, cell.row as u64, cell.row as u64) {
+        return Some(address.to_string());
+    }
+    let at = match way {
+        Way::Columns => band.start.col as u64 + 1,
+        Way::Rows => band.start.row as u64 + 1,
+    };
+    let count = match way {
+        Way::Columns => (band.end.col - band.start.col + 1) as u64,
+        Way::Rows => (band.end.row - band.start.row + 1) as u64,
+    };
+    moved_cell(address, way, at, count, insert)
 }
 
 /// The **area** a text names, moved.

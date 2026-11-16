@@ -393,6 +393,15 @@ pub struct Area {
     pub end: CellRef,
 }
 
+/// The way a fact moves: with the **rows**, or with the **columns**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Way {
+    /// With the rows.
+    Rows,
+    /// With the columns.
+    Columns,
+}
+
 impl Area {
     /// The area from one corner to another, whichever way round they are.
     pub fn new(first: CellRef, second: CellRef) -> Area {
@@ -1898,6 +1907,27 @@ impl Cells {
             renamed += 1;
         }
         renamed
+    }
+
+    /// **Insert or delete** the cells of a range in every formula that
+    /// names the sheet.
+    ///
+    /// A formula is **text**, so the text is parsed, the cells are
+    /// moved and the expression is printed. A formula that does not
+    /// name the sheet is left exactly as the caller wrote it.
+    ///
+    /// The answer is how many formulas were rewritten.
+    pub fn shifted_cells(&mut self, sheet: &str, band: &Area, way: Way, insert: bool) -> usize {
+        let mut shifted = 0usize;
+        for entry in self.cells.values_mut() {
+            let Some(text) = &entry.formula else { continue };
+            let Some(rewritten) = shifted_cells_in_formula(text, sheet, band, way, insert) else {
+                continue;
+            };
+            entry.formula = Some(rewritten);
+            shifted += 1;
+        }
+        shifted
     }
 
     /// **Move** the column in every formula that names the sheet.
@@ -3768,6 +3798,82 @@ impl Expr {
     /// reference names a column that is gone.
     ///
     /// A reference that names **another sheet** does not move: the
+    /// The expression with the **cells** of a range inserted or
+    /// deleted.
+    ///
+    /// The cells of a range may be **inserted** — the cells beside them
+    /// shift — or **deleted**, and the shift is **within the band**:
+    /// the **rows** of the range when the cells shift sideways, and its
+    /// **columns** when they shift down.
+    ///
+    /// A reference that lies **within** the band is written again, as if
+    /// the columns (or the rows) were inserted (or deleted) at the edge
+    /// of the band. A reference that reaches **outside** the band is
+    /// left as it is: the cells it names are not the cells that moved.
+    ///
+    /// A reference that names **another sheet** does not move.
+    pub fn shifted_cells(&self, sheet: &str, band: &Area, way: Way, insert: bool) -> Expr {
+        let names_this_sheet = |named: &Option<String>| match named {
+            None => true,
+            Some(name) => name.eq_ignore_ascii_case(sheet),
+        };
+        match self {
+            Expr::Cell { sheet: named, anchor } => {
+                if !names_this_sheet(named) {
+                    return self.clone();
+                }
+                let cell = anchor.cell;
+                if !band_holds(band, way, cell.row as u64, cell.row as u64) {
+                    return self.clone();
+                }
+                let at = at_of(band, way);
+                let count = count_of(band, way);
+                if insert {
+                    Expr::Cell { sheet: named.clone(), anchor: anchor.inserted_column(at, count) }
+                } else {
+                    match anchor.deleted_column(at, count) {
+                        Some(anchor) => Expr::Cell { sheet: named.clone(), anchor },
+                        None => Expr::Error(REF_ERROR.to_string()),
+                    }
+                }
+            }
+            Expr::Range { sheet: named, start, end } => {
+                if !names_this_sheet(named) {
+                    return self.clone();
+                }
+                if !band_holds(band, way, start.cell.row as u64, end.cell.row as u64) {
+                    return self.clone();
+                }
+                let at = at_of(band, way);
+                let count = count_of(band, way);
+                if insert {
+                    Expr::Range {
+                        sheet: named.clone(),
+                        start: start.inserted_column(at, count),
+                        end: end.inserted_column(at, count),
+                    }
+                } else {
+                    match (start.deleted_column(at, count), end.deleted_column(at, count)) {
+                        (Some(start), Some(end)) => Expr::Range { sheet: named.clone(), start, end },
+                        _ => Expr::Error(REF_ERROR.to_string()),
+                    }
+                }
+            }
+            Expr::Name(name) => Expr::Name(name.clone()),
+            Expr::Call(name, arguments) => Expr::Call(
+                name.clone(),
+                arguments.iter().map(|argument| argument.shifted_cells(sheet, band, way, insert)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(inner.shifted_cells(sheet, band, way, insert))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
+                operator.clone(),
+                Box::new(left.shifted_cells(sheet, band, way, insert)),
+                Box::new(right.shifted_cells(sheet, band, way, insert)),
+            ),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => self.clone(),
+        }
+    }
+
     /// columns of that sheet are not the columns that moved.
     pub fn moved_column(&self, sheet: &str, from: u64, count: u64, to: u64) -> Expr {
         let names_this_sheet = |named: &Option<String>| match named {
@@ -3916,6 +4022,29 @@ pub fn delete_column_in_formula(text: &str, sheet: &str, at: u64, count: u64) ->
     Some(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
 }
 
+/// The formula's **text** with the **cells** of a range inserted or
+/// deleted.
+///
+/// A reference that lies within the band is written again, and a
+/// reference that reaches outside it is left as it was. A formula that
+/// does not parse is `None`: a formula that cannot be read is not
+/// changed.
+pub fn shifted_cells_in_formula(
+    text: &str,
+    sheet: &str,
+    band: &Area,
+    way: Way,
+    insert: bool,
+) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let shifted = expression.shifted_cells(sheet, band, way, insert);
+    if shifted == expression {
+        return None;
+    }
+    let printed = shifted.to_text();
+    Some(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
+}
+
 /// The formula's **text** with the column **moved**.
 ///
 /// The text is parsed, the column is moved and the expression is
@@ -4055,5 +4184,37 @@ pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Expr {
         Expr::Binary(operator, left, right) => {
             Expr::Binary(operator.clone(), Box::new(shift(left, dr, dc)), Box::new(shift(right, dr, dc)))
         }
+    }
+}
+
+/// Whether the **band** holds a span of rows — or of columns.
+///
+/// The band holds the span when the span lies **within** it: the rows
+/// of the band for a shift of the columns, and the columns of it for a
+/// shift of the rows. A span that reaches outside the band is not
+/// held: the cells it names are not the cells that moved.
+pub fn band_holds(band: &Area, way: Way, first: u64, last: u64) -> bool {
+    match way {
+        Way::Columns => band.start.row as u64 <= first && last <= band.end.row as u64,
+        Way::Rows => band.start.col as u64 <= first && last <= band.end.col as u64,
+    }
+}
+
+/// The place the shift happens: the **first** column of the band, or
+/// its first row.
+///
+/// The place is counted from **one**, as the tree counts them.
+fn at_of(band: &Area, way: Way) -> u64 {
+    match way {
+        Way::Columns => band.start.col as u64 + 1,
+        Way::Rows => band.start.row as u64 + 1,
+    }
+}
+
+/// How many columns — or rows — the shift moves.
+fn count_of(band: &Area, way: Way) -> u64 {
+    match way {
+        Way::Columns => (band.end.col - band.start.col + 1) as u64,
+        Way::Rows => (band.end.row - band.start.row + 1) as u64,
     }
 }
