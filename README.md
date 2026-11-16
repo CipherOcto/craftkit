@@ -4422,6 +4422,7 @@ so.
 | the **audit** of a formula | **built.** Every part of a formula and the value it gives are given, from the inside out, and nothing is changed (§974) | §974 |
 | the **text of a column, cut at fixed widths** | **built.** The text of a column is cut at the widths that are given, and the parts are written beside it (§975) | §975 |
 | the **parts of a text, separated by more than one delimiter** | **built.** The parts of a text may be separated by a set of delimiters, and each character of the set is one of them (§976) | §976 |
+| the **look of a cell, copied to other cells** | **built.** The look of one cell — its format, its font, its alignment, its fill and its borders — is written onto the cells of a range (§977) | §977 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55962,7 +55963,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 228 |
+| grid | 229 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63642,3 +63643,69 @@ where the columns are cut by a tab and the notes by a comma.
   quotes holds none of them, where the reference would hold one.
 - **The tree does not trim a part**: a space in a text is part of the
   text.
+
+## 977. The look of a cell, copied to other cells
+
+A look is how a cell is **shown**: its number format, its font, its
+alignment, its fill and its borders. A cell that is shown like another
+is often a cell that is written like it.
+
+### What was built
+
+- A new command: **`grid.cell.look.copy`**.
+- The **look** is the number format, the font, the alignment, the fill
+  and the borders — and nothing else.
+- The **value** and the **formula** of a cell are not part of its look,
+  and they stay as they are.
+- The **style** a cell names is not part of its look either: a style
+  is the workbook's, and it carries a lock.
+- A look with **nothing in it** takes the look of the cell away: the
+  cell is shown as the cell the look was taken from is shown.
+- A cell that is **covered by a merge** or **locked** by the sheet's
+  protection is **refused**, and so is the formatting of a protected
+  sheet that does not allow the formatting.
+- A cell that is **not there** is refused: there is no look to take.
+
+### What the port found
+
+- **The reference's format painter is a tool with a state**: a cell is
+  picked up, and the look is then painted somewhere else, and the tool
+  remembers what it picked up between the two. Here the look is
+  **named twice** — the cell it comes from and the range it goes onto
+  — and there is no state between the two: a command says what it acts
+  on, and what it acts on is said in the call.
+- **The reference tiles the look** over whole rows or columns and
+  keeps the heights and the widths as they are. Here the look goes
+  onto **cells**, the ones the range names, and nothing else is
+  touched.
+- **The reference's look is a style**: one thing that a cell has, with
+  the number format, the font, the fill, the border and the alignment
+  in it. Here the look is **five things** a cell has — the format,
+  the font, the alignment, the fill and the borders — and the borders
+  are kept beside the cells for the reason the notes are (§ the note
+  module): a border is none of the four things a cell is.
+
+### What it cost
+
+- **One new module** (`src/lookcopy.rs`) and **one new command**
+  (`grid.cell.look.copy`). The grid battery now carries **229**
+  commands.
+- **One rule that was already there**: the look of a cell is read by
+  the tree's own reading commands (§ the cell read), and the copy
+  writes the same five things they read.
+- **Seven tests** (`tests/lookcopy.rs`): the look copied onto a range,
+  what a cell holds left alone, the borders copied, a look with
+  nothing in it, a cell covered by a merge, a locked cell, and a cell
+  that is not there.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree copies a cell and not a pattern**: the reference may
+  paint a block of cells onto a block of cells, and here one cell's
+  look goes onto every cell of the range.
+- **The tree does not copy the style a cell names**: the style is the
+  workbook's, and it carries a lock with it.
+- **The tree copies onto the cells it is given**: the heights of rows
+  and the widths of columns are not part of a look, and they stay as
+  they are.
