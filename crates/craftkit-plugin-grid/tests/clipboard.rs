@@ -239,3 +239,65 @@ fn the_pasted_cell_keeps_its_look() {
     assert_eq!(cell["value"], json!(6.0), "the value is there");
     assert_eq!(cell["font"]["bold"], json!(true), "and the cell is still bold");
 }
+
+/// A **transposed** paste puts the rows of the clipboard into the
+/// columns.
+#[test]
+fn a_transposed_paste_puts_the_rows_into_the_columns() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    set_number(&mut session, sheet, "B1", 2.0);
+    set_number(&mut session, sheet, "A2", 3.0);
+    set_number(&mut session, sheet, "B2", 4.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1:B2" }))
+        .expect("the cells are copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "D1", "transpose": true }))
+        .expect("the cells are pasted");
+    assert_eq!(cell_of(&mut session, sheet, "D1")["value"], json!(1.0), "the first cell is in the corner");
+    assert_eq!(cell_of(&mut session, sheet, "E1")["value"], json!(3.0), "the row becomes a column");
+    assert_eq!(cell_of(&mut session, sheet, "D2")["value"], json!(2.0), "and the column becomes a row");
+    assert_eq!(
+        cell_of(&mut session, sheet, "E2")["value"],
+        json!(4.0),
+        "and the last cell is in the far corner"
+    );
+}
+
+/// A transposed paste moves the **formula** with its cell.
+#[test]
+fn a_transposed_paste_moves_the_formula_with_its_cell() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    set_formula(&mut session, sheet, "B2", "A1 + 1");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1:B2" }))
+        .expect("the cells are copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "A5", "transpose": true }))
+        .expect("the cells are pasted");
+    assert_eq!(cell_of(&mut session, sheet, "A5")["value"], json!(1.0), "the number is pasted");
+    assert_eq!(
+        formula_of(&mut session, sheet, "B6"),
+        Some("A5 + 1".to_string()),
+        "the formula moved with its cell"
+    );
+}
+
+/// A paste that would land **off the sheet** is refused.
+#[test]
+fn a_paste_that_would_land_off_the_sheet_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    set_number(&mut session, sheet, "B1", 2.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1:B1" }))
+        .expect("the cells are copied");
+    let outcome =
+        session.execute("grid.range.paste", &json!({ "sheet": sheet, "at": "A1048576", "transpose": true }));
+    assert!(outcome.is_err(), "a cell may not be pushed off the sheet");
+}

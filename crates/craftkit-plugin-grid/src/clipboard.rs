@@ -33,13 +33,18 @@
 //! and what they give is pasted instead. The value is computed in the
 //! sheet the cells were copied from, because the value of a formula is
 //! derived, and it is derived where the formula is.
+//!
+//! And a paste may be **transposed**: the rows of the clipboard become
+//! the columns of the block, and the columns become the rows. A cell
+//! may not land **off the sheet** — a sheet has so many rows and so
+//! many columns.
 
 use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Text};
 
-use crate::formula::{CellRef, Cells};
+use crate::formula::{CellRef, Cells, MAX_COLS, MAX_ROWS};
 
 /// The **workbook** a sheet is in, and its **name**.
 fn workbook_of(session: &craftkit_sdk::Session, sheet: u64) -> Option<(u64, String)> {
@@ -263,6 +268,10 @@ commands! {
             /// Whether the **formulas** are dropped and the **values** they
             /// give are pasted.
             values: Option<Bool>,
+            /// Whether the cells land **transposed**: the rows of the
+            /// clipboard become the columns of the block, and the columns
+            /// become the rows.
+            transpose: Option<Bool>,
         },
         run: {
             let id = "grid.range.paste".to_string();
@@ -303,8 +312,7 @@ commands! {
                     message: "the clipboard is empty: there is nothing to paste".to_string(),
                 });
             };
-            let row_delta = at.row as i64 - from.row as i64;
-            let col_delta = at.col as i64 - from.col as i64;
+            let transpose = matches!(self.transpose, Some(Bool(true)));
             // The **values**: a paste of values drops the formulas and
             // pastes what they give, and the value is computed in the
             // sheet the cells were copied from — the value of a formula
@@ -332,9 +340,34 @@ commands! {
             // is named, and their formulas are shifted.
             let mut pasted = Vec::new();
             for (cell, entry) in held.iter() {
+                // The **landing** of the cell: the place it comes to.
+                // A transposed paste swaps the rows and the columns.
+                let (row, col) = if transpose {
+                    (
+                        at.row as i64 + (cell.col as i64 - from.col as i64),
+                        at.col as i64 + (cell.row as i64 - from.row as i64),
+                    )
+                } else {
+                    (
+                        at.row as i64 + (cell.row as i64 - from.row as i64),
+                        at.col as i64 + (cell.col as i64 - from.col as i64),
+                    )
+                };
+                if row < 0 || col < 0 || row as u64 >= MAX_ROWS || col as u64 >= MAX_COLS {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the cell {} would land at {}, and that is not in the sheet",
+                            cell.to_text(),
+                            CellRef { col: col as u32, row: row as u32 }.to_text()
+                        ),
+                    });
+                }
+                let row_delta = row - cell.row as i64;
+                let col_delta = col - cell.col as i64;
                 if values {
                     if entry.formula.is_none() {
-                        pasted.push((cell, entry.clone()));
+                        pasted.push((cell, (row as u32, col as u32), entry.clone()));
                         continue;
                     }
                     // The **value** the formula gives, and no formula.
@@ -346,26 +379,26 @@ commands! {
                             .map(|book| book.value_of(&source, cell))
                             .unwrap_or(crate::formula::Value::Empty),
                     );
-                    pasted.push((cell, entry));
+                    pasted.push((cell, (row as u32, col as u32), entry));
                     continue;
                 }
                 let Some(formula) = &entry.formula else {
-                    pasted.push((cell, entry.clone()));
+                    pasted.push((cell, (row as u32, col as u32), entry.clone()));
                     continue;
                 };
                 let mut entry = entry.clone();
                 if let Some(shifted) = crate::formula::shift_in_formula(formula, row_delta, col_delta) {
                     entry.formula = Some(shifted);
                 }
-                pasted.push((cell, entry));
+                pasted.push((cell, (row as u32, col as u32), entry));
             }
             // A paste over cells that hold something is **refused**,
             // unless the paste is told to overwrite.
             let overwrite = matches!(self.overwrite, Some(Bool(true)));
             if !overwrite {
                 let cells = crate::cells_of(node);
-                for (cell, _) in &pasted {
-                    let landing = CellRef { col: (cell.col as i64 + col_delta) as u32, row: (cell.row as i64 + row_delta) as u32 };
+                for (_, (row, col), _) in &pasted {
+                    let landing = CellRef { col: *col, row: *row };
                     if let Some(entry) = cells.get(landing)
                         && entry.value.is_some()
                     {
@@ -385,9 +418,8 @@ commands! {
             for (cell, entry) in cells.iter() {
                 written.set_entry(cell, entry.clone());
             }
-            for (cell, entry) in pasted {
-                let landing = CellRef { col: (cell.col as i64 + col_delta) as u32, row: (cell.row as i64 + row_delta) as u32 };
-                written.set_entry(landing, entry);
+            for (_, (row, col), entry) in pasted {
+                written.set_entry(CellRef { col, row }, entry);
             }
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 node.data["cells"] = crate::cells_into(&written);
@@ -399,6 +431,7 @@ commands! {
                     "workbook": workbook,
                     "pasted": count,
                     "values": values,
+                    "transpose": transpose,
                 })))
 
         }
