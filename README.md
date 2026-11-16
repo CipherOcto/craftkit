@@ -4410,6 +4410,7 @@ so.
 | a **cell** pushed **off** the sheet | **built.** The inserting of cells refuses when a cell would be pushed off the sheet, and a cell may not be lost (§962) | §962 |
 | the **clipboard** of a workbook | **built.** Cells may be copied, cut and pasted, and a pasted formula is shifted so that it still names what it named (§963) | §963 |
 | the **default size** of a sheet | **built.** A sheet has a default width and a default height, a column that has no width of its own has the sheet's, and a file that says one is read (§964) | §964 |
+| the **header** and the **footer** of a file | **built.** The six texts of a file are read and printed, and one the tree cannot print is counted and left out (§965) | §965 |
 
 ### The list of things that are honestly not there: empty
 
@@ -62980,3 +62981,62 @@ The width of the columns that have no width of their own, and the height of the 
   prints**: a row that has no height of its own is as high as the
   sheet's default height when a sheet is printed, and the tree's own
   fifteen points when the sheet says nothing.
+
+## 965. The header and the footer of a file
+
+The text above the page and the text below it, as the file says them.
+
+### What was built
+
+- The **header** and the **footer** of a file are read: the six texts
+  of the **odd**, the **even** and the **first** pages.
+- A file's header is **printed** as it stands: the codes in it are
+  worked out for the page they are on, exactly as they are for a
+  header that was set by hand — `&P` is the page number, `&N` the
+  number of pages, `&A` the name of the sheet, and `&L`, `&C` and
+  `&R` the three sections the text stands in.
+- A header the tree **cannot print** is **not imported**, and it is
+  **counted**: a header that names the machine — the date, the time,
+  the file it was printed from — is not a header this tree prints, and
+  a document may not hold a thing the tree has no word for.
+
+### What the port found
+
+- **The tree keeps two flags** — different first page, different odd
+  and even pages — beside the six texts, and a file's flags are read
+  with them. Here the flags are gone: the kind of page that has a
+  header of its own is the kind that has one, and a file that says
+  "the even pages are different" and gives no even header has no even
+  header, so the even pages fall back on the odd ones.
+- **The tree's header carries a font** (`&"Arial,Bold"`) and a size,
+  and the drawing honours them. Here a section says whether it is
+  bold and whether it is italic, and a font is not a fact a printed
+  sheet has here.
+- **The reference caps a header at 255 characters**, because Excel
+  does. Here the tree's own bound is ten thousand, and a header over
+  it is refused.
+
+### What it cost
+
+- **No new command**: the tree already had the header and the footer
+  — `grid.print.header` and `grid.print.footer` — and this arc is
+  what was missing was the way **into** them.
+- **One rule that was already there**: the codes of a header, and the
+  three sections they stand in — the tree's own — and it is now the
+  rule of the file as well.
+- **Five tests**: the six texts that are read, the file that says no
+  header, the texts that are imported, the header the tree cannot
+  print, and the header of a file that is printed.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A file's flags are not carried**: a file that says the even pages
+  are different and gives no even header prints the odd header on its
+  even pages here, where the file would print none. The tree's rule
+  is the one that decides, and it was the rule before the file was
+  read.
+- **The tree does not print the machine**: a header with the date, the
+  time or the name of the file in it is not imported, and the import
+  says how many were left out. A program that wants them may set a
+  header of its own.
