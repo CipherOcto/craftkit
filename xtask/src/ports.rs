@@ -1150,6 +1150,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/notes.rs",
         section: "§978",
     },
+    Port {
+        rule: "a range of cells is given a border",
+        from: "gridcraft/crates/engine/src/cmd/format.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/borders.rs",
+        command: "grid.range.border",
+        test: "crates/craftkit-plugin-grid/tests/rangeborder.rs",
+        section: "§979",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

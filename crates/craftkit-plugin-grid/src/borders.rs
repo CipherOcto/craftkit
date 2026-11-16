@@ -24,6 +24,10 @@
 //! - the **formatting** of a protected sheet that does not allow the
 //!   formatting is refused, and the border is the formatting.
 //!
+//! And a **range** of cells may be given a border as well: the
+//! **preset** says which edges of which cells get the line — `all`,
+//! `outside`, `inside`, or one of the four edges on its own.
+//!
 //! And the border is **taken away** with the formatting it is: the
 //! tree's *clear formats* clears the style, and the border is part of
 //! it, and the tree's *clear all* clears the style too.
@@ -135,6 +139,71 @@ fn colour_of(given: &str) -> Option<String> {
         return None;
     }
     Some(format!("#{}", hex.to_ascii_lowercase()))
+}
+
+/// The most **cells** a border of a range may reach.
+///
+/// The tree's own bound: a border is written on every cell of the
+/// range, and a range of a million cells is a million lines.
+const MAX_BORDER_CELLS: u64 = 1_000_000;
+
+/// The **presets** a border of a range has: which edges of which
+/// cells get the line.
+const PRESETS: [&str; 7] = ["all", "outside", "inside", "top", "bottom", "left", "right"];
+
+/// The **preset** a name says, if it says one this tree has.
+fn preset_of(given: &str) -> Option<&'static str> {
+    PRESETS.iter().find(|preset| preset.eq_ignore_ascii_case(given)).copied()
+}
+
+/// The **edges** a preset gives to a cell of a range.
+///
+/// The edges are the tree's four: `top`, `right`, `bottom` and `left`.
+/// A cell on the rim of the range has the edges that face out of it,
+/// and a cell that is not on the rim has the edges that face in.
+fn edges_of(preset: &str, area: &crate::formula::Area, cell: crate::formula::CellRef) -> Vec<&'static str> {
+    let top = cell.row == area.start.row;
+    let bottom = cell.row == area.end.row;
+    let left = cell.col == area.start.col;
+    let right = cell.col == area.end.col;
+    let mut edges: Vec<&'static str> = Vec::new();
+    match preset {
+        "all" => edges.extend(["top", "right", "bottom", "left"]),
+        "outside" => {
+            if top {
+                edges.push("top");
+            }
+            if right {
+                edges.push("right");
+            }
+            if bottom {
+                edges.push("bottom");
+            }
+            if left {
+                edges.push("left");
+            }
+        }
+        "inside" => {
+            if !top {
+                edges.push("top");
+            }
+            if !right {
+                edges.push("right");
+            }
+            if !bottom {
+                edges.push("bottom");
+            }
+            if !left {
+                edges.push("left");
+            }
+        }
+        "top" if top => edges.push("top"),
+        "bottom" if bottom => edges.push("bottom"),
+        "left" if left => edges.push("left"),
+        "right" if right => edges.push("right"),
+        _ => {}
+    }
+    edges
 }
 
 /// The **sheet** a command is about, or the error that says there is
@@ -386,6 +455,163 @@ commands! {
             }
             Ok(Outcome::changed(format!("the cell `{address}` has no {edge} border"))
                 .with_data(json!({ "sheet": sheet, "cell": address, "edge": edge, "had": had })))
+
+        }
+    }
+
+    /// **Give** a range of cells a border.
+    ///
+    /// The **preset** says which edges of which cells get the line:
+    /// `all` gives every cell of the range all four of its edges,
+    /// `outside` gives the cells on the rim the edges that face out of
+    /// the range, `inside` gives the cells that are not on the rim the
+    /// edges that face in, and `top`, `bottom`, `left` and `right` give
+    /// one edge to the cells that are on that edge of the range.
+    ///
+    /// A border of the style `none` takes the border away — the tree's
+    /// own: a line of no style is no line.
+    grid.range.border {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the cells are in.
+            sheet: NodeRef,
+            /// The **range** of cells: `A1`, `B2:D4`.
+            range: Text,
+            /// The **preset**: `all`, `outside`, `inside`, `top`, `bottom`,
+            /// `left` or `right`.
+            preset: Text,
+            /// The **style** of the line: `thin`, `medium`, `thick`, `dashed`,
+            /// `dotted`, `double`, `hair`, `mediumDashed`, `dashDot`,
+            /// `mediumDashDot`, `dashDotDot`, `mediumDashDotDot` or
+            /// `slantDashDot` — and `none`, which takes the border away.
+            ///
+            /// It is a thin line without it.
+            style: Option<Text>,
+            /// The **colour** of the line, as `#rrggbb`. Without it the line
+            /// is black.
+            colour: Option<Text>,
+        },
+        run: {
+            let id = "grid.range.border".to_string();
+            let sheet = self.sheet.0;
+            sheet_of(session, sheet, &id)?;
+            let area = crate::fill::area_at(&self.range.0, &id)?;
+            let Some(preset) = preset_of(self.preset.0.trim()) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{}` is not a preset: a border of a range is one of {}",
+                        self.preset.0.trim(),
+                        PRESETS.join(", ")
+                    ),
+                });
+            };
+            let style = match &self.style {
+                None => Some("thin".to_string()),
+                Some(text) => {
+                    let given = text.0.trim();
+                    if given.eq_ignore_ascii_case("none") {
+                        None
+                    } else {
+                        match style_of(given) {
+                            Some(style) => Some(style.to_string()),
+                            None => {
+                                return Err(EngineError::Failed {
+                                    id: id.clone(),
+                                    message: format!(
+                                        "`{given}` is not a border style: a style is one of {}",
+                                        STYLES.join(", ")
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
+            };
+            let colour = match &self.colour {
+                None => DEFAULT_COLOUR.to_string(),
+                Some(text) => match colour_of(&text.0) {
+                    Some(colour) => colour,
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{}` is not a colour: a colour is `#rrggbb`", text.0.trim()),
+                        });
+                    }
+                },
+            };
+            if area.count() > MAX_BORDER_CELLS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the range is too large for a border (at most {MAX_BORDER_CELLS} cells)"),
+                });
+            }
+            // The **cells** the border is written on.
+            let mut targets: Vec<crate::formula::CellRef> = Vec::new();
+            for row in area.start.row..=area.end.row {
+                for col in area.start.col..=area.end.col {
+                    targets.push(crate::formula::CellRef { col, row });
+                }
+            }
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            crate::merges::refuse_covered(&node, &targets, &id)?;
+            crate::protection::refuse_format(&node, &id)?;
+            let mut written = 0usize;
+            let mut edges_written = 0usize;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                let mut borders = borders_of(node);
+                for target in &targets {
+                    let edges = edges_of(preset, &area, *target);
+                    if edges.is_empty() {
+                        continue;
+                    }
+                    let address = target.to_text();
+                    let mut held = borders.remove(&address).unwrap_or_default();
+                    for edge in edges {
+                        match &style {
+                            Some(style) => {
+                                held.insert(
+                                    edge.to_string(),
+                                    Border { style: style.clone(), colour: colour.clone() },
+                                );
+                            }
+                            None => {
+                                held.remove(edge);
+                            }
+                        }
+                        edges_written += 1;
+                    }
+                    if held.is_empty() {
+                        borders.remove(&address);
+                    } else {
+                        borders.insert(address, held);
+                    }
+                    written += 1;
+                }
+                node.data["borders"] = borders_into(&borders);
+            }
+            Ok(Outcome::changed(format!("the cells of {} have a {preset} border", area.to_text()))
+                .with_data(json!({
+                    "sheet": sheet,
+                    "range": area.to_text(),
+                    "preset": preset,
+                    "style": match &style {
+                        Some(style) => json!(style),
+                        None => json!("none"),
+                    },
+                    "colour": colour,
+                    "cells": written,
+                    "edges": edges_written,
+                })))
 
         }
     }
