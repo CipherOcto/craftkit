@@ -547,6 +547,37 @@ fn a_sheet_with_no_default_size_has_none() {
     assert_eq!(sheet.default_height, None, "and the rows have no default height");
 }
 
+/// The **edit ranges** of a sheet are read: the ranges that stay
+/// editable while the sheet is protected.
+#[test]
+fn the_edit_ranges_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetProtection sheet="1"/><protectedRanges><protectedRange name="Range1" password="83AF" sqref="A1:B2 D4:E5"/></protectedRanges><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    assert_eq!(sheet.edit_ranges.len(), 1, "one range says it is editable");
+    let range = &sheet.edit_ranges[0];
+    assert_eq!(range.ranges, vec!["A1:B2".to_string(), "D4:E5".to_string()], "and it is two ranges");
+    assert_eq!(range.name.as_deref(), Some("Range1"), "the file names it");
+    assert!(range.password, "and it names a password for it");
+}
+
 /// The **protection** of a workbook is read: the structure of it may
 /// be locked, and the file may name a password for it.
 #[test]

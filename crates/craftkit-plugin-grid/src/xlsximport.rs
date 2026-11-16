@@ -232,6 +232,8 @@ commands! {
             let mut unread_headers = 0u64;
             let mut centred = 0u64;
             let mut marks = 0u64;
+            let mut unread_edit_ranges = 0u64;
+            let mut unread_range_names = 0u64;
             let mut outlines = 0u64;
             let mut setups = 0u64;
             let mut breaks = 0u64;
@@ -856,6 +858,30 @@ commands! {
                     });
                     protections += 1;
                 }
+                // The **edit ranges** of the sheet: the ranges that
+                // stay editable while the sheet is protected. The name
+                // of a range and the password that opens it are the
+                // file's own, and the tree's edit ranges are ranges
+                // and nothing else: what is not kept is counted.
+                let mut edit_ranges: Vec<String> = Vec::new();
+                for range in &sheet.edit_ranges {
+                    for text in &range.ranges {
+                        if crate::merges::parse_area(text).is_some() {
+                            edit_ranges.push(text.clone());
+                        } else {
+                            unread_edit_ranges += 1;
+                        }
+                    }
+                    if range.name.is_some() {
+                        unread_range_names += 1;
+                    }
+                    if range.password {
+                        unread_passwords += 1;
+                    }
+                }
+                if !edit_ranges.is_empty() {
+                    data["edit_ranges"] = json!(edit_ranges);
+                }
                 if !borders_of_sheet.is_empty() {
                     let mut borders: craftkit_sdk::serde_json::Map<String, Json> =
                         craftkit_sdk::serde_json::Map::new();
@@ -1215,6 +1241,16 @@ commands! {
                     "; {unread_prints} printing(s) could not be read and were not imported"
                 ));
             }
+            if unread_edit_ranges > 0 {
+                summary.push_str(&format!(
+                    "; {unread_edit_ranges} edit range(s) could not be read and were not imported"
+                ));
+            }
+            if unread_range_names > 0 {
+                summary.push_str(&format!(
+                    "; {unread_range_names} range name(s) could not be kept: the tree's edit ranges have none"
+                ));
+            }
             if unread_passwords > 0 {
                 summary.push_str(&format!(
                     "; {unread_passwords} password(s) could not be kept: the tree's protection has none"
@@ -1256,6 +1292,8 @@ commands! {
                 "setups": setups,
                 "centred": centred,
                 "marks": marks,
+                "unread_edit_ranges": unread_edit_ranges,
+                "unread_range_names": unread_range_names,
                 "breaks": breaks,
                 "sparklines": imported_sparklines,
                 "unread_sparklines": unread_sparklines,

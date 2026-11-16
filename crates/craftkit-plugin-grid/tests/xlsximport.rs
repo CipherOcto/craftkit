@@ -932,6 +932,52 @@ fn a_file_with_no_marks_has_none() {
     assert_eq!(outcome.data["headings"].as_bool(), Some(false), "and the headings are not printed");
 }
 
+/// The **edit ranges** of a file are imported: a cell in one of them
+/// may be changed while the sheet is protected, and a cell outside
+/// them may not.
+#[test]
+fn the_edit_ranges_of_a_file_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetProtection sheet="1"/><protectedRanges><protectedRange name="Range1" sqref="A1:B2"/></protectedRanges><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["unread_range_names"].as_u64(), Some(1), "the name was not kept");
+    assert_eq!(outcome.data["unread_passwords"].as_u64(), Some(0), "and there was no password");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let outcome = session
+        .execute("grid.sheet.edit.read", &json!({ "sheet": sheet }))
+        .expect("the edit ranges are read");
+    assert_eq!(outcome.data["ranges"][0].as_str(), Some("A1:B2"), "the range that stays editable");
+    // A cell **in** the range may be changed.
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": 2 }))
+        .expect("the cell is in the range");
+    // A cell **outside** it may not.
+    let error = session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "C1", "value": 2 }))
+        .expect_err("the cell is locked");
+    assert!(error.to_string().contains("locked"), "the error says so: {error}");
+}
+
 /// The **protection** of a workbook is imported: a file that locks its
 /// structure has a workbook whose structure is locked, and its sheets
 /// may not be renamed.

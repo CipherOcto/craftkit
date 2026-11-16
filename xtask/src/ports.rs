@@ -1060,6 +1060,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/xlsximport.rs",
         section: "§968",
     },
+    Port {
+        rule: "the edit ranges of a file are read",
+        from: "gridcraft/crates/xlsx/src/sheet_read.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/xlsximport.rs",
+        command: "grid.import.xlsx",
+        test: "crates/craftkit-plugin-grid/tests/xlsximport.rs",
+        section: "§969",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

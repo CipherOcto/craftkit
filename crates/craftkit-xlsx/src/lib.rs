@@ -303,6 +303,9 @@ pub struct Sheet {
     /// The **options** of the print: the marks it prints and where the
     /// sheet sits on the page.
     pub print_options: Option<PrintOptions>,
+    /// The **edit ranges** of the sheet: the ranges that stay editable
+    /// while the sheet is protected.
+    pub edit_ranges: Vec<EditRange>,
     /// The **breaks** of the printing: the lines a page begins at, by
     /// the file's own numbering.
     ///
@@ -742,6 +745,21 @@ pub struct Print {
     pub fit: Option<(u32, u32)>,
     /// Whether the sheet prints to **fit** rather than at a scale.
     pub fit_to_page: bool,
+}
+
+/// An **edit range** of a sheet: a range that stays editable while the
+/// sheet is protected.
+///
+/// The **name** of the range and the **password** that opens it are
+/// the file's own: the tree's edit ranges are ranges and nothing else.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct EditRange {
+    /// The **ranges** of cells, as the file writes them.
+    pub ranges: Vec<String>,
+    /// The **name** of the range, when the file names one.
+    pub name: Option<String>,
+    /// Whether the file names a **password** for the range.
+    pub password: bool,
 }
 
 /// The **options** of the print of a sheet.
@@ -1505,6 +1523,9 @@ fn read_sheet(
     // The **options** of the print: the marks it prints, and where the
     // sheet sits on the page.
     sheet.print_options = read_print_options(&root);
+    // The **edit ranges** of the sheet: the ranges that stay editable
+    // while the sheet is protected.
+    sheet.edit_ranges = read_edit_ranges(&root);
     // The **breaks** of the printing: the lines a page begins at.
     sheet.breaks = read_breaks(&root);
     // The **sparklines** of the sheet: the little drawings in its
@@ -1994,6 +2015,35 @@ fn read_print(root: &craftkit_xml::El) -> Option<Print> {
         .map(|properties| properties.flag("fitToPage", false))
         .unwrap_or(false);
     Some(print)
+}
+
+/// Read the **edit ranges** of a sheet: the ranges that stay editable
+/// while the sheet is protected.
+///
+/// A range of no cells is not a range, and it is not here.
+fn read_edit_ranges(root: &craftkit_xml::El) -> Vec<EditRange> {
+    let mut out: Vec<EditRange> = Vec::new();
+    let Some(protected) = root.child("protectedRanges") else { return out };
+    for range in protected.kids("protectedRange") {
+        let ranges: Vec<String> = range
+            .attr("sqref")
+            .unwrap_or("")
+            .split_whitespace()
+            .filter(|text| !text.is_empty())
+            .map(str::to_string)
+            .collect();
+        if ranges.is_empty() {
+            continue;
+        }
+        out.push(EditRange {
+            ranges,
+            name: range.attr("name").map(str::to_string),
+            password: ["password", "hashValue", "algorithmName", "saltValue", "spinCount"]
+                .iter()
+                .any(|name| range.attr(name).is_some()),
+        });
+    }
+    out
 }
 
 /// Read the **options** of the print of a sheet: the marks it prints
