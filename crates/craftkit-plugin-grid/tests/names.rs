@@ -282,3 +282,96 @@ fn the_name_is_saved() {
     let node = saved.node(workbook).expect("the workbook is in the document");
     assert_eq!(node.data["names"]["Sales"], "Sheet1!A1:B2", "and the name is there");
 }
+
+/// A **text** in a cell.
+fn a_text(session: &mut Session, sheet: u64, cell: &str, text: &str) {
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": cell, "value": text }))
+        .expect("the cell is set");
+}
+
+/// The **labels** of the top row name the columns below them.
+#[test]
+fn the_labels_of_the_top_row_name_the_columns_below_them() {
+    let mut session = session();
+    let (workbook, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "Sales");
+    a_text(&mut session, sheet, "B1", "Costs");
+    a_number(&mut session, sheet, "A2", 1.0);
+    a_number(&mut session, sheet, "B2", 2.0);
+    let outcome = session
+        .execute(
+            "grid.name.from",
+            &json!({ "workbook": workbook, "sheet": sheet, "range": "A1:B2", "edge": "top" }),
+        )
+        .expect("the names are made");
+    assert_eq!(outcome.data["made"][0]["name"], json!("Sales"), "the first label is a name");
+    assert_eq!(outcome.data["made"][0]["refers_to"], json!("Sheet1!A2"), "and it names the column below");
+    assert_eq!(outcome.data["made"][1]["name"], json!("Costs"), "the second label is a name too");
+    assert_eq!(outcome.data["made"][1]["refers_to"], json!("Sheet1!B2"), "and it names its column");
+}
+
+/// The **labels** of the left column name the rows beside them.
+#[test]
+fn the_labels_of_the_left_column_name_the_rows_beside_them() {
+    let mut session = session();
+    let (workbook, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "East");
+    a_text(&mut session, sheet, "A2", "West");
+    a_number(&mut session, sheet, "B1", 1.0);
+    a_number(&mut session, sheet, "B2", 2.0);
+    let outcome = session
+        .execute(
+            "grid.name.from",
+            &json!({ "workbook": workbook, "sheet": sheet, "range": "A1:B2", "edge": "left" }),
+        )
+        .expect("the names are made");
+    assert_eq!(outcome.data["made"][0]["name"], json!("East"), "the first label is a name");
+    assert_eq!(outcome.data["made"][0]["refers_to"], json!("Sheet1!B1"), "and it names the row beside");
+}
+
+/// A label that is **not a name** is skipped and reported.
+#[test]
+fn a_label_that_is_not_a_name_is_skipped_and_reported() {
+    let mut session = session();
+    let (workbook, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "Total ($)");
+    a_text(&mut session, sheet, "B1", "Sales");
+    a_number(&mut session, sheet, "A2", 1.0);
+    a_number(&mut session, sheet, "B2", 2.0);
+    let outcome = session
+        .execute(
+            "grid.name.from",
+            &json!({ "workbook": workbook, "sheet": sheet, "range": "A1:B2", "edge": "top" }),
+        )
+        .expect("the names are made");
+    assert_eq!(outcome.data["made"].as_array().map(|made| made.len()), Some(1), "one name is made");
+    let skipped = outcome.data["skipped"][0].as_str().expect("the label is reported").to_string();
+    assert!(skipped.starts_with("Total ($)"), "and the label is reported: {skipped}");
+}
+
+/// A range with **no cells** below the labels is refused.
+#[test]
+fn a_range_with_no_cells_below_the_labels_is_refused() {
+    let mut session = session();
+    let (workbook, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "Sales");
+    let outcome = session.execute(
+        "grid.name.from",
+        &json!({ "workbook": workbook, "sheet": sheet, "range": "A1:B1", "edge": "top" }),
+    );
+    assert!(outcome.is_err(), "there are no cells below the labels");
+}
+
+/// An **edge** that is not one of the tree's is refused.
+#[test]
+fn an_edge_that_is_not_one_of_the_trees_is_refused() {
+    let mut session = session();
+    let (workbook, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "Sales");
+    let outcome = session.execute(
+        "grid.name.from",
+        &json!({ "workbook": workbook, "sheet": sheet, "range": "A1:B2", "edge": "middle" }),
+    );
+    assert!(outcome.is_err(), "an edge of a range is one of the tree's");
+}

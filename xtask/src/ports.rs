@@ -1186,6 +1186,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/regions.rs",
         section: "§982",
     },
+    Port {
+        rule: "the labels of a range make the names",
+        from: "gridcraft/crates/engine/src/cmd/formulas.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/names.rs",
+        command: "grid.name.from",
+        test: "crates/craftkit-plugin-grid/tests/names.rs",
+        section: "§983",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

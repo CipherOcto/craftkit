@@ -29,6 +29,12 @@
 //! the sheet's own name wins; here there is one kind of name and one
 //! place it lives.
 //!
+//! And the **labels** of a range may make the names: the labels of one
+//! edge of the range name the cells beside them, and a label that is
+//! not a name is skipped and reported — the tree does not clean a
+//! label into a name, because a cleaned label is a name the tree made
+//! up.
+//!
 //! # What the port found
 //!
 //! - **The tree keeps its names in a hidden stash of the file.** The
@@ -273,6 +279,213 @@ commands! {
             }
             Ok(Outcome::changed(format!("the name `{name}` is taken away"))
                 .with_data(json!({ "workbook": workbook, "name": name })))
+
+        }
+    }
+
+    /// **Make** names from the labels of a range.
+    ///
+    /// The labels of one **edge** of the range name the cells between
+    /// the edges: the labels of the top row name the columns below
+    /// them, and the labels of the left column name the rows beside
+    /// them.
+    ///
+    /// A label that is **not a name** is skipped and reported: the tree
+    /// does not clean a label into a name, because a cleaned label is a
+    /// name the tree made up.
+    grid.name.from {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook the names belong to.
+            workbook: NodeRef,
+            /// The sheet the cells are in.
+            sheet: NodeRef,
+            /// The **range** of cells: `A1`, `B2:D4`.
+            range: Text,
+            /// The **edge** whose labels name the cells: `top`, `bottom`,
+            /// `left` or `right`.
+            edge: Text,
+        },
+        run: {
+            let id = "grid.name.from".to_string();
+            let workbook = self.workbook.0;
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is not a workbook"),
+                });
+            }
+            let Some(sheet_node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if sheet_node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let sheet_name = sheet_node.name.clone();
+            let area = crate::fill::area_at(&self.range.0, &id)?;
+            let edge = self.edge.0.trim().to_lowercase();
+            if !["top", "bottom", "left", "right"].contains(&edge.as_str()) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{}` is not an edge: an edge of a range is top, bottom, left or right",
+                        self.edge.0.trim()
+                    ),
+                });
+            }
+            // The **labels** that name the cells, and the cells each of
+            // them names: a label names the line beside it.
+            let labels: Vec<(crate::formula::CellRef, Area)> = match edge.as_str() {
+                "top" => {
+                    if area.start.row >= area.end.row {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "there are no cells below the labels".to_string(),
+                        });
+                    }
+                    (area.start.col..=area.end.col)
+                        .map(|col| {
+                            (
+                                crate::formula::CellRef { col, row: area.start.row },
+                                Area::new(
+                                    crate::formula::CellRef { col, row: area.start.row + 1 },
+                                    crate::formula::CellRef { col, row: area.end.row },
+                                ),
+                            )
+                        })
+                        .collect()
+                }
+                "bottom" => {
+                    if area.start.row >= area.end.row {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "there are no cells above the labels".to_string(),
+                        });
+                    }
+                    (area.start.col..=area.end.col)
+                        .map(|col| {
+                            (
+                                crate::formula::CellRef { col, row: area.end.row },
+                                Area::new(
+                                    crate::formula::CellRef { col, row: area.start.row },
+                                    crate::formula::CellRef { col, row: area.end.row - 1 },
+                                ),
+                            )
+                        })
+                        .collect()
+                }
+                "left" => {
+                    if area.start.col >= area.end.col {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "there are no cells beside the labels".to_string(),
+                        });
+                    }
+                    (area.start.row..=area.end.row)
+                        .map(|row| {
+                            (
+                                crate::formula::CellRef { col: area.start.col, row },
+                                Area::new(
+                                    crate::formula::CellRef { col: area.start.col + 1, row },
+                                    crate::formula::CellRef { col: area.end.col, row },
+                                ),
+                            )
+                        })
+                        .collect()
+                }
+                _ => {
+                    if area.start.col >= area.end.col {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "there are no cells beside the labels".to_string(),
+                        });
+                    }
+                    (area.start.row..=area.end.row)
+                        .map(|row| {
+                            (
+                                crate::formula::CellRef { col: area.end.col, row },
+                                Area::new(
+                                    crate::formula::CellRef { col: area.start.col, row },
+                                    crate::formula::CellRef { col: area.end.col - 1, row },
+                                ),
+                            )
+                        })
+                        .collect()
+                }
+            };
+            let cells = crate::cells_of(&sheet_node);
+            let mut made: Vec<(String, String, bool)> = Vec::new();
+            let mut skipped: Vec<String> = Vec::new();
+            for (label, named) in labels {
+                let text = match cells.get(label) {
+                    Some(entry) => match &entry.value {
+                        Some(value) => crate::formula::display_text(value),
+                        None => String::new(),
+                    },
+                    None => String::new(),
+                };
+                let text = text.trim().to_string();
+                if text.is_empty() {
+                    continue;
+                }
+                if let Some(reason) = why_not(&text) {
+                    skipped.push(format!("{text} ({reason})"));
+                    continue;
+                }
+                made.push((text, format!("{sheet_name}!{}", area_to_text(&named)), false));
+            }
+            if made.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "there are no labels that are names".to_string(),
+                });
+            }
+            let mut names = node.data.get("names").cloned().unwrap_or(json!({}));
+            if !names.is_object() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the names of the workbook `{workbook}` are not a group"),
+                });
+            }
+            for (name, refers_to, replaced) in made.iter_mut() {
+                let was_there = names.get(name.as_str()).is_some();
+                *replaced = was_there;
+                names[name.as_str()] = json!(refers_to.clone());
+            }
+            if let Some(node) = session.document_mut()?.node_mut(workbook) {
+                node.data["names"] = names;
+            }
+            let made: Vec<craftkit_sdk::serde_json::Value> = made
+                .iter()
+                .map(|(name, refers_to, replaced)| {
+                    json!({ "name": name, "refers_to": refers_to, "replaced": replaced })
+                })
+                .collect();
+            Ok(Outcome::changed(format!("made {} name(s) from the labels", made.len())).with_data(json!({
+                "workbook": workbook,
+                "sheet": sheet,
+                "range": area.to_text(),
+                "edge": edge,
+                "made": made,
+                "skipped": skipped,
+            })))
 
         }
     }
