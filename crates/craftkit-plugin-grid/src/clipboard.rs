@@ -32,6 +32,11 @@
 //!   they land on: a border is part of the look of a cell, and the
 //!   look is pasted with it.
 //!
+//! And a paste may be a paste of the **formats**: the look of the
+//! copied cells is written onto the cells they land on and what those
+//! cells hold is not touched. A paste of the formats and a paste of
+//! the values are two different pastes, and a paste is one of them.
+//!
 //! And a paste may be a paste of **values**: the formulas are dropped
 //! and what they give is pasted instead. The value is computed in the
 //! sheet the cells were copied from, because the value of a formula is
@@ -294,6 +299,12 @@ commands! {
             /// clipboard become the columns of the block, and the columns
             /// become the rows.
             transpose: Option<Bool>,
+            /// Whether only the **look** of the cells is pasted: the
+            /// format, the font, the alignment, the fill and the borders.
+            ///
+            /// What the cells hold is not touched, and it may not be given
+            /// with the values.
+            formats: Option<Bool>,
         },
         run: {
             let id = "grid.range.paste".to_string();
@@ -335,11 +346,22 @@ commands! {
                 });
             };
             let transpose = matches!(self.transpose, Some(Bool(true)));
+            // A paste of **values** and a paste of **formats** are two
+            // different pastes, and a paste is one of them.
+            let formats = matches!(self.formats, Some(Bool(true)));
             // The **values**: a paste of values drops the formulas and
             // pastes what they give, and the value is computed in the
             // sheet the cells were copied from — the value of a formula
             // is derived, and it is derived where the formula is.
             let values = matches!(self.values, Some(Bool(true)));
+            // A paste of **values** and a paste of **formats** are two
+            // different pastes, and a paste is one of them.
+            if formats && values {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "paste the values or the formats, and not both".to_string(),
+                });
+            }
             let source = if values {
                 let Some(source) = clipboard_sheet(&book) else {
                     return Err(EngineError::Failed {
@@ -387,6 +409,19 @@ commands! {
                 }
                 let row_delta = row - cell.row as i64;
                 let col_delta = col - cell.col as i64;
+                if formats {
+                    // The **look** of the cell: its format, its font, its
+                    // alignment and its fill. The value and the formula
+                    // are not part of it, and the style and the lock are
+                    // not either.
+                    let mut look = entry.clone();
+                    look.value = None;
+                    look.formula = None;
+                    look.style = None;
+                    look.locked = None;
+                    pasted.push((cell, (row as u32, col as u32), look));
+                    continue;
+                }
                 if values {
                     if entry.formula.is_none() {
                         pasted.push((cell, (row as u32, col as u32), entry.clone()));
@@ -417,7 +452,9 @@ commands! {
             // A paste over cells that hold something is **refused**,
             // unless the paste is told to overwrite.
             let overwrite = matches!(self.overwrite, Some(Bool(true)));
-            if !overwrite {
+            // A paste of **formats** does not touch what the cells hold,
+            // and so it is not refused over a cell that holds something.
+            if !overwrite && !formats {
                 let cells = crate::cells_of(node);
                 for (_, (row, col), _) in &pasted {
                     let landing = CellRef { col: *col, row: *row };
@@ -450,7 +487,19 @@ commands! {
                 .map(crate::borders::borders_from)
                 .unwrap_or_default();
             for (_, (row, col), entry) in &pasted {
-                written.set_entry(CellRef { col: *col, row: *row }, entry.clone());
+                let landing = CellRef { col: *col, row: *row };
+                if formats {
+                    // What the cell holds **stays**: only the look of the
+                    // cell that was copied is written onto it.
+                    let mut merged = written.get(landing).cloned().unwrap_or_default();
+                    merged.format = entry.format.clone();
+                    merged.align = entry.align;
+                    merged.font = entry.font.clone();
+                    merged.fill = entry.fill.clone();
+                    written.set_entry(landing, merged);
+                    continue;
+                }
+                written.set_entry(landing, entry.clone());
             }
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 node.data["cells"] = crate::cells_into(&written);
@@ -477,6 +526,7 @@ commands! {
                     "pasted": count,
                     "values": values,
                     "transpose": transpose,
+                    "formats": formats,
                 })))
 
         }

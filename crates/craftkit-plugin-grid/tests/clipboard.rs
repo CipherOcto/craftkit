@@ -352,3 +352,65 @@ fn a_cell_that_is_pasted_over_loses_the_border_it_had() {
     let borders = borders_of(&mut session, sheet, "C1");
     assert_eq!(borders["top"], Json::Null, "the border of the cell that was there is gone");
 }
+
+/// A paste of the **formats** writes the look and keeps what the cell
+/// holds.
+#[test]
+fn a_paste_of_the_formats_writes_the_look_and_keeps_what_the_cell_holds() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute("grid.cell.font.bold", &json!({ "sheet": sheet, "cell": "A1", "on": true }))
+        .expect("the font is bold");
+    session
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "0.00" }))
+        .expect("the cell is formatted");
+    set_number(&mut session, sheet, "C1", 42.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "formats": true }))
+        .expect("the formats are pasted");
+    let cell = cell_of(&mut session, sheet, "C1");
+    assert_eq!(cell["value"], json!(42.0), "the cell still holds what it held");
+    assert_eq!(cell["font"]["bold"], json!(true), "and it is bold now");
+    assert_eq!(cell["format"], json!("0.00"), "and it has the format");
+}
+
+/// A paste of the **formats** may not be given with the values.
+#[test]
+fn a_paste_of_the_formats_may_not_be_given_with_the_values() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    let outcome = session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "formats": true, "values": true }));
+    assert!(outcome.is_err(), "a paste is the values or the formats, and not both");
+}
+
+/// A paste of the **formats** writes the borders too.
+#[test]
+fn a_paste_of_the_formats_writes_the_borders_too() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute(
+            "grid.cell.border.set",
+            &json!({ "sheet": sheet, "cell": "A1", "edge": "left", "style": "thick" }),
+        )
+        .expect("the border is set");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "formats": true }))
+        .expect("the formats are pasted");
+    let borders = borders_of(&mut session, sheet, "C1");
+    assert_eq!(borders["left"]["style"], json!("thick"), "the border is on the cell");
+}
