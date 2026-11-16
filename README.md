@@ -4416,6 +4416,7 @@ so.
 | the **marks** of a print | **built.** The gridlines and the headings a file prints are read, and they are the tree's own marks (§968) | §968 |
 | the **edit ranges** of a file | **built.** The ranges that stay editable while a sheet is protected are read, and a cell in one of them may be changed (§969) | §969 |
 | the **named styles** of a file | **built.** The styles a file names are read with their look, and a cell may be given one of them (§970) | §970 |
+| the **palette** of a file | **built.** The colours a file names by their number are the file's own, and a file that names none has the format's (§971) | §971 |
 
 ### The list of things that are honestly not there: empty
 
@@ -63295,3 +63296,50 @@ The styles a file names, and the look each of them carries.
 - **The tree keeps no fill and no borders for a style**: the file's
   style may carry a colour behind the text and lines on its edges, and
   the tree's styles have no word for either.
+
+## 971. The palette of a file is read
+
+The colours a file names by their number.
+
+### What was built
+
+- The **palette** of a file is read: the `indexedColors` of the styles
+  part are the colours the file names by their number.
+- A colour a file names **by its number** is the file's own colour: a
+  cell whose font says "the colour number one" is painted with the
+  colour the file's palette gives that number.
+- A file that names **no palette** has the tree's own — the colours
+  the format numbers the way the tree numbers them.
+
+### What the port found
+
+- **The reference's palette is the file's when the file names one**,
+  and the whole of it: a file that names two colours has a palette of
+  two, and a colour number it does not name has no colour at all.
+  Here it is the same: the file's palette replaces the tree's, and a
+  number the file does not name has no colour.
+- **The reference reads the palette of the file before anything else
+  in the styles part**, because every colour of the file is named
+  against it. Here the palette is read with the styles and every
+  colour — the fonts, the fills, the borders, the rules and the tab —
+  is named against it.
+
+### What it cost
+
+- **No new command**: the tree already read the colours of a file, and
+  this arc is what was missing was **whose** colours they are.
+- **One rule that was already there**: a colour a file names by its
+  number is the colour that number has — the tree's own — and it is
+  now the file's number that says which colour.
+- **Two tests**: the palette that is read, and the file that names
+  none.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's own palette is the format's**: sixty-four colours, the
+  ones the format names. A file that names a palette of its own has
+  that one, and a file that names none has the format's.
+- **The tree does not read a palette from anywhere else**: the palette
+  lives in the styles part, and a file that has no styles part has the
+  tree's palette.
