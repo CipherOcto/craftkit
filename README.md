@@ -4420,6 +4420,7 @@ so.
 | the **export** of a sheet as an HTML page | **built.** A sheet is written as a table with the look of the sheet, and the text is given and not written to a file (§972) | §972 |
 | the **evaluation** of a formula | **built.** A formula is worked out against the sheet as it is, its value is given back, and nothing is changed (§973) | §973 |
 | the **audit** of a formula | **built.** Every part of a formula and the value it gives are given, from the inside out, and nothing is changed (§974) | §974 |
+| the **text of a column, cut at fixed widths** | **built.** The text of a column is cut at the widths that are given, and the parts are written beside it (§975) | §975 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55960,7 +55961,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 227 |
+| grid | 228 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63514,3 +63515,72 @@ part gives.
   named.
 - **The tree gives two hundred steps at most**: a chain longer than
   that is cut short, and the tree's own bound is the tree's own.
+
+## 975. The text of a column, cut at fixed widths
+
+Some text is not separated by a delimiter — it is **laid out**: a line
+of a fixed-width report, a record of a mainframe, a column of a
+listing where every field is eight characters wide.
+
+### What was built
+
+- A new command: **`grid.text.widths`**.
+- The **widths** are counts of characters, and they are a set: the
+  order they are written in does not matter, and the same width twice
+  is one width.
+- A width of **no characters** is refused, because a cut at nothing is
+  not a cut; a width that is **not a number** is refused as well.
+- A width that is **past the end of a text** cuts nothing there: the
+  text is shorter than the layout says, and what is left of it is the
+  last part.
+- Every part is read as a **value**: a text that is a number is a
+  number, and a text that is nothing is nothing — an empty value takes
+  the cell away.
+- The parts may be written into **another column**, and the cells that
+  are covered by a merge or locked by the sheet's protection are **not
+  written**.
+- A cell that holds no text is **left alone**: there is nothing to
+  cut.
+
+### What the port found
+
+- **The reference cuts a range and writes it from a cell**, and the
+  cut is a whole method of the data area: a range of texts, a list of
+  delimiters, a list of fixed widths, a destination cell. Here the cut
+  is **a column of a sheet** and the destination is a **column**, as it
+  is in the tree's other cut (§548): the parts of a row of values are a
+  row, and a row starts in one place.
+- **The reference takes a list of delimiters** and cuts at any of
+  them. The tree has that cut already, at **one** delimiter (§548),
+  and this arc is the other way of cutting: at **widths**, where the
+  layout of the text says where the parts are.
+- **The reference trims each part**, so a part that holds spaces holds
+  nothing at its ends. Here the spaces **stay**: a space in a text is
+  part of the text, and a part that is a text is a text.
+- **The reference's parts are cell values**, read by the same rule a
+  typed cell is read by. Here a part is a number when it is one and a
+  text when it is not — the same rule the tree's other cut uses.
+
+### What it cost
+
+- **One new module** (`src/textwidths.rs`) and **one new command**
+  (`grid.text.widths`). The grid battery now carries **228** commands.
+- **One rule that was already there**: the rule that reads a part as a
+  value, which the tree's other cut wrote; it is now written once and
+  used by both.
+- **Nine tests** (`tests/textwidths.rs`): the text cut at the widths,
+  a part that is a number, the widths as a set, a width past the end
+  of the text, the parts written into another column, a cell that holds
+  no text, a width of no characters, a width that is not a number, and
+  a column that is not a column.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree cuts a column and not a range**: the reference names the
+  range it cuts, and here the column is named.
+- **The tree cuts at widths only**: a text cut at a list of widths
+  cannot be cut at a list of delimiters in the same breath, and the
+  tree has one command for each of the two ways.
+- **The formula in a cell is not cut**: the value of a formula cell is
+  computed, and the command cuts only the text a cell holds.
