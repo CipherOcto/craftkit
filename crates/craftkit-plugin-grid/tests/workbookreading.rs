@@ -95,3 +95,50 @@ fn a_workbook_that_is_not_there_is_refused() {
         .expect_err("the sheet is not a workbook");
     assert!(error.to_string().contains("not a workbook"), "the refusal says why: {error}");
 }
+
+/// The **properties** of a workbook may be **set**, and what is set is
+/// said by the answer.
+#[test]
+fn the_properties_of_a_workbook_may_be_set() {
+    let mut session = session();
+    let (workbook, _sheet) = a_workbook(&mut session);
+    let outcome = session
+        .execute(
+            "grid.workbook.properties.set",
+            &json!({
+                "workbook": workbook,
+                "title": "The sales of the year",
+                "subject": "Sales",
+                "author": "A. Writer",
+                "keywords": "sales year",
+                "description": "The numbers",
+                "company": "The Company Ltd",
+            }),
+        )
+        .expect("the properties are set");
+    assert_eq!(outcome.data["properties"]["title"], json!("The sales of the year"), "the title is said");
+    let answer = read(&mut session, workbook);
+    assert_eq!(answer["properties"]["author"], json!("A. Writer"), "the author is said");
+    assert_eq!(answer["properties"]["company"], json!("The Company Ltd"), "the company is said");
+    assert_eq!(answer["properties"]["last_modified_by"], Json::Null, "and what was not said is nothing");
+}
+
+/// A property that is **not given** keeps what it was, and a property
+/// given as an **empty text** is taken away.
+#[test]
+fn a_property_that_is_not_given_keeps_what_it_was() {
+    let mut session = session();
+    let (workbook, _sheet) = a_workbook(&mut session);
+    session
+        .execute(
+            "grid.workbook.properties.set",
+            &json!({ "workbook": workbook, "title": "A title", "subject": "A subject" }),
+        )
+        .expect("the properties are set");
+    session
+        .execute("grid.workbook.properties.set", &json!({ "workbook": workbook, "subject": "" }))
+        .expect("the properties are set");
+    let answer = read(&mut session, workbook);
+    assert_eq!(answer["properties"]["title"], json!("A title"), "the title kept what it was");
+    assert_eq!(answer["properties"]["subject"], Json::Null, "the subject is taken away");
+}

@@ -68,6 +68,26 @@ fn tree_formula(text: &str) -> String {
     text.replace("_xlfn.", "").replace("_xlpm.", "")
 }
 
+/// The **properties** of a workbook, as the answer holds them.
+///
+/// A property the file does not say is nothing, and the answer says
+/// so.
+fn properties_to_json(properties: &craftkit_xlsx::Properties) -> craftkit_sdk::serde_json::Value {
+    let text = |value: &Option<String>| match value {
+        Some(value) => json!(value),
+        None => craftkit_sdk::serde_json::Value::Null,
+    };
+    json!({
+        "title": text(&properties.title),
+        "subject": text(&properties.subject),
+        "author": text(&properties.creator),
+        "keywords": text(&properties.keywords),
+        "description": text(&properties.description),
+        "last_modified_by": text(&properties.last_modified_by),
+        "company": text(&properties.company),
+    })
+}
+
 commands! {
     /// **Import** a workbook file into the document.
     ///
@@ -139,6 +159,7 @@ commands! {
                     "date_system": system.name(),
                     "custom_lists": Vec::<String>::new(),
                     "styles": Vec::<String>::new(),
+                    "properties": properties_to_json(&workbook.properties),
                 }),
             );
             // The **sheets**: one for each sheet of the file, in the

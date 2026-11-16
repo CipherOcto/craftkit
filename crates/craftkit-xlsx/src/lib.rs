@@ -1017,6 +1017,52 @@ pub struct Name {
     pub refers_to: String,
 }
 
+/// The **properties** of a workbook: what the file says about itself.
+///
+/// The properties are in the file's own parts — `docProps/core.xml`
+/// and `docProps/app.xml` — and a file that has none has no
+/// properties: they are not an error, they are nothing.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Properties {
+    /// The **title** of the workbook.
+    pub title: Option<String>,
+    /// The **subject** of the workbook.
+    pub subject: Option<String>,
+    /// The **author** of the workbook: the one who created it.
+    pub creator: Option<String>,
+    /// The **keywords** of the workbook.
+    pub keywords: Option<String>,
+    /// The **description** of the workbook.
+    pub description: Option<String>,
+    /// The **last one to change** the workbook.
+    pub last_modified_by: Option<String>,
+    /// The **company** the workbook belongs to.
+    pub company: Option<String>,
+}
+
+/// The **properties** of a workbook, as the file's own parts say them.
+fn properties_of(package: &mut craftkit_zip::Package<'_>) -> Properties {
+    let mut properties = Properties::default();
+    if let Ok(Some(core)) = read_xml(package, "docProps/core.xml") {
+        properties.title = text_of(&core, "title");
+        properties.subject = text_of(&core, "subject");
+        properties.creator = text_of(&core, "creator");
+        properties.keywords = text_of(&core, "keywords");
+        properties.description = text_of(&core, "description");
+        properties.last_modified_by = text_of(&core, "lastModifiedBy");
+    }
+    if let Ok(Some(app)) = read_xml(package, "docProps/app.xml") {
+        properties.company = text_of(&app, "Company");
+    }
+    properties
+}
+
+/// The **text** of a child of an element, when it is not nothing.
+fn text_of(element: &craftkit_xml::El, name: &str) -> Option<String> {
+    let text = element.child(name)?.text.trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+
 /// A **workbook**: its sheets and its date system.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Workbook {
@@ -1037,6 +1083,9 @@ pub struct Workbook {
     pub charts: Vec<(String, Vec<Chart>)>,
     /// The date system the numbers of the cells are counted in.
     pub system: DateSystem,
+    /// The **properties** of the workbook: what the file says about
+    /// itself.
+    pub properties: Properties,
     /// The **warnings**: what could not be read, and what was kept
     /// instead.
     ///
@@ -1062,6 +1111,10 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
         .find(|rel| rel.kind == "officeDocument")
         .map(|rel| rel.target.clone())
         .unwrap_or_else(|| "xl/workbook.xml".to_string());
+
+    // The **properties** of the workbook: what the file says about
+    // itself.
+    workbook.properties = properties_of(&mut package);
 
     let workbook_xml = read_xml(&mut package, &part)?;
     let Some(workbook_xml) = workbook_xml else {

@@ -1,6 +1,6 @@
 //! The **import** of a workbook file into the document.
 
-use craftkit_sdk::serde_json::json;
+use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Ecosystem, Session};
 
 /// The battery's **anchor**: the one name that keeps its commands
@@ -1428,4 +1428,64 @@ fn the_date_system_of_the_file_is_the_date_system_of_the_workbook() {
     let outcome =
         session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
     assert_eq!(outcome.data["system"].as_str(), Some("1904"), "the 1904 system");
+}
+
+/// The **properties** of the file are the properties of the workbook:
+/// what the file says about itself.
+#[test]
+fn the_properties_of_the_file_are_read() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "docProps/core.xml",
+            r#"<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The sales of the year</dc:title><dc:subject>Sales</dc:subject><dc:creator>A. Writer</dc:creator><cp:keywords>sales year</cp:keywords><dc:description>The numbers</dc:description><cp:lastModifiedBy>B. Editor</cp:lastModifiedBy></cp:coreProperties>"#,
+        ),
+        (
+            "docProps/app.xml",
+            r#"<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Company>The Company Ltd</Company></Properties>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let answer =
+        session.execute("grid.workbook.get", &json!({ "workbook": workbook })).expect("the workbook is read");
+    let properties = &answer.data["properties"];
+    assert_eq!(properties["title"], json!("The sales of the year"), "the title");
+    assert_eq!(properties["subject"], json!("Sales"), "the subject");
+    assert_eq!(properties["author"], json!("A. Writer"), "the author");
+    assert_eq!(properties["keywords"], json!("sales year"), "the keywords");
+    assert_eq!(properties["description"], json!("The numbers"), "the description");
+    assert_eq!(properties["last_modified_by"], json!("B. Editor"), "the last one to change it");
+    assert_eq!(properties["company"], json!("The Company Ltd"), "the company");
+}
+
+/// A file that says **nothing about itself** has no properties, and
+/// the answer says so: a property that is not said is nothing.
+#[test]
+fn a_file_with_no_properties_has_none() {
+    let mut session = session();
+    let path = a_file(a_workbook_file(r#"<worksheet><sheetData/></worksheet>"#, r#"<sst/>"#));
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let answer =
+        session.execute("grid.workbook.get", &json!({ "workbook": workbook })).expect("the workbook is read");
+    let properties = &answer.data["properties"];
+    assert_eq!(properties["title"], Json::Null, "the title is nothing");
+    assert_eq!(properties["company"], Json::Null, "and so is the company");
 }
