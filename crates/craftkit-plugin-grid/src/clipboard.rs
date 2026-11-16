@@ -30,7 +30,11 @@
 //!   and their **alignment**: a cell is more than its value;
 //! - the **borders** of the copied cells are the borders of the cells
 //!   they land on: a border is part of the look of a cell, and the
-//!   look is pasted with it.
+//!   look is pasted with it;
+//! - the **comments** and the **notes** of the copied cells are the
+//!   comments and the notes of the cells they land on: a comment
+//!   travels with the cell it is on. A paste of the values and a paste
+//!   of the formats do not carry them.
 //!
 //! And a paste may be a paste of the **formats**: the look of the
 //! copied cells is written onto the cells they land on and what those
@@ -108,6 +112,8 @@ fn copy_into(
     cells: &Cells,
     first: CellRef,
     borders: &BTreeMap<String, BTreeMap<String, crate::borders::Border>>,
+    comments: &BTreeMap<String, crate::comments::Comment>,
+    notes: &BTreeMap<String, crate::notes::Note>,
 ) {
     let mut copied = craftkit_sdk::serde_json::Map::new();
     for (cell, entry) in cells.iter() {
@@ -121,11 +127,27 @@ fn copy_into(
             held.insert(address.clone(), edges.clone());
         }
     }
+    // The **comments** and the **notes** of the copied cells: a comment
+    // travels with the cell it is on.
+    let mut held_comments = BTreeMap::new();
+    for (address, comment) in comments {
+        if copied.contains_key(address) {
+            held_comments.insert(address.clone(), comment.clone());
+        }
+    }
+    let mut held_notes = BTreeMap::new();
+    for (address, note) in notes {
+        if copied.contains_key(address) {
+            held_notes.insert(address.clone(), note.clone());
+        }
+    }
     node.data["clipboard"] = json!({
         "sheet": sheet,
         "at": first.to_text(),
         "cells": Json::Object(copied),
         "borders": crate::borders::borders_into(&held),
+        "comments": crate::comments::comments_into(&held_comments),
+        "notes": crate::notes::notes_into(&held_notes),
     });
 }
 
@@ -185,8 +207,10 @@ commands! {
                 });
             };
             let borders = crate::borders::borders_of(node);
+            let comments = crate::comments::comments_of(node);
+            let notes = crate::notes::notes_of(node);
             if let Some(node) = session.document_mut()?.node_mut(workbook) {
-                copy_into(node, sheet, &copied, area.start, &borders);
+                copy_into(node, sheet, &copied, area.start, &borders, &comments, &notes);
             }
             Ok(Outcome::changed(format!("{count} cell(s) of `{}` were copied", self.range.0))
                 .with_data(json!({
@@ -258,8 +282,10 @@ commands! {
                 });
             };
             let borders = crate::borders::borders_of(node);
+            let comments = crate::comments::comments_of(node);
+            let notes = crate::notes::notes_of(node);
             if let Some(node) = session.document_mut()?.node_mut(workbook) {
-                copy_into(node, sheet, &copied, area.start, &borders);
+                copy_into(node, sheet, &copied, area.start, &borders, &comments, &notes);
             }
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 node.data["cells"] = crate::cells_into(&taken);
@@ -517,6 +543,68 @@ commands! {
                     }
                 }
                 node.data["borders"] = crate::borders::borders_into(&sheet_borders);
+            }
+            // The **comments** and the **notes** of the copied cells are
+            // the comments and the notes of the cells they land on: a
+            // comment travels with the cell it is on. A paste of the
+            // values and a paste of the formats do not carry them.
+            if !values && !formats {
+                let comments = book
+                    .data
+                    .get("clipboard")
+                    .and_then(|clipboard| clipboard.get("comments"))
+                    .and_then(|comments| comments.as_object())
+                    .map(|comments| {
+                        comments
+                            .iter()
+                            .filter_map(|(address, comment)| {
+                                crate::comments::comment_from(comment)
+                                    .map(|comment| (address.to_string(), comment))
+                            })
+                            .collect::<BTreeMap<String, crate::comments::Comment>>()
+                    })
+                    .unwrap_or_default();
+                let notes = book
+                    .data
+                    .get("clipboard")
+                    .and_then(|clipboard| clipboard.get("notes"))
+                    .and_then(|notes| notes.as_object())
+                    .map(|notes| {
+                        notes
+                            .iter()
+                            .filter_map(|(address, note)| {
+                                crate::notes::note_from(note).map(|note| (address.to_string(), note))
+                            })
+                            .collect::<BTreeMap<String, crate::notes::Note>>()
+                    })
+                    .unwrap_or_default();
+                if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                    let mut sheet_comments = crate::comments::comments_of(node);
+                    let mut sheet_notes = crate::notes::notes_of(node);
+                    for (cell, (row, col), _) in &pasted {
+                        let address = CellRef { col: *col, row: *row }.to_text();
+                        let source = cell.to_text();
+                        match comments.get(&source) {
+                            Some(comment) => {
+                                sheet_comments.insert(address.clone(), comment.clone());
+                                sheet_notes.remove(&address);
+                            }
+                            None => {
+                                sheet_comments.remove(&address);
+                                match notes.get(&source) {
+                                    Some(note) => {
+                                        sheet_notes.insert(address.clone(), note.clone());
+                                    }
+                                    None => {
+                                        sheet_notes.remove(&address);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    node.data["comments"] = crate::comments::comments_into(&sheet_comments);
+                    node.data["notes"] = crate::notes::notes_into(&sheet_notes);
+                }
             }
             Ok(Outcome::changed(format!("{count} cell(s) were pasted at {}", at.to_text()))
                 .with_data(json!({

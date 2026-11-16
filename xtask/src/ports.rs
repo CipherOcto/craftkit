@@ -1231,6 +1231,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/clipboard.rs",
         section: "§987",
     },
+    Port {
+        rule: "the comment of a copied cell is pasted with it",
+        from: "gridcraft/crates/engine/src/cmd/edit/clipboard.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/clipboard.rs",
+        command: "grid.range.paste",
+        test: "crates/craftkit-plugin-grid/tests/clipboard.rs",
+        section: "§988",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

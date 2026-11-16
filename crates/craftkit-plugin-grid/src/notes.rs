@@ -33,6 +33,13 @@ pub struct Note {
     pub author: Option<String>,
 }
 
+/// The **note** a value holds, if it holds one.
+pub fn note_from(value: &Json) -> Option<Note> {
+    let text = value.get("text")?.as_str()?.to_string();
+    let author = value.get("author").and_then(|author| author.as_str()).map(|author| author.to_string());
+    Some(Note { text, author })
+}
+
 /// The **notes** of a sheet: by the address of the cell they are on.
 pub fn notes_of(node: &Node) -> BTreeMap<String, Note> {
     let mut notes = BTreeMap::new();
@@ -40,9 +47,8 @@ pub fn notes_of(node: &Node) -> BTreeMap<String, Note> {
         return notes;
     };
     for (address, note) in map {
-        let Some(text) = note.get("text").and_then(|text| text.as_str()) else { continue };
-        let author = note.get("author").and_then(|author| author.as_str()).map(|author| author.to_string());
-        notes.insert(address.to_string(), Note { text: text.to_string(), author });
+        let Some(note) = note_from(note) else { continue };
+        notes.insert(address.to_string(), note);
     }
     notes
 }

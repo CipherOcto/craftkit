@@ -59,6 +59,23 @@ pub struct Comment {
     pub resolved: bool,
 }
 
+/// The **comment** a value holds, if it holds one.
+pub fn comment_from(value: &Json) -> Option<Comment> {
+    let text = value.get("text")?.as_str()?.to_string();
+    let author = value.get("author").and_then(|author| author.as_str()).map(|author| author.to_string());
+    let mut replies = Vec::new();
+    if let Some(list) = value.get("replies").and_then(|replies| replies.as_array()) {
+        for reply in list {
+            let Some(text) = reply.get("text").and_then(|text| text.as_str()) else { continue };
+            let author =
+                reply.get("author").and_then(|author| author.as_str()).map(|author| author.to_string());
+            replies.push(Reply { text: text.to_string(), author });
+        }
+    }
+    let resolved = value.get("resolved").and_then(|resolved| resolved.as_bool()).unwrap_or(false);
+    Some(Comment { text, author, replies, resolved })
+}
+
 /// The **comments** of a sheet: by the address of the cell they are on.
 pub fn comments_of(node: &Node) -> BTreeMap<String, Comment> {
     let mut comments = BTreeMap::new();
@@ -66,20 +83,8 @@ pub fn comments_of(node: &Node) -> BTreeMap<String, Comment> {
         return comments;
     };
     for (address, comment) in map {
-        let Some(text) = comment.get("text").and_then(|text| text.as_str()) else { continue };
-        let author =
-            comment.get("author").and_then(|author| author.as_str()).map(|author| author.to_string());
-        let mut replies = Vec::new();
-        if let Some(list) = comment.get("replies").and_then(|replies| replies.as_array()) {
-            for reply in list {
-                let Some(text) = reply.get("text").and_then(|text| text.as_str()) else { continue };
-                let author =
-                    reply.get("author").and_then(|author| author.as_str()).map(|author| author.to_string());
-                replies.push(Reply { text: text.to_string(), author });
-            }
-        }
-        let resolved = comment.get("resolved").and_then(|resolved| resolved.as_bool()).unwrap_or(false);
-        comments.insert(address.to_string(), Comment { text: text.to_string(), author, replies, resolved });
+        let Some(comment) = comment_from(comment) else { continue };
+        comments.insert(address.to_string(), comment);
     }
     comments
 }

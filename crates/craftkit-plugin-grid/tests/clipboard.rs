@@ -414,3 +414,97 @@ fn a_paste_of_the_formats_writes_the_borders_too() {
     let borders = borders_of(&mut session, sheet, "C1");
     assert_eq!(borders["left"]["style"], json!("thick"), "the border is on the cell");
 }
+
+/// The **comment** on a cell, as the answer holds it.
+fn comment_of(session: &mut Session, sheet: u64, cell: &str) -> craftkit_sdk::serde_json::Value {
+    let outcome = session
+        .execute("grid.cell.comment.get", &json!({ "sheet": sheet, "cell": cell }))
+        .expect("the comment is read");
+    outcome.data["comment"].clone()
+}
+
+/// The **note** on a cell, as the answer holds it.
+fn note_of(session: &mut Session, sheet: u64, cell: &str) -> craftkit_sdk::serde_json::Value {
+    let outcome = session
+        .execute("grid.cell.note.get", &json!({ "sheet": sheet, "cell": cell }))
+        .expect("the note is read");
+    outcome.data["note"].clone()
+}
+
+/// The **comment** of a copied cell is pasted with it.
+#[test]
+fn the_comment_of_a_copied_cell_is_pasted_with_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute(
+            "grid.cell.comment.set",
+            &json!({ "sheet": sheet, "cell": "A1", "text": "a thread", "author": "ada" }),
+        )
+        .expect("the comment is written");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session.execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1" })).expect("the cell is pasted");
+    let comment = comment_of(&mut session, sheet, "C1");
+    assert_eq!(comment["text"], json!("a thread"), "the comment is on the cell");
+    assert_eq!(comment["author"], json!("ada"), "and so is its author");
+}
+
+/// The **note** of a copied cell is pasted with it.
+#[test]
+fn the_note_of_a_copied_cell_is_pasted_with_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute("grid.cell.note.set", &json!({ "sheet": sheet, "cell": "A1", "text": "check this" }))
+        .expect("the note is written");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session.execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1" })).expect("the cell is pasted");
+    assert_eq!(note_of(&mut session, sheet, "C1")["text"], json!("check this"), "the note is on the cell");
+}
+
+/// A cell that is pasted over **loses** the comment it had.
+#[test]
+fn a_cell_that_is_pasted_over_loses_the_comment_it_had() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    set_number(&mut session, sheet, "C1", 2.0);
+    session
+        .execute("grid.cell.comment.set", &json!({ "sheet": sheet, "cell": "C1", "text": "a thread" }))
+        .expect("the comment is written");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "overwrite": true }))
+        .expect("the cell is pasted");
+    assert_eq!(
+        comment_of(&mut session, sheet, "C1"),
+        Json::Null,
+        "the comment of the cell that was there is gone"
+    );
+}
+
+/// A paste of the **values** does not carry the comment.
+#[test]
+fn a_paste_of_the_values_does_not_carry_the_comment() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute("grid.cell.comment.set", &json!({ "sheet": sheet, "cell": "A1", "text": "a thread" }))
+        .expect("the comment is written");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "values": true }))
+        .expect("the values are pasted");
+    assert_eq!(comment_of(&mut session, sheet, "C1"), Json::Null, "the comment did not travel");
+}
