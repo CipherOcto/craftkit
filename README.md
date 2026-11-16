@@ -4413,6 +4413,7 @@ so.
 | the **header** and the **footer** of a file | **built.** The six texts of a file are read and printed, and one the tree cannot print is counted and left out (§965) | §965 |
 | the **centre** of a sheet on the page | **built.** A sheet may be centred sideways and down the page, and a file that centres its sheet has a sheet that is centred (§966) | §966 |
 | the **protection** of a workbook | **built.** A file that locks the structure of its workbook has a workbook whose structure is locked, and a password is counted and left out (§967) | §967 |
+| the **marks** of a print | **built.** The gridlines and the headings a file prints are read, and they are the tree's own marks (§968) | §968 |
 
 ### The list of things that are honestly not there: empty
 
@@ -63146,3 +63147,50 @@ A file that locks its structure has a workbook whose structure is locked.
   wants the password of a file has to read it itself.
 - **The tree does not unlock anything**: a workbook that is protected
   may be unprotected by a program that says so, exactly as §951 says.
+
+## 968. The marks of a print are read
+
+The gridlines and the headings a file prints.
+
+### What was built
+
+- The **marks** of a print are read: a file that prints its gridlines
+  and its headings has a sheet that prints them.
+- The marks are **the tree's own** rules, and they now come from the
+  file: the **gridlines** are drawn on the page, and the **headings**
+  take their room from it — the room is the width of a column of
+  headings and the height of a row, and a sheet that prints its
+  headings has fewer rows and fewer columns on a page than one that
+  does not.
+- A file that says nothing about its marks has none: the gridlines and
+  the headings are not printed.
+
+### What the port found
+
+- **The file says twice whether the gridlines are printed** — the
+  `gridLines` flag says it, and the `gridLinesSet` flag says that the
+  choice was made — and the tree reads the first. The second says
+  that a person chose, and the choice is the flag itself.
+- **The reference keeps the marks beside the paper, the margins and
+  the scale** in one settings block. Here each mark is its own fact
+  and its own command, and the file's one element says two of them.
+
+### What it cost
+
+- **No new command**: the tree already had the marks — `grid.print.gridlines`
+  and `grid.print.headings` — and this arc is what was missing was the
+  way **into** them.
+- **One rule that was already there**: the room the headings take from
+  the page, and the gridlines that are drawn on it — the tree's own.
+- **Two tests**: the marks that are imported, and the file that says
+  nothing about them.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not read the flag that says the choice was made**:
+  a file that says `gridLinesSet="1"` and `gridLines="0"` prints no
+  gridlines here, which is what the file says as well.
+- **The tree's headings take room from the page**: a sheet that prints
+  its headings has fewer rows on a page than one that does not, and
+  that is the tree's own rule and not the file's.
