@@ -231,6 +231,7 @@ commands! {
             let mut unread_prints = 0u64;
             let mut unread_headers = 0u64;
             let mut centred = 0u64;
+            let mut marks = 0u64;
             let mut outlines = 0u64;
             let mut setups = 0u64;
             let mut breaks = 0u64;
@@ -674,6 +675,18 @@ commands! {
                 if let Some(print) = &sheet.print {
                     data["print"] = print_setup(print, &mut unread_setups).to_json();
                     setups += 1;
+                }
+                // The **marks** of the print: the gridlines and the
+                // headings the file prints.
+                if let Some(options) = &sheet.print_options {
+                    if options.gridlines {
+                        data["print_gridlines"] = json!(true);
+                        marks += 1;
+                    }
+                    if options.headings {
+                        data["print_headings"] = json!(true);
+                        marks += 1;
+                    }
                 }
                 // The **centre** of the sheet on the page: where the
                 // file says the sheet sits.
@@ -1242,6 +1255,7 @@ commands! {
                 "outlines": outlines,
                 "setups": setups,
                 "centred": centred,
+                "marks": marks,
                 "breaks": breaks,
                 "sparklines": imported_sparklines,
                 "unread_sparklines": unread_sparklines,

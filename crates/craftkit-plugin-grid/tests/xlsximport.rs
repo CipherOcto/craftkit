@@ -867,6 +867,71 @@ fn the_printing_of_a_sheet_is_imported() {
     assert_eq!(node.data["title_columns"][1].as_u64(), Some(1), "and the second");
 }
 
+/// The **marks** of a print are imported: a file that prints its
+/// gridlines and its headings has a sheet that prints them.
+#[test]
+fn the_marks_of_a_print_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><printOptions gridLines="1" headings="1"/><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["marks"].as_u64(), Some(2), "both marks were imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let outcome = session.execute("grid.print.read", &json!({ "sheet": sheet })).expect("the setup is read");
+    assert_eq!(outcome.data["gridlines"].as_bool(), Some(true), "the gridlines are printed");
+    assert_eq!(outcome.data["headings"].as_bool(), Some(true), "and the headings are printed");
+}
+
+/// A file that says nothing about the **marks** of its print has none:
+/// the gridlines and the headings are not printed.
+#[test]
+fn a_file_with_no_marks_has_none() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["marks"].as_u64(), Some(0), "no mark was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let outcome = session.execute("grid.print.read", &json!({ "sheet": sheet })).expect("the setup is read");
+    assert_eq!(outcome.data["gridlines"].as_bool(), Some(false), "the gridlines are not printed");
+    assert_eq!(outcome.data["headings"].as_bool(), Some(false), "and the headings are not printed");
+}
+
 /// The **protection** of a workbook is imported: a file that locks its
 /// structure has a workbook whose structure is locked, and its sheets
 /// may not be renamed.
