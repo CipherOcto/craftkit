@@ -4402,6 +4402,7 @@ so.
 | the **statistics** of a range | **built.** The count, the sum, the average, the smallest and the largest of a range are read in one call (§954) | §954 |
 | the **invalid cells** of a sheet | **built.** The cells that hold something and do not pass the rule that is over them are found and named (§955) | §955 |
 | the **properties** of a workbook | **built.** The title, the subject, the author, the keywords, the description and the company of a workbook are read from the file and may be set (§956) | §956 |
+| the **one directory** of artefacts | **built.** The gate builds with the working build's profile on a desk, so the tree's artefacts are kept once and not twice (§957) | §957 |
 
 ### The list of things that are honestly not there: empty
 
@@ -62483,3 +62484,67 @@ What the file says about itself, and what a program says about it.
   not been made, and until it is, a property set here is a property of
   the document and not of a file.
 
+## 957. The one directory of artefacts
+
+What the gate builds with, and how many copies of the tree the disk keeps.
+
+### What was built
+
+- The **profile** the gate builds with is a **decision** and not a
+  constant: on a desk it is the **`dev`** profile — the profile the
+  working build uses — and on a **build machine** it is the **`ci`**
+  profile.
+- So a desk keeps **one** directory of artefacts (`target/debug`), and
+  the gate and the working build **share** it: one copy of the tree, not
+  two.
+- The **`dev` profile keeps line tables** and not full debug info,
+  which is the `ci` profile's setting and for the same reason: a tree
+  with a hundred test binaries keeps a copy of every one of them, and
+  the debug info inside them is the difference between one directory of
+  artefacts and two. Line tables are kept, so a panic still says the
+  file and the line.
+- The **`ci` profile** is left as it was — the same tree, built for
+  speed, with debug assertions off — and it is now the **build
+  machine's** profile and only the build machine's.
+- **`CI=1` on a desk** reproduces a build machine's run, profile and
+  all: it is the same switch the scope of a run reads.
+
+### What the port found
+
+- **The two directories were never two target directories.** There is no
+  `CARGO_TARGET_DIR` anywhere in the tree: `target/ci` is where cargo
+  keeps the artefacts of a **profile** named `ci`, and `target/debug`
+  is where it keeps the artefacts of the `dev` one. Cargo keeps a
+  separate copy per profile, so a tree that uses two profiles keeps two
+  copies of everything it builds.
+- **The gate was paying for a second copy of the whole tree**, and the
+  copy was not a check: it was the same tests, compiled the same way,
+  into a second directory. The disk it took was **57 G** here, and the
+  local `cargo test` of a battery ran out of disk while the gate's
+  copy sat there unused.
+- **The `ci` profile exists for the build machine**, and its own
+  comment says so: debug assertions off, because they are slow and, in
+  a graphics context, sometimes wrong. That is a reason for the
+  **remote** run, and it was being paid for locally as well.
+
+### What it cost
+
+- **One decision, in one place**: `xtask::profile()` — and the scope
+  rule reads the same fact about the machine rather than its own copy
+  of it.
+- **No new dependency** and **no new command**: the gate is the gate,
+  and it builds the same tree it built before.
+- **One rebuild**: the profile of the working build changed, so the
+  tree's artefacts were built again — once, into the one directory.
+
+### What it does not settle
+
+- **The local gate is now stricter than the build machine's**: it runs
+  with debug assertions **on**. That is not a loss — a check that is
+  stricter catches more — but it does mean a desk and a build machine
+  are not the same run, and `CI=1` is the way to make them the same.
+- **Full debug information is gone from the working build.** A panic
+  still names the file and the line, and a backtrace still has its
+  lines; a debugger that wants the values of the variables does not.
+  That is the trade for keeping one copy of the tree rather than two,
+  and it is the tree's trade to undo if the disk ever allows it.
