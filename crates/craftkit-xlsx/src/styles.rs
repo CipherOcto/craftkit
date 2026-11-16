@@ -270,6 +270,9 @@ pub struct Styles {
     /// The **named styles** of the workbook, in the order the file
     /// holds them.
     named: Vec<NamedStyle>,
+    /// The **palette** of the workbook: the colours it names by their
+    /// number.
+    palette: Vec<u32>,
 }
 
 impl Styles {
@@ -331,6 +334,12 @@ impl Styles {
         &self.named
     }
 
+    /// The **palette** of the workbook: the colours it names by their
+    /// number.
+    pub fn palette(&self) -> &[u32] {
+        &self.palette
+    }
+
     /// Whether there are **no** styles at all: a workbook with no
     /// styles part has no formats.
     pub fn is_empty(&self) -> bool {
@@ -340,6 +349,16 @@ impl Styles {
 
 /// Read the **styles** part of a workbook.
 pub fn read_styles(root: &El, theme: &Theme) -> Styles {
+    // The **palette** of the file: the colours it names by their
+    // number. A file that names no palette has the tree's own.
+    let mut palette: Vec<u32> = INDEXED.to_vec();
+    if let Some(colours) = root.path(&["colors", "indexedColors"]) {
+        let own: Vec<u32> =
+            colours.kids("rgbColor").filter_map(|colour| rgb_of_hex(colour.attr("rgb")?)).collect();
+        if !own.is_empty() {
+            palette = own;
+        }
+    }
     // The **custom** number formats: the ones the workbook names by
     // their own number.
     let mut custom: Vec<(u32, String)> = Vec::new();
@@ -353,23 +372,23 @@ pub fn read_styles(root: &El, theme: &Theme) -> Styles {
     // The **fonts** of the workbook, in the order the file holds them.
     let fonts: Vec<Font> = root
         .child("fonts")
-        .map(|fonts| fonts.kids("font").map(|font| read_font(font, theme)).collect())
+        .map(|fonts| fonts.kids("font").map(|font| read_font(font, theme, &palette)).collect())
         .unwrap_or_default();
     // The **fills** of the workbook, in the order the file holds them.
     let fills: Vec<Fill> = root
         .child("fills")
-        .map(|fills| fills.kids("fill").map(|fill| read_fill(fill, theme)).collect())
+        .map(|fills| fills.kids("fill").map(|fill| read_fill(fill, theme, &palette)).collect())
         .unwrap_or_default();
     // The **borders** of the workbook, in the order the file holds them.
     let borders: Vec<Borders> = root
         .child("borders")
-        .map(|borders| borders.kids("border").map(|border| read_borders(border, theme)).collect())
+        .map(|borders| borders.kids("border").map(|border| read_borders(border, theme, &palette)).collect())
         .unwrap_or_default();
     // The **differential formats** of the workbook: the looks of the
     // rules that are about a range of cells.
     let dxfs: Vec<Dxf> = root
         .child("dxfs")
-        .map(|dxfs| dxfs.kids("dxf").map(|dxf| read_dxf(dxf, theme)).collect())
+        .map(|dxfs| dxfs.kids("dxf").map(|dxf| read_dxf(dxf, theme, &palette)).collect())
         .unwrap_or_default();
     // The **cell formats**: each says which number format its cell is
     // written with, which font it is written in, which fill is behind
@@ -452,6 +471,7 @@ pub fn read_styles(root: &El, theme: &Theme) -> Styles {
         borders,
         dxfs,
         named,
+        palette,
     }
 }
 
@@ -461,7 +481,7 @@ pub fn read_styles(root: &El, theme: &Theme) -> Styles {
 /// A differential format names its fill the other way round: the colour
 /// is in the **background** of the fill, and the background of a fill
 /// that has no pattern is its colour.
-fn read_dxf(element: &El, theme: &Theme) -> Dxf {
+fn read_dxf(element: &El, theme: &Theme, palette: &[u32]) -> Dxf {
     let format = element.child("numFmt").and_then(|format| {
         format.attr("formatCode").map(|code| code.to_string()).or_else(|| {
             let id = format.attr_u32("numFmtId")?;
@@ -476,8 +496,8 @@ fn read_dxf(element: &El, theme: &Theme) -> Dxf {
         }
         pattern
             .child("bgColor")
-            .and_then(|colour| read_colour(colour, theme))
-            .or_else(|| pattern.child("fgColor").and_then(|colour| read_colour(colour, theme)))
+            .and_then(|colour| read_colour(colour, theme, palette))
+            .or_else(|| pattern.child("fgColor").and_then(|colour| read_colour(colour, theme, palette)))
     });
     Dxf { format, fill }
 }
@@ -512,7 +532,7 @@ const BORDER_STYLES: [&str; 13] = [
 ///
 /// A line with no style is no line, and a style this tree does not
 /// have is no line either.
-fn read_borders(element: &El, theme: &Theme) -> Borders {
+fn read_borders(element: &El, theme: &Theme, palette: &[u32]) -> Borders {
     let mut edges = Vec::new();
     for edge in ["top", "right", "bottom", "left"] {
         let Some(line) = element.child(edge) else { continue };
@@ -523,14 +543,14 @@ fn read_borders(element: &El, theme: &Theme) -> Borders {
         edges.push(Border {
             edge: edge.to_string(),
             style: style.to_string(),
-            colour: line.child("color").and_then(|colour| read_colour(colour, theme)),
+            colour: line.child("color").and_then(|colour| read_colour(colour, theme, palette)),
         });
     }
     Borders { edges }
 }
 
 /// Read a **font** of a workbook.
-fn read_font(element: &El, theme: &Theme) -> Font {
+fn read_font(element: &El, theme: &Theme, palette: &[u32]) -> Font {
     // A property that is **there** is true, unless it says otherwise.
     let flag = |name: &str| element.child(name).is_some_and(|child| child.flag("val", true));
     Font {
@@ -562,7 +582,7 @@ fn read_font(element: &El, theme: &Theme) -> Font {
             Some("subscript") => Vert::Subscript,
             _ => Vert::Baseline,
         },
-        colour: element.child("color").and_then(|colour| read_colour(colour, theme)),
+        colour: element.child("color").and_then(|colour| read_colour(colour, theme, palette)),
     }
 }
 
@@ -571,11 +591,11 @@ fn read_font(element: &El, theme: &Theme) -> Font {
 /// A fill is a **pattern**, and only a **solid** one is a colour here:
 /// a pattern of stripes is a drawing, and a drawing is not a fact of
 /// the sheet.
-fn read_fill(element: &El, theme: &Theme) -> Fill {
+fn read_fill(element: &El, theme: &Theme, palette: &[u32]) -> Fill {
     let Some(pattern) = element.child("patternFill") else { return Fill::default() };
     let kind = pattern.attr("patternType").unwrap_or("none").to_string();
     let colour = if kind == "solid" {
-        pattern.child("fgColor").and_then(|colour| read_colour(colour, theme))
+        pattern.child("fgColor").and_then(|colour| read_colour(colour, theme, palette))
     } else {
         None
     };
@@ -593,7 +613,7 @@ fn read_fill(element: &El, theme: &Theme) -> Fill {
 /// A **tint** is the file's way of saying that a colour is lighter or
 /// darker than the colour it names, and it is applied to the colour
 /// the theme gives.
-pub(crate) fn read_colour(element: &El, theme: &Theme) -> Option<String> {
+pub(crate) fn read_colour(element: &El, theme: &Theme, palette: &[u32]) -> Option<String> {
     if element.flag("auto", false) {
         return None;
     }
@@ -601,7 +621,7 @@ pub(crate) fn read_colour(element: &El, theme: &Theme) -> Option<String> {
         return colour_of_hex(hex);
     }
     if let Some(number) = element.attr_u32("indexed") {
-        let rgb = INDEXED.get(number as usize)?;
+        let rgb = palette.get(number as usize)?;
         return Some(format!("#{rgb:06x}"));
     }
     // A **theme** colour: the file names the colour by its place in the
@@ -612,6 +632,21 @@ pub(crate) fn read_colour(element: &El, theme: &Theme) -> Option<String> {
         return apply_tint(colour, tint);
     }
     None
+}
+
+/// The **colour** of a hex, as a number: the file's own eight digits
+/// are an alpha byte and a colour, and the colour is what is kept.
+fn rgb_of_hex(hex: &str) -> Option<u32> {
+    let hex = hex.trim().trim_start_matches('#');
+    let digits = match hex.len() {
+        8 => hex.get(2..)?,
+        6 => hex,
+        _ => return None,
+    };
+    if !digits.chars().all(|digit| digit.is_ascii_hexdigit()) {
+        return None;
+    }
+    u32::from_str_radix(digits, 16).ok()
 }
 
 /// A colour of **hex**, as `#rrggbb`.

@@ -690,7 +690,7 @@ fn extension_conditionals(root: &craftkit_xml::El) -> u64 {
 ///
 /// A file keeps them in the **extension list** of the sheet, and the
 /// names here are the file's own.
-pub fn read_sparklines(root: &craftkit_xml::El, theme: &Theme) -> Vec<Sparkline> {
+pub fn read_sparklines(root: &craftkit_xml::El, theme: &Theme, palette: &[u32]) -> Vec<Sparkline> {
     let mut out = Vec::new();
     for list in root.kids("extLst") {
         for extension in list.kids("ext") {
@@ -701,8 +701,9 @@ pub fn read_sparklines(root: &craftkit_xml::El, theme: &Theme) -> Vec<Sparkline>
                     Some("stacked") => "stacked",
                     _ => "line",
                 };
-                let colour =
-                    group.child("colorSeries").and_then(|colour| crate::styles::read_colour(colour, theme));
+                let colour = group
+                    .child("colorSeries")
+                    .and_then(|colour| crate::styles::read_colour(colour, theme, palette));
                 let markers = group.flag("markers", false);
                 let Some(sparklines) = group.child("sparklines") else { continue };
                 for sparkline in sparklines.kids("sparkline") {
@@ -1517,8 +1518,9 @@ fn read_sheet(
     }
     // The **colour** of the sheet's tab, when the file gives it one.
     if let Some(properties) = root.child("sheetPr") {
-        sheet.tab_colour =
-            properties.child("tabColor").and_then(|colour| crate::styles::read_colour(colour, theme));
+        sheet.tab_colour = properties
+            .child("tabColor")
+            .and_then(|colour| crate::styles::read_colour(colour, theme, styles.palette()));
     }
     // The **page setup** of the sheet: how it prints.
     sheet.print = read_print(&root);
@@ -1534,7 +1536,7 @@ fn read_sheet(
     sheet.breaks = read_breaks(&root);
     // The **sparklines** of the sheet: the little drawings in its
     // cells. They live in the extension list of the sheet.
-    sheet.sparklines = read_sparklines(&root, theme);
+    sheet.sparklines = read_sparklines(&root, theme, styles.palette());
     // The **conditional formats** of the extension list: they are not
     // comparisons, and the tree's rule is a comparison — so they are
     // not read, and the reader says how many it left out.
