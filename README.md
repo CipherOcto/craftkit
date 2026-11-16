@@ -4421,6 +4421,7 @@ so.
 | the **evaluation** of a formula | **built.** A formula is worked out against the sheet as it is, its value is given back, and nothing is changed (§973) | §973 |
 | the **audit** of a formula | **built.** Every part of a formula and the value it gives are given, from the inside out, and nothing is changed (§974) | §974 |
 | the **text of a column, cut at fixed widths** | **built.** The text of a column is cut at the widths that are given, and the parts are written beside it (§975) | §975 |
+| the **parts of a text, separated by more than one delimiter** | **built.** The parts of a text may be separated by a set of delimiters, and each character of the set is one of them (§976) | §976 |
 
 ### The list of things that are honestly not there: empty
 
@@ -63584,3 +63585,60 @@ listing where every field is eight characters wide.
   tree has one command for each of the two ways.
 - **The formula in a cell is not cut**: the value of a formula cell is
   computed, and the command cuts only the text a cell holds.
+
+## 976. The parts of a text, separated by more than one delimiter
+
+A text may hold parts that are separated by more than one kind of
+mark — a list of names with commas and semicolons, a row of a file
+where the columns are cut by a tab and the notes by a comma.
+
+### What was built
+
+- The command **`grid.text.columns`** takes a **set of delimiters**
+  now: each character of the set is a delimiter of its own, so `,;`
+  is a comma and a semicolon.
+- The set and the **one delimiter** may not both be given: naming one
+  delimiter or a set of them is a choice, and naming both is not a
+  choice at all.
+- A set that is **empty** is refused: a cut at nothing is not a cut.
+- The rest of the rule is the rule of the one delimiter (§548): the
+  **qualifier** marks a part that holds a delimiter, a **run** of
+  delimiters is one delimiter when the file says so, every part is
+  read as a **value**, and a cell that holds no text is left alone.
+
+### What the port found
+
+- **The reference takes a list of delimiters and an extra one**, so a
+  cut may be at a comma and a semicolon and, on top of that, at
+  whatever the caller adds. Here the set is the whole of it: the extra
+  delimiter of the reference is a member of the set, and the tree does
+  not carry a second door to the same cut.
+- **The reference's qualifier is a character that is doubled to mean
+  itself** — two quotes inside a quoted part are one quote. Here the
+  qualifier is taken away wherever it stands, and two of them are two
+  of them: the tree's rule is the one of the tree's own cut, and it
+  was written once (§548).
+- **The reference cuts a range and writes it from a cell**, and here
+  the cut is a **column of a sheet** written into a column, as it is
+  in the tree's other cut: the parts of a row of values are a row,
+  and a row starts in one place.
+
+### What it cost
+
+- **One command that was already there**: `grid.text.columns` takes
+  the set now, and the rule that cuts a text is written once for both
+  ways of naming the delimiters. The grid battery carries **228**
+  commands.
+- **Four tests** (`tests/textcolumns.rs`): the parts separated by a
+  set, a run of the delimiters of a set, the set and the one delimiter
+  named together, and a set that is empty.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree cuts a column and not a range**: the reference names the
+  range it cuts, and here the column is named.
+- **The tree does not double a qualifier**: a part that holds two
+  quotes holds none of them, where the reference would hold one.
+- **The tree does not trim a part**: a space in a text is part of the
+  text.
