@@ -4425,6 +4425,7 @@ so.
 | the **look of a cell, copied to other cells** | **built.** The look of one cell — its format, its font, its alignment, its fill and its borders — is written onto the cells of a range (§977) | §977 |
 | the **notes of a sheet become comments** | **built.** Every note of a sheet becomes the first comment of its cell, and the note is taken away (§978) | §978 |
 | a **range of cells is given a border** | **built.** The preset says which edges of which cells get the line — all of them, the outside, the inside, or one edge on its own (§979) | §979 |
+| a **cell may be given the sum of the numbers above it** | **built.** The run of numbers above a cell, or beside it, is summed into it as a formula (§980) | §980 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55965,7 +55966,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 231 |
+| grid | 232 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63836,3 +63837,73 @@ usually drawn with lines around it and between its parts.
   the tree's model of a border.
 - **The tree does not thicken the outside**: the style of the line is
   the same on every edge the preset reaches.
+
+## 980. A cell may be given the sum of the numbers above it
+
+A column of numbers has a sum under it, and a row of numbers has a
+sum beside it.
+
+### What was built
+
+- A new command: **`grid.formula.sum`**.
+- The **range** is the numbers that are summed, and it may be named;
+  without it the range is the **run of numbers above** the cell, and
+  when there is none the run of numbers **beside** it.
+- A run of numbers ends where a cell that holds no number begins, and
+  a cell that holds a **formula** counts when the formula gives a
+  number: the value of a formula cell is computed, and it is computed
+  here.
+- The **way** of the sum is `sum`, `average`, `count`, `max` or `min`,
+  and it is `sum` without it; a way that is not one of the tree's is
+  refused by name.
+- A cell with **no numbers** above it and none beside it is refused:
+  there is nothing to sum, and a command that quietly does nothing is
+  a command that answers a question nobody asked.
+- The sum is written as a **formula**, and the rule of a formula is
+  the rule of the tree's formula command: a formula that reads itself
+  is refused.
+
+### What the port found
+
+- **The reference's auto sum is a command of the active cell and the
+  current selection**, and it puts the formula into the cell that is
+  picked. Here the **cell is named** and the sheet it is in is named:
+  a command says what it acts on.
+- **The reference guesses the range too** — the numbers above, and the
+  numbers beside them — and so does this tree: the run of numbers is
+  the tree's own guess, and the command is named for it. What is
+  **not** guessed here is the *way* of the sum: it is `sum` unless the
+  file says otherwise, and a way that is not one of the tree's is
+  refused.
+- **The reference puts the sum in a cell that is picked**, and the
+  cell may be any cell of the selection. Here one cell is named and
+  one range is summed.
+- **The reference's sum of a range of cells** writes a formula in
+  every cell of the range, each with the total of the others. Here
+  one cell is given one sum: the totals of a table are a question for
+  the tree's *subtotal* (§ the data battery), which is a command of
+  its own.
+
+### What it cost
+
+- **One new module** (`src/sums.rs`) and **one new command**
+  (`grid.formula.sum`). The grid battery now carries **232** commands.
+- **One rule that was already there**: the rule that writes a formula
+  in a cell — the one that refuses a formula which does not parse and
+  one that reads itself — was in the tree's formula command, and it is
+  now written once and used by both.
+- **Eight tests** (`tests/sums.rs`): the run above, the range named,
+  the run beside, the run that ends at a cell that holds no number, a
+  cell that holds a formula, the way of the sum, a way that is not one
+  of the tree's, and a cell with no numbers around it.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree sums one range into one cell**: the reference's totals
+  for a whole range are not here.
+- **The tree does not offer the sum without a cell**: the reference
+  starts the formula in the cell that is picked and lets a person
+  finish it, and here the formula is written whole or not at all.
+- **The tree does not sum the cells of a range that hold text**: a
+  cell that holds text is not a number, and the run ends there.
