@@ -25,7 +25,11 @@
 //!   summary is refused and the refusal says which cell;
 //! - a group of rows that holds **no number** has **no value**: the
 //!   answer is nothing, and nothing is written as nothing and not as
-//!   a zero.
+//!   a zero;
+//! - the **range** of a pivot may be changed, and a field follows its
+//!   **name** into the new range: a field whose name is not there is
+//!   taken away, and the column the pivot gathers the rows by may not
+//!   be taken away.
 
 use craftkit_derive::commands;
 
@@ -1656,6 +1660,160 @@ commands! {
                 "sheet": sheet,
                 "name": name,
                 "range": pivot.range.to_text(),
+            })))
+
+        }
+    }
+
+    /// **Change** the range a pivot reads.
+    ///
+    /// The fields of a pivot are **derived** from the cells of the sheet
+    /// as they are, so the pivot follows the new range: there is no
+    /// copy of the fields to keep in step.
+    ///
+    /// A field that is **not in the new range** is taken away — the
+    /// column it spreads the groups over, the column it puts together,
+    /// and the field it filters, sorts and groups by. The column it
+    /// gathers the rows by is **not** taken away: a pivot without it is
+    /// not a pivot, and that is refused by name.
+    grid.pivot.source {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+            sheet: NodeRef,
+            /// The name of the pivot.
+            name: Text,
+            /// The range it reads now: `A1:C5`.
+            range: Text,
+        },
+        run: {
+            let id = "grid.pivot.source".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let name = self.name.0.trim().to_string();
+            let mut pivots = pivots_of(&node);
+            let Some(pivot) = pivots.iter_mut().find(|pivot| pivot.name == name) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the sheet `{sheet}` has no pivot called `{name}`"),
+                });
+            };
+            let text = self.range.0.trim().to_string();
+            let area = crate::fill::area_at(&text, &id)?;
+            if area.count() < 2 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the range {text} is one cell, and a pivot reads more than one cell"),
+                });
+            }
+            // The **fields** are named by the header of their column,
+            // and a field follows its **name** into the new range.
+            let cells = crate::cells_of(&node);
+            let old = pivot.range;
+            let name_of = |column: u32| -> Option<String> {
+                header_text(&cells, CellRef { col: column, row: old.start.row }).ok()
+            };
+            let mut by_name: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+            for col in area.start.col..=area.end.col {
+                let cell = CellRef { col, row: area.start.row };
+                if let Ok(name) = header_text(&cells, cell) {
+                    by_name.entry(name).or_insert(col);
+                }
+            }
+            // The column the pivot gathers the rows by: it may not be
+            // taken away, for a pivot without it is not a pivot.
+            let Some(row_name) = name_of(pivot.row_field) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the column {} has no header, and a field is named by its header",
+                        CellRef::column_text(pivot.row_field)
+                    ),
+                });
+            };
+            let Some(row_column) = by_name.get(&row_name).copied() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the field `{row_name}` is not in the range {text}"),
+                });
+            };
+            pivot.row_field = row_column;
+            // The **fields** that are not in the new range are taken away.
+            let mut taken: Vec<String> = Vec::new();
+            let moved = |field: Option<u32>, taken: &mut Vec<String>| -> Option<u32> {
+                let column = field?;
+                match name_of(column).and_then(|name| by_name.get(&name).copied()) {
+                    Some(new_column) => Some(new_column),
+                    None => {
+                        if let Some(name) = name_of(column) {
+                            taken.push(name);
+                        } else {
+                            taken.push(CellRef::column_text(column));
+                        }
+                        None
+                    }
+                }
+            };
+            pivot.column_field = moved(pivot.column_field, &mut taken);
+            pivot.value_field = moved(pivot.value_field, &mut taken);
+            if let Some(filter) = &pivot.filter {
+                match moved(Some(filter.field), &mut taken) {
+                    Some(column) => {
+                        if let Some(filter) = &mut pivot.filter {
+                            filter.field = column;
+                        }
+                    }
+                    None => pivot.filter = None,
+                }
+            }
+            if let Some((field, order)) = pivot.sort {
+                match moved(Some(field), &mut taken) {
+                    Some(column) => pivot.sort = Some((column, order)),
+                    None => pivot.sort = None,
+                }
+            }
+            if let Some((field, group)) = pivot.group {
+                match moved(Some(field), &mut taken) {
+                    Some(column) => pivot.group = Some((column, group)),
+                    None => pivot.group = None,
+                }
+            }
+            // The **way** of putting numbers together needs the column it
+            // puts together: that is the tree's rule, and it is the rule
+            // of making a pivot.
+            if pivot.aggregate != Aggregate::Count && pivot.value_field.is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the way of putting numbers together is `{}`, and it needs the column it puts together",
+                        pivot.aggregate.to_text()
+                    ),
+                });
+            }
+            // The **header** of the new range names the fields.
+            field_name(&cells, &area, pivot.row_field)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            if let Some(column) = pivot.column_field {
+                field_name(&cells, &area, column)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            }
+            if let Some(column) = pivot.value_field {
+                field_name(&cells, &area, column)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            }
+            pivot.range = area;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["pivots"] = pivots_into(&pivots);
+            }
+            Ok(Outcome::changed(format!("the pivot `{name}` reads {text} now")).with_data(json!({
+                "sheet": sheet,
+                "name": name,
+                "range": text,
+                "taken": taken,
             })))
 
         }

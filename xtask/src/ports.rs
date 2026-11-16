@@ -1195,6 +1195,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/names.rs",
         section: "§983",
     },
+    Port {
+        rule: "the range a pivot reads may be changed",
+        from: "gridcraft/crates/engine/src/cmd/pivot.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/pivots.rs",
+        command: "grid.pivot.source",
+        test: "crates/craftkit-plugin-grid/tests/pivotsource.rs",
+        section: "§984",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
