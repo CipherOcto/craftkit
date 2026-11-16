@@ -561,6 +561,39 @@ fn the_rows_and_the_columns_of_a_sheet_are_imported() {
     assert_eq!(node.data["hidden_columns"][0].as_str(), Some("C"), "and it is the third column");
 }
 
+/// The **default size** of a sheet is imported: the width of a column
+/// and the height of a row that has no size of its own.
+#[test]
+fn the_default_size_of_a_sheet_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetFormatPr defaultColWidth="12.25" defaultRowHeight="24"/><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["default_width"].as_f64(), Some(12.25), "the columns are twelve and a quarter wide");
+    assert_eq!(node.data["default_height"].as_f64(), Some(24.0), "and the rows are twenty four points high");
+}
+
 /// The **merges** of a sheet are imported: the ranges that are one
 /// cell.
 #[test]

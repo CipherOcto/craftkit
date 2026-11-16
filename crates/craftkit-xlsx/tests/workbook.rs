@@ -488,6 +488,65 @@ fn the_rows_and_the_columns_of_a_sheet_are_read() {
     assert!(sheet.columns[2].hidden, "and it is hidden");
 }
 
+/// The **default size** of a sheet is read: the width of a column and
+/// the height of a row that has no size of its own.
+///
+/// A sheet that says nothing has no default size, and that is not the
+/// tree's own size: what a file does not say is not a fact of the
+/// file.
+#[test]
+fn the_default_size_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetFormatPr defaultColWidth="12.25" defaultRowHeight="24"/><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    assert_eq!(sheet.default_width, Some(12.25), "the columns are twelve and a quarter wide");
+    assert_eq!(sheet.default_height, Some(24.0), "and the rows are twenty four points high");
+}
+
+/// A sheet that says nothing of its **default size** has none.
+#[test]
+fn a_sheet_with_no_default_size_has_none() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetFormatPr baseColWidth="8"/><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    assert_eq!(sheet.default_width, None, "the columns have no default width");
+    assert_eq!(sheet.default_height, None, "and the rows have no default height");
+}
+
 /// The **merges** of a sheet are read: the ranges that are one cell.
 #[test]
 fn the_merges_of_a_sheet_are_read() {

@@ -543,6 +543,15 @@ commands! {
                 if !column_widths.is_empty() {
                     data["columns"] = Json::Object(column_widths);
                 }
+                // The **default size** of the sheet: the width of a
+                // column and the height of a row that has no size of
+                // its own. A sheet that says nothing has none.
+                if let Some(width) = sheet.default_width {
+                    data["default_width"] = json!(width);
+                }
+                if let Some(height) = sheet.default_height {
+                    data["default_height"] = json!(height);
+                }
                 if !hidden_rows.is_empty() {
                     data["hidden_rows"] = Json::Array(hidden_rows);
                 }

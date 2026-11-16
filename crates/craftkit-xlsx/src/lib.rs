@@ -238,6 +238,19 @@ pub struct Sheet {
     /// The **columns** of the sheet that say something of themselves:
     /// their width and whether they are hidden.
     pub columns: Vec<Column>,
+    /// The **default width** of the sheet's columns, in characters,
+    /// when the file says one.
+    ///
+    /// A file that says nothing has no default width: the width of a
+    /// column that has no width of its own is then the tree's own, and
+    /// that is not a fact of the file.
+    pub default_width: Option<f64>,
+    /// The **default height** of the sheet's rows, in points, when the
+    /// file says one.
+    ///
+    /// A file that says nothing has no default height, for the same
+    /// reason a file that says nothing has no default width.
+    pub default_height: Option<f64>,
     /// The **merges** of the sheet: the ranges that are **one cell**.
     ///
     /// The ranges are the file's own words — `A1:B2` — and a range of
@@ -1388,6 +1401,12 @@ fn read_sheet(
     // protected, and the flags of that element say what is still
     // allowed.
     sheet.protection = read_sheet_protection(&root);
+    // The **default size** of the sheet: the width of a column and the
+    // height of a row that has no size of its own.
+    if let Some(format) = root.child("sheetFormatPr") {
+        sheet.default_width = format.attr_f64("defaultColWidth").filter(|width| *width > 0.0);
+        sheet.default_height = format.attr_f64("defaultRowHeight").filter(|height| *height > 0.0);
+    }
     // The **outline** of the sheet: where the summary of a group
     // sits. A file that says nothing about it has the summary below
     // and to the right, and that is not carried.

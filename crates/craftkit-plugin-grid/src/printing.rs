@@ -265,6 +265,7 @@ pub(crate) fn row_height(node: &Node, row: u32) -> f64 {
         .and_then(|rows| rows.get(row.to_string()))
         .and_then(|height| height.as_f64())
         .filter(|height| height.is_finite() && *height > 0.0)
+        .or_else(|| crate::sizes::default_height(node))
         .unwrap_or(DEFAULT_ROW_HEIGHT)
 }
 
@@ -275,6 +276,7 @@ pub(crate) fn column_width(node: &Node, column: u32) -> f64 {
         .and_then(|columns| columns.get(crate::formula::CellRef::column_text(column)))
         .and_then(|width| width.as_f64())
         .filter(|width| width.is_finite() && *width > 0.0)
+        .or_else(|| crate::sizes::default_width(node))
         .map(|width| width * CHARACTER + PADDING)
         .unwrap_or(DEFAULT_COLUMN_WIDTH * CHARACTER + PADDING)
 }

@@ -184,3 +184,144 @@ fn the_size_is_saved() {
     assert_eq!(node.data["rows"]["3"].as_f64(), Some(30.0), "the height is there");
     assert_eq!(node.data["columns"]["B"].as_f64(), Some(12.5), "and the width is there");
 }
+
+/// The **default width** of a sheet may be given, in characters: the
+/// width of a column that has no width of its own.
+#[test]
+fn a_sheet_may_be_given_a_default_width() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.sheet.default.width", &json!({ "sheet": sheet, "width": 20 }))
+        .expect("the default width is set");
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["default_width"].as_f64(), Some(20.0), "the sheet says so");
+}
+
+/// The **default height** of a sheet may be given, in points: the
+/// height of a row that has no height of its own.
+#[test]
+fn a_sheet_may_be_given_a_default_height() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.sheet.default.height", &json!({ "sheet": sheet, "height": 24 }))
+        .expect("the default height is set");
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["default_height"].as_f64(), Some(24.0), "the sheet says so");
+}
+
+/// A sheet that has **no** default width has none: the tree's own
+/// width is a fact of the tree's renderer and not of the sheet.
+#[test]
+fn a_sheet_with_no_default_width_has_none() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data.get("default_width"), None, "the sheet says nothing");
+}
+
+/// A default width of **nothing** is refused, for the same reason a
+/// width of nothing is.
+#[test]
+fn a_default_width_of_nothing_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    let error = session
+        .execute("grid.sheet.default.width", &json!({ "sheet": sheet, "width": 0 }))
+        .expect_err("the default width is refused");
+    assert!(error.to_string().contains("hidden"), "the error says so: {error}");
+}
+
+/// A default height of **nothing** is refused, for the same reason a
+/// height of nothing is.
+#[test]
+fn a_default_height_of_nothing_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    let error = session
+        .execute("grid.sheet.default.height", &json!({ "sheet": sheet, "height": 0 }))
+        .expect_err("the default height is refused");
+    assert!(error.to_string().contains("hidden"), "the error says so: {error}");
+}
+
+/// A node that is **not a sheet** is refused, for the default width as
+/// for the rest.
+#[test]
+fn a_node_that_is_not_a_sheet_is_refused_for_the_default_width() {
+    let mut session = session();
+    let (workbook, _sheet) = a_workbook(&mut session);
+    let error = session
+        .execute("grid.sheet.default.width", &json!({ "sheet": workbook, "width": 20 }))
+        .expect_err("the default width is refused");
+    assert!(error.to_string().contains("is not a sheet"), "the error says so: {error}");
+}
+
+/// A column that has **no width of its own** has the **sheet's**
+/// default width: the text of a cell is written in the width of the
+/// column it is in.
+#[test]
+fn a_column_has_the_default_width_of_its_sheet() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": 1234.5 }))
+        .expect("the value is set");
+    session
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "comma" }))
+        .expect("the format is set");
+    // A sheet with no default width: the text is as long as it is.
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(outcome.data["text"].as_str(), Some("1,234.50"), "the text is as long as it is");
+    // A sheet with a default width: the text is as wide as the column.
+    session
+        .execute("grid.sheet.default.width", &json!({ "sheet": sheet, "width": 20 }))
+        .expect("the default width is set");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    let text = outcome.data["text"].as_str().expect("the cell has text");
+    assert_eq!(text.chars().count(), 20, "the text is as wide as the column");
+}
+
+/// A column that has a **width of its own** keeps it: the default
+/// width of the sheet is for the columns that have no width.
+#[test]
+fn a_column_with_a_width_of_its_own_keeps_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": 1234.5 }))
+        .expect("the value is set");
+    session
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "comma" }))
+        .expect("the format is set");
+    session
+        .execute("grid.sheet.default.width", &json!({ "sheet": sheet, "width": 20 }))
+        .expect("the default width is set");
+    session
+        .execute("grid.column.width", &json!({ "sheet": sheet, "column": "A", "width": 12 }))
+        .expect("the width is set");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    let text = outcome.data["text"].as_str().expect("the cell has text");
+    assert_eq!(text.chars().count(), 12, "the text is as wide as its own column");
+}
+
+/// The **defaults** of a sheet are said when the workbook is read.
+#[test]
+fn the_defaults_of_a_sheet_are_said() {
+    let mut session = session();
+    let (workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.sheet.default.width", &json!({ "sheet": sheet, "width": 20 }))
+        .expect("the default width is set");
+    session
+        .execute("grid.sheet.default.height", &json!({ "sheet": sheet, "height": 24 }))
+        .expect("the default height is set");
+    let outcome =
+        session.execute("grid.workbook.get", &json!({ "workbook": workbook })).expect("the workbook is read");
+    let sheets = outcome.data["sheets"].as_array().expect("the workbook has sheets");
+    assert_eq!(sheets[0]["default_width"].as_f64(), Some(20.0), "the width is said");
+    assert_eq!(sheets[0]["default_height"].as_f64(), Some(24.0), "and the height is said");
+}

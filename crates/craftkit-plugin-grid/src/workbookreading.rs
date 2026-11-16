@@ -83,6 +83,10 @@ commands! {
                     "name": sheet.name,
                     "used_range": used,
                     "cells": cells.len(),
+                    // The **default size** of the sheet: a sheet that
+                    // says nothing has none, and that is said here.
+                    "default_width": crate::sizes::default_width(sheet),
+                    "default_height": crate::sizes::default_height(sheet),
                 }));
             }
             let names = node.data.get("names").cloned().unwrap_or(Json::Null);

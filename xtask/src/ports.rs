@@ -1006,6 +1006,24 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/clipboard.rs",
         section: "§963",
     },
+    Port {
+        rule: "the default width of a sheet",
+        from: "gridcraft/crates/engine/src/cmd/format/sizes.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/sizes.rs",
+        command: "grid.sheet.default.width",
+        test: "crates/craftkit-plugin-grid/tests/sizes.rs",
+        section: "§964",
+    },
+    Port {
+        rule: "the default size a file says",
+        from: "gridcraft/crates/xlsx/src/sheet_read.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "craftkit-xlsx::Sheet::default_width",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§964",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
