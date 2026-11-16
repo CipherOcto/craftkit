@@ -435,6 +435,77 @@ impl Area {
     }
 }
 
+/// Put a **formula** in a cell.
+///
+/// The rule of the tree's formula command: a formula that does not
+/// parse is refused, and so is one that reads **itself** — the cycle is
+/// found here, and not later in the middle of a recalculation.
+///
+/// The rule is written once, and every command that writes a formula
+/// writes it this way.
+pub(crate) fn set_formula(
+    session: &mut craftkit_sdk::Session,
+    sheet: u64,
+    cell: CellRef,
+    text: &str,
+    id: &str,
+) -> Result<craftkit_sdk::Outcome, craftkit_sdk::EngineError> {
+    use craftkit_sdk::{EngineError, Outcome};
+    let text = text.trim().to_string();
+    let expression =
+        parse(&text).map_err(|error| EngineError::Failed { id: id.to_string(), message: error.message })?;
+    // The **locks** the styles of the workbook carry.
+    let locks = crate::style_locks(session, sheet);
+    let Some(node) = session.document().node(sheet) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no sheet `{sheet}`"),
+        });
+    };
+    if node.kind != "grid.sheet" {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the node `{sheet}` is not a sheet"),
+        });
+    }
+    crate::merges::refuse_covered(node, &[cell], id)?;
+    crate::protection::refuse_locked(node, &locks, &[cell], id)?;
+    let name = node.name.clone();
+    let mut cells = crate::cells_of(node);
+    // The cycle check: with the new formula in place, does the cell
+    // read itself — in this sheet or in another?
+    cells.set_formula(cell, text.clone());
+    let mut book = crate::book_of(session.document());
+    if let Some(sheet_cells) = book.sheet_mut(&name) {
+        *sheet_cells = cells.clone();
+    }
+    if book.reads_itself(&name, cell) {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the formula in {name}!{} reads itself", cell.to_text()),
+        });
+    }
+    let Some(node) = session.document_mut()?.node_mut(sheet) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no sheet `{sheet}`"),
+        });
+    };
+    node.data["cells"] = crate::cells_into(&cells);
+    let precedents = precedents(&expression, book.names());
+    Ok(Outcome::changed(format!("set the formula in {}", cell.to_text())).with_data(
+        craftkit_sdk::serde_json::json!({
+            "sheet": sheet,
+            "cell": cell.to_text(),
+            "formula": text,
+            "precedents": precedents
+                .iter()
+                .map(|area| area.to_text())
+                .collect::<Vec<_>>(),
+        }),
+    ))
+}
+
 /// What a cell holds.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {

@@ -487,6 +487,7 @@ mod statistics;
 mod storedtext;
 mod styles;
 mod subtotals;
+mod sums;
 mod tables;
 mod tabs;
 mod tabsorder;
@@ -1692,60 +1693,7 @@ commands! {
         run: {
             let sheet = self.sheet.0;
             let cell = cell_at(&self.cell.0, "grid.formula.set")?;
-            // The **locks** the styles of the workbook carry.
-            let locks = crate::style_locks(session, sheet);
-            let text = self.formula.0.trim().to_string();
-            let expression = formula::parse(&text).map_err(|error| EngineError::Failed {
-                id: "grid.formula.set".to_string(),
-                message: error.message,
-            })?;
-            let Some(node) = session.document().node(sheet) else {
-                return Err(EngineError::Failed {
-                    id: "grid.formula.set".to_string(),
-                    message: format!("there is no sheet `{sheet}`"),
-                });
-            };
-            if node.kind != "grid.sheet" {
-                return Err(EngineError::Failed {
-                    id: "grid.formula.set".to_string(),
-                    message: format!("the node `{sheet}` is not a sheet"),
-                });
-            }
-            merges::refuse_covered(node, &[cell], "grid.formula.set")?;
-            crate::protection::refuse_locked(node, &locks, &[cell], "grid.formula.set")?;
-            let name = node.name.clone();
-            let mut cells = cells_of(node);
-            // The cycle check: with the new formula in place, does the cell
-            // read itself — in this sheet or in another?
-            cells.set_formula(cell, text.clone());
-            let mut book = book_of(session.document());
-            if let Some(sheet_cells) = book.sheet_mut(&name) {
-                *sheet_cells = cells.clone();
-            }
-            if book.reads_itself(&name, cell) {
-                return Err(EngineError::Failed {
-                    id: "grid.formula.set".to_string(),
-                    message: format!("the formula in {name}!{} reads itself", cell.to_text()),
-                });
-            }
-            let Some(node) = session.document_mut()?.node_mut(sheet) else {
-                return Err(EngineError::Failed {
-                    id: "grid.formula.set".to_string(),
-                    message: format!("there is no sheet `{sheet}`"),
-                });
-            };
-            node.data["cells"] = cells_into(&cells);
-            let precedents = formula::precedents(&expression, book.names());
-            Ok(Outcome::changed(format!("set the formula in {}", cell.to_text())).with_data(json!({
-                "sheet": sheet,
-                "cell": cell.to_text(),
-                "formula": text,
-                "precedents": precedents
-                    .iter()
-                    .map(|area| area.to_text())
-                    .collect::<Vec<_>>(),
-            })))
-
+            formula::set_formula(session, sheet, cell, &self.formula.0, "grid.formula.set")
         }
     }
 

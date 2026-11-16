@@ -1159,6 +1159,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/rangeborder.rs",
         section: "§979",
     },
+    Port {
+        rule: "a cell may be given the sum of the numbers above it",
+        from: "gridcraft/crates/engine/src/cmd/formulas.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/sums.rs",
+        command: "grid.formula.sum",
+        test: "crates/craftkit-plugin-grid/tests/sums.rs",
+        section: "§980",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
