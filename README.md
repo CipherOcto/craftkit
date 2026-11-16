@@ -4424,6 +4424,7 @@ so.
 | the **parts of a text, separated by more than one delimiter** | **built.** The parts of a text may be separated by a set of delimiters, and each character of the set is one of them (§976) | §976 |
 | the **look of a cell, copied to other cells** | **built.** The look of one cell — its format, its font, its alignment, its fill and its borders — is written onto the cells of a range (§977) | §977 |
 | the **notes of a sheet become comments** | **built.** Every note of a sheet becomes the first comment of its cell, and the note is taken away (§978) | §978 |
+| a **range of cells is given a border** | **built.** The preset says which edges of which cells get the line — all of them, the outside, the inside, or one edge on its own (§979) | §979 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55964,7 +55965,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 230 |
+| grid | 231 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63767,3 +63768,71 @@ the other.
   gone, and the comment that replaces it is not the note.
 - **The tree does not convert a comment into a note**: the reference
   has no such thing either, and here nothing is added to it.
+
+## 979. A range of cells is given a border
+
+A border is a line on the edge of a cell, and a table of numbers is
+usually drawn with lines around it and between its parts.
+
+### What was built
+
+- A new command: **`grid.range.border`**.
+- The **preset** says which edges of which cells get the line:
+  - `all` gives every cell of the range all four of its edges;
+  - `outside` gives the cells on the rim the edges that face **out** of
+    the range;
+  - `inside` gives the cells that are not on the rim the edges that
+    face **in**;
+  - `top`, `bottom`, `left` and `right` give one edge to the cells
+    that are on that edge of the range.
+- The **style** of the line is one of the tree's own, and it is a thin
+  line without it; a border of the style `none` takes the border away
+  — the tree's own rule, and the rule of one cell's border.
+- The **colour** of the line is `#rrggbb`, and it is black without it.
+- A cell that is **covered by a merge** is refused, and so is the
+  formatting of a protected sheet that does not allow the formatting.
+- A range of more than a **million cells** is refused: a border is
+  written on every cell of the range.
+
+### What the port found
+
+- **The reference's border is a preset of a selection**, and it has
+  more than the tree's seven: `thickOutside`, `thickBottom`,
+  `doubleBottom`, `topThickBottom`, `topDoubleBottom`,
+  `insideHorizontal`, `insideVertical` and the two diagonals. Here a
+  preset says **which edges get the line** and the **style** says what
+  the line looks like: a thick outside border is the `outside` preset
+  with the style `thick`, and it is one rule written once rather than a
+  name for every picture of it.
+- **The reference's borders are a part of the style of a cell**, and a
+  cell has one style that holds its font, its fill, its border, its
+  alignment and its number format. Here the border is a **fact of the
+  sheet**, kept beside the cells for the reason the notes are (§ the
+  note module): a border is none of the four things a cell is.
+- **The reference keeps a cell's borders when a preset does not reach
+  that edge**, and so does this tree: a preset writes the edges it
+  names and leaves the others as they are.
+
+### What it cost
+
+- **One command** in a module that was already there (`src/borders.rs`):
+  the grid battery now carries **231** commands.
+- **One rule that was already there**: the style of a border, its
+  colour, and the rule that a border of the style `none` is no border —
+  they are the rules of one cell's border, and they are written once.
+- **Eight tests** (`tests/rangeborder.rs`): every edge of every cell,
+  the edges that face out, the edges that face in, one edge of the
+  cells that are on it, a border taken away, the colour of the line, a
+  preset that is not one of the tree's, and a cell covered by a merge.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree has seven presets and the reference has more**: the
+  thick, the double and the diagonal borders are a style and a
+  combination of edges here, and not a name of their own.
+- **The tree draws a border on every cell of the range**: a border
+  between two cells is drawn twice, once by each of them, and that is
+  the tree's model of a border.
+- **The tree does not thicken the outside**: the style of the line is
+  the same on every edge the preset reaches.
