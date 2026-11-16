@@ -4431,6 +4431,7 @@ so.
 | the **labels of a range make the names** | **built.** The labels of one edge of a range name the cells beside them, and a label that is not a name is skipped and reported (§983) | §983 |
 | the **range a pivot reads may be changed** | **built.** A field follows its name into the new range, a field that is not there is taken away, and the summary is derived (§984) | §984 |
 | a **range may be pasted transposed** | **built.** The rows of the clipboard become the columns of the block, the formulas move with their cells, and a cell may not land off the sheet (§985) | §985 |
+| the **borders of the copied cells are pasted with them** | **built.** A border is part of the look of a cell, and the look is pasted with it (§986) | §986 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64216,3 +64217,53 @@ round: the rows become the columns, and the columns become the rows.
 - **The tree does not paste into a place that is not a cell**: the
   place the paste lands on is a cell of the sheet, and a block that
   does not fit is refused.
+
+## 986. The borders of the copied cells are pasted with them
+
+A border is part of the look of a cell, and the look of a cell is
+pasted with the cell.
+
+### What was built
+
+- The **borders** of the copied cells are the borders of the cells
+  they land on: the clipboard keeps them, and the paste writes them.
+- A cell that is pasted over **loses** the border it had: the look of
+  the cell that is pasted is the whole of the look, and the border is
+  part of it.
+- The borders travel with a **transposed** paste as well (§985): a
+  border is part of the cell it is on.
+
+### What the port found
+
+- **The reference's clipboard holds the style of a cell**, and the
+  style holds the border, so the border is pasted with it and nobody
+  has to think about it. Here the border is a **fact of the sheet**
+  kept beside the cells for the reason the notes are (§ the note
+  module) — a cell is a value, a formula, a format and a style, and a
+  border is none of those four — so the clipboard has to keep the
+  borders **as borders**, and the paste has to write them.
+- **The reference's paste replaces the style of the cell it lands on**,
+  and so does this tree: the look of the cell that is pasted is the
+  whole of the look, and what was there before is gone.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` carries
+  the borders now, and the grid battery carries **235** commands.
+- **One rule that was already there**: the rule that a border is a
+  fact of the sheet and that the look of a cell is the format, the
+  font, the alignment, the fill and the borders (§977).
+- **Two tests** (`tests/clipboard.rs`): the border of the copied cell
+  on the pasted one, and the border of the cell that was there gone.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree pastes the borders of the cells and not of the range**:
+  a border of a cell that was not copied is not pasted, and the
+  cells that were copied and hold no border take the border of the
+  cell they land on away.
+- **The tree does not paste the borders of a whole row or column**:
+  the tree's borders are of cells, and a row has a million of them.
+- **The tree does not paste the look of the range as a whole**: the
+  look is of cells, one by one.
