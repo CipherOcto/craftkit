@@ -142,3 +142,33 @@ fn a_property_that_is_not_given_keeps_what_it_was() {
     assert_eq!(answer["properties"]["title"], json!("A title"), "the title kept what it was");
     assert_eq!(answer["properties"]["subject"], Json::Null, "the subject is taken away");
 }
+
+/// The **theme** of a workbook may be read, and a workbook that has no
+/// theme says so: the colours are nothing, and nothing is said.
+#[test]
+fn the_theme_of_a_workbook_may_be_read() {
+    let mut session = session();
+    let (workbook, _sheet) = a_workbook(&mut session);
+    let outcome =
+        session.execute("grid.workbook.theme", &json!({ "workbook": workbook })).expect("the theme is read");
+    assert_eq!(outcome.data["theme"]["name"], Json::Null, "there is no theme");
+    assert_eq!(outcome.data["theme"]["colours"], Json::Null, "and no colours");
+    let answer = read(&mut session, workbook);
+    assert_eq!(answer["theme"]["name"], Json::Null, "and the whole answer says so too");
+}
+
+/// A node that is not a workbook is refused, and so is a workbook that
+/// is not there.
+#[test]
+fn the_theme_of_a_node_that_is_not_a_workbook_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    let error = session
+        .execute("grid.workbook.theme", &json!({ "workbook": 999 }))
+        .expect_err("the workbook is refused");
+    assert!(error.to_string().contains("there is no workbook `999`"), "the refusal says why: {error}");
+    let error = session
+        .execute("grid.workbook.theme", &json!({ "workbook": sheet }))
+        .expect_err("the sheet is not a workbook");
+    assert!(error.to_string().contains("not a workbook"), "the refusal says why: {error}");
+}

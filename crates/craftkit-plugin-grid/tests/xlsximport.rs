@@ -1489,3 +1489,52 @@ fn a_file_with_no_properties_has_none() {
     assert_eq!(properties["title"], Json::Null, "the title is nothing");
     assert_eq!(properties["company"], Json::Null, "and so is the company");
 }
+
+/// The **theme** of the file is the theme of the workbook, and the
+/// colours of the cells that name it are the colours of the theme.
+#[test]
+fn the_theme_of_the_file_is_read() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor theme="4"/></patternFill></fill></fills><cellXfs><xf numFmtId="0" fillId="0"/><xf numFmtId="0" fillId="1"/></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/theme/theme1.xml",
+            r#"<theme name="Office"><themeElements><clrScheme><dk1><srgbClr val="000000"/></dk1><lt1><srgbClr val="FFFFFF"/></lt1><dk2><srgbClr val="44546A"/></dk2><lt2><srgbClr val="E7E6E6"/></lt2><accent1><srgbClr val="4472C4"/></accent1><accent2><srgbClr val="ED7D31"/></accent2><accent3><srgbClr val="A5A5A5"/></accent3><accent4><srgbClr val="FFC000"/></accent4><accent5><srgbClr val="5B9BD5"/></accent5><accent6><srgbClr val="70AD47"/></accent6><hlink><srgbClr val="0563C1"/></hlink><folHlink><srgbClr val="954F72"/></folHlink></clrScheme><fontScheme><majorFont><latin typeface="Calibri Light"/></majorFont><minorFont><latin typeface="Calibri"/></minorFont></fontScheme></themeElements></theme>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let answer =
+        session.execute("grid.workbook.theme", &json!({ "workbook": workbook })).expect("the theme is read");
+    let theme = &answer.data["theme"];
+    assert_eq!(theme["name"], json!("Office"), "the name of the theme");
+    assert_eq!(theme["colours"]["accent1"], json!("#4472c4"), "and the colour of the first accent");
+    assert_eq!(theme["minor_font"], json!("Calibri"), "and the minor font");
+    // The **cell** that named the colour of the theme is coloured with
+    // it: the colour of a cell is not the name of a colour.
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let cell =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(cell.data["fill"], json!("#4472c4"), "the cell is filled with the theme's colour");
+}

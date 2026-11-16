@@ -44,9 +44,12 @@
 //!   from the master, and the battery that owns the spreadsheet model
 //!   moves the text — the reader knows the file's words, and the
 //!   moving is the model's.
-//! - It does not read the **theme**: a colour that a file names by its
-//!   theme is not a colour here, and a cell that names one has no
-//!   colour.
+//! - It does not read the **drawings** of a sheet: a picture that a
+//!   file holds is not a picture here, and the battery that owns the
+//!   spreadsheet model says how many it left out.
+//! - It does not read a **theme** of its own: a file that names a
+//!   colour by the theme is read against the theme the file holds, and
+//!   a file that holds no theme has no themed colour to read.
 
 #![deny(
     clippy::unwrap_used,
@@ -60,9 +63,11 @@
 
 mod rels;
 mod styles;
+mod theme;
 
 pub use rels::{Rel, rels_of, resolve, split_dir};
 pub use styles::{Alignment, Border, Borders, Fill, Font, Protection, Styles, Underline, Vert, read_styles};
+pub use theme::{SLOTS, Theme, apply_tint, read_theme};
 
 /// The most **rows** a sheet may have: the tree's own bound.
 pub const MAX_ROWS: u64 = 1_048_576;
@@ -663,7 +668,7 @@ fn extension_conditionals(root: &craftkit_xml::El) -> u64 {
 ///
 /// A file keeps them in the **extension list** of the sheet, and the
 /// names here are the file's own.
-pub fn read_sparklines(root: &craftkit_xml::El) -> Vec<Sparkline> {
+pub fn read_sparklines(root: &craftkit_xml::El, theme: &Theme) -> Vec<Sparkline> {
     let mut out = Vec::new();
     for list in root.kids("extLst") {
         for extension in list.kids("ext") {
@@ -674,7 +679,8 @@ pub fn read_sparklines(root: &craftkit_xml::El) -> Vec<Sparkline> {
                     Some("stacked") => "stacked",
                     _ => "line",
                 };
-                let colour = group.child("colorSeries").and_then(crate::styles::read_colour);
+                let colour =
+                    group.child("colorSeries").and_then(|colour| crate::styles::read_colour(colour, theme));
                 let markers = group.flag("markers", false);
                 let Some(sparklines) = group.child("sparklines") else { continue };
                 for sparkline in sparklines.kids("sparkline") {
@@ -1086,6 +1092,9 @@ pub struct Workbook {
     /// The **properties** of the workbook: what the file says about
     /// itself.
     pub properties: Properties,
+    /// The **theme** of the workbook: the colours and the fonts it
+    /// names its cells by.
+    pub theme: Theme,
     /// The **warnings**: what could not be read, and what was kept
     /// instead.
     ///
@@ -1151,7 +1160,12 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
     // date in the file's own words.
     let system = workbook.system;
     let strings = shared_strings(&mut package, &workbook_rels, &mut workbook.warnings)?;
-    let styles = read_styles_of(&mut package, &workbook_rels, &mut workbook.warnings);
+    // The **theme**: the colours and the fonts the file names its
+    // cells by. The styles come after it, because a style may name a
+    // colour of the theme.
+    let theme = read_theme_of(&mut package, &workbook_rels);
+    workbook.theme = theme.clone();
+    let styles = read_styles_of(&mut package, &workbook_rels, &mut workbook.warnings, &theme);
 
     let sheet_elements = workbook_xml
         .child("sheets")
@@ -1180,6 +1194,7 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             &relation.target,
             &strings,
             &styles,
+            &theme,
             &workbook_rels,
             system,
             &mut workbook.warnings,
@@ -1327,11 +1342,18 @@ fn rich_text(element: &craftkit_xml::El) -> String {
 }
 
 /// Read a **sheet**: its cells.
+///
+/// The arguments are the facts of the file that a sheet is read
+/// against: the strings it may hold, the styles it is written in, the
+/// theme the styles name their colours by, and the calendar its
+/// numbers are counted in.
+#[allow(clippy::too_many_arguments)]
 fn read_sheet(
     package: &mut craftkit_zip::Package<'_>,
     part: &str,
     strings: &[String],
     styles: &Styles,
+    theme: &Theme,
     workbook_rels: &[Rel],
     system: DateSystem,
     warnings: &mut Vec<String>,
@@ -1377,7 +1399,8 @@ fn read_sheet(
     }
     // The **colour** of the sheet's tab, when the file gives it one.
     if let Some(properties) = root.child("sheetPr") {
-        sheet.tab_colour = properties.child("tabColor").and_then(crate::styles::read_colour);
+        sheet.tab_colour =
+            properties.child("tabColor").and_then(|colour| crate::styles::read_colour(colour, theme));
     }
     // The **page setup** of the sheet: how it prints.
     sheet.print = read_print(&root);
@@ -1385,7 +1408,7 @@ fn read_sheet(
     sheet.breaks = read_breaks(&root);
     // The **sparklines** of the sheet: the little drawings in its
     // cells. They live in the extension list of the sheet.
-    sheet.sparklines = read_sparklines(&root);
+    sheet.sparklines = read_sparklines(&root, theme);
     // The **conditional formats** of the extension list: they are not
     // comparisons, and the tree's rule is a comparison — so they are
     // not read, and the reader says how many it left out.
@@ -2435,12 +2458,28 @@ fn column_index(letters: &str) -> Option<u32> {
 
 /// The **styles** of a workbook: the format of each cell.
 ///
+/// The **theme** of the workbook.
+///
+/// A workbook with no theme part has no theme, and that is not an
+/// error: a file may be written without one — and then a cell that
+/// names a colour of the theme has no colour.
+fn read_theme_of(package: &mut craftkit_zip::Package<'_>, workbook_rels: &[Rel]) -> Theme {
+    let Some(relation) = workbook_rels.iter().find(|rel| rel.kind == "theme") else {
+        return Theme::default();
+    };
+    let Some(root) = read_xml(package, &relation.target).ok().flatten() else {
+        return Theme::default();
+    };
+    read_theme(&root)
+}
+
 /// A workbook with no styles part has no formats, and that is not an
 /// error: a file may be written without one.
 fn read_styles_of(
     package: &mut craftkit_zip::Package<'_>,
     workbook_rels: &[Rel],
     warnings: &mut Vec<String>,
+    theme: &Theme,
 ) -> Styles {
     let Some(relation) = workbook_rels.iter().find(|rel| rel.kind == "styles") else {
         return Styles::default();
@@ -2449,7 +2488,7 @@ fn read_styles_of(
         warnings.push(format!("the part {} could not be read", relation.target));
         return Styles::default();
     };
-    read_styles(&root)
+    read_styles(&root, theme)
 }
 
 /// Read a part of the package as XML.

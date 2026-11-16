@@ -35,6 +35,22 @@ pub(crate) fn properties_of(node: &craftkit_sdk::Node) -> Json {
     })
 }
 
+/// The **theme** of a workbook: the colours and the fonts it names.
+///
+/// A theme that is not said is nothing, and the answer says so.
+pub(crate) fn theme_of(node: &craftkit_sdk::Node) -> Json {
+    let theme = node.data.get("theme").cloned().unwrap_or(Json::Null);
+    if theme.is_object() {
+        return theme;
+    }
+    json!({
+        "name": Json::Null,
+        "colours": Json::Null,
+        "major_font": Json::Null,
+        "minor_font": Json::Null,
+    })
+}
+
 commands! {
     /// Read a **workbook**.
     grid.workbook.get {
@@ -87,6 +103,7 @@ commands! {
                 "custom_lists": lists,
                 "date_system": system,
                 "properties": properties_of(node),
+                "theme": theme_of(node),
             })))
 
         }
@@ -155,6 +172,39 @@ commands! {
                 .with_data(json!({
                     "workbook": workbook,
                     "properties": properties,
+                })))
+
+        }
+    }
+
+    /// The **theme** of a workbook: the colours and the fonts it names.
+    ///
+    /// A theme that is not said is nothing, and the answer says so.
+    grid.workbook.theme {
+        area: "grid",
+        layer: "grid",
+        icon: "palette",
+        params: {
+            /// The workbook whose theme is read.
+            workbook: NodeRef,
+        },
+        run: {
+            let id = "grid.workbook.theme".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed { id, message: format!("there is no workbook `{workbook}`") });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let theme = theme_of(node);
+            Ok(Outcome::new("the theme of the workbook".to_string())
+                .with_data(json!({
+                    "workbook": workbook,
+                    "theme": theme,
                 })))
 
         }

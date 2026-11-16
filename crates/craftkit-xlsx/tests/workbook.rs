@@ -1462,3 +1462,108 @@ fn a_cell_with_a_bad_address_is_dropped() {
     let workbook = read(&bytes).expect("the workbook is read");
     assert!(workbook.sheets[0].cells.is_empty(), "the cell is dropped");
 }
+
+/// The **theme** of a workbook is read: the name of it, the twelve
+/// colours and the two fonts.
+#[test]
+fn the_theme_of_a_workbook_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/theme/theme1.xml",
+            r#"<theme name="Office"><themeElements><clrScheme><dk1><sysClr val="windowText" lastClr="000000"/></dk1><lt1><sysClr val="window" lastClr="FFFFFF"/></lt1><dk2><srgbClr val="44546A"/></dk2><lt2><srgbClr val="E7E6E6"/></lt2><accent1><srgbClr val="4472C4"/></accent1><accent2><srgbClr val="ED7D31"/></accent2><accent3><srgbClr val="A5A5A5"/></accent3><accent4><srgbClr val="FFC000"/></accent4><accent5><srgbClr val="5B9BD5"/></accent5><accent6><srgbClr val="70AD47"/></accent6><hlink><srgbClr val="0563C1"/></hlink><folHlink><srgbClr val="954F72"/></folHlink></clrScheme><fontScheme><majorFont><latin typeface="Calibri Light"/></majorFont><minorFont><latin typeface="Calibri"/></minorFont></fontScheme></themeElements></theme>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let theme = &workbook.theme;
+    assert_eq!(theme.name, Some("Office".to_string()), "the name of the theme");
+    assert_eq!(theme.colour(0), Some("#ffffff"), "the first colour is the light one");
+    assert_eq!(theme.colour(1), Some("#000000"), "and the second is the dark one");
+    assert_eq!(theme.colour(2), Some("#e7e6e6"), "and the third is the second light one");
+    assert_eq!(theme.colour(4), Some("#4472c4"), "and the fifth is the first accent");
+    assert_eq!(theme.colour(11), Some("#954f72"), "and the last is the followed link");
+    assert_eq!(theme.major_font, Some("Calibri Light".to_string()), "the major font");
+    assert_eq!(theme.minor_font, Some("Calibri".to_string()), "and the minor font");
+}
+
+/// A workbook with **no theme** has no theme, and that is not an
+/// error.
+#[test]
+fn a_workbook_with_no_theme_has_none() {
+    let bytes = a_workbook(r#"<worksheet><sheetData/></worksheet>"#, r#"<sst/>"#);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.theme.is_empty(), "the theme says nothing");
+    assert_eq!(workbook.theme.colour(0), None, "and it has no colour");
+}
+
+/// A cell that names a colour **by the theme** is coloured with it.
+#[test]
+fn a_cell_that_names_a_colour_by_the_theme_is_coloured_with_it() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><fonts><font><scheme val="minor"/></font></fonts><fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="solid"><fgColor theme="4"/></patternFill></fill></fills><cellXfs><xf numFmtId="0" fontId="0" fillId="0"/><xf numFmtId="0" fontId="0" fillId="1"/></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/theme/theme1.xml",
+            r#"<theme name="Office"><themeElements><clrScheme><dk1><srgbClr val="000000"/></dk1><lt1><srgbClr val="FFFFFF"/></lt1><dk2><srgbClr val="44546A"/></dk2><lt2><srgbClr val="E7E6E6"/></lt2><accent1><srgbClr val="4472C4"/></accent1><accent2><srgbClr val="ED7D31"/></accent2><accent3><srgbClr val="A5A5A5"/></accent3><accent4><srgbClr val="FFC000"/></accent4><accent5><srgbClr val="5B9BD5"/></accent5><accent6><srgbClr val="70AD47"/></accent6><hlink><srgbClr val="0563C1"/></hlink><folHlink><srgbClr val="954F72"/></folHlink></clrScheme><fontScheme><majorFont><latin typeface="Calibri Light"/></majorFont><minorFont><latin typeface="Calibri"/></minorFont></fontScheme></themeElements></theme>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let cells = &workbook.sheets[0].cells;
+    assert_eq!(
+        cells[0].fill.as_ref().and_then(|fill| fill.colour.as_deref()),
+        Some("#4472c4"),
+        "the fill is the colour of the theme it names"
+    );
+    assert_eq!(
+        cells[0].font.as_ref().and_then(|font| font.name.as_deref()),
+        Some("Calibri"),
+        "and the font is the face of the theme it names"
+    );
+}
+
+/// A **tint** is the file's way of saying that a colour is lighter or
+/// darker than the colour it names.
+#[test]
+fn a_tint_moves_the_luminance_of_the_colour() {
+    let darker = craftkit_xlsx::apply_tint("#4472c4", -0.5).expect("the colour is tinted");
+    let lighter = craftkit_xlsx::apply_tint("#4472c4", 0.5).expect("the colour is tinted");
+    assert_ne!(darker, "#4472c4", "a negative tint darkens the colour");
+    assert_ne!(lighter, "#4472c4", "and a positive one lightens it");
+    assert_eq!(darker, "#203864", "the dark one is half as light");
+    assert_eq!(lighter, "#a2b8e2", "and the light one is half as dark");
+    assert_eq!(
+        craftkit_xlsx::apply_tint("#4472c4", 0.0),
+        Some("#4472c4".to_string()),
+        "and a tint of nothing is the colour it was"
+    );
+}

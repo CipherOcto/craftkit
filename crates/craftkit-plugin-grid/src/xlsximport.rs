@@ -88,6 +88,35 @@ fn properties_to_json(properties: &craftkit_xlsx::Properties) -> craftkit_sdk::s
     })
 }
 
+/// The **theme** of a workbook, as the answer holds it.
+///
+/// A colour the theme does not have is nothing, and the answer says so.
+fn theme_to_json(theme: &craftkit_xlsx::Theme) -> craftkit_sdk::serde_json::Value {
+    let mut colours = craftkit_sdk::serde_json::Map::new();
+    for (index, name) in craftkit_xlsx::SLOTS.iter().enumerate() {
+        let colour = match theme.colour(index as u64) {
+            Some(colour) => json!(colour),
+            None => craftkit_sdk::serde_json::Value::Null,
+        };
+        colours.insert(name.to_string(), colour);
+    }
+    json!({
+        "name": match &theme.name {
+            Some(name) => json!(name),
+            None => craftkit_sdk::serde_json::Value::Null,
+        },
+        "colours": craftkit_sdk::serde_json::Value::Object(colours),
+        "major_font": match &theme.major_font {
+            Some(face) => json!(face),
+            None => craftkit_sdk::serde_json::Value::Null,
+        },
+        "minor_font": match &theme.minor_font {
+            Some(face) => json!(face),
+            None => craftkit_sdk::serde_json::Value::Null,
+        },
+    })
+}
+
 commands! {
     /// **Import** a workbook file into the document.
     ///
@@ -160,6 +189,7 @@ commands! {
                     "custom_lists": Vec::<String>::new(),
                     "styles": Vec::<String>::new(),
                     "properties": properties_to_json(&workbook.properties),
+                    "theme": theme_to_json(&workbook.theme),
                 }),
             );
             // The **sheets**: one for each sheet of the file, in the

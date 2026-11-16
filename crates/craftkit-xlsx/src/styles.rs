@@ -30,6 +30,8 @@
 
 use craftkit_xml::El;
 
+use crate::theme::{Theme, apply_tint};
+
 /// The **built-in** number formats, by the number they have.
 ///
 /// The tree's own table, in the tree's own order. The numbers that are
@@ -309,7 +311,7 @@ impl Styles {
 }
 
 /// Read the **styles** part of a workbook.
-pub fn read_styles(root: &El) -> Styles {
+pub fn read_styles(root: &El, theme: &Theme) -> Styles {
     // The **custom** number formats: the ones the workbook names by
     // their own number.
     let mut custom: Vec<(u32, String)> = Vec::new();
@@ -321,20 +323,26 @@ pub fn read_styles(root: &El) -> Styles {
         }
     }
     // The **fonts** of the workbook, in the order the file holds them.
-    let fonts: Vec<Font> =
-        root.child("fonts").map(|fonts| fonts.kids("font").map(read_font).collect()).unwrap_or_default();
+    let fonts: Vec<Font> = root
+        .child("fonts")
+        .map(|fonts| fonts.kids("font").map(|font| read_font(font, theme)).collect())
+        .unwrap_or_default();
     // The **fills** of the workbook, in the order the file holds them.
-    let fills: Vec<Fill> =
-        root.child("fills").map(|fills| fills.kids("fill").map(read_fill).collect()).unwrap_or_default();
+    let fills: Vec<Fill> = root
+        .child("fills")
+        .map(|fills| fills.kids("fill").map(|fill| read_fill(fill, theme)).collect())
+        .unwrap_or_default();
     // The **borders** of the workbook, in the order the file holds them.
     let borders: Vec<Borders> = root
         .child("borders")
-        .map(|borders| borders.kids("border").map(read_borders).collect())
+        .map(|borders| borders.kids("border").map(|border| read_borders(border, theme)).collect())
         .unwrap_or_default();
     // The **differential formats** of the workbook: the looks of the
     // rules that are about a range of cells.
-    let dxfs: Vec<Dxf> =
-        root.child("dxfs").map(|dxfs| dxfs.kids("dxf").map(read_dxf).collect()).unwrap_or_default();
+    let dxfs: Vec<Dxf> = root
+        .child("dxfs")
+        .map(|dxfs| dxfs.kids("dxf").map(|dxf| read_dxf(dxf, theme)).collect())
+        .unwrap_or_default();
     // The **cell formats**: each says which number format its cell is
     // written with, which font it is written in, which fill is behind
     // it and how its text lies.
@@ -370,7 +378,7 @@ pub fn read_styles(root: &El) -> Styles {
 /// A differential format names its fill the other way round: the colour
 /// is in the **background** of the fill, and the background of a fill
 /// that has no pattern is its colour.
-fn read_dxf(element: &El) -> Dxf {
+fn read_dxf(element: &El, theme: &Theme) -> Dxf {
     let format = element.child("numFmt").and_then(|format| {
         format.attr("formatCode").map(|code| code.to_string()).or_else(|| {
             let id = format.attr_u32("numFmtId")?;
@@ -385,8 +393,8 @@ fn read_dxf(element: &El) -> Dxf {
         }
         pattern
             .child("bgColor")
-            .and_then(read_colour)
-            .or_else(|| pattern.child("fgColor").and_then(read_colour))
+            .and_then(|colour| read_colour(colour, theme))
+            .or_else(|| pattern.child("fgColor").and_then(|colour| read_colour(colour, theme)))
     });
     Dxf { format, fill }
 }
@@ -421,7 +429,7 @@ const BORDER_STYLES: [&str; 13] = [
 ///
 /// A line with no style is no line, and a style this tree does not
 /// have is no line either.
-fn read_borders(element: &El) -> Borders {
+fn read_borders(element: &El, theme: &Theme) -> Borders {
     let mut edges = Vec::new();
     for edge in ["top", "right", "bottom", "left"] {
         let Some(line) = element.child(edge) else { continue };
@@ -432,14 +440,14 @@ fn read_borders(element: &El) -> Borders {
         edges.push(Border {
             edge: edge.to_string(),
             style: style.to_string(),
-            colour: line.child("color").and_then(read_colour),
+            colour: line.child("color").and_then(|colour| read_colour(colour, theme)),
         });
     }
     Borders { edges }
 }
 
 /// Read a **font** of a workbook.
-fn read_font(element: &El) -> Font {
+fn read_font(element: &El, theme: &Theme) -> Font {
     // A property that is **there** is true, unless it says otherwise.
     let flag = |name: &str| element.child(name).is_some_and(|child| child.flag("val", true));
     Font {
@@ -447,7 +455,14 @@ fn read_font(element: &El) -> Font {
             .child("name")
             .or_else(|| element.child("rFont"))
             .and_then(|name| name.attr("val"))
-            .map(|name| name.to_string()),
+            .map(|name| name.to_string())
+            // A font that names a **scheme** takes the name of the
+            // theme's font: the file does not say what the face is, and
+            // the theme does.
+            .or_else(|| {
+                let scheme = element.child("scheme")?.attr("val")?;
+                theme.font(scheme).map(|face| face.to_string())
+            }),
         size: element.child("sz").and_then(|size| size.attr_f64("val")).filter(|size| *size > 0.0),
         bold: flag("b"),
         italic: flag("i"),
@@ -464,7 +479,7 @@ fn read_font(element: &El) -> Font {
             Some("subscript") => Vert::Subscript,
             _ => Vert::Baseline,
         },
-        colour: element.child("color").and_then(read_colour),
+        colour: element.child("color").and_then(|colour| read_colour(colour, theme)),
     }
 }
 
@@ -473,21 +488,29 @@ fn read_font(element: &El) -> Font {
 /// A fill is a **pattern**, and only a **solid** one is a colour here:
 /// a pattern of stripes is a drawing, and a drawing is not a fact of
 /// the sheet.
-fn read_fill(element: &El) -> Fill {
+fn read_fill(element: &El, theme: &Theme) -> Fill {
     let Some(pattern) = element.child("patternFill") else { return Fill::default() };
     let kind = pattern.attr("patternType").unwrap_or("none").to_string();
-    let colour = if kind == "solid" { pattern.child("fgColor").and_then(read_colour) } else { None };
+    let colour = if kind == "solid" {
+        pattern.child("fgColor").and_then(|colour| read_colour(colour, theme))
+    } else {
+        None
+    };
     Fill { pattern: kind, colour }
 }
 
 /// Read the **colour** of an element, as `#rrggbb`.
 ///
-/// A file names a colour in three ways, and this tree has two of
+/// A file names a colour in three ways, and this tree has all three of
 /// them: a colour in **hex** — with an alpha byte in front of it,
-/// which is dropped — and a colour by its **number** in the old
-/// palette, which is the tree's own table. A **theme** colour is not
-/// a colour here: this tree has no theme.
-pub(crate) fn read_colour(element: &El) -> Option<String> {
+/// which is dropped — a colour by its **number** in the old palette,
+/// which is the tree's own table, and a colour by its **place in the
+/// theme**, which the theme answers.
+///
+/// A **tint** is the file's way of saying that a colour is lighter or
+/// darker than the colour it names, and it is applied to the colour
+/// the theme gives.
+pub(crate) fn read_colour(element: &El, theme: &Theme) -> Option<String> {
     if element.flag("auto", false) {
         return None;
     }
@@ -498,6 +521,13 @@ pub(crate) fn read_colour(element: &El) -> Option<String> {
         let rgb = INDEXED.get(number as usize)?;
         return Some(format!("#{rgb:06x}"));
     }
+    // A **theme** colour: the file names the colour by its place in the
+    // theme, and the theme says what that colour is.
+    if let Some(index) = element.attr_u32("theme") {
+        let colour = theme.colour(index as u64)?;
+        let tint = element.attr_f64("tint").unwrap_or(0.0).clamp(-1.0, 1.0);
+        return apply_tint(colour, tint);
+    }
     None
 }
 
@@ -505,7 +535,7 @@ pub(crate) fn read_colour(element: &El) -> Option<String> {
 ///
 /// The hex of a file is eight digits: the alpha byte first, and the
 /// colour after it. A hex of six digits is the colour itself.
-fn colour_of_hex(hex: &str) -> Option<String> {
+pub(crate) fn colour_of_hex(hex: &str) -> Option<String> {
     let hex = hex.trim().trim_start_matches('#');
     let digits = match hex.len() {
         8 => hex.get(2..)?,
