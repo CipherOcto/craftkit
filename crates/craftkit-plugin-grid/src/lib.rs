@@ -438,6 +438,7 @@ mod goals;
 mod headers;
 mod hiding;
 mod host;
+mod htmlexport;
 mod hypotheses;
 mod importing;
 mod information;
