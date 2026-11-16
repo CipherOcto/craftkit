@@ -4418,6 +4418,7 @@ so.
 | the **named styles** of a file | **built.** The styles a file names are read with their look, and a cell may be given one of them (§970) | §970 |
 | the **palette** of a file | **built.** The colours a file names by their number are the file's own, and a file that names none has the format's (§971) | §971 |
 | the **export** of a sheet as an HTML page | **built.** A sheet is written as a table with the look of the sheet, and the text is given and not written to a file (§972) | §972 |
+| the **evaluation** of a formula | **built.** A formula is worked out against the sheet as it is, its value is given back, and nothing is changed (§973) | §973 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55958,7 +55959,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 225 |
+| grid | 226 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63409,3 +63410,57 @@ The sheet as a page of a web.
 - **The bounds are the tree's own**: a page of more than a hundred
   thousand rows is refused, and so is a page of more than four million
   cells.
+
+## 973. A formula may be evaluated without being put in a cell
+
+The value of a formula, worked out against the sheet as it is.
+
+### What was built
+
+- A new command: **`grid.formula.evaluate`**.
+- A formula is **worked out** against the sheet it is read in, and the
+  **value** it gives is given back — the value, and what kind of value
+  it is.
+- **Nothing is changed**: a formula that is not in a cell is not in a
+  cell, and the sheet is the same after the evaluation as it was
+  before.
+- A formula the tree **cannot parse** is an error, exactly as it is
+  when it is put in a cell, and a formula that reads **itself** is
+  refused when it is put in one — so a cycle never reaches the
+  evaluation.
+
+### What the port found
+
+- **The reference's evaluation needs no sheet**: it reads the sheet
+  that is showing and the cell that is picked. Here a sheet is
+  **named**, because the tree has no sheet that is showing and no cell
+  that is picked: a command says what it acts on.
+- **The reference audits a formula as well as evaluating it** — it
+  gives the steps, each sub-expression with its value. That is the
+  formula bar's "evaluate formula", and the tree's evaluator does not
+  show its steps: the tree gives the value and nothing else.
+- **The reference checks the arguments of a formula before it works
+  it out** — a function called with the wrong number of arguments is
+  an error. Here the tree's parser is the check: a formula it cannot
+  read is refused before anything is worked out.
+
+### What it cost
+
+- **One command**: the grid battery now carries **226** commands.
+- **One rule that was already there**: the tree's parser and the
+  tree's evaluator — the ones every formula in every cell is read
+  with — and they are now the rule of a formula that is not in a cell.
+- **Seven tests**: the formula that is evaluated, the formula that
+  reads the sheet, the formula with no `=`, the sheet that is not
+  changed, the formula that cannot be read, the formula that reads
+  itself, and the node that is not a sheet.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not audit a formula**: the steps of the evaluation —
+  each sub-expression with its value — are not given, and only the
+  value is.
+- **The tree does not choose a sheet for you**: a formula is read in
+  the sheet that is named, and a program that wants the sheet that is
+  showing must say which one it means.
