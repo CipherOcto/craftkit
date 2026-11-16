@@ -231,3 +231,70 @@ fn a_column_that_is_not_a_column_is_refused() {
         .expect_err("the column is refused");
     assert!(error.to_string().contains("not a column"), "the refusal says why: {error}");
 }
+
+/// **A block of columns may be moved**, and the columns between them
+/// shift by as many as move.
+#[test]
+fn a_block_of_columns_may_be_moved() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    for (cell, value) in [("A1", 1.0), ("B1", 2.0), ("C1", 3.0), ("D1", 4.0), ("E1", 5.0)] {
+        set_number(&mut session, sheet, cell, value);
+    }
+    session
+        .execute("grid.column.move", &json!({ "sheet": sheet, "column": "B", "count": 2, "before": "E" }))
+        .expect("the block is moved");
+    assert_eq!(cell_of(&mut session, sheet, "A1")["value"], json!(1.0), "the first column stays");
+    assert_eq!(
+        cell_of(&mut session, sheet, "B1")["value"],
+        json!(4.0),
+        "the column that was fourth is second"
+    );
+    assert_eq!(cell_of(&mut session, sheet, "C1")["value"], json!(2.0), "the block is third and fourth");
+    assert_eq!(cell_of(&mut session, sheet, "D1")["value"], json!(3.0), "and it kept its order");
+    assert_eq!(cell_of(&mut session, sheet, "E1")["value"], json!(5.0), "and the last column stays");
+}
+
+/// **A formula follows the cell of the block it names.**
+#[test]
+fn a_formula_follows_the_cell_of_the_block() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "B1", 2.0);
+    set_formula(&mut session, sheet, "F1", "B1*10");
+    session
+        .execute("grid.column.move", &json!({ "sheet": sheet, "column": "B", "count": 2, "before": "E" }))
+        .expect("the block is moved");
+    assert_eq!(
+        formula_of(&mut session, sheet, "F1"),
+        Some("C1 * 10".to_string()),
+        "the formula names the cell's new place"
+    );
+}
+
+/// **A range that lies wholly in the block follows it.**
+#[test]
+fn a_range_that_lies_in_the_block_follows_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_formula(&mut session, sheet, "F1", "SUM(B1:B5)");
+    session
+        .execute("grid.column.move", &json!({ "sheet": sheet, "column": "B", "count": 2, "before": "E" }))
+        .expect("the block is moved");
+    assert_eq!(
+        formula_of(&mut session, sheet, "F1"),
+        Some("SUM(C1:C5)".to_string()),
+        "the range names the block's new place"
+    );
+}
+
+/// **A block may not go before itself.**
+#[test]
+fn a_block_may_not_go_before_itself() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let error = session
+        .execute("grid.column.move", &json!({ "sheet": sheet, "column": "B", "count": 2, "before": "C" }))
+        .expect_err("the move is refused");
+    assert!(error.to_string().contains("already before"), "the refusal says why: {error}");
+}
