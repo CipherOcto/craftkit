@@ -4415,6 +4415,7 @@ so.
 | the **protection** of a workbook | **built.** A file that locks the structure of its workbook has a workbook whose structure is locked, and a password is counted and left out (§967) | §967 |
 | the **marks** of a print | **built.** The gridlines and the headings a file prints are read, and they are the tree's own marks (§968) | §968 |
 | the **edit ranges** of a file | **built.** The ranges that stay editable while a sheet is protected are read, and a cell in one of them may be changed (§969) | §969 |
+| the **named styles** of a file | **built.** The styles a file names are read with their look, and a cell may be given one of them (§970) | §970 |
 
 ### The list of things that are honestly not there: empty
 
@@ -63245,3 +63246,52 @@ The ranges that stay editable while the sheet is protected.
   password is editable here, because the tree has no password to ask
   for. A program that wants to keep the range shut may unprotect the
   sheet.
+
+## 970. The named styles of a file are read
+
+The styles a file names, and the look each of them carries.
+
+### What was built
+
+- The **named styles** of a file are read: the styles the file names,
+  each with its **format**, its **font**, its **alignment** and its
+  **lock**.
+- The workbook **knows** its styles: `grid.workbook.get` says them, and
+  a cell may be **given** one of them with `grid.cell.style` — and the
+  cell is then written with the style's format, which is the tree's
+  own rule of the styles.
+- A style whose **alignment** the tree does not have is not carried,
+  and it is **counted** and said.
+
+### What the port found
+
+- **The reference leaves the `Normal` style out** of the styles it
+  reads, because in its model `Normal` is the style of every cell that
+  names none. Here it is a style like any other: the file names it,
+  the file is a fact, and a program may apply it.
+- **The reference's style carries the whole look of a cell** — the
+  fill and the borders as well. Here a style is the tree's style: a
+  name, a format, a font, an alignment and a lock, and the fill and
+  the borders of a style are not a thing the tree's styles have.
+
+### What it cost
+
+- **No new command**: the tree already had the styles — the commands
+  of §944 — and this arc is what was missing was the way **into** them.
+- **One rule that was already there**: a cell that names a style is
+  written with the style's format — the tree's own — and it is now the
+  rule of the file as well.
+- **Two tests**: the styles that are read, and the style that is
+  imported and given to a cell.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A cell of a file does not name the style it belongs to**: the file
+  gives a cell a format of its own over the format of its style, and
+  the tree's own rule gives the style's format the precedence. So the
+  cell keeps the format the file gives it, and the workbook keeps the
+  styles the file names.
+- **The tree keeps no fill and no borders for a style**: the file's
+  style may carry a colour behind the text and lines on its edges, and
+  the tree's styles have no word for either.
