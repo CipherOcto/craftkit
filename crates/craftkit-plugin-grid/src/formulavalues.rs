@@ -13,6 +13,7 @@
 
 use craftkit_derive::commands;
 
+use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
@@ -71,6 +72,76 @@ commands! {
             Ok(Outcome::new(format!("the formula gives {}", kind_of(&value))).with_data(json!({
                 "sheet": sheet,
                 "formula": text,
+                "value": value.to_json(),
+                "type": kind_of(&value),
+            })))
+
+        }
+    }
+
+    /// **Audit** a formula: the steps of its evaluation.
+    ///
+    /// Every step is a part of the formula and the **value** that part
+    /// gives, and the steps come **from the inside out**: the values
+    /// first and the whole of it last.
+    ///
+    /// The formula is not put in a cell and the sheet is not changed:
+    /// an audit reads and does not write.
+    grid.formula.steps {
+        area: "grid",
+        layer: "grid",
+        icon: "search",
+        params: {
+            /// The sheet it is read in.
+            sheet: NodeRef,
+            /// The formula, with or without its `=`.
+            formula: Text,
+        },
+        run: {
+            let id = "grid.formula.steps".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let name = node.name.clone();
+            let text = self.formula.0.trim().to_string();
+            let expression = crate::formula::parse(&text).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: error.message,
+            })?;
+            // The **book** the formula is worked out in: the sheet's
+            // own cells are the ones it reads.
+            let mut book = book_of(session.document());
+            if let Some(sheet_cells) = book.sheet_mut(&name) {
+                *sheet_cells = cells_of(node);
+            }
+            // The **steps**: every part of the formula that says
+            // something, and the value it gives.
+            let mut parts: Vec<crate::formula::Expr> = Vec::new();
+            parts_of(&expression, &mut parts);
+            let mut steps: Vec<Json> = Vec::new();
+            for part in parts.iter().rev().take(MAX_STEPS) {
+                let value = book.evaluate(&name, part, &mut Vec::new());
+                steps.push(json!({
+                    "expression": part.to_text(),
+                    "value": value.to_json(),
+                    "type": kind_of(&value),
+                }));
+            }
+            let value = book.evaluate(&name, &expression, &mut Vec::new());
+            Ok(Outcome::new(format!("the formula is audited in {} step(s)", steps.len())).with_data(json!({
+                "sheet": sheet,
+                "formula": text,
+                "steps": steps,
                 "value": value.to_json(),
                 "type": kind_of(&value),
             })))
@@ -146,6 +217,38 @@ commands! {
                 .with_data(json!({ "sheet": sheet, "converted": converted.len() })))
 
         }
+    }
+}
+
+/// The **most** steps an audit gives: the tree's own bound.
+///
+/// A long chain of operations is a long list, and a list of a million
+/// steps is not an audit.
+const MAX_STEPS: usize = 200;
+
+/// The parts of a formula that say something: a reference, an
+/// operation or a call.
+///
+/// The parts are gathered from the outside in, and the audit reads
+/// them the other way round: the values first and the whole of it
+/// last.
+fn parts_of(expression: &crate::formula::Expr, parts: &mut Vec<crate::formula::Expr>) {
+    use crate::formula::Expr;
+    match expression {
+        Expr::Cell { .. } | Expr::Range { .. } => parts.push(expression.clone()),
+        Expr::Call(_, arguments) => {
+            parts.push(expression.clone());
+            for argument in arguments {
+                parts_of(argument, parts);
+            }
+        }
+        Expr::Binary(_, left, right) => {
+            parts.push(expression.clone());
+            parts_of(left, parts);
+            parts_of(right, parts);
+        }
+        Expr::Negate(inner) => parts_of(inner, parts),
+        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) | Expr::Name(_) => {}
     }
 }
 

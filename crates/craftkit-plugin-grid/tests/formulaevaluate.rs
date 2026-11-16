@@ -127,3 +127,50 @@ fn a_node_that_is_not_a_sheet_is_refused() {
         .expect_err("the formula is refused");
     assert!(error.to_string().contains("not a sheet"), "the error says so: {error}");
 }
+
+/// A formula is **audited**: every part of it and the value that part
+/// gives, from the inside out.
+#[test]
+fn a_formula_is_audited() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": 5 }))
+        .expect("the cell is set");
+    let outcome = session
+        .execute("grid.formula.steps", &json!({ "sheet": sheet, "formula": "=A1*2" }))
+        .expect("the formula is audited");
+    let steps = outcome.data["steps"].as_array().expect("the audit has steps");
+    assert_eq!(steps.len(), 2, "the cell and the operation");
+    assert_eq!(steps[0]["expression"].as_str(), Some("A1"), "the cell comes first");
+    assert_eq!(steps[0]["value"].as_f64(), Some(5.0), "and it gives five");
+    assert_eq!(steps[1]["expression"].as_str(), Some("A1 * 2"), "the operation comes last");
+    assert_eq!(steps[1]["value"].as_f64(), Some(10.0), "and it gives ten");
+    assert_eq!(outcome.data["value"].as_f64(), Some(10.0), "and the whole of it gives ten");
+}
+
+/// An audit **reads** and does not write: the sheet is the same after
+/// it as it was before.
+#[test]
+fn an_audit_changes_nothing() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.formula.steps", &json!({ "sheet": sheet, "formula": "=1+2" }))
+        .expect("the formula is audited");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(outcome.data["formula"], json!(null), "the cell holds no formula");
+}
+
+/// A formula the tree **cannot parse** is an error, exactly as it is
+/// when it is put in a cell.
+#[test]
+fn a_formula_that_cannot_be_read_is_not_audited() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    let error = session
+        .execute("grid.formula.steps", &json!({ "sheet": sheet, "formula": "=1+" }))
+        .expect_err("the formula is refused");
+    assert!(!error.to_string().is_empty(), "the error says something: {error}");
+}
