@@ -4406,6 +4406,7 @@ so.
 | the **moving** of a column | **built.** A column may be taken out of where it is and put before another one, and every fact that named it goes with it (§958) | §958 |
 | the **theme** of a workbook | **built.** The twelve colours and the two fonts a file names its cells by are read, and a cell that names one is coloured with it (§959) | §959 |
 | the **moving** of a **block** of columns | **built.** As many columns as the count says move together, and the columns between them shift by as many (§960) | §960 |
+| the **inserting** and the **deleting** of **cells** | **built.** A range of cells may be inserted or deleted, and the cells beside it move within the band (§961) | §961 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55946,7 +55947,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 216 |
+| grid | 218 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62744,3 +62745,69 @@ More than one column at a time, and the columns between shift by as many.
   it is an error** — the same as for one column (§958), and the same
   rule: the cells a range named are now in two places, and no range
   names them.
+
+## 961. The inserting of cells and the deleting of cells
+
+A range of cells, and the cells beside it.
+
+### What was built
+
+- Two new commands, **`grid.cell.insert`** and **`grid.cell.delete`**:
+  a range of cells is inserted or deleted, and the cells beside it
+  move.
+- The difference from the inserting of a **row** or of a **column** is
+  the **band**: the cells move only **within the rows** of the range
+  when they move sideways, and only **within its columns** when they
+  move down. A cell above the band is not touched by a sideways move,
+  and a cell beside the band is not touched by a downward one.
+- The **cells** go with their content, and the **facts** that name
+  cells go with them: the **borders**, the **notes**, the **comments**,
+  the **links** and the **pictures** of a cell move with the cell, and
+  the **merges**, the **print area**, the **validations**, the
+  **conditional formats**, the **sparklines**, the **tables**, the
+  **pivots** and the **charts** move with the columns (or the rows)
+  they cover.
+- The **formulas** are written again, and the rule is the reference's
+  own: a reference is written again when it lies **within the band**,
+  and left as it was when it reaches outside it — the cells it names
+  are not the cells that moved.
+
+### What the port found
+
+- **The reference's rule is one sentence** — "like inserting or
+  deleting lines, for references that lie within the shifted columns
+  (rows); Excel leaves references reaching outside them as they are" —
+  and the tree takes it whole: the formulas and the facts follow the
+  **same** rule, which is why the tree has one band rule and not two.
+- **The reference's features are mapped through the same rule as the
+  formulas**: a range that reaches outside the band does not move at
+  all, and the tree does the same — a merge that reaches outside the
+  band stays where it is, and the cells under it are what they are.
+- **The reference refuses to push data off the sheet** — "Excel cannot
+  shift nonblank cells off of the worksheet" — and the tree refuses
+  too, in its own words: a cell that would be pushed off the last
+  column stays where it is.
+
+### What it cost
+
+- **Two commands**: the grid battery now carries **218** commands.
+- **One rule in the formula engine** — `shifted_cells`, a reference
+  within the band is written again and one that reaches outside it is
+  not — and **two helpers** in the moving module for the facts.
+- **Eight tests**: the cells that move sideways, the cells that move
+  down, the formula within the band, the formula that reaches outside
+  it, the cells that move back, the formula that names a deleted cell,
+  the protected sheet, and the way that is not a way.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not refuse to push data off the sheet**: a cell that
+  would be pushed off the last column stays where it is, and the sheet
+  does not say why — the reference refuses the whole move, and the
+  tree's rule of §946 ("refuse, do not clamp") says it should refuse
+  too. That is a rule the tree has not yet written, and it is an arc
+  of its own if it is wanted.
+- **The widths of the columns, the hidden columns and the outline do
+  not move**: a cell insert moves cells, not columns, and a column's
+  width belongs to the column.
