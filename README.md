@@ -4403,6 +4403,7 @@ so.
 | the **invalid cells** of a sheet | **built.** The cells that hold something and do not pass the rule that is over them are found and named (§955) | §955 |
 | the **properties** of a workbook | **built.** The title, the subject, the author, the keywords, the description and the company of a workbook are read from the file and may be set (§956) | §956 |
 | the **one directory** of artefacts | **built.** The gate builds with the working build's profile on a desk, so the tree's artefacts are kept once and not twice (§957) | §957 |
+| the **moving** of a column | **built.** A column may be taken out of where it is and put before another one, and every fact that named it goes with it (§958) | §958 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55943,7 +55944,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 214 |
+| grid | 215 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62548,3 +62549,77 @@ What the gate builds with, and how many copies of the tree the disk keeps.
   lines; a debugger that wants the values of the variables does not.
   That is the trade for keeping one copy of the tree rather than two,
   and it is the tree's trade to undo if the disk ever allows it.
+
+## 958. The moving of a column
+
+A column may be taken out of where it is and put somewhere else.
+
+### What was built
+
+- A new command, **`grid.column.move`**: a column is moved **before**
+  another column, and the columns between them shift by one.
+- The **cells** go with it — their values, their formats, their notes,
+  their borders, their comments, their links and their pictures — and the
+  **facts that name columns** go with it too: the **merges**, the
+  **print area**, the **validations**, the **conditional formats**, the
+  **sparklines**, the **tables**, the **pivots**, the **charts**, the
+  **widths**, the **hidden columns**, the **outline levels**, the
+  **title columns**, the **breaks** of the print, the **filter** and the
+  **names** of the workbook that point at the sheet.
+- The **formulas** are written again, and the rule is one sentence: **a
+  reference follows the cells it names.** A reference to a cell of the
+  moved column names the cell it moved to; a reference to a cell of the
+  band between names the cell it shifted to; a range that lies wholly in
+  the moved column follows it.
+- The formulas of **every sheet** are written again, because a formula
+  may name this sheet from another one.
+- A **fact** that cannot be written **refuses** the move, and the
+  refusal says which fact it is: a merge that has an edge on the moved
+  column names cells that are now in two places, and no range names
+  them.
+
+### What the port found
+
+- **The reference moves a block of columns**, and the tree moves **one**:
+  the tree's rule is that a command's parameters are the fields of a
+  struct, and a block is a count — but a block of columns has a
+  destination that is a *boundary* and a source that is a *range*, and
+  the tree's move names one column and one place.
+- **The reference's destination is a boundary and the tree's is a
+  place**: the reference's `before` is an index, and the tree's `before`
+  is a **column**, and the tree says which column the moved one ends up
+  at.
+- **The reference moves the whole sheet's features**, and so does the
+  tree — but the reference's features that name a range are shifted, and
+  the tree's are **refused** when they name the column that moves: the
+  tree does not shift a fact it cannot write, because a fact left behind
+  is a fact that is wrong.
+
+### What it cost
+
+- **One command**: the grid battery now carries **215** commands.
+- **One rule in the formula engine**: `moved_column` — a reference
+  follows the cells it names, and a range with an edge on the moved
+  column becomes the error `#REF!`, which is what the tree already
+  writes where a reference names a column that is gone.
+- **Ten tests**: the cells that move, the formula that follows, the
+  formula of another sheet that follows, the range that follows, the
+  range that becomes an error, the merge that refuses, the widths that
+  move, the column that may not go before itself, the protected sheet,
+  and the name that is not a column.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree moves one column at a time.** Moving a block of columns is
+  not a move repeated — the references of a block are rewritten against
+  the block — and so it is an arc of its own, if it is wanted.
+- **A range that covers the moved column shrinks, and a range with an
+  edge on it is an error.** The tree does not widen a range to keep the
+  cells it named, because the cells it named are in two places now: one
+  range cannot name them.
+- **The `$` does not stop a move.** It says a reference does not move
+  when a column is **inserted**, and a move is not an insertion — the
+  cell moves, and a reference names a cell. This is the tree's rule and
+  not the reference's, and it is a difference the reader may want to
+  argue with.
