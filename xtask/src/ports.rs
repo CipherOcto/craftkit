@@ -1177,6 +1177,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/clipboard.rs",
         section: "§981",
     },
+    Port {
+        rule: "the region of a cell",
+        from: "gridcraft/crates/engine/src/selection.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/regions.rs",
+        command: "grid.cell.region",
+        test: "crates/craftkit-plugin-grid/tests/regions.rs",
+        section: "§982",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
