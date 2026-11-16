@@ -4405,6 +4405,7 @@ so.
 | the **one directory** of artefacts | **built.** The gate builds with the working build's profile on a desk, so the tree's artefacts are kept once and not twice (§957) | §957 |
 | the **moving** of a column | **built.** A column may be taken out of where it is and put before another one, and every fact that named it goes with it (§958) | §958 |
 | the **theme** of a workbook | **built.** The twelve colours and the two fonts a file names its cells by are read, and a cell that names one is coloured with it (§959) | §959 |
+| the **moving** of a **block** of columns | **built.** As many columns as the count says move together, and the columns between them shift by as many (§960) | §960 |
 
 ### The list of things that are honestly not there: empty
 
@@ -62685,3 +62686,61 @@ The colours and the fonts a file names its cells by.
   no other.
 - **The theme is not written back**: a workbook the tree exports — and
   the tree has no writer yet — would lose it.
+
+## 960. The moving of a block of columns
+
+More than one column at a time, and the columns between shift by as many.
+
+### What was built
+
+- `grid.column.move` gained a **count**: how many columns move. The
+  command of §958 moves one column, and the same command moves a block
+  of them — the tree's own rule is that a command is a struct whose
+  fields are its parameters, and the insert and the delete of a column
+  already carry a count.
+- The **rule** of the move is the same one, generalised: **a reference
+  follows the cells it names.** A reference to a cell of the block names
+  the cell it moved to; a range that lies **wholly** in the block
+  follows it; a range with an **edge on** the block names a column that
+  is not there any more and is the error `#REF!`.
+- The **columns between** the block and its place shift by as many
+  columns as move — two columns that move shift the band by two, not by
+  one.
+- The **facts** follow the block: the merges, the widths, the hidden
+  columns, the validations, the conditionals, the tables, the pivots,
+  the charts, the filter and the names — and a fact that cannot be
+  written still **refuses** the move and says which fact it is.
+
+### What the port found
+
+- **The reference moves a block and the tree now does too**, and the
+  two agree: moving `B:C` before `E` leaves `A, D, B, C, E` in the
+  tree as well as in the reference.
+- **The reference's destination is a boundary and the tree's is a
+  column**: the reference's `before` is an index into the sheet after
+  the shift, and the tree's `before` is the **column** the block goes
+  in front of — which is the same thing said in a way a person can
+  read.
+- **A block that goes before itself is refused**, and so is a block that
+  would end past the last column of a sheet: the tree refuses rather
+  than clamps (§960's rule, and the tree's own since §946).
+
+### What it cost
+
+- **No new command**: the grid battery still carries **216** commands,
+  and the move of §958 gained a parameter.
+- **Four tests**: the block that moves, the formula that follows the
+  block, the range that lies in it, and the block that may not go
+  before itself.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's move takes the columns it names and the count**: a
+  range of columns — `B:D` — is not a column name, and the tree's
+  rules say that a range is not a name (§946's rule, and the tree's
+  own since the beginning).
+- **A range that covers the block shrinks, and a range with an edge on
+  it is an error** — the same as for one column (§958), and the same
+  rule: the cells a range named are now in two places, and no range
+  names them.
