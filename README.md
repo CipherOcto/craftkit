@@ -4407,6 +4407,7 @@ so.
 | the **theme** of a workbook | **built.** The twelve colours and the two fonts a file names its cells by are read, and a cell that names one is coloured with it (§959) | §959 |
 | the **moving** of a **block** of columns | **built.** As many columns as the count says move together, and the columns between them shift by as many (§960) | §960 |
 | the **inserting** and the **deleting** of **cells** | **built.** A range of cells may be inserted or deleted, and the cells beside it move within the band (§961) | §961 |
+| a **cell** pushed **off** the sheet | **built.** The inserting of cells refuses when a cell would be pushed off the sheet, and a cell may not be lost (§962) | §962 |
 
 ### The list of things that are honestly not there: empty
 
@@ -62811,3 +62812,43 @@ A range of cells, and the cells beside it.
 - **The widths of the columns, the hidden columns and the outline do
   not move**: a cell insert moves cells, not columns, and a column's
   width belongs to the column.
+
+## 962. A cell may not be pushed off the sheet
+
+The refusal that §961 named and did not yet write.
+
+### What was built
+
+- The inserting of cells now **refuses** when a cell would be pushed
+  **off** the sheet: the refusal names the cell, and the sheet is as
+  it was.
+- The deleting of cells refuses the same way — though a delete makes
+  room rather than taking it, and so it rarely comes to that.
+
+### What the port found
+
+- **The reference refuses with Excel's own words**: "to prevent
+  possible loss of data, Excel cannot shift nonblank cells off of the
+  worksheet". The tree says it in its own words — a cell may not be
+  lost — and it refuses the whole move rather than leaving one cell
+  behind, which is what the reference does.
+- **The refusal is about the cells, not the sheet's size**: a cell in
+  the last column may be inserted into when nothing is beside it, and
+  the tree's rule is the same: what is refused is the move that would
+  lose a cell.
+
+### What it cost
+
+- **No new command**: the grid battery still carries **218** commands,
+  and the insert of §961 refuses in one more case.
+- **One test**: the cell in the last column that may not be pushed
+  off.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree refuses only the cells that would be lost.** A cell that
+  would be pushed off the sheet and a cell that would be *overwritten*
+  are the same thing here, and both are refused — but the tree does
+  not count them, and the answer of the refusal does not say how many
+  cells would have been lost.
