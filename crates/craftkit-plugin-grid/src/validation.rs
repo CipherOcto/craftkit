@@ -768,6 +768,111 @@ commands! {
                 }
             }
 
+
         }
+    }
+
+    /// The **invalid cells** of a sheet: the cells that hold something
+    /// and do not pass the **validation** rules that are over them.
+    ///
+    /// The rules are the tree's own, and the check is the tree's own:
+    /// the cell is read as it would be typed, and the rule is the rule
+    /// that is over it.
+    grid.validation.invalid {
+        area: "grid",
+        layer: "grid",
+        icon: "check",
+        params: {
+            /// The sheet.
+            sheet: NodeRef,
+        },
+        run: {
+            let id = "grid.validation.invalid".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let name = node.name.clone();
+            let rules = rules_of(node);
+            let cells = crate::cells_of(node);
+            let book = crate::book_of(session.document());
+            let system = crate::system_of(session, sheet);
+            // The **cells** of the rules: a cell that holds a rule is
+            // checked, and a cell that holds nothing is not.
+            let mut invalid: Vec<String> = Vec::new();
+            let mut checked = 0u64;
+            for rule in &rules {
+                let Some(area) = area_of(rule) else { continue };
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        if checked >= MAX_VALIDATED_CELLS {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!(
+                                    "the rules of the sheet are over more than {MAX_VALIDATED_CELLS} cells"
+                                ),
+                            });
+                        }
+                        checked += 1;
+                        let cell = CellRef { col, row };
+                        let value = match cells.get(cell).and_then(|entry| entry.value.clone()) {
+                            Some(Value::Empty) | None => continue,
+                            Some(value) => value,
+                        };
+                        let input = input_text(&value);
+                        if input.is_empty() {
+                            continue;
+                        }
+                        if check(&book, &name, &rules, cell, &input, system).is_some() {
+                            invalid.push(cell.to_text());
+                        }
+                    }
+                }
+            }
+            let count = invalid.len();
+            Ok(Outcome::new(format!("{count} invalid cell(s)")).with_data(json!({
+                "sheet": sheet,
+                "invalid": invalid,
+            })))
+
+        }
+    }
+}
+
+/// The most cells the **invalid** cells of a sheet may be found in.
+const MAX_VALIDATED_CELLS: u64 = 100_000;
+
+/// The **text** of a value, as a user would type it.
+///
+/// A number is written as a formula writes a number, a boolean is
+/// `TRUE` or `FALSE`, and a cell that holds nothing is nothing at all.
+fn input_text(value: &Value) -> String {
+    match value {
+        Value::Text(text) => text.clone(),
+        Value::Number(number) => {
+            if number.fract() == 0.0 && number.abs() < 1e15 {
+                format!("{}", *number as i64)
+            } else {
+                format!("{number}")
+            }
+        }
+        Value::Bool(flag) => {
+            if *flag {
+                "TRUE".to_string()
+            } else {
+                "FALSE".to_string()
+            }
+        }
+        Value::Empty => String::new(),
+        Value::Error(message) => message.clone(),
     }
 }

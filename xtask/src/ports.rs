@@ -934,6 +934,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/reading.rs",
         section: "§954",
     },
+    Port {
+        rule: "the invalid cells of a sheet",
+        from: "gridcraft/crates/engine/src/cmd/data/validation.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/validation.rs",
+        command: "grid.validation.invalid",
+        test: "crates/craftkit-plugin-grid/tests/validation.rs",
+        section: "§955",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -306,3 +306,35 @@ fn the_rules_are_saved_with_the_sheet() {
     assert_eq!(rules.len(), 1, "the rule is saved");
     assert_eq!(rules[0]["kind"].as_str(), Some("whole"), "and it is the rule that was set");
 }
+
+/// The **invalid cells** of a sheet: the cells that hold something and
+/// do not pass the rule that is over them.
+#[test]
+fn the_invalid_cells_of_a_sheet_are_found() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    whole_rule(&mut session, sheet, "A1:A5");
+    for (cell, value) in [("A1", json!(5.0)), ("A2", json!(50.0)), ("A3", json!("text")), ("A4", json!(7.0))]
+    {
+        session
+            .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": cell, "value": value }))
+            .expect("the cell is set");
+    }
+    let outcome = session
+        .execute("grid.validation.invalid", &json!({ "sheet": sheet }))
+        .expect("the invalid cells are found");
+    assert_eq!(outcome.data["invalid"], json!(["A2", "A3"]));
+}
+
+/// A cell that holds nothing is not invalid, and a cell that has no
+/// rule is not invalid.
+#[test]
+fn a_cell_with_nothing_in_it_is_not_invalid() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    whole_rule(&mut session, sheet, "A1:A5");
+    let outcome = session
+        .execute("grid.validation.invalid", &json!({ "sheet": sheet }))
+        .expect("the invalid cells are found");
+    assert_eq!(outcome.data["invalid"], json!([] as [String; 0]));
+}
