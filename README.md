@@ -4414,6 +4414,7 @@ so.
 | the **centre** of a sheet on the page | **built.** A sheet may be centred sideways and down the page, and a file that centres its sheet has a sheet that is centred (§966) | §966 |
 | the **protection** of a workbook | **built.** A file that locks the structure of its workbook has a workbook whose structure is locked, and a password is counted and left out (§967) | §967 |
 | the **marks** of a print | **built.** The gridlines and the headings a file prints are read, and they are the tree's own marks (§968) | §968 |
+| the **edit ranges** of a file | **built.** The ranges that stay editable while a sheet is protected are read, and a cell in one of them may be changed (§969) | §969 |
 
 ### The list of things that are honestly not there: empty
 
@@ -63194,3 +63195,53 @@ The gridlines and the headings a file prints.
 - **The tree's headings take room from the page**: a sheet that prints
   its headings has fewer rows on a page than one that does not, and
   that is the tree's own rule and not the file's.
+
+## 969. The edit ranges of a file are read
+
+The ranges that stay editable while the sheet is protected.
+
+### What was built
+
+- The **edit ranges** of a file are read: the file's `protectedRanges`
+  says which ranges of a protected sheet a person may still change.
+- A cell in an **edit range** may be changed while the sheet is
+  protected — the tree's own rule — and a cell outside them may not:
+  the tree's own refusal, and now it is the file's rule as well.
+- The **name** of a range and the **password** that opens it are the
+  file's own, and the tree's edit ranges are ranges and nothing else:
+  what is not kept is **counted** and said.
+
+### What the port found
+
+- **The reference's edit range has a name, a password and a security
+  descriptor**, and it holds **several ranges** at once. Here an edit
+  range is **one range**: a file that names two ranges in one edit
+  range has two edit ranges here, and a file that names a range of
+  several becomes several of the tree's.
+- **The reference's reader keeps a hash that never matches** when the
+  password of a range cannot be read, so that the range stays locked
+  rather than open. Here there is no password to keep and no hash to
+  break: the tree's edit ranges are open, and the file's password is
+  counted and left out.
+
+### What it cost
+
+- **No new command**: the tree already had the edit ranges — the
+  commands of §952 — and this arc is what was missing was the way
+  **into** them.
+- **One rule that was already there**: a cell in an edit range may be
+  changed while the sheet is protected — the tree's own — and it is now
+  the rule of the file as well.
+- **Two tests**: the edit ranges that are read, and the cell in one of
+  them that may be changed while the cell outside it may not.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree keeps no name and no password for an edit range**: a
+  range that the file calls `Range1` is `A1:B2` here, and the import
+  says that a name was left out.
+- **The tree's edit ranges are open**: a range the file locked with a
+  password is editable here, because the tree has no password to ask
+  for. A program that wants to keep the range shut may unprotect the
+  sheet.
