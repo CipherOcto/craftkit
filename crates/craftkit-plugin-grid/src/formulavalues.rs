@@ -21,6 +21,63 @@ use crate::formula::{CellRef, Value};
 use crate::{book_of, cells_into, cells_of};
 
 commands! {
+    /// **Evaluate** a formula without putting it in a cell.
+    ///
+    /// The formula is worked out against the sheet as it is, and the
+    /// **value** it gives is given back. Nothing is changed: a formula
+    /// that is not in a cell is not in a cell.
+    ///
+    /// A formula the tree cannot parse is an **error**, exactly as it
+    /// is when it is put in a cell, and a formula that reads a cell
+    /// which reads itself gives an **error** too.
+    grid.formula.evaluate {
+        area: "grid",
+        layer: "grid",
+        icon: "calculator",
+        params: {
+            /// The sheet it is read in.
+            sheet: NodeRef,
+            /// The formula, with or without its `=`.
+            formula: Text,
+        },
+        run: {
+            let id = "grid.formula.evaluate".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let name = node.name.clone();
+            let text = self.formula.0.trim().to_string();
+            let expression = crate::formula::parse(&text).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: error.message,
+            })?;
+            // The **book** the formula is worked out in: the sheet's
+            // own cells are the ones it reads.
+            let mut book = book_of(session.document());
+            if let Some(sheet_cells) = book.sheet_mut(&name) {
+                *sheet_cells = cells_of(node);
+            }
+            let value = book.evaluate(&name, &expression, &mut Vec::new());
+            Ok(Outcome::new(format!("the formula gives {}", kind_of(&value))).with_data(json!({
+                "sheet": sheet,
+                "formula": text,
+                "value": value.to_json(),
+                "type": kind_of(&value),
+            })))
+
+        }
+    }
+
     /// Turn the formulas of a range into the **values** they give.
     grid.formula.values {
         area: "grid",
@@ -89,5 +146,16 @@ commands! {
                 .with_data(json!({ "sheet": sheet, "converted": converted.len() })))
 
         }
+    }
+}
+
+/// The **kind** of a value: what a program can tell from it.
+fn kind_of(value: &Value) -> &'static str {
+    match value {
+        Value::Empty => "empty",
+        Value::Number(_) => "number",
+        Value::Text(_) => "text",
+        Value::Bool(_) => "boolean",
+        Value::Error(_) => "error",
     }
 }
