@@ -547,6 +547,39 @@ fn a_sheet_with_no_default_size_has_none() {
     assert_eq!(sheet.default_height, None, "and the rows have no default height");
 }
 
+/// The **named styles** of a workbook are read: the styles the file
+/// names, each with the look it carries.
+#[test]
+fn the_named_styles_of_a_workbook_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="4" fontId="1" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Heading 1" xfId="0"/></cellStyles></styleSheet>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.named_styles.len(), 1, "the workbook names one style");
+    let style = &workbook.named_styles[0];
+    assert_eq!(style.name, "Heading 1", "it is called Heading 1");
+    assert_eq!(style.format.as_deref(), Some("#,##0.00"), "and it is written with two decimals");
+    let font = style.font.as_ref().expect("the style has a font");
+    assert!(font.bold, "the font is bold");
+    assert_eq!(font.size, Some(14.0), "and it is fourteen points high");
+}
+
 /// The **edit ranges** of a sheet are read: the ranges that stay
 /// editable while the sheet is protected.
 #[test]

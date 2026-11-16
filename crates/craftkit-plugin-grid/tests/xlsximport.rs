@@ -932,6 +932,54 @@ fn a_file_with_no_marks_has_none() {
     assert_eq!(outcome.data["headings"].as_bool(), Some(false), "and the headings are not printed");
 }
 
+/// The **named styles** of a file are imported: the workbook knows the
+/// styles the file names, and a cell may be given one of them.
+#[test]
+fn the_named_styles_of_a_file_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId2"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="4" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Money" xfId="0"/></cellStyles></styleSheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1234.5</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    // The **workbook** knows the style the file names.
+    let outcome =
+        session.execute("grid.workbook.get", &json!({ "workbook": workbook })).expect("the workbook is read");
+    let styles = outcome.data["styles"].as_array().expect("the workbook has styles");
+    assert_eq!(styles[0]["name"].as_str(), Some("Money"), "the style is called Money");
+    assert_eq!(styles[0]["format"].as_str(), Some("#,##0.00"), "and it is written with two decimals");
+    // A cell may be **given** it, and the cell is then written with the
+    // style's format.
+    session
+        .execute("grid.cell.style", &json!({ "sheet": sheet, "cell": "A1", "style": "Money" }))
+        .expect("the cell is given the style");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(outcome.data["text"].as_str(), Some("1,234.50"), "the cell is written with the style");
+}
+
 /// The **edit ranges** of a file are imported: a cell in one of them
 /// may be changed while the sheet is protected, and a cell outside
 /// them may not.

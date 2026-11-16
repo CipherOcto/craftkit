@@ -198,6 +198,26 @@ pub struct Protection {
     pub hidden: bool,
 }
 
+/// A **named style** of a workbook: a style the file names.
+///
+/// The style's look is the look of the **base format** it names: the
+/// format of the cells that name the style is the style's, unless
+/// they have one of their own.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct NamedStyle {
+    /// The **name** the style is found by.
+    pub name: String,
+    /// The **format code** of the style, when it has one.
+    pub format: Option<String>,
+    /// The **font** of the style, when it has one.
+    pub font: Option<Font>,
+    /// The **alignment** of the style, when it has one.
+    pub align: Option<Alignment>,
+    /// Whether the cells that name the style are **locked**, when the
+    /// style says so.
+    pub locked: Option<bool>,
+}
+
 /// A **differential format**: the look of a rule that is about a range
 /// of cells and not about a cell.
 ///
@@ -247,6 +267,9 @@ pub struct Styles {
     /// file holds them: the looks of the rules that are about a range
     /// of cells.
     dxfs: Vec<Dxf>,
+    /// The **named styles** of the workbook, in the order the file
+    /// holds them.
+    named: Vec<NamedStyle>,
 }
 
 impl Styles {
@@ -301,6 +324,11 @@ impl Styles {
     pub fn dxf(&self, number: Option<u32>) -> Option<&Dxf> {
         let index = number? as usize;
         self.dxfs.get(index)
+    }
+
+    /// The **named styles** of the workbook: the styles the file names.
+    pub fn named_styles(&self) -> &[NamedStyle] {
+        &self.named
     }
 
     /// Whether there are **no** styles at all: a workbook with no
@@ -369,7 +397,62 @@ pub fn read_styles(root: &El, theme: &Theme) -> Styles {
             protections.push(format.child("protection").map(read_protection));
         }
     }
-    Styles { formats, font_ids, fill_ids, aligns, border_ids, protections, fonts, fills, borders, dxfs }
+    // The **base formats** of the named styles: the look of each
+    // named style, in the order the file holds them.
+    let mut style_formats: Vec<String> = Vec::new();
+    let mut style_font_ids: Vec<u32> = Vec::new();
+    let mut style_aligns: Vec<Option<Alignment>> = Vec::new();
+    let mut style_protections: Vec<Option<Protection>> = Vec::new();
+    if let Some(cells) = root.child("cellStyleXfs") {
+        for format in cells.kids("xf") {
+            let id = format.attr_u32("numFmtId").unwrap_or(0);
+            let code = custom
+                .iter()
+                .find(|(number, _)| *number == id)
+                .map(|(_, code)| code.clone())
+                .or_else(|| builtin_format(id).map(|code| code.to_string()))
+                .unwrap_or_else(|| GENERAL.to_string());
+            style_formats.push(code);
+            style_font_ids.push(format.attr_u32("fontId").unwrap_or(0));
+            style_aligns.push(format.child("alignment").map(read_alignment));
+            style_protections.push(format.child("protection").map(read_protection));
+        }
+    }
+    // The **named styles**: the styles the file names, each with the
+    // look of the base format it points at.
+    let mut named: Vec<NamedStyle> = Vec::new();
+    if let Some(styles) = root.child("cellStyles") {
+        for style in styles.kids("cellStyle") {
+            let Some(name) = style.attr("name") else { continue };
+            let index = style.attr_u32("xfId").unwrap_or(0) as usize;
+            let format = style_formats.get(index).cloned().filter(|code| !code.eq_ignore_ascii_case(GENERAL));
+            let font = style_font_ids
+                .get(index)
+                .copied()
+                .map(|number| number as usize)
+                .and_then(|number| fonts.get(number))
+                .cloned();
+            let align = style_aligns.get(index).and_then(|align| align.clone());
+            let locked = style_protections
+                .get(index)
+                .and_then(|protection| protection.as_ref())
+                .map(|protection| protection.locked);
+            named.push(NamedStyle { name: name.to_string(), format, font, align, locked });
+        }
+    }
+    Styles {
+        formats,
+        font_ids,
+        fill_ids,
+        aligns,
+        border_ids,
+        protections,
+        fonts,
+        fills,
+        borders,
+        dxfs,
+        named,
+    }
 }
 
 /// Read a **differential format**: the look of a rule that is about a

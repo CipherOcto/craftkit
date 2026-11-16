@@ -191,6 +191,30 @@ commands! {
                     unread_passwords += 1;
                 }
             }
+            // The **named styles** of the workbook: the styles the file
+            // names, each with the look it carries.
+            let mut styles: Vec<Json> = Vec::new();
+            let mut unread_style_aligns = 0u64;
+            for style in &workbook.named_styles {
+                let mut entry = craftkit_sdk::serde_json::Map::new();
+                entry.insert("name".to_string(), json!(style.name));
+                entry.insert(
+                    "format".to_string(),
+                    json!(style.format.clone().unwrap_or_else(|| "general".to_string())),
+                );
+                entry.insert("locked".to_string(), json!(style.locked));
+                match style.align.as_ref().map(align_of) {
+                    Some(Some(align)) => {
+                        entry.insert("align".to_string(), align);
+                    }
+                    Some(None) => unread_style_aligns += 1,
+                    None => {}
+                }
+                if let Some(font) = style.font.as_ref() {
+                    entry.insert("font".to_string(), font_of(font));
+                }
+                styles.push(Json::Object(entry));
+            }
             // The **workbook** itself.
             let workbook_id = session.document_mut()?.add_node_with_under(
                 None,
@@ -200,7 +224,7 @@ commands! {
                 json!({
                     "date_system": system.name(),
                     "custom_lists": Vec::<String>::new(),
-                    "styles": Vec::<String>::new(),
+                    "styles": styles,
                     "properties": properties_to_json(&workbook.properties),
                     "theme": theme_to_json(&workbook.theme),
                     "protection": protection,
@@ -1221,6 +1245,11 @@ commands! {
                     "; {unread_filters} filter(s) could not be read and were not imported"
                 ));
             }
+            if unread_style_aligns > 0 {
+                summary.push_str(&format!(
+                    "; {unread_style_aligns} style alignment(s) could not be read and were not imported"
+                ));
+            }
             if unread_aligns > 0 {
                 summary.push_str(&format!(
                     "; {unread_aligns} alignment(s) could not be read and were not imported"
@@ -1294,6 +1323,7 @@ commands! {
                 "marks": marks,
                 "unread_edit_ranges": unread_edit_ranges,
                 "unread_range_names": unread_range_names,
+                "unread_style_aligns": unread_style_aligns,
                 "breaks": breaks,
                 "sparklines": imported_sparklines,
                 "unread_sparklines": unread_sparklines,

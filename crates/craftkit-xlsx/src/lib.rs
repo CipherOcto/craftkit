@@ -1179,6 +1179,8 @@ pub struct Workbook {
     /// The **protection** of the workbook: what the file locks, when
     /// it locks something.
     pub protection: Option<WorkbookProtection>,
+    /// The **named styles** of the workbook: the styles the file names.
+    pub named_styles: Vec<crate::styles::NamedStyle>,
     /// The **warnings**: what could not be read, and what was kept
     /// instead.
     ///
@@ -1274,6 +1276,8 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
     let theme = read_theme_of(&mut package, &workbook_rels);
     workbook.theme = theme.clone();
     let styles = read_styles_of(&mut package, &workbook_rels, &mut workbook.warnings, &theme);
+    // The **named styles** of the workbook: the styles the file names.
+    workbook.named_styles = styles.named_styles().to_vec();
 
     let sheet_elements = workbook_xml
         .child("sheets")
