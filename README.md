@@ -4427,6 +4427,7 @@ so.
 | a **range of cells is given a border** | **built.** The preset says which edges of which cells get the line — all of them, the outside, the inside, or one edge on its own (§979) | §979 |
 | a **cell may be given the sum of the numbers above it** | **built.** The run of numbers above a cell, or beside it, is summed into it as a formula (§980) | §980 |
 | a **range may be pasted as its values** | **built.** The formulas are dropped and what they give is pasted, computed where the formula was (§981) | §981 |
+| the **region of a cell** | **built.** The block of filled cells a cell is in is found and given, and it is derived and not stored (§982) | §982 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55967,7 +55968,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 232 |
+| grid | 233 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63968,3 +63969,61 @@ behind.
   is pasted is the value the formula gives.
 - **The tree does not transpose**: the cells land where they are told
   to land.
+
+## 982. The region of a cell
+
+A table of data is a **region**: a block of cells that hold something,
+and the empty cells around it are not part of it.
+
+### What was built
+
+- A new command: **`grid.cell.region`**.
+- A cell is **filled** when it holds a value or a formula, and an
+  empty cell is not part of any region.
+- The region **grows** while the line next to it holds something: the
+  row above and the row below, and then the column to the left and the
+  column to the right, and so on until nothing more grows.
+- The line next to the region is read **with its diagonals**: a row
+  that holds something one column further out still grows the region,
+  and that is what makes a region a block and not a cross.
+- A cell that holds nothing is a region of **one cell**: itself.
+- The region never leaves the **sheet**: a sheet has so many rows and
+  so many columns.
+- The region is **derived** from the cells that hold something, and it
+  is not stored: the command reads and does not write.
+
+### What the port found
+
+- **The reference's region is the selection's region**, and it is
+  found from the cell that is picked. Here the **cell is named** and
+  the sheet it is in is named: a command says what it acts on.
+- **The reference reads the cell as filled when it holds a value or a
+  formula**, and so does this tree — and a cell that holds only a
+  format is not filled here, because a format is not a value.
+- **The reference's region is a selection**, and a selection is a
+  thing a person drags. Here the region is a **range that is given
+  back**: a program asks what is around a cell and gets an area, and
+  nothing is selected.
+
+### What it cost
+
+- **One new module** (`src/regions.rs`) and **one new command**
+  (`grid.cell.region`). The grid battery now carries **233** commands.
+- **One rule that was already there**: the cells of a sheet and the
+  addresses they have; the region is read out of them and nothing is
+  written.
+- **Five tests** (`tests/regions.rs`): the block of filled cells, a
+  cell that holds nothing, the region that stops at the empty cells, a
+  cell that holds a formula, and the region that grows.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree finds the region and does not select it**: the reference
+  moves the selection to the region, and here nothing is selected.
+- **The tree reads the region of one cell**: the reference reads the
+  region of the selection and of the cell that is picked, and the tree
+  has no selection to speak of.
+- **The tree does not count the spilled cells of a formula**: the
+  reference counts a cell that a formula spills into as filled, and
+  this tree has no spill.
