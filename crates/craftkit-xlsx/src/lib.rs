@@ -1158,6 +1158,9 @@ pub struct Workbook {
     /// The **theme** of the workbook: the colours and the fonts it
     /// names its cells by.
     pub theme: Theme,
+    /// The **protection** of the workbook: what the file locks, when
+    /// it locks something.
+    pub protection: Option<WorkbookProtection>,
     /// The **warnings**: what could not be read, and what was kept
     /// instead.
     ///
@@ -1165,6 +1168,20 @@ pub struct Workbook {
     /// says what it had to leave out rather than refusing the whole
     /// file.
     pub warnings: Vec<String>,
+}
+
+/// The **protection** of a workbook: what the file locks.
+///
+/// The **password** is not kept: the tree's protection says what is
+/// protected and nothing more, and a file's password is a hash of a
+/// word nobody has.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct WorkbookProtection {
+    /// Whether the **structure** of the workbook is locked: its sheets
+    /// may not be added, taken away, renamed or moved.
+    pub structure: bool,
+    /// Whether the file names a **password** for the protection.
+    pub password: bool,
 }
 
 /// Read a workbook file.
@@ -1205,6 +1222,16 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
         && properties.flag("date1904", false)
     {
         workbook.system = DateSystem::Y1904;
+    }
+
+    // The **protection** of the workbook: what the file locks.
+    if let Some(protection) = workbook_xml.child("workbookProtection") {
+        workbook.protection = Some(WorkbookProtection {
+            structure: protection.flag("lockStructure", false),
+            password: ["workbookPassword", "workbookHashValue", "workbookAlgorithmName"]
+                .iter()
+                .any(|name| protection.attr(name).is_some()),
+        });
     }
 
     let sheet_names: Vec<String> = workbook_xml

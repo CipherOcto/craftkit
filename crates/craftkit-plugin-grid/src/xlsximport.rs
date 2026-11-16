@@ -178,6 +178,19 @@ commands! {
                 craftkit_xlsx::DateSystem::Y1900 => crate::dates::System::Y1900,
                 craftkit_xlsx::DateSystem::Y1904 => crate::dates::System::Y1904,
             };
+            // The **protection** of the workbook: what the file locks.
+            // The tree's protection has no password, so a password the
+            // file names is not carried, and it is counted.
+            let mut protection = json!({ "structure": false });
+            let mut unread_passwords = 0u64;
+            if let Some(locked) = &workbook.protection {
+                if locked.structure {
+                    protection = json!({ "structure": true });
+                }
+                if locked.password {
+                    unread_passwords += 1;
+                }
+            }
             // The **workbook** itself.
             let workbook_id = session.document_mut()?.add_node_with_under(
                 None,
@@ -190,6 +203,7 @@ commands! {
                     "styles": Vec::<String>::new(),
                     "properties": properties_to_json(&workbook.properties),
                     "theme": theme_to_json(&workbook.theme),
+                    "protection": protection,
                 }),
             );
             // The **sheets**: one for each sheet of the file, in the
@@ -1188,6 +1202,11 @@ commands! {
                     "; {unread_prints} printing(s) could not be read and were not imported"
                 ));
             }
+            if unread_passwords > 0 {
+                summary.push_str(&format!(
+                    "; {unread_passwords} password(s) could not be kept: the tree's protection has none"
+                ));
+            }
             if unread_headers > 0 {
                 summary.push_str(&format!(
                     "; {unread_headers} header(s) or footer(s) could not be printed and were not imported"
@@ -1219,6 +1238,7 @@ commands! {
                 "prints": printed,
                 "unread_prints": unread_prints,
                 "unread_headers": unread_headers,
+                "unread_passwords": unread_passwords,
                 "outlines": outlines,
                 "setups": setups,
                 "centred": centred,

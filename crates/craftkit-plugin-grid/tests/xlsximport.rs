@@ -867,6 +867,39 @@ fn the_printing_of_a_sheet_is_imported() {
     assert_eq!(node.data["title_columns"][1].as_u64(), Some(1), "and the second");
 }
 
+/// The **protection** of a workbook is imported: a file that locks its
+/// structure has a workbook whose structure is locked, and its sheets
+/// may not be renamed.
+#[test]
+fn the_protection_of_a_workbook_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><workbookProtection workbookPassword="83AF" lockStructure="1"/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["unread_passwords"].as_u64(), Some(1), "the password was not carried");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let error = session
+        .execute("grid.sheet.rename", &json!({ "sheet": sheet, "name": "Two" }))
+        .expect_err("the sheet may not be renamed");
+    assert!(error.to_string().contains("protected"), "the error says so: {error}");
+}
+
 /// The **centre** of a sheet on the page is imported: a file that
 /// centres its sheet has a sheet that is centred.
 #[test]

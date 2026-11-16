@@ -547,6 +547,53 @@ fn a_sheet_with_no_default_size_has_none() {
     assert_eq!(sheet.default_height, None, "and the rows have no default height");
 }
 
+/// The **protection** of a workbook is read: the structure of it may
+/// be locked, and the file may name a password for it.
+#[test]
+fn the_protection_of_a_workbook_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><workbookProtection workbookPassword="83AF" lockStructure="1"/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let protection = workbook.protection.as_ref().expect("the workbook is protected");
+    assert!(protection.structure, "the structure is locked");
+    assert!(protection.password, "and the file names a password for it");
+}
+
+/// A workbook that says nothing about its **protection** has none.
+#[test]
+fn a_workbook_with_no_protection_has_none() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.protection, None, "the workbook is not protected");
+}
+
 /// The **options** of the print of a sheet are read: the marks it
 /// prints and where the sheet sits on the page.
 #[test]
