@@ -4400,6 +4400,7 @@ so.
 | the **walk** between the **comments** | **built.** The next comment of a sheet is the one after a cell, and the walk goes round (§952) | §952 |
 | the chart that reads its range **the other way round** | **built.** A chart may read its range by rows — the first row holds the categories and the rows after it are the series (§953) | §953 |
 | the **statistics** of a range | **built.** The count, the sum, the average, the smallest and the largest of a range are read in one call (§954) | §954 |
+| the **invalid cells** of a sheet | **built.** The cells that hold something and do not pass the rule that is over them are found and named (§955) | §955 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55940,7 +55941,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 212 |
+| grid | 214 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62385,3 +62386,53 @@ How much is in a range, read in one call.
 - **The statistics do not spread**: there is no median, no variance and
   no quartiles here — the tree's report of a range (§946) has them, and
   it is a report and not a reading.
+
+## 955. The invalid cells of a sheet
+
+The cells that hold something and do not pass the rule that is over them.
+
+### What was built
+
+- A new command, **`grid.validation.invalid`**: the **cells** of a
+  sheet that hold something and do not pass the **validation rules**
+  that are over them.
+- The check is the **tree's own**: the cell is read as a user would
+  type it, and the rule that is over it is the rule that is judged.
+- A cell that holds **nothing** is never invalid — there is nothing to
+  pass — and a cell that has **no rule** over it is never invalid
+  either.
+- The rules are read from the sheet, and **every** rule is read: a
+  sheet may hold several rules over several ranges, and each of them is
+  judged.
+
+### What the port found
+
+- **The reference circles the invalid cells**, and the tree **names
+  them**: the tree's canvas is a model and not a drawing (§953), and a
+  command that says which cells are wrong is a command that a program
+  can use — a circle is a picture of an answer, and the answer is the
+  answer.
+- **The reference works on the active sheet**, and the tree's **names**
+  the sheet: the tree has no active sheet, because a program says what
+  it wants (§954).
+- **The reference caps the walk at a hundred thousand cells**, and so
+  does the tree's — a rule over a whole sheet is a rule over a whole
+  sheet, and a program that asks for more is told so.
+
+### What it cost
+
+- **One command**: the grid battery now carries **213** commands.
+- **Two tests**: the invalid cells of a sheet, and the empty cell that
+  is not invalid.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The rules are the tree's own**: a rule of the reference is a rule
+  the tree may not have, and a rule of the tree is a rule the
+  reference may not have — the cells that are found are the cells that
+  the tree's rules forbid.
+- **A cell is checked once per rule that is over it**: a cell under two
+  rules that both forbid it is named once, because the answer is the
+  set of the cells that do not pass.
+
