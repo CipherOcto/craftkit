@@ -4423,6 +4423,7 @@ so.
 | the **text of a column, cut at fixed widths** | **built.** The text of a column is cut at the widths that are given, and the parts are written beside it (§975) | §975 |
 | the **parts of a text, separated by more than one delimiter** | **built.** The parts of a text may be separated by a set of delimiters, and each character of the set is one of them (§976) | §976 |
 | the **look of a cell, copied to other cells** | **built.** The look of one cell — its format, its font, its alignment, its fill and its borders — is written onto the cells of a range (§977) | §977 |
+| the **notes of a sheet become comments** | **built.** Every note of a sheet becomes the first comment of its cell, and the note is taken away (§978) | §978 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55963,7 +55964,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 229 |
+| grid | 230 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63709,3 +63710,60 @@ is often a cell that is written like it.
 - **The tree copies onto the cells it is given**: the heights of rows
   and the widths of columns are not part of a look, and they stay as
   they are.
+
+## 978. The notes of a sheet become comments
+
+A note is the yellow box in the corner of a cell; a comment is a
+thread in the margin of it. A workbook written in one may be read in
+the other.
+
+### What was built
+
+- A new command: **`grid.note.convert`**.
+- Every **note** of the sheet becomes the **first comment** of its
+  cell: the text and the author are kept.
+- The note is **taken away**: a cell carries the one or the other, and
+  that is the tree's own rule.
+- The **replies** and the **resolved** flag of a comment that is
+  already there stay: that is the tree's own rule for writing a
+  comment on a cell that has one.
+- A sheet with **no notes** is refused: there is nothing to convert,
+  and a command that quietly does nothing is a command that answers a
+  question nobody asked.
+
+### What the port found
+
+- **The reference converts the notes of the whole workbook**, and it
+  says how many it converted. Here the **sheet** is named, as every
+  command of this tree names the sheet it acts on: the tree's
+  commands always say where they are.
+- **The reference's note and its comment are two kinds of the same
+  thing** — a note is an old comment, and converting it makes it a
+  thread. Here the two are **different things** in different places:
+  the note is one text and the comment is a thread with replies and a
+  resolved flag. A note becomes the *first* comment of the cell and
+  the thread starts there.
+- **The reference's conversion is undone by one undo**, and it is
+  counted when there is nothing to convert. Here a sheet with no
+  notes is **refused** by name, which is the tree's rule for a
+  command that would otherwise do nothing.
+
+### What it cost
+
+- **One command** in a module that was already there
+  (`src/notes.rs`): the grid battery now carries **230** commands.
+- **One rule that was already there**: a cell carries a note or a
+  comment and not both, and the note goes when the comment comes.
+- **Three tests** (`tests/notes.rs`): the notes converted, a sheet
+  with no notes, and the comments that are there left alone.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree converts a sheet and not a workbook**: the reference
+  converts every note of the workbook at once, and here the sheet is
+  named.
+- **The tree does not keep the note**: a note that is converted is
+  gone, and the comment that replaces it is not the note.
+- **The tree does not convert a comment into a note**: the reference
+  has no such thing either, and here nothing is added to it.
