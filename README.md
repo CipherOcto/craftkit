@@ -4434,6 +4434,7 @@ so.
 | the **borders of the copied cells are pasted with them** | **built.** A border is part of the look of a cell, and the look is pasted with it (§986) | §986 |
 | a **range may be pasted as its formats** | **built.** The look of the copied cells is written onto the cells they land on, and what those cells hold is not touched (§987) | §987 |
 | the **comment of a copied cell is pasted with it** | **built.** The comment and the note travel with the cell they are on, and a paste of the values does not carry them (§988) | §988 |
+| a **style may be made from the look of a cell** | **built.** The format, the font and the alignment of the cell become a style of the workbook, and the lock is not taken (§989) | §989 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55974,7 +55975,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 235 |
+| grid | 236 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -64384,3 +64385,60 @@ the cell it is on.
 - **The tree does not paste the hyperlinks**: they are facts of a
   cell and not of its look, and the reference's kinds that carry them
   are not here.
+
+## 989. A style may be made from the look of a cell
+
+A cell that is shown a certain way is often shown that way in many
+places, and a **named style** is the name of that way.
+
+### What was built
+
+- A new command: **`grid.style.from`**.
+- The style takes the **format**, the **font** and the **alignment**
+  of the cell — the three the look has and the style carries.
+- The look is the one the cell is **shown** with: the cell's own, and
+  the style the cell names when it has none of its own.
+- The **lock** is not taken: a lock is the sheet's protection and not
+  a look.
+- A cell that is **not there** is refused: there is no look to take.
+- A style that is **already there** is refused: the tree's rule for
+  making a style.
+- The style is the **workbook's**, as every style of this tree is.
+
+### What the port found
+
+- **The reference's new cell style is made from the cell that is
+  picked**, and it takes the whole style of it — the number format,
+  the font, the fill, the border, the alignment and the protection.
+  Here the style takes the **three things the tree's style carries**
+  (§970): the format, the font and the alignment. The fill and the
+  borders are facts of the sheet beside the cells and not part of a
+  style, and the protection is the sheet's.
+- **The reference's style is made from the cell as it is shown**,
+  with the style of the cell filling in what the cell does not say of
+  its own, and so does this tree.
+- **The reference replaces a style of the same name** when it makes
+  one. Here a style that is already there is **refused**: the tree's
+  rule for making a style, and a name that names two different looks
+  is a name nobody can trust.
+
+### What it cost
+
+- **One command** in a module that was already there (`src/styles.rs`):
+  the grid battery now carries **236** commands.
+- **One rule that was already there**: the rule of the look of a cell
+  (§977) and the rule of the style of a workbook (§970).
+- **Four tests** (`tests/stylefrom.rs`): the style that takes the
+  format, the font and the alignment, the style made from a cell that
+  names a style, a cell that is not there, and a style that is
+  already there.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's style carries no fill and no borders**: they are facts
+  of the sheet beside the cells, and a style is the workbook's.
+- **The tree does not replace a style of the same name**: it refuses,
+  and the refusal is by name.
+- **The tree does not make a style from a range of cells**: a style is
+  the look of a cell, and a range has no look of its own.
