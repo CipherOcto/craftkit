@@ -126,7 +126,7 @@ pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
                 "--all-targets",
                 "--all-features",
                 "--profile",
-                "ci",
+                crate::profile(),
                 "--",
                 "-D",
                 "clippy::all",
@@ -150,7 +150,7 @@ pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
                     "--all-targets",
                     "--all-features",
                     "--profile",
-                    "ci",
+                    crate::profile(),
                     "--",
                     "-D",
                     "clippy::all",
@@ -228,7 +228,7 @@ fn build_the_shared_libraries(root: &Path, packages: &[Package]) -> Result<(), S
         return Ok(());
     }
     names.sort_unstable();
-    let mut args: Vec<&str> = vec!["build", "--profile", "ci"];
+    let mut args: Vec<&str> = vec!["build", "--profile", crate::profile()];
     for name in &names {
         args.push("--package");
         args.push(name);
@@ -253,7 +253,7 @@ pub fn test_package(root: &Path, package: &Package) -> Result<(), String> {
         &[
             "test",
             "--profile",
-            "ci",
+            crate::profile(),
             "--package",
             &package.name,
             // The batteries are optional features, and a test that is behind a
@@ -296,7 +296,10 @@ pub fn test_package(root: &Path, package: &Package) -> Result<(), String> {
         }
     }
     if package.has_lib {
-        cargo(&["test", "--profile", "ci", "--package", &package.name, "--all-features", "--doc"], root)?;
+        cargo(
+            &["test", "--profile", crate::profile(), "--package", &package.name, "--all-features", "--doc"],
+            root,
+        )?;
     }
     Ok(())
 }
@@ -374,9 +377,7 @@ pub fn summary(elapsed_secs: f64, ran: &[&str], skipped: &[&str]) -> String {
 /// a breakage — so the report says what was left out, by name.
 pub fn choose_scope(args: &[String]) -> crate::verify::Scope {
     let all = args.iter().any(|a| a == "--all");
-    let on_a_build_machine = std::env::var("CI").map(|v| !v.is_empty()).unwrap_or(false)
-        || std::env::var("GITHUB_ACTIONS").map(|v| !v.is_empty()).unwrap_or(false);
-    choose_scope_in(all, on_a_build_machine)
+    choose_scope_in(all, crate::on_a_build_machine())
 }
 
 /// The scope, from the two facts that decide it.

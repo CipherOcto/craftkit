@@ -581,6 +581,48 @@ impl Capture {
     }
 }
 
+/// The **profile** the gate builds with.
+///
+/// **One decision, and not a constant.** Cargo keeps a separate copy of
+/// every artefact for every profile, and a custom profile keeps its
+/// artefacts in a directory of its own: `--profile ci` writes to
+/// `target/ci/`, and the working build writes to `target/debug/`. So a
+/// tree with two profiles in use keeps **two copies of the whole tree**
+/// on the disk — and on a machine that is shared, that is not a detail,
+/// it is the difference between a gate that runs and a gate that stops
+/// with "no space left on device".
+///
+/// **So the profile follows the machine.** On a desk the gate builds
+/// with the **`dev`** profile: the same profile the working build uses,
+/// in the same directory, sharing one cache. On a **build machine** it
+/// builds with the **`ci`** profile, which is the same tree built for
+/// speed: debug assertions off, because they are slow and, in a
+/// graphics context, sometimes wrong.
+///
+/// **What that costs locally, and it is little.** The local gate runs
+/// with debug assertions **on** — which is stricter than the build
+/// machine's, and so never a worse check — and with the artefacts of
+/// the working build, which are the ones the tree is written against.
+/// The one thing the local gate no longer does is build a second copy
+/// of the tree, and that copy was never a check.
+///
+/// **Set `CI=1` to be the build machine.** That is the same switch the
+/// scope of a run reads, and it is the way to reproduce a build
+/// machine's run on a desk.
+pub fn profile() -> &'static str {
+    if on_a_build_machine() { "ci" } else { "dev" }
+}
+
+/// Whether this machine is a **build machine**.
+///
+/// **The environment decides, and not the tree.** `CI` is what the
+/// build machines set, and `GITHUB_ACTIONS` is what the workflow sets:
+/// one of them is enough, and a desk that has neither is a desk.
+pub fn on_a_build_machine() -> bool {
+    std::env::var("CI").map(|value| !value.is_empty()).unwrap_or(false)
+        || std::env::var("GITHUB_ACTIONS").map(|value| !value.is_empty()).unwrap_or(false)
+}
+
 /// Run a cargo subcommand and fail with its output if it fails.
 pub fn cargo(args: &[&str], dir: &Path) -> Result<(), String> {
     // `nice -n 15` so a gate run on a shared machine yields to real work. It

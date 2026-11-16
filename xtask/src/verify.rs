@@ -277,7 +277,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
                 "--all-targets",
                 "--all-features",
                 "--profile",
-                "ci",
+                crate::profile(),
                 "--",
                 "-D",
                 "clippy::all",
@@ -331,7 +331,7 @@ fn build_the_shared_libraries(root: &Path, packages: &[&Package]) -> Result<(), 
         return Ok(());
     }
     names.sort_unstable();
-    let mut args: Vec<&str> = vec!["build", "--profile", "ci"];
+    let mut args: Vec<&str> = vec!["build", "--profile", crate::profile()];
     for name in &names {
         args.push("--package");
         args.push(name);

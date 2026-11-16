@@ -195,11 +195,25 @@ dbg_macro = "warn"
 todo = "warn"
 
 [profile.dev]
+# The **working** profile: what a developer builds with, and — since §957 —
+# what the gate builds with on a desk, so that the gate and the working
+# build share **one** set of artefacts.
+#
+# `debug = "line-tables-only"` is the `ci` profile's setting, and it is here
+# for the same reason it is there: a tree with a hundred test binaries keeps
+# a copy of every one of them, and full debug info in each of them is the
+# difference between one directory of artefacts and two. Line tables are
+# kept, so a panic still says the file and the line.
 opt-level = 1
+debug = "line-tables-only"
 
 # The `ci` profile exists so the test suite is fast without going to full
 # release, and with debug assertions off (they are slow and, in a graphics
 # context, sometimes wrong) but overflow checks on.
+#
+# **It is the build machine's profile, and only that.** A desk builds with
+# `dev` — the profile the working build uses, in the same directory — so a
+# desk keeps one copy of the tree's artefacts and not two. §957.
 [profile.ci]
 inherits = "dev"
 opt-level = 1

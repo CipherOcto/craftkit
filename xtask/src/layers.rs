@@ -642,7 +642,7 @@ pub fn wasm_packages() -> Vec<&'static str> {
 /// `wasm32-unknown-unknown`.
 pub fn check_wasm(root: &Path) -> Result<(), String> {
     let packages = wasm_packages();
-    let mut args: Vec<&str> = vec!["check", "--target", wasm::TARGET, "--profile", "ci"];
+    let mut args: Vec<&str> = vec!["check", "--target", wasm::TARGET, "--profile", crate::profile()];
     args.extend(packages.iter().flat_map(|name| ["-p", name]));
     cargo(&args, root)
 }
