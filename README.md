@@ -4432,6 +4432,7 @@ so.
 | the **range a pivot reads may be changed** | **built.** A field follows its name into the new range, a field that is not there is taken away, and the summary is derived (§984) | §984 |
 | a **range may be pasted transposed** | **built.** The rows of the clipboard become the columns of the block, the formulas move with their cells, and a cell may not land off the sheet (§985) | §985 |
 | the **borders of the copied cells are pasted with them** | **built.** A border is part of the look of a cell, and the look is pasted with it (§986) | §986 |
+| a **range may be pasted as its formats** | **built.** The look of the copied cells is written onto the cells they land on, and what those cells hold is not touched (§987) | §987 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64267,3 +64268,61 @@ pasted with the cell.
   the tree's borders are of cells, and a row has a million of them.
 - **The tree does not paste the look of the range as a whole**: the
   look is of cells, one by one.
+
+## 987. A range may be pasted as its formats
+
+A table of numbers may be shown in the look of another table, without
+the numbers moving.
+
+### What was built
+
+- The command **`grid.range.paste`** takes a **`formats`** now: the
+  **look** of the copied cells — the format, the font, the alignment,
+  the fill and the borders — is written onto the cells they land on,
+  and what those cells hold is **not touched**.
+- A paste of the formats is **not refused** over a cell that holds
+  something: the contents of the cell are not written over, and that
+  is the rule of a paste of formats.
+- The **style** a cell names and the **lock** it is under are not part
+  of the look, and they stay as they are: a style is the workbook's and
+  a lock is the sheet's protection.
+- A paste of the formats and a paste of the **values** (§981) are two
+  different pastes, and a paste is one of them: naming both is
+  refused by name.
+
+### What the port found
+
+- **The reference's paste of formats is one of the eleven kinds of its
+  paste special**, and the kinds are named in one list. Here a paste
+  is one command and what it does is named in the call: `values`,
+  `formats`, `transpose`.
+- **The reference's paste of formats writes the whole style of the
+  cell**, and the style holds the number format, the font, the fill,
+  the border, the alignment and the protection. Here the **look** is
+  the five things §977 named, and the protection is not part of it: a
+  paste of formats does not unlock a cell.
+- **The reference's paste of formats over a cell that holds something
+  is allowed**, and so is this tree's: what the cell holds is not
+  written over, and so there is nothing to refuse.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` takes the
+  formats, and the grid battery carries **235** commands.
+- **One rule that was already there**: the rule that a look is the
+  format, the font, the alignment, the fill and the borders (§977).
+- **Three tests** (`tests/clipboard.rs`): the look written and the
+  contents kept, the formats and the values refused together, and the
+  borders written.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree pastes the formats of the cells and not of the range**:
+  there is no format of a range here, for the tree's formats are of
+  cells.
+- **The tree does not paste the style a cell names**: a style is the
+  workbook's, and it carries a lock with it.
+- **The tree does not paste the validation, the comments or the
+  hyperlinks**: those are facts of a cell and not its look, and the
+  reference's kinds that carry them are not here.
