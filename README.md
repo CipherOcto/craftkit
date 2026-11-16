@@ -4417,6 +4417,7 @@ so.
 | the **edit ranges** of a file | **built.** The ranges that stay editable while a sheet is protected are read, and a cell in one of them may be changed (§969) | §969 |
 | the **named styles** of a file | **built.** The styles a file names are read with their look, and a cell may be given one of them (§970) | §970 |
 | the **palette** of a file | **built.** The colours a file names by their number are the file's own, and a file that names none has the format's (§971) | §971 |
+| the **export** of a sheet as an HTML page | **built.** A sheet is written as a table with the look of the sheet, and the text is given and not written to a file (§972) | §972 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55957,7 +55958,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 224 |
+| grid | 225 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63343,3 +63344,68 @@ The colours a file names by their number.
 - **The tree does not read a palette from anywhere else**: the palette
   lives in the styles part, and a file that has no styles part has the
   tree's palette.
+
+## 972. A sheet is exported as an HTML page
+
+The sheet as a page of a web.
+
+### What was built
+
+- A new command: **`grid.export.html`**.
+- A page is a **table**: a row of the sheet is a row of the table and
+  a cell is a cell of it, written as it is **shown** — the tree's own
+  rule of the CSV (§557).
+- The page carries the **look** of the sheet: the bold of a cell, the
+  colour of its text, the colour behind it and the way its text lies. A
+  **number** is written to the right and the **text** to the left,
+  unless the cell says otherwise.
+- A **merged cell** spans its region, and the cells it covers are not
+  written at all. A **hidden row** is not written either.
+- The **marks of HTML** in a cell's text are escaped: a page is HTML
+  and not text.
+- A sheet that is read **right to left** says so, and the text of a
+  cell in a right-to-left language follows its first strong character.
+- The text is **given** and not written to a file: the writing is the
+  caller's business, as it is for the CSV.
+- A sheet that is **too tall** or **too wide** for a page is
+  **refused**: the tree refuses and does not cut a page short.
+
+### What the port found
+
+- **The reference writes the file and the tree gives the text.** The
+  reference's export is a "save as a web page": it names a path and
+  writes a file there. Here the export is a **query**: it gives the
+  text of the page, and the writing is the caller's business — the
+  tree's own rule of the CSV (§557), and a command of the tree never
+  reaches outside the program.
+- **The reference draws the pictures and the charts over the table**,
+  as inline SVG, and gives the table the sheet's own widths when it
+  does. Here the page is the **table alone**.
+- **The reference's page is one long line** and the look of its cell
+  is the look of the cell's **style**. Here the page is line by line,
+  and the look of a cell is the cell's own, or the style's when the
+  cell names none — the tree's own rules.
+
+### What it cost
+
+- **One command**: the grid battery now carries **225** commands.
+- **One rule that was already there**: a cell is written as it is
+  shown — the tree's own rule of the CSV (§557) — and it is now the
+  rule of the page as well.
+- **Nine tests**: the sheet that is a table, the marks that are
+  escaped, the look of the sheet, the number that is written to the
+  right, the merged cell that spans its region, the hidden row that is
+  not written, the sheet that holds nothing, the node that is not a
+  sheet, and the page that is given.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The page is the table alone**: a picture or a chart of the sheet is
+  not drawn beside it, and the page has no column widths of its own —
+  the browser finds them.
+- **The tree does not write the file**: the page is given and the
+  writing is the caller's business, exactly as the CSV is.
+- **The bounds are the tree's own**: a page of more than a hundred
+  thousand rows is refused, and so is a page of more than four million
+  cells.
