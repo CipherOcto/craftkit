@@ -867,6 +867,40 @@ fn the_printing_of_a_sheet_is_imported() {
     assert_eq!(node.data["title_columns"][1].as_u64(), Some(1), "and the second");
 }
 
+/// The **centre** of a sheet on the page is imported: a file that
+/// centres its sheet has a sheet that is centred.
+#[test]
+fn the_centre_of_a_sheet_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><printOptions horizontalCentered="1" verticalCentered="1"/><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["centred"].as_u64(), Some(1), "the sheet was centred");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["print_centred"]["horizontal"].as_bool(), Some(true), "sideways");
+    assert_eq!(node.data["print_centred"]["vertical"].as_bool(), Some(true), "and down the page");
+}
+
 /// The **header** and the **footer** of a file are imported: the texts
 /// of the odd, the even and the first pages.
 #[test]

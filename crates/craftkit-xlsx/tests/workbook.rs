@@ -547,6 +547,37 @@ fn a_sheet_with_no_default_size_has_none() {
     assert_eq!(sheet.default_height, None, "and the rows have no default height");
 }
 
+/// The **options** of the print of a sheet are read: the marks it
+/// prints and where the sheet sits on the page.
+#[test]
+fn the_options_of_a_print_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><printOptions gridLines="1" headings="1" horizontalCentered="1" verticalCentered="0"/><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    let options = sheet.print_options.as_ref().expect("the sheet has the options of its print");
+    assert!(options.gridlines, "the gridlines are printed");
+    assert!(options.headings, "the headings are printed");
+    assert!(options.centred_horizontally, "the sheet is centred sideways");
+    assert!(!options.centred_vertically, "and not down the page");
+}
+
 /// The **header** and the **footer** of the pages of a sheet are read:
 /// the texts of the odd, the even and the first pages.
 #[test]

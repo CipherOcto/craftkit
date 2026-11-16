@@ -151,6 +151,37 @@ fn a_margin_that_is_not_a_margin_is_refused() {
     assert!(message.contains("a margin is a number between zero"), "the refusal says why: {message}");
 }
 
+/// The sheet may be **centred** on the page, and the setup says so.
+#[test]
+fn the_sheet_may_be_centred_on_the_page() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    assert_eq!(setup_of(&mut session, sheet)["centred"]["horizontal"], json!(false), "not centred");
+    session
+        .execute("grid.print.centre", &json!({ "sheet": sheet, "horizontal": true }))
+        .expect("the sheet is centred");
+    let setup = setup_of(&mut session, sheet);
+    assert_eq!(setup["centred"]["horizontal"], json!(true), "the sheet is centred sideways");
+    assert_eq!(setup["centred"]["vertical"], json!(false), "and not down the page");
+}
+
+/// The centring may be **taken away**: a sheet that is not centred is
+/// in the corner of the page.
+#[test]
+fn the_centring_may_be_taken_away() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    session
+        .execute("grid.print.centre", &json!({ "sheet": sheet, "horizontal": true, "vertical": true }))
+        .expect("the sheet is centred");
+    session
+        .execute("grid.print.centre", &json!({ "sheet": sheet, "horizontal": false }))
+        .expect("the sheet is not centred");
+    let setup = setup_of(&mut session, sheet);
+    assert_eq!(setup["centred"]["horizontal"], json!(false), "the sheet is not centred sideways");
+    assert_eq!(setup["centred"]["vertical"], json!(true), "and it is still centred down the page");
+}
+
 /// **The pages are derived: a sheet that is wider than the paper is
 /// two pages.**
 #[test]

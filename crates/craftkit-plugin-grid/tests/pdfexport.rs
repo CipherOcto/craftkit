@@ -226,6 +226,63 @@ fn the_headings_of_the_sheet_are_drawn() {
     assert!(find(&with, b"(1) Tj").is_some(), "the number of the row is drawn");
 }
 
+/// The **place** of a piece of text in the bytes of the file: the x
+/// and the y it is drawn at.
+fn place_of(bytes: &[u8], needle: &[u8]) -> Option<(f64, f64)> {
+    let at = find(bytes, needle)?;
+    let before = &bytes[..at];
+    // The **matrix** of the text is the last `Tm` before it.
+    let window_start = at.saturating_sub(400);
+    let window = &before[window_start..];
+    let matrix = window.windows(2).rposition(|pair| pair == b"Tm")? + window_start;
+    let line = &before[..matrix];
+    let start = line.iter().rposition(|byte| *byte == b'\n').map(|index| index + 1).unwrap_or(0);
+    let numbers: Vec<f64> = std::str::from_utf8(&line[start..])
+        .ok()?
+        .split_whitespace()
+        .filter_map(|number| number.parse().ok())
+        .collect();
+    if numbers.len() < 6 {
+        return None;
+    }
+    Some((numbers[4], numbers[5]))
+}
+
+/// A **centred** sheet is drawn in the middle of the page, and not in
+/// the corner of it.
+#[test]
+fn a_centred_sheet_is_drawn_in_the_middle() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (without, _) = exported(&mut session, sheet);
+    let corner = place_of(&without, b"(ann) Tj").expect("the text is drawn");
+    session
+        .execute("grid.print.centre", &json!({ "sheet": sheet, "horizontal": true }))
+        .expect("the sheet is centred");
+    let (with, _) = exported(&mut session, sheet);
+    let middle = place_of(&with, b"(ann) Tj").expect("the text is drawn");
+    assert!(middle.0 > corner.0, "the sheet moved to the right: {corner:?} then {middle:?}");
+}
+
+/// A sheet that is centred **down** the page is drawn lower than one
+/// that is not.
+#[test]
+fn a_centred_sheet_is_drawn_lower() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("ann"));
+    let (without, _) = exported(&mut session, sheet);
+    let corner = place_of(&without, b"(ann) Tj").expect("the text is drawn");
+    session
+        .execute("grid.print.centre", &json!({ "sheet": sheet, "vertical": true }))
+        .expect("the sheet is centred");
+    let (with, _) = exported(&mut session, sheet);
+    let middle = place_of(&with, b"(ann) Tj").expect("the text is drawn");
+    // The page is measured from the top, and the PDF from the bottom.
+    assert!(middle.1 < corner.1, "the sheet moved down the page: {corner:?} then {middle:?}");
+}
+
 /// A **link** to a web address is drawn over its cell.
 #[test]
 fn a_link_to_a_web_address_is_drawn() {

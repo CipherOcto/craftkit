@@ -1033,6 +1033,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§965",
     },
+    Port {
+        rule: "the centre of a sheet on the page",
+        from: "gridcraft/crates/engine/src/cmd/print.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/printing.rs",
+        command: "grid.print.centre",
+        test: "crates/craftkit-plugin-grid/tests/printing.rs",
+        section: "§966",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

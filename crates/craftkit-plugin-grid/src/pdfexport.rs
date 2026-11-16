@@ -666,8 +666,6 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
     let scale = pages.scale;
     let name = node.name.clone();
     let margins = setup.margins;
-    let origin_x = margins[0] + pages.heading_room.0;
-    let origin_y = margins[2] + pages.heading_room.1;
     // The **rows** and the **columns** of the page: the titles first,
     // and then the band of the page.
     let (band_rows, band_columns) = band;
@@ -676,6 +674,25 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
     rows.extend(band_rows.0..=band_rows.1);
     let mut columns: Vec<u32> = title_columns.clone();
     columns.extend(band_columns.0..=band_columns.1);
+    // The **size** of the block of the page: the columns of it and the
+    // rows of it, at the scale the sheet prints at.
+    let block_width: f64 =
+        columns.iter().map(|column| crate::printing::column_width(node, *column) * scale).sum();
+    let block_height: f64 = rows.iter().map(|row| crate::printing::row_height(node, *row) * scale).sum();
+    // The **centre**: a centred sheet sits in the middle of what the
+    // margins leave, and the room that is left over is shared on both
+    // sides.
+    let (printable_width, printable_height) = setup.printable();
+    let (centred_x, centred_y) = pages.centred;
+    let shift_x =
+        if centred_x { ((printable_width - pages.heading_room.0 - block_width) / 2.0).max(0.0) } else { 0.0 };
+    let shift_y = if centred_y {
+        ((printable_height - pages.heading_room.1 - block_height) / 2.0).max(0.0)
+    } else {
+        0.0
+    };
+    let origin_x = margins[0] + pages.heading_room.0 + shift_x;
+    let origin_y = margins[2] + pages.heading_room.1 + shift_y;
     // The place of each of them on the page.
     let mut xs: Vec<f64> = Vec::with_capacity(columns.len());
     let mut x = origin_x;
@@ -689,8 +706,6 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
         ys.push(y);
         y += crate::printing::row_height(node, *row) * scale;
     }
-    let block_width = x - origin_x;
-    let block_height = y - origin_y;
     // The **gridlines**, when the sheet says they are printed.
     if pages.gridlines {
         let width = (0.35 * scale).clamp(0.1, 0.5) as f32;
@@ -741,8 +756,8 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             columns: &columns,
             xs: &xs,
             ys: &ys,
-            left: margins[0],
-            top: margins[2],
+            left: origin_x - pages.heading_room.0,
+            top: origin_y - pages.heading_room.1,
         };
         draw_headings(page, &places);
     }

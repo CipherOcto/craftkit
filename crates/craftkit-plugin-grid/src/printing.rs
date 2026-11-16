@@ -43,7 +43,7 @@ use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
 use crate::formula::Area;
 
@@ -339,6 +339,9 @@ pub(crate) struct Pages {
     pub gridlines: bool,
     /// Whether the **headings** are printed.
     pub headings: bool,
+    /// Whether the sheet is **centred** on the page: sideways, and down
+    /// it.
+    pub centred: (bool, bool),
 }
 
 /// The **pages** of a sheet, worked out.
@@ -412,7 +415,22 @@ pub(crate) fn pages_of(
         heading_room,
         gridlines: crate::marks::gridlines_of(node),
         headings: crate::marks::headings_of(node),
+        centred: centred_of(node),
     }))
+}
+
+/// Whether the sheet is **centred** on the page: sideways, and down
+/// it.
+///
+/// A sheet that says nothing is in the corner, and that is the tree's
+/// own: the page is printed from the margin, and the room that is left
+/// over is left over.
+pub(crate) fn centred_of(node: &Node) -> (bool, bool) {
+    let centred = node.data.get("print_centred");
+    let read = |name: &str| {
+        centred.and_then(|centred| centred.get(name)).and_then(|flag| flag.as_bool()).unwrap_or(false)
+    };
+    (read("horizontal"), read("vertical"))
 }
 
 /// The **bands** of a set of lines: the lines that go on one page.
@@ -593,6 +611,48 @@ commands! {
         }
     }
 
+    /// **Centre** the sheet on the page, or do not.
+    ///
+    /// A centred sheet sits in the middle of what the margins leave:
+    /// the room that is left over is shared on both sides, and the
+    /// sheet is in the middle of it. The headings go with it.
+    grid.print.centre {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
+            sheet: NodeRef,
+            /// Whether the sheet is centred **sideways**.
+            horizontal: Option<Bool>,
+            /// Whether the sheet is centred **down** the page.
+            vertical: Option<Bool>,
+        },
+        run: {
+            let id = "grid.print.centre".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let (mut horizontal, mut vertical) = centred_of(&node);
+            if let Some(flag) = self.horizontal {
+                horizontal = flag.0;
+            }
+            if let Some(flag) = self.vertical {
+                vertical = flag.0;
+            }
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["print_centred"] = json!({ "horizontal": horizontal, "vertical": vertical });
+            }
+            Ok(Outcome::changed("the sheet is centred on the page".to_string()).with_data(json!({
+                "sheet": sheet,
+                "horizontal": horizontal,
+                "vertical": vertical,
+            })))
+
+        }
+    }
+
     /// **Read** the setup of a sheet.
     grid.print.read {
         area: "grid",
@@ -631,6 +691,10 @@ commands! {
                 "footer": crate::headers::to_json(&node)["footer"].clone(),
                 "gridlines": crate::marks::gridlines_of(&node),
                 "headings": crate::marks::headings_of(&node),
+                "centred": {
+                    "horizontal": centred_of(&node).0,
+                    "vertical": centred_of(&node).1,
+                },
                 "page": { "width": page_width, "height": page_height },
                 "printable": { "width": printable_width, "height": printable_height },
                 "area": area_of(&node).map(|area| json!(area.to_text())).unwrap_or(Json::Null),

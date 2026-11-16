@@ -216,6 +216,7 @@ commands! {
             let mut printed = 0u64;
             let mut unread_prints = 0u64;
             let mut unread_headers = 0u64;
+            let mut centred = 0u64;
             let mut outlines = 0u64;
             let mut setups = 0u64;
             let mut breaks = 0u64;
@@ -659,6 +660,17 @@ commands! {
                 if let Some(print) = &sheet.print {
                     data["print"] = print_setup(print, &mut unread_setups).to_json();
                     setups += 1;
+                }
+                // The **centre** of the sheet on the page: where the
+                // file says the sheet sits.
+                if let Some(options) = &sheet.print_options
+                    && (options.centred_horizontally || options.centred_vertically)
+                {
+                    data["print_centred"] = json!({
+                        "horizontal": options.centred_horizontally,
+                        "vertical": options.centred_vertically,
+                    });
+                    centred += 1;
                 }
                 // The **header** and the **footer** of the pages: the
                 // texts of the odd, the even and the first pages. A
@@ -1209,6 +1221,7 @@ commands! {
                 "unread_headers": unread_headers,
                 "outlines": outlines,
                 "setups": setups,
+                "centred": centred,
                 "breaks": breaks,
                 "sparklines": imported_sparklines,
                 "unread_sparklines": unread_sparklines,

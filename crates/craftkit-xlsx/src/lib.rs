@@ -300,6 +300,9 @@ pub struct Sheet {
     /// The **header** and the **footer** of the pages of the sheet,
     /// when the file says them.
     pub header_footer: Option<HeaderFooter>,
+    /// The **options** of the print: the marks it prints and where the
+    /// sheet sits on the page.
+    pub print_options: Option<PrintOptions>,
     /// The **breaks** of the printing: the lines a page begins at, by
     /// the file's own numbering.
     ///
@@ -739,6 +742,26 @@ pub struct Print {
     pub fit: Option<(u32, u32)>,
     /// Whether the sheet prints to **fit** rather than at a scale.
     pub fit_to_page: bool,
+}
+
+/// The **options** of the print of a sheet.
+///
+/// The **marks** are the gridlines and the headings, and the
+/// **centring** is where the sheet sits on the page: in the middle of
+/// it, sideways, down it, or both.
+///
+/// A file that says nothing has the marks off and the sheet in the
+/// corner, and that is not carried: the flags are the file's own.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PrintOptions {
+    /// Whether the **gridlines** are printed.
+    pub gridlines: bool,
+    /// Whether the **headings** are printed.
+    pub headings: bool,
+    /// Whether the sheet is centred **sideways** on the page.
+    pub centred_horizontally: bool,
+    /// Whether the sheet is centred **down** the page.
+    pub centred_vertically: bool,
 }
 
 /// The **header** and the **footer** of the pages of a sheet.
@@ -1452,6 +1475,9 @@ fn read_sheet(
     sheet.print = read_print(&root);
     // The **header** and the **footer** of the pages of the sheet.
     sheet.header_footer = read_header_footer(&root);
+    // The **options** of the print: the marks it prints, and where the
+    // sheet sits on the page.
+    sheet.print_options = read_print_options(&root);
     // The **breaks** of the printing: the lines a page begins at.
     sheet.breaks = read_breaks(&root);
     // The **sparklines** of the sheet: the little drawings in its
@@ -1941,6 +1967,21 @@ fn read_print(root: &craftkit_xml::El) -> Option<Print> {
         .map(|properties| properties.flag("fitToPage", false))
         .unwrap_or(false);
     Some(print)
+}
+
+/// Read the **options** of the print of a sheet: the marks it prints
+/// and where the sheet sits on the page.
+///
+/// A file that says nothing about them has the marks off and the sheet
+/// in the corner, and that is not carried.
+fn read_print_options(root: &craftkit_xml::El) -> Option<PrintOptions> {
+    let element = root.child("printOptions")?;
+    Some(PrintOptions {
+        gridlines: element.flag("gridLines", false),
+        headings: element.flag("headings", false),
+        centred_horizontally: element.flag("horizontalCentered", false),
+        centred_vertically: element.flag("verticalCentered", false),
+    })
 }
 
 /// Read the **header** and the **footer** of the pages of a sheet.
