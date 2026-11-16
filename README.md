@@ -4411,6 +4411,7 @@ so.
 | the **clipboard** of a workbook | **built.** Cells may be copied, cut and pasted, and a pasted formula is shifted so that it still names what it named (§963) | §963 |
 | the **default size** of a sheet | **built.** A sheet has a default width and a default height, a column that has no width of its own has the sheet's, and a file that says one is read (§964) | §964 |
 | the **header** and the **footer** of a file | **built.** The six texts of a file are read and printed, and one the tree cannot print is counted and left out (§965) | §965 |
+| the **centre** of a sheet on the page | **built.** A sheet may be centred sideways and down the page, and a file that centres its sheet has a sheet that is centred (§966) | §966 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55951,7 +55952,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 223 |
+| grid | 224 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63040,3 +63041,58 @@ The text above the page and the text below it, as the file says them.
   time or the name of the file in it is not imported, and the import
   says how many were left out. A program that wants them may set a
   header of its own.
+
+## 966. A sheet may be centred on the page
+
+The sheet in the middle of the paper, and not in the corner of it.
+
+### What was built
+
+- A new command: **`grid.print.centre`**.
+- A **centred sheet** sits in the middle of what the margins leave: the
+  room that is left over is shared on both sides, and the **headings**
+  go with it.
+- The **centring is two facts** — sideways and down the page — and each
+  may be set or taken away on its own. A sheet that says nothing is in
+  the corner, and that is the tree's own.
+- A **file that centres its sheet** has a sheet that is centred: the
+  file's own flags are read and carried.
+- The **setup says where the sheet sits**: `grid.print.read` reports
+  the centring beside the paper, the margins and the marks.
+
+### What the port found
+
+- **The tree centres the content of the sheet and knows nothing of the
+  headings.** Here the block of a page — the headings and the cells
+  together — is what is centred, because the headings are the tree's
+  own and they take their room with them.
+- **The reference has one command for the whole setup of a print** —
+  the paper, the orientation, the margins, the scale, the fit, the
+  centring, the marks, the header and the footer — and it takes them
+  all as one parameter object. Here there is a command for each: the
+  tree's command is a struct whose fields are its parameters, and a
+  command is one behaviour.
+- **The reference's file reader reads the flags of the print** and
+  keeps them; here the flags of the print are read too, and the ones
+  the tree has words for are carried.
+
+### What it cost
+
+- **One command**: the grid battery now carries **224** commands.
+- **One rule that was already there**: the page of a sheet is laid out
+  from its margin, and the block of it is placed on the page — the
+  tree's own — and the centring is where that block sits.
+- **Seven tests**: the sheet that is centred, the centring that is
+  taken away, the sheet that is drawn in the middle, the sheet that is
+  drawn lower, the options of a print that are read, and the centre of
+  a sheet that is imported.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree centres the block and the reference centres the cells**:
+  a sheet with headings is centred a little differently here, because
+  the headings are the tree's own and they are part of what is centred.
+- **The tree does not print a sheet that is bigger than the page in
+  the middle of it**: the room that is left over is never negative,
+  and a sheet that does not fit is in the corner.
