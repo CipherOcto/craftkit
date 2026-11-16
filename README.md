@@ -4408,6 +4408,7 @@ so.
 | the **moving** of a **block** of columns | **built.** As many columns as the count says move together, and the columns between them shift by as many (§960) | §960 |
 | the **inserting** and the **deleting** of **cells** | **built.** A range of cells may be inserted or deleted, and the cells beside it move within the band (§961) | §961 |
 | a **cell** pushed **off** the sheet | **built.** The inserting of cells refuses when a cell would be pushed off the sheet, and a cell may not be lost (§962) | §962 |
+| the **clipboard** of a workbook | **built.** Cells may be copied, cut and pasted, and a pasted formula is shifted so that it still names what it named (§963) | §963 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55948,7 +55949,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 218 |
+| grid | 221 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62852,3 +62853,61 @@ The refusal that §961 named and did not yet write.
   are the same thing here, and both are refused — but the tree does
   not count them, and the answer of the refusal does not say how many
   cells would have been lost.
+
+## 963. The clipboard of a workbook
+
+The cells that were copied, waiting to be pasted somewhere else.
+
+### What was built
+
+- Three new commands: **`grid.range.copy`**, **`grid.range.cut`** and
+  **`grid.range.paste`**.
+- The clipboard is the **workbook's**, and not the sheet's: cells may
+  be copied from one sheet and pasted into another, and that is what a
+  spreadsheet does.
+- A pasted formula keeps its **shape**: a **relative** reference moves
+  with the cell it names, and an **absolute** one stays where it is. So
+  a formula that says `=A1` in the cell `B2` says `=C4` in the cell
+  `D5`, and a formula that says `=$A$1` still says `=$A$1`.
+- The cells that are pasted keep their **format**, their **font** and
+  their **alignment**: a cell is more than its value.
+- A paste over cells that hold something is **refused**, unless the
+  paste is told to **overwrite**; and a workbook with nothing copied has
+  nothing to paste, and says so.
+
+### What the port found
+
+- **The reference's clipboard is the system's**: it holds text and
+  HTML, and it talks to the machine's clipboard. The tree's clipboard
+  is the **document's** — the tree's commands never open a dialog and
+  never reach outside the program, and a program that copies a range
+  wants the cells and not a flavour of text.
+- **The reference's paste has a `pasteSpecial`** with its own
+  parameters; the tree has one paste and one `overwrite`, because a
+  command is a struct whose fields are its parameters, and the tree's
+  fill (§963's neighbour) already carries the modes a paste would.
+- **The reference's cut takes the cells away** and so does the tree's —
+  and the tree's cut is a copy and a taking-away, which is what the
+  reference's is.
+
+### What it cost
+
+- **Three commands**: the grid battery now carries **221** commands.
+- **One rule that was already there**: the shifting of a formula by a
+  distance — the tree's `shift_in_formula`, which the fill of §946
+  already used — and it is now the rule of the paste.
+- **Six tests**: the cells that are copied and pasted, the formula that
+  is shifted, the cells that are cut, the clipboard of the workbook, the
+  paste that is refused, and the clipboard that is empty.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's clipboard holds the cells and nothing else**: there is
+  no text flavour and no HTML flavour, and a program that wants the
+  text of a range asks the cells for it (§946's rule, and the tree's
+  own since the beginning).
+- **A paste does not move the cells it covers out of the way**: it
+  refuses them, and the `overwrite` says they may go. Excel asks, and
+  the tree asks nothing — the tree's rule is that a program says what
+  it wants (§946).
