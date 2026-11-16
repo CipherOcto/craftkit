@@ -63,7 +63,7 @@ pub fn split(text: &str, delimiter: char, qualifier: char, treat_consecutive: bo
 
 /// The **value** a part holds: a number if the text is one, and a text
 /// if it is not.
-fn value_of(part: &str) -> Value {
+pub(crate) fn value_of(part: &str) -> Value {
     if part.is_empty() {
         return Value::Empty;
     }

@@ -1114,6 +1114,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/formulaevaluate.rs",
         section: "§974",
     },
+    Port {
+        rule: "the text of a column, cut at fixed widths",
+        from: "gridcraft/crates/engine/src/cmd/data/tools.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/textwidths.rs",
+        command: "grid.text.widths",
+        test: "crates/craftkit-plugin-grid/tests/textwidths.rs",
+        section: "§975",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

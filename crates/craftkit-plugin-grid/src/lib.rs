@@ -493,6 +493,7 @@ mod textcolumns;
 mod texts;
 mod textsection;
 mod textvalue;
+mod textwidths;
 mod trace;
 mod trendlines;
 mod trigonometry;
