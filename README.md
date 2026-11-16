@@ -4404,6 +4404,7 @@ so.
 | the **properties** of a workbook | **built.** The title, the subject, the author, the keywords, the description and the company of a workbook are read from the file and may be set (§956) | §956 |
 | the **one directory** of artefacts | **built.** The gate builds with the working build's profile on a desk, so the tree's artefacts are kept once and not twice (§957) | §957 |
 | the **moving** of a column | **built.** A column may be taken out of where it is and put before another one, and every fact that named it goes with it (§958) | §958 |
+| the **theme** of a workbook | **built.** The twelve colours and the two fonts a file names its cells by are read, and a cell that names one is coloured with it (§959) | §959 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55944,7 +55945,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 215 |
+| grid | 216 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62623,3 +62624,64 @@ A column may be taken out of where it is and put somewhere else.
   cell moves, and a reference names a cell. This is the tree's rule and
   not the reference's, and it is a difference the reader may want to
   argue with.
+
+## 959. The theme of a workbook
+
+The colours and the fonts a file names its cells by.
+
+### What was built
+
+- The **XLSX reader** reads the file's **theme**: the part that says
+  what the colours are. The theme holds **twelve colours** — the two
+  lights, the two darks, the six accents, the link and the followed
+  link — and **two fonts**, the **major** one and the **minor** one.
+- A cell that names a colour **by the theme** is now **coloured with
+  it**: the colour of a cell is not the name of a colour, and a file
+  that writes `theme="4"` writes the colour the theme holds.
+- A **tint** is the file's way of saying that a colour is lighter or
+  darker than the colour it names, and it is applied: the rule is the
+  rule of **ECMA-376**, which moves the **luminance** of the colour
+  and leaves its hue and its saturation alone.
+- A cell whose font names a **scheme** takes the name of the theme's
+  font — the file does not say what the face is, and the theme does.
+- The **battery** carries the theme as a fact of the workbook, and a
+  new command, **`grid.workbook.theme`**, reads it.
+
+### What the port found
+
+- **The file's order of the colours is not the order a cell names
+  them by.** The file holds `dk1` before `lt1`, and the index of a
+  cell colour is `lt1, dk1, lt2, dk2, accent1 … accent6, hlink,
+  folHlink`. The tree keeps the **index** order, because the index is
+  what a cell names.
+- **A theme colour may be a system colour**: the file may say "the
+  colour of the window" and give the colour it was last time it was
+  drawn, and the tree reads the last one and falls back to the colour
+  of the window itself.
+- **The reference's theme is part of the model** — it is set, and it
+  is written back — and the tree's theme is **read only**: the tree
+  has no writer for a workbook (§956), so a theme it reads is a fact
+  and nothing more.
+
+### What it cost
+
+- **One module** in the reader (`craftkit-xlsx`), and the **styles**
+  reader now takes the theme, because a style may name a colour of it.
+- **One command**: the grid battery now carries **216** commands.
+- **Six tests**: the theme that is read, the workbook with no theme,
+  the cell that is coloured with the theme, the tint that moves the
+  luminance, the theme of a workbook that has none, and the node that
+  is not a workbook.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree has no theme of its own**: a workbook that is made in the
+  tree has no theme, and the colours of its cells are the colours the
+  tree names — and the tree has no word for a themed colour of its
+  own making.
+- **The script fonts of a theme are not read**: a theme names a face
+  for each script it covers, and the tree reads the **latin** face and
+  no other.
+- **The theme is not written back**: a workbook the tree exports — and
+  the tree has no writer yet — would lose it.
