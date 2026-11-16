@@ -4409,6 +4409,7 @@ so.
 | the **inserting** and the **deleting** of **cells** | **built.** A range of cells may be inserted or deleted, and the cells beside it move within the band (§961) | §961 |
 | a **cell** pushed **off** the sheet | **built.** The inserting of cells refuses when a cell would be pushed off the sheet, and a cell may not be lost (§962) | §962 |
 | the **clipboard** of a workbook | **built.** Cells may be copied, cut and pasted, and a pasted formula is shifted so that it still names what it named (§963) | §963 |
+| the **default size** of a sheet | **built.** A sheet has a default width and a default height, a column that has no width of its own has the sheet's, and a file that says one is read (§964) | §964 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55949,7 +55950,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 221 |
+| grid | 223 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -62911,3 +62912,71 @@ The cells that were copied, waiting to be pasted somewhere else.
   refuses them, and the `overwrite` says they may go. Excel asks, and
   the tree asks nothing — the tree's rule is that a program says what
   it wants (§946).
+
+## 964. A sheet has a default width and a default height
+
+The width of the columns that have no width of their own, and the height of the rows that have no height of their own.
+
+### What was built
+
+- Two new commands: **`grid.sheet.default.width`** and
+  **`grid.sheet.default.height`**.
+- A **column that has no width of its own** has the **sheet's** default
+  width, and a **row that has no height of its own** has the sheet's
+  default height. A column that has a width of its own keeps it.
+- The **file's** default size is read: the `sheetFormatPr` of a sheet
+  says how wide its columns are and how high its rows are, and both
+  are read into the sheet.
+- The **defaults of a sheet are said** when a workbook is read:
+  `grid.workbook.get` says the default width and the default height of
+  each of its sheets, and a sheet that has neither says nothing.
+- A default of **nothing** is refused: a column of no width is a
+  hidden column, and the hiding of one is not here.
+
+### What the port found
+
+- **The reference's width is a number of pixels and its command
+  clamps it** to what the format allows. Here a width is in
+  **characters** and a height is in **points** — the tree's own units
+  — and a size that is not a number is **refused**, because the tree
+  refuses and does not clamp.
+- **The reference's command sets the default width and not the default
+  height.** Here both are set, and each has its own command: a width
+  and a height are two facts, and the tree's rule is one command for
+  one behaviour.
+- **The reference's reader makes a default width out of
+  `baseColWidth`** when the file does not say one, with a formula of
+  its own in pixels. Here a file that says no default width has none:
+  what a file does not say is not a fact of the file.
+- **The file's own units are the tree's units here.** `defaultColWidth`
+  is in characters and `defaultRowHeight` is in points, which is what
+  the tree asks for; the reference's are in pixels and the reference
+  converts them.
+
+### What it cost
+
+- **Two commands**: the grid battery now carries **223** commands.
+- **One rule that was already there**: the text of a cell is written
+  in the width of the column it is in — the tree's own rule — and it
+  now takes the sheet's default width when the column has none.
+- **Twelve tests**: the default width and the default height that are
+  set, the sheet that has neither, the two defaults of nothing that
+  are refused, the node that is not a sheet, the column that has the
+  default width of its sheet, the column that keeps its own, the
+  defaults that are said, the default size that is read from a file,
+  and the file that says no default size.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not make a default width out of `baseColWidth`**: a
+  file that names only `baseColWidth` has no default width here, and
+  the tree's own width of eight and a half characters is the width of
+  the tree's renderer and not a fact of the file.
+- **A default may be set and changed, and not taken away**: the tree's
+  sizes are set — a row's height and a column's width are set the same
+  way — and a sheet that has never been given a default has none.
+- **The tree's default height is used where the tree draws and
+  prints**: a row that has no height of its own is as high as the
+  sheet's default height when a sheet is printed, and the tree's own
+  fifteen points when the sheet says nothing.
