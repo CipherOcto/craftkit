@@ -446,6 +446,7 @@ mod inserting;
 pub mod inventory;
 mod links;
 mod logic;
+mod lookcopy;
 mod lookups;
 mod marks;
 mod matrices;
