@@ -229,4 +229,75 @@ commands! {
 
         }
     }
+
+    /// **Convert** the notes of the sheet into comments.
+    ///
+    /// Every note becomes the **first comment** of its cell: the text and
+    /// the author are kept, and the note is taken away, because a cell
+    /// carries the one or the other.
+    ///
+    /// A sheet with **no notes** is refused: there is nothing to convert,
+    /// and a command that quietly does nothing is a command that answers
+    /// a question nobody asked.
+    grid.note.convert {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet whose notes are converted.
+            sheet: NodeRef,
+        },
+        run: {
+            let id = "grid.note.convert".to_string();
+            let sheet = self.sheet.0;
+            sheet_of(session, sheet, &id)?;
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut notes = notes_of(node);
+            if notes.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "there are no notes to convert".to_string(),
+                });
+            }
+            let mut comments = crate::comments::comments_of(node);
+            let mut converted: Vec<String> = Vec::new();
+            for (address, note) in notes.iter() {
+                // The **replies** and the **resolved** flag of a comment
+                // that is there stay: the tree's own rule for writing a
+                // comment on a cell that has one.
+                let held = comments.get(address);
+                let replies = held.map(|comment| comment.replies.clone()).unwrap_or_default();
+                let resolved = held.map(|comment| comment.resolved).unwrap_or(false);
+                comments.insert(
+                    address.clone(),
+                    crate::comments::Comment {
+                        text: note.text.clone(),
+                        author: note.author.clone(),
+                        replies,
+                        resolved,
+                    },
+                );
+                converted.push(address.clone());
+            }
+            node.data["comments"] = crate::comments::comments_into(&comments);
+            // The **notes** are taken away: a cell carries the one or the
+            // other.
+            notes.clear();
+            node.data["notes"] = notes_into(&notes);
+            Ok(Outcome::changed(format!("converted {} note(s) into comments", converted.len()))
+                .with_data(json!({
+                    "sheet": sheet,
+                    "converted": converted.len(),
+                    "cells": converted,
+                })))
+
+        }
+    }
 }

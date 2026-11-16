@@ -1141,6 +1141,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/lookcopy.rs",
         section: "§977",
     },
+    Port {
+        rule: "the notes of a sheet become comments",
+        from: "gridcraft/crates/engine/src/cmd/review.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/notes.rs",
+        command: "grid.note.convert",
+        test: "crates/craftkit-plugin-grid/tests/notes.rs",
+        section: "§978",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

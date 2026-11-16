@@ -179,3 +179,62 @@ fn a_node_that_is_not_a_sheet_is_refused() {
         .expect_err("it is refused");
     assert!(error.to_string().contains("there is no sheet"), "and there is none: {error}");
 }
+
+/// The **comment** on a cell, as the answer holds it.
+fn comment_of(session: &mut Session, sheet: u64, cell: &str) -> Json {
+    let outcome = session
+        .execute("grid.cell.comment.get", &json!({ "sheet": sheet, "cell": cell }))
+        .expect("the comment is read");
+    outcome.data["comment"].clone()
+}
+
+/// The notes of a sheet become **comments**.
+#[test]
+fn the_notes_of_a_sheet_become_comments() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute(
+            "grid.cell.note.set",
+            &json!({ "sheet": sheet, "cell": "A1", "text": "check this", "author": "ada" }),
+        )
+        .expect("the note is written");
+    session
+        .execute("grid.cell.note.set", &json!({ "sheet": sheet, "cell": "B1", "text": "and this" }))
+        .expect("the note is written");
+    let outcome =
+        session.execute("grid.note.convert", &json!({ "sheet": sheet })).expect("the notes are converted");
+    assert_eq!(outcome.data["converted"], json!(2), "two notes are converted");
+    let comment = comment_of(&mut session, sheet, "A1");
+    assert_eq!(comment["text"], json!("check this"), "the text of the note is the comment");
+    assert_eq!(comment["author"], json!("ada"), "and so is its author");
+    let note = note_of(&mut session, sheet, "A1");
+    assert_eq!(note, Json::Null, "the note is taken away");
+    let second = comment_of(&mut session, sheet, "B1");
+    assert_eq!(second["text"], json!("and this"), "the other note is a comment too");
+}
+
+/// A sheet with **no notes** is refused.
+#[test]
+fn a_sheet_with_no_notes_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let outcome = session.execute("grid.note.convert", &json!({ "sheet": sheet }));
+    assert!(outcome.is_err(), "there is nothing to convert");
+}
+
+/// The **comments** that are there stay as they are.
+#[test]
+fn the_comments_that_are_there_stay_as_they_are() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.cell.comment.set", &json!({ "sheet": sheet, "cell": "C1", "text": "a thread" }))
+        .expect("the comment is written");
+    session
+        .execute("grid.cell.note.set", &json!({ "sheet": sheet, "cell": "A1", "text": "check this" }))
+        .expect("the note is written");
+    session.execute("grid.note.convert", &json!({ "sheet": sheet })).expect("the notes are converted");
+    let comment = comment_of(&mut session, sheet, "C1");
+    assert_eq!(comment["text"], json!("a thread"), "the comment is still there");
+}
