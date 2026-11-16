@@ -4419,6 +4419,7 @@ so.
 | the **palette** of a file | **built.** The colours a file names by their number are the file's own, and a file that names none has the format's (§971) | §971 |
 | the **export** of a sheet as an HTML page | **built.** A sheet is written as a table with the look of the sheet, and the text is given and not written to a file (§972) | §972 |
 | the **evaluation** of a formula | **built.** A formula is worked out against the sheet as it is, its value is given back, and nothing is changed (§973) | §973 |
+| the **audit** of a formula | **built.** Every part of a formula and the value it gives are given, from the inside out, and nothing is changed (§974) | §974 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55959,7 +55960,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 226 |
+| grid | 227 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -63464,3 +63465,52 @@ The value of a formula, worked out against the sheet as it is.
 - **The tree does not choose a sheet for you**: a formula is read in
   the sheet that is named, and a program that wants the sheet that is
   showing must say which one it means.
+
+## 974. A formula may be audited
+
+The steps of an evaluation: every part of a formula and the value that
+part gives.
+
+### What was built
+
+- A new command: **`grid.formula.steps`**.
+- Every **step** of an audit is a part of the formula and the **value**
+  that part gives, and the steps come **from the inside out**: the
+  values first and the whole of it last.
+- The formula is not put in a cell and the sheet is not changed: an
+  audit **reads and does not write**.
+- The audit gives the **value of the whole** as well, so a program
+  need not ask twice.
+
+### What the port found
+
+- **The reference audits the cell that is picked**, and the formula of
+  that cell is the one it audits. Here the formula is **named** and
+  the sheet it is read in is named: a command says what it acts on.
+- **The reference's audit is the formula bar's**: it evaluates what
+  would happen if the formula were typed, and it gives the steps.
+  Here the formula is **parsed** first, exactly as it is when it is
+  put in a cell, and a formula the tree cannot read is refused
+  before anything is worked out.
+- **The reference prints each step with its own printer**, so the step
+  reads as the formula does. Here the tree's own printer does it — the
+  printer that writes a formula down twice — so a step reads as the
+  tree writes a formula.
+
+### What it cost
+
+- **One command**: the grid battery now carries **227** commands.
+- **One rule that was already there**: the tree's printer and the
+  tree's evaluator — the ones of every formula in every cell — and
+  they are now the rule of an audit as well.
+- **Three tests**: the formula that is audited, the sheet that is not
+  changed, and the formula that cannot be read.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree audits a formula and not a cell**: the reference audits
+  the formula of the cell that is picked, and here the formula is
+  named.
+- **The tree gives two hundred steps at most**: a chain longer than
+  that is cut short, and the tree's own bound is the tree's own.
