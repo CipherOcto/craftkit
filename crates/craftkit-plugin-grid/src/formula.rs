@@ -1577,7 +1577,7 @@ impl Font {
 }
 
 /// A cell: a value, or a formula.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Cell {
     /// The value, when the cell holds one.
     pub value: Option<Value>,

@@ -396,6 +396,7 @@ mod cellread;
 mod charts;
 mod checkboxes;
 mod clearing;
+mod clipboard;
 mod colours;
 mod columndeleting;
 mod columninserting;
@@ -518,6 +519,9 @@ pub use cellread::GridCellGet;
 pub use charts::{GridChartAdd, GridChartElement, GridChartRead, GridChartRemove, GridChartSet};
 pub use checkboxes::{GridCellCheckboxSet, GridCellCheckboxToggle};
 pub use clearing::{GridCellClearContents, GridCellClearFormat};
+pub use clipboard::GridRangeCopy;
+pub use clipboard::GridRangeCut;
+pub use clipboard::GridRangePaste;
 pub use colours::{GridCellFill, GridCellFontColour};
 pub use columndeleting::GridColumnDelete;
 pub use columninserting::GridColumnInsert;
@@ -539,7 +543,7 @@ use flash::GridFlashFill;
 pub use font::{GridCellFont, GridCellFontBold, GridCellFontItalic, GridCellFontStrike};
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 pub use formatdecimals::GridCellFormatDecimals;
-use formula::{Book, CellRef, Cells, Value};
+use formula::{Book, Cell, CellRef, Cells, Value};
 pub use formulavalues::GridFormulaValues;
 pub use goals::{GridGoal, GridGoalScan};
 pub use headers::{GridPrintFooter, GridPrintHeader};
@@ -804,73 +808,77 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
     };
     for (address, entry) in map {
         let Some(cell) = CellRef::parse(address) else { continue };
-        let formula = entry.get("formula").and_then(|formula| formula.as_str()).map(|text| text.to_string());
-        let value = entry.get("value").map(Value::from_json);
-        let format = entry.get("format").and_then(|format| format.as_str()).map(|text| text.to_string());
-        let style = entry.get("style").and_then(|style| style.as_str()).map(|text| text.to_string());
-        let align = entry.get("align").and_then(formula::Align::from_json);
-        let font = entry.get("font").and_then(formula::Font::from_json);
-        let locked = entry.get("locked").and_then(|locked| locked.as_bool());
-        let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
-        match (value, formula) {
-            (_, Some(formula)) => cells.set_formula(cell, formula),
-            (Some(value), None) => cells.set_value(cell, value),
-            (None, None) => {}
-        }
-        if let Some(format) = format {
-            cells.set_format(cell, Some(format));
-        }
-        if let Some(style) = style {
-            cells.set_style(cell, Some(style));
-        }
-        if let Some(align) = align {
-            cells.set_align(cell, Some(align));
-        }
-        if let Some(font) = font {
-            cells.set_font(cell, Some(font));
-        }
-        if let Some(locked) = locked {
-            cells.set_locked(cell, Some(locked));
-        }
-        if let Some(fill) = fill {
-            cells.set_fill(cell, Some(fill));
-        }
+        cells.set_entry(cell, cell_from(entry));
     }
     cells
+}
+
+/// A **cell**, from the entry the answer holds.
+pub(crate) fn cell_from(entry: &Json) -> Cell {
+    let formula = entry.get("formula").and_then(|formula| formula.as_str()).map(|text| text.to_string());
+    let value = entry.get("value").map(Value::from_json);
+    let format = entry.get("format").and_then(|format| format.as_str()).map(|text| text.to_string());
+    let style = entry.get("style").and_then(|style| style.as_str()).map(|text| text.to_string());
+    let align = entry.get("align").and_then(formula::Align::from_json);
+    let font = entry.get("font").and_then(formula::Font::from_json);
+    let locked = entry.get("locked").and_then(|locked| locked.as_bool());
+    let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
+    let mut cell = Cell::default();
+    match (value, formula) {
+        (_, Some(formula)) => cell.formula = Some(formula),
+        (Some(value), None) => cell.value = Some(value),
+        (None, None) => {}
+    }
+    cell.format = format;
+    cell.style = style;
+    cell.align = align;
+    cell.font = font;
+    cell.locked = locked;
+    cell.fill = fill;
+    cell
 }
 
 /// The cells of a sheet, into its payload.
 pub(crate) fn cells_into(cells: &Cells) -> Json {
     let mut map = serde_json::Map::new();
     for (cell, entry) in cells.iter() {
-        let mut one = serde_json::Map::new();
-        if let Some(formula) = &entry.formula {
-            one.insert("formula".to_string(), Json::String(formula.clone()));
-        }
-        if let Some(value) = &entry.value {
-            one.insert("value".to_string(), value.to_json());
-        }
-        if let Some(format) = &entry.format {
-            one.insert("format".to_string(), Json::String(format.clone()));
-        }
-        if let Some(style) = &entry.style {
-            one.insert("style".to_string(), Json::String(style.clone()));
-        }
-        if let Some(align) = entry.align {
-            one.insert("align".to_string(), align.to_json());
-        }
-        if let Some(font) = &entry.font {
-            one.insert("font".to_string(), font.to_json());
-        }
-        if let Some(locked) = entry.locked {
-            one.insert("locked".to_string(), Json::Bool(locked));
-        }
-        if let Some(fill) = &entry.fill {
-            one.insert("fill".to_string(), Json::String(fill.clone()));
-        }
-        map.insert(cell.to_text(), Json::Object(one));
+        map.insert(cell.to_text(), cell_into(entry));
     }
     Json::Object(map)
+}
+
+/// The **entry** of a cell, as the answer holds it.
+///
+/// A cell is more than its value: it holds a formula, a format, a
+/// style, an alignment, a font and a fill, and the entry is all of
+/// them.
+pub(crate) fn cell_into(entry: &Cell) -> Json {
+    let mut one = serde_json::Map::new();
+    if let Some(formula) = &entry.formula {
+        one.insert("formula".to_string(), Json::String(formula.clone()));
+    }
+    if let Some(value) = &entry.value {
+        one.insert("value".to_string(), value.to_json());
+    }
+    if let Some(format) = &entry.format {
+        one.insert("format".to_string(), Json::String(format.clone()));
+    }
+    if let Some(style) = &entry.style {
+        one.insert("style".to_string(), Json::String(style.clone()));
+    }
+    if let Some(align) = entry.align {
+        one.insert("align".to_string(), align.to_json());
+    }
+    if let Some(font) = &entry.font {
+        one.insert("font".to_string(), font.to_json());
+    }
+    if let Some(locked) = entry.locked {
+        one.insert("locked".to_string(), Json::Bool(locked));
+    }
+    if let Some(fill) = &entry.fill {
+        one.insert("fill".to_string(), Json::String(fill.clone()));
+    }
+    Json::Object(one)
 }
 
 /// The cell at an address, or the error that says there is no such cell.
