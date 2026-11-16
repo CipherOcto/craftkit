@@ -73,8 +73,17 @@ pub struct Border {
 
 /// The **borders** of a sheet: by the address of the cell they are on.
 pub fn borders_of(node: &Node) -> BTreeMap<String, BTreeMap<String, Border>> {
+    match node.data.get("borders") {
+        Some(borders) => borders_from(borders),
+        None => BTreeMap::new(),
+    }
+}
+
+/// The **borders** a value holds: by the address of the cell they are
+/// on.
+pub fn borders_from(value: &Json) -> BTreeMap<String, BTreeMap<String, Border>> {
     let mut borders = BTreeMap::new();
-    let Some(map) = node.data.get("borders").and_then(|borders| borders.as_object()) else {
+    let Some(map) = value.as_object() else {
         return borders;
     };
     for (address, edges) in map {

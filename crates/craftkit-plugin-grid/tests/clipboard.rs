@@ -301,3 +301,54 @@ fn a_paste_that_would_land_off_the_sheet_is_refused() {
         session.execute("grid.range.paste", &json!({ "sheet": sheet, "at": "A1048576", "transpose": true }));
     assert!(outcome.is_err(), "a cell may not be pushed off the sheet");
 }
+
+/// The **borders** of a cell, as the answer holds them.
+fn borders_of(session: &mut Session, sheet: u64, cell: &str) -> craftkit_sdk::serde_json::Value {
+    let outcome = session
+        .execute("grid.cell.border.get", &json!({ "sheet": sheet, "cell": cell }))
+        .expect("the borders are read");
+    outcome.data["borders"].clone()
+}
+
+/// The **borders** of the copied cells are pasted with them.
+#[test]
+fn the_borders_of_the_copied_cells_are_pasted_with_them() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute(
+            "grid.cell.border.set",
+            &json!({ "sheet": sheet, "cell": "A1", "edge": "top", "style": "thin" }),
+        )
+        .expect("the border is set");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session.execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1" })).expect("the cell is pasted");
+    let borders = borders_of(&mut session, sheet, "C1");
+    assert_eq!(borders["top"]["style"], json!("thin"), "the border of the first cell is on the second");
+}
+
+/// A cell that is pasted over **loses** the border it had.
+#[test]
+fn a_cell_that_is_pasted_over_loses_the_border_it_had() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    set_number(&mut session, sheet, "C1", 2.0);
+    session
+        .execute(
+            "grid.cell.border.set",
+            &json!({ "sheet": sheet, "cell": "C1", "edge": "top", "style": "thin" }),
+        )
+        .expect("the border is set");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "overwrite": true }))
+        .expect("the cell is pasted");
+    let borders = borders_of(&mut session, sheet, "C1");
+    assert_eq!(borders["top"], Json::Null, "the border of the cell that was there is gone");
+}

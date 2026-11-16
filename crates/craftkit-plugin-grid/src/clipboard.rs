@@ -27,7 +27,10 @@
 //! - a paste over cells that hold something is **refused**, unless the
 //!   paste is told to **overwrite**;
 //! - the cells that are pasted keep their **format**, their **font**
-//!   and their **alignment**: a cell is more than its value.
+//!   and their **alignment**: a cell is more than its value;
+//! - the **borders** of the copied cells are the borders of the cells
+//!   they land on: a border is part of the look of a cell, and the
+//!   look is pasted with it.
 //!
 //! And a paste may be a paste of **values**: the formulas are dropped
 //! and what they give is pasted instead. The value is computed in the
@@ -38,6 +41,8 @@
 //! the columns of the block, and the columns become the rows. A cell
 //! may not land **off the sheet** — a sheet has so many rows and so
 //! many columns.
+
+use std::collections::BTreeMap;
 
 use craftkit_derive::commands;
 
@@ -92,15 +97,30 @@ fn clipboard_sheet(node: &Node) -> Option<u64> {
 /// The cells are stored with the addresses they have, and the place
 /// they were copied from — so that a paste knows how far they have
 /// travelled.
-fn copy_into(node: &mut Node, sheet: u64, cells: &Cells, first: CellRef) {
+fn copy_into(
+    node: &mut Node,
+    sheet: u64,
+    cells: &Cells,
+    first: CellRef,
+    borders: &BTreeMap<String, BTreeMap<String, crate::borders::Border>>,
+) {
     let mut copied = craftkit_sdk::serde_json::Map::new();
     for (cell, entry) in cells.iter() {
         copied.insert(cell.to_text(), crate::cell_into(entry));
+    }
+    // The **borders** of the copied cells: a border is part of the look
+    // of a cell, and the look is pasted with it.
+    let mut held = BTreeMap::new();
+    for (address, edges) in borders {
+        if copied.contains_key(address) {
+            held.insert(address.clone(), edges.clone());
+        }
     }
     node.data["clipboard"] = json!({
         "sheet": sheet,
         "at": first.to_text(),
         "cells": Json::Object(copied),
+        "borders": crate::borders::borders_into(&held),
     });
 }
 
@@ -159,8 +179,9 @@ commands! {
                     message: format!("the sheet `{sheet}` is in no workbook"),
                 });
             };
+            let borders = crate::borders::borders_of(node);
             if let Some(node) = session.document_mut()?.node_mut(workbook) {
-                copy_into(node, sheet, &copied, area.start);
+                copy_into(node, sheet, &copied, area.start, &borders);
             }
             Ok(Outcome::changed(format!("{count} cell(s) of `{}` were copied", self.range.0))
                 .with_data(json!({
@@ -231,8 +252,9 @@ commands! {
                     message: format!("the sheet `{sheet}` is in no workbook"),
                 });
             };
+            let borders = crate::borders::borders_of(node);
             if let Some(node) = session.document_mut()?.node_mut(workbook) {
-                copy_into(node, sheet, &copied, area.start);
+                copy_into(node, sheet, &copied, area.start, &borders);
             }
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 node.data["cells"] = crate::cells_into(&taken);
@@ -418,11 +440,34 @@ commands! {
             for (cell, entry) in cells.iter() {
                 written.set_entry(cell, entry.clone());
             }
-            for (_, (row, col), entry) in pasted {
-                written.set_entry(CellRef { col, row }, entry);
+            // The **borders** of the copied cells are the borders of the
+            // cells they land on: a border is part of the look of a cell,
+            // and the look is pasted with it.
+            let borders = book
+                .data
+                .get("clipboard")
+                .and_then(|clipboard| clipboard.get("borders"))
+                .map(crate::borders::borders_from)
+                .unwrap_or_default();
+            for (_, (row, col), entry) in &pasted {
+                written.set_entry(CellRef { col: *col, row: *row }, entry.clone());
             }
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 node.data["cells"] = crate::cells_into(&written);
+                let mut sheet_borders = crate::borders::borders_of(node);
+                for (cell, (row, col), _) in &pasted {
+                    let address = CellRef { col: *col, row: *row }.to_text();
+                    let source = cell.to_text();
+                    match borders.get(&source) {
+                        Some(edges) => {
+                            sheet_borders.insert(address, edges.clone());
+                        }
+                        None => {
+                            sheet_borders.remove(&address);
+                        }
+                    }
+                }
+                node.data["borders"] = crate::borders::borders_into(&sheet_borders);
             }
             Ok(Outcome::changed(format!("{count} cell(s) were pasted at {}", at.to_text()))
                 .with_data(json!({
