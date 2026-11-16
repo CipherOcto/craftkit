@@ -4433,6 +4433,7 @@ so.
 | a **range may be pasted transposed** | **built.** The rows of the clipboard become the columns of the block, the formulas move with their cells, and a cell may not land off the sheet (§985) | §985 |
 | the **borders of the copied cells are pasted with them** | **built.** A border is part of the look of a cell, and the look is pasted with it (§986) | §986 |
 | a **range may be pasted as its formats** | **built.** The look of the copied cells is written onto the cells they land on, and what those cells hold is not touched (§987) | §987 |
+| the **comment of a copied cell is pasted with it** | **built.** The comment and the note travel with the cell they are on, and a paste of the values does not carry them (§988) | §988 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64326,3 +64327,60 @@ the numbers moving.
 - **The tree does not paste the validation, the comments or the
   hyperlinks**: those are facts of a cell and not its look, and the
   reference's kinds that carry them are not here.
+
+## 988. The comment of a copied cell is pasted with it
+
+A comment is a thread in the margin of a cell, and a thread belongs to
+the cell it is on.
+
+### What was built
+
+- The **comment** and the **note** of the copied cells are the comment
+  and the note of the cells they land on: a comment travels with the
+  cell it is on.
+- A cell that is pasted over **loses** the comment it had: the cell
+  that is pasted is the cell that was copied, and it holds what that
+  one holds.
+- A cell carries a comment **or** a note and not both: the tree's own
+  rule, and it holds here too.
+- A paste of the **values** (§981) and a paste of the **formats**
+  (§987) do **not** carry them: a comment is neither a value nor a
+  look.
+
+### What the port found
+
+- **The reference's comment lives in the cell**, and a copy carries it
+  without anybody thinking about it; the reference's paste special
+  also has a kind of its own for the comments. Here the comment is a
+  **fact of the sheet** kept beside the cells for the reason the notes
+  are (§ the note module) — a cell is a value, a formula, a format and
+  a style, and a comment is none of those four — so the clipboard has
+  to keep the comments **as comments**, and the paste has to write
+  them.
+- **The reference's paste of values does not carry the comments**, and
+  so does this tree: the values are the values, and a comment is not
+  one.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` carries
+  the comments and the notes, and the grid battery carries **235**
+  commands.
+- **One rule that was already there**: the rule that a cell carries a
+  note or a comment and not both, and the rule that a comment and a
+  note are facts of the sheet beside the cells.
+- **Four tests** (`tests/clipboard.rs`): the comment pasted, the note
+  pasted, the comment of the cell that was there gone, and a paste of
+  the values that carries no comment.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree pastes the comments of the cells and not of the range**:
+  a thread belongs to a cell, and a range has no thread of its own.
+- **The tree does not carry the replies of a thread across a
+  transpose**: a transposed paste carries the comment with the cell,
+  and the replies travel with the comment.
+- **The tree does not paste the hyperlinks**: they are facts of a
+  cell and not of its look, and the reference's kinds that carry them
+  are not here.
