@@ -4428,6 +4428,7 @@ so.
 | a **cell may be given the sum of the numbers above it** | **built.** The run of numbers above a cell, or beside it, is summed into it as a formula (§980) | §980 |
 | a **range may be pasted as its values** | **built.** The formulas are dropped and what they give is pasted, computed where the formula was (§981) | §981 |
 | the **region of a cell** | **built.** The block of filled cells a cell is in is found and given, and it is derived and not stored (§982) | §982 |
+| the **labels of a range make the names** | **built.** The labels of one edge of a range name the cells beside them, and a label that is not a name is skipped and reported (§983) | §983 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55968,7 +55969,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 233 |
+| grid | 234 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -64027,3 +64028,69 @@ and the empty cells around it are not part of it.
 - **The tree does not count the spilled cells of a formula**: the
   reference counts a cell that a formula spills into as filled, and
   this tree has no spill.
+
+## 983. The labels of a range make the names
+
+A table of numbers has a row of labels above it, and the labels are
+the names of the columns.
+
+### What was built
+
+- A new command: **`grid.name.from`**.
+- The **labels** of one **edge** of the range name the cells beside
+  them: the labels of the top row name the columns below them, the
+  labels of the bottom row the columns above them, and the labels of
+  the left column the rows beside them.
+- A label is a name by the **tree's rule for a name**, and a label
+  that is **not a name** is skipped and reported: the tree does not
+  clean a label into a name, because a cleaned label is a name the
+  tree made up.
+- A range with **no cells** beside the labels is refused: there is
+  nothing for the names to stand for.
+- An **edge** that is not one of the tree's is refused by name.
+- The names are the **workbook's** names, as every name of this tree
+  is, and they name a range in the sheet that is named — so a name
+  never moves.
+
+### What the port found
+
+- **The reference makes the names from the selection**, and it says
+  which edges to use: the top, the left, the bottom, the right. Here
+  the **range** and the **edge** are named, and only one edge at a
+  time: a command says what it acts on, and one edge is what it acts
+  on.
+- **The reference cleans the labels into names**: a label that is not
+  a name is rewritten — its marks become underscores — and the label
+  is used. Here a label that is not a name is **skipped and
+  reported**. The tree does not make up a name, and a name that the
+  tree made up is a name a person cannot find again.
+- **The reference's names may be on a sheet**, and it asks before it
+  replaces a name that is there. Here a name is the **workbook's**,
+  and a name that is there is replaced — the tree's rule for writing a
+  name (§ the name module) — and the answer says which names were
+  replaced.
+- **The reference's names are absolute** — `Sheet1!$A$2:$A$5` — and
+  so are the tree's: a name is a range in a sheet, and it is written
+  as it is.
+
+### What it cost
+
+- **One command** in a module that was already there (`src/names.rs`):
+  the grid battery now carries **234** commands.
+- **One rule that was already there**: the rule for a name — what a
+  name may hold and what it may not — and it is the rule that says
+  which labels are names.
+- **Five tests** (`tests/names.rs`): the labels of the top row, the
+  labels of the left column, a label that is not a name, a range with
+  no cells beside the labels, and an edge that is not one of the
+  tree's.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree makes the names of one edge at a time**: the reference
+  may name the columns and the rows in the same breath.
+- **The tree does not clean a label into a name**: a label with a mark
+  in it is not a name, and it is reported and left alone.
+- **The tree does not ask before it replaces a name**: that is the
+  tree's rule for writing a name, and the answer says what it did.
