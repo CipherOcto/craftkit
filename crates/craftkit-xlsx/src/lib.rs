@@ -297,6 +297,9 @@ pub struct Sheet {
     /// The numbers are the **file's** own: the margins are in inches,
     /// the paper is the file's own number, and the scale is a percent.
     pub print: Option<Print>,
+    /// The **header** and the **footer** of the pages of the sheet,
+    /// when the file says them.
+    pub header_footer: Option<HeaderFooter>,
     /// The **breaks** of the printing: the lines a page begins at, by
     /// the file's own numbering.
     ///
@@ -736,6 +739,30 @@ pub struct Print {
     pub fit: Option<(u32, u32)>,
     /// Whether the sheet prints to **fit** rather than at a scale.
     pub fit_to_page: bool,
+}
+
+/// The **header** and the **footer** of the pages of a sheet.
+///
+/// The texts are the **file's** own words, with the file's own codes in
+/// them: `&L`, `&C` and `&R` are the three sections, `&P` the page
+/// number, `&N` the number of pages, and `&A` the name of the sheet.
+///
+/// The **kinds** of page are the file's own: the odd pages, the even
+/// pages and the first page. A text the file does not say is not here.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct HeaderFooter {
+    /// The header of the **odd** pages.
+    pub odd_header: Option<String>,
+    /// The footer of the **odd** pages.
+    pub odd_footer: Option<String>,
+    /// The header of the **even** pages.
+    pub even_header: Option<String>,
+    /// The footer of the **even** pages.
+    pub even_footer: Option<String>,
+    /// The header of the **first** page.
+    pub first_header: Option<String>,
+    /// The footer of the **first** page.
+    pub first_footer: Option<String>,
 }
 
 /// A **validation** of a sheet: a rule on what a cell may hold.
@@ -1423,6 +1450,8 @@ fn read_sheet(
     }
     // The **page setup** of the sheet: how it prints.
     sheet.print = read_print(&root);
+    // The **header** and the **footer** of the pages of the sheet.
+    sheet.header_footer = read_header_footer(&root);
     // The **breaks** of the printing: the lines a page begins at.
     sheet.breaks = read_breaks(&root);
     // The **sparklines** of the sheet: the little drawings in its
@@ -1912,6 +1941,32 @@ fn read_print(root: &craftkit_xml::El) -> Option<Print> {
         .map(|properties| properties.flag("fitToPage", false))
         .unwrap_or(false);
     Some(print)
+}
+
+/// Read the **header** and the **footer** of the pages of a sheet.
+///
+/// The texts are the file's own words: a text that is empty is not a
+/// text, and a file that says no header at all has no header here.
+fn read_header_footer(root: &craftkit_xml::El) -> Option<HeaderFooter> {
+    let element = root.child("headerFooter")?;
+    let text = |name: &str| {
+        element.child(name).map(|child| child.text.trim().to_string()).filter(|text| !text.is_empty())
+    };
+    let header_footer = HeaderFooter {
+        odd_header: text("oddHeader"),
+        odd_footer: text("oddFooter"),
+        even_header: text("evenHeader"),
+        even_footer: text("evenFooter"),
+        first_header: text("firstHeader"),
+        first_footer: text("firstFooter"),
+    };
+    let empty = header_footer.odd_header.is_none()
+        && header_footer.odd_footer.is_none()
+        && header_footer.even_header.is_none()
+        && header_footer.even_footer.is_none()
+        && header_footer.first_header.is_none()
+        && header_footer.first_footer.is_none();
+    if empty { None } else { Some(header_footer) }
 }
 
 /// Read the **breaks** of the printing of a sheet: the rows and the

@@ -867,6 +867,117 @@ fn the_printing_of_a_sheet_is_imported() {
     assert_eq!(node.data["title_columns"][1].as_u64(), Some(1), "and the second");
 }
 
+/// The **header** and the **footer** of a file are imported: the texts
+/// of the odd, the even and the first pages.
+#[test]
+fn the_header_and_the_footer_of_a_sheet_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><headerFooter differentOddEven="1" differentFirst="1"><oddHeader>&amp;LPage &amp;P of &amp;N</oddHeader><oddFooter>&amp;A</oddFooter><evenHeader>&amp;LEven</evenHeader><firstHeader>&amp;LFirst</firstHeader></headerFooter><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["unread_headers"].as_u64(), Some(0), "every header was read");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(
+        node.data["print_header"]["odd"].as_str(),
+        Some("&LPage &P of &N"),
+        "the header of the odd pages"
+    );
+    assert_eq!(node.data["print_header"]["even"].as_str(), Some("&LEven"), "the header of the even pages");
+    assert_eq!(node.data["print_header"]["first"].as_str(), Some("&LFirst"), "the header of the first page");
+    assert_eq!(node.data["print_footer"]["odd"].as_str(), Some("&A"), "the footer of the odd pages");
+}
+
+/// The header of a file is **printed**: the codes in it are worked out
+/// for the page they are on, exactly as they are for a header that was
+/// set by hand.
+#[test]
+fn the_header_of_a_file_is_printed() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><headerFooter><oddHeader>&amp;LPage &amp;P of &amp;N</oddHeader></headerFooter><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let outcome =
+        session.execute("grid.print.pages", &json!({ "sheet": sheet })).expect("the pages are read");
+    let pages = outcome.data["pages"].as_array().expect("the pages are a list");
+    assert_eq!(pages.len(), 1, "the sheet is one page");
+    assert_eq!(pages[0]["header"]["left"]["text"], json!("Page 1 of 1"), "the header is printed");
+}
+
+/// A header that holds a code the tree does not print is **not**
+/// imported: the tree prints no date, and a header with a date in it
+/// is not a header the tree can print. It is counted, and said.
+#[test]
+fn a_header_the_tree_cannot_print_is_not_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><headerFooter><oddHeader>&amp;D</oddHeader><oddFooter>&amp;T</oddFooter></headerFooter><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["unread_headers"].as_u64(), Some(2), "both were left out");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data.get("print_header"), None, "the sheet has no header");
+    assert_eq!(node.data.get("print_footer"), None, "and no footer");
+}
+
 /// A **print area of one cell** is not imported: an area of one cell
 /// is a cell, and the tree's own command refuses it.
 #[test]

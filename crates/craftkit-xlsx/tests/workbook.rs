@@ -547,6 +547,65 @@ fn a_sheet_with_no_default_size_has_none() {
     assert_eq!(sheet.default_height, None, "and the rows have no default height");
 }
 
+/// The **header** and the **footer** of the pages of a sheet are read:
+/// the texts of the odd, the even and the first pages.
+#[test]
+fn the_header_and_the_footer_of_a_sheet_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><headerFooter differentOddEven="1" differentFirst="1"><oddHeader>&amp;LOdd&amp;CCentre</oddHeader><oddFooter>&amp;ROdd</oddFooter><evenHeader>&amp;LEven</evenHeader><evenFooter>&amp;REven</evenFooter><firstHeader>&amp;LFirst</firstHeader><firstFooter>&amp;RFirst</firstFooter></headerFooter><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    let header_footer = sheet.header_footer.as_ref().expect("the sheet has a header and a footer");
+    assert_eq!(header_footer.odd_header.as_deref(), Some("&LOdd&CCentre"), "the odd header");
+    assert_eq!(header_footer.odd_footer.as_deref(), Some("&ROdd"), "the odd footer");
+    assert_eq!(header_footer.even_header.as_deref(), Some("&LEven"), "the even header");
+    assert_eq!(header_footer.even_footer.as_deref(), Some("&REven"), "the even footer");
+    assert_eq!(header_footer.first_header.as_deref(), Some("&LFirst"), "the first header");
+    assert_eq!(header_footer.first_footer.as_deref(), Some("&RFirst"), "the first footer");
+}
+
+/// A sheet that says **no header** has none.
+#[test]
+fn a_sheet_with_no_header_has_none() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><headerFooter differentOddEven="1"><oddHeader></oddHeader></headerFooter><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let sheet = &workbook.sheets[0];
+    assert_eq!(sheet.header_footer, None, "the sheet has no header and no footer");
+}
+
 /// The **merges** of a sheet are read: the ranges that are one cell.
 #[test]
 fn the_merges_of_a_sheet_are_read() {

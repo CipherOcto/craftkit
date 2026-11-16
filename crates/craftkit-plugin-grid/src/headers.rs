@@ -25,7 +25,11 @@
 //! - **The tree keeps two flags** — different first page, different
 //!   odd and even pages — beside the six texts, so an even header
 //!   that is set but not switched on is a header that is not printed.
-//!   Here the texts are the facts and the flags are gone.
+//!   Here the texts are the facts and the flags are gone, and a file
+//!   that has the flags is read for its texts and not for its flags: a
+//!   file that says "the even pages are different" and gives no even
+//!   header has no even header, and the tree's even pages fall back on
+//!   the odd ones.
 //! - **The tree's header and footer carry a font** (`&"Arial,Bold"`) and
 //!   a size, and the drawing honours them. Here a section says whether
 //!   it is bold and whether it is italic, and a font is not a fact a

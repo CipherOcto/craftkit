@@ -215,6 +215,7 @@ commands! {
             let mut unread_validations = 0u64;
             let mut printed = 0u64;
             let mut unread_prints = 0u64;
+            let mut unread_headers = 0u64;
             let mut outlines = 0u64;
             let mut setups = 0u64;
             let mut breaks = 0u64;
@@ -658,6 +659,45 @@ commands! {
                 if let Some(print) = &sheet.print {
                     data["print"] = print_setup(print, &mut unread_setups).to_json();
                     setups += 1;
+                }
+                // The **header** and the **footer** of the pages: the
+                // texts of the odd, the even and the first pages. A
+                // text the tree does not print — one that names the
+                // machine, or a font — is not carried, and it is
+                // counted.
+                if let Some(header_footer) = &sheet.header_footer {
+                    let mut header = craftkit_sdk::serde_json::Map::new();
+                    let mut footer = craftkit_sdk::serde_json::Map::new();
+                    for (kind, text) in [
+                        ("odd", &header_footer.odd_header),
+                        ("even", &header_footer.even_header),
+                        ("first", &header_footer.first_header),
+                    ] {
+                        let Some(text) = text else { continue };
+                        if crate::headers::check(text).is_ok() {
+                            header.insert(kind.to_string(), json!(text));
+                        } else {
+                            unread_headers += 1;
+                        }
+                    }
+                    for (kind, text) in [
+                        ("odd", &header_footer.odd_footer),
+                        ("even", &header_footer.even_footer),
+                        ("first", &header_footer.first_footer),
+                    ] {
+                        let Some(text) = text else { continue };
+                        if crate::headers::check(text).is_ok() {
+                            footer.insert(kind.to_string(), json!(text));
+                        } else {
+                            unread_headers += 1;
+                        }
+                    }
+                    if !header.is_empty() {
+                        data["print_header"] = Json::Object(header);
+                    }
+                    if !footer.is_empty() {
+                        data["print_footer"] = Json::Object(footer);
+                    }
                 }
                 // The **breaks** of the printing: the lines a page
                 // begins at.
@@ -1136,6 +1176,11 @@ commands! {
                     "; {unread_prints} printing(s) could not be read and were not imported"
                 ));
             }
+            if unread_headers > 0 {
+                summary.push_str(&format!(
+                    "; {unread_headers} header(s) or footer(s) could not be printed and were not imported"
+                ));
+            }
             Ok(Outcome::changed(summary).with_data(json!({
                 "id": workbook_id,
                 "name": name,
@@ -1161,6 +1206,7 @@ commands! {
                 "unread_validations": unread_validations,
                 "prints": printed,
                 "unread_prints": unread_prints,
+                "unread_headers": unread_headers,
                 "outlines": outlines,
                 "setups": setups,
                 "breaks": breaks,
