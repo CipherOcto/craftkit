@@ -4401,6 +4401,7 @@ so.
 | the chart that reads its range **the other way round** | **built.** A chart may read its range by rows — the first row holds the categories and the rows after it are the series (§953) | §953 |
 | the **statistics** of a range | **built.** The count, the sum, the average, the smallest and the largest of a range are read in one call (§954) | §954 |
 | the **invalid cells** of a sheet | **built.** The cells that hold something and do not pass the rule that is over them are found and named (§955) | §955 |
+| the **properties** of a workbook | **built.** The title, the subject, the author, the keywords, the description and the company of a workbook are read from the file and may be set (§956) | §956 |
 
 ### The list of things that are honestly not there: empty
 
@@ -62435,4 +62436,50 @@ The cells that hold something and do not pass the rule that is over them.
 - **A cell is checked once per rule that is over it**: a cell under two
   rules that both forbid it is named once, because the answer is the
   set of the cells that do not pass.
+
+## 956. The properties of a workbook
+
+What the file says about itself, and what a program says about it.
+
+### What was built
+
+- The **XLSX reader** reads the file's own parts: `docProps/core.xml`
+  for the **title**, the **subject**, the **creator**, the
+  **keywords**, the **description** and the **last one to change** the
+  file, and `docProps/app.xml` for the **company**.
+- `grid.workbook.get` says the **properties** of the workbook, and a
+  property the file does not say is **nothing** — not an empty text,
+  not an error: nothing.
+- A new command, **`grid.workbook.properties.set`**: the properties of
+  a workbook may be **set**. A property that is **not given** keeps
+  what it was, and a property given as an **empty text** is taken away.
+
+### What the port found
+
+- **The reference has one command for the properties**
+  (`file.properties`) and it **sets** them, and the tree has a
+  **reading** and a **setting**: the tree reads a file before it writes
+  anything, and a property that is not known cannot be known twice.
+- **The reference's author is the tree's author**, and the file's
+  **creator** is the same thing said in another way: the tree says
+  `author` and reads `dc:creator`.
+- **The tree has one property the reference does not**: the **last one
+  to change** the file, which the file says and a program does not set.
+
+### What it cost
+
+- **One command** and **one reader**: the grid battery now carries
+  **214** commands.
+- **Four tests**: the properties of a file, the file that says
+  nothing, the setting of the properties, and the property that keeps
+  what it was.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree cannot write a workbook back**: the properties that are set
+  live in the document, and there is no XLSX writer in this tree to
+  put them into a file — the writing of a workbook is an arc that has
+  not been made, and until it is, a property set here is a property of
+  the document and not of a file.
 
