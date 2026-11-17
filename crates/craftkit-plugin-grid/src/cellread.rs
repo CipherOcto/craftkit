@@ -14,7 +14,9 @@
 //!   the lock it is under — the tree's cell carries all of them in
 //!   its style, and here the cell carries them itself;
 //! - the **note** and the **link** that are on it;
-//! - the **merge** that covers it, if it is covered by one.
+//! - the **merge** that covers it, if it is covered by one;
+//! - the **reading** of its text: the phonetic guide over it, when the
+//!   cell carries one.
 //!
 //! The tree's `cell.get` says the same things, and says more: the
 //! tree's cell may hold a **picture**, and the tree's cell may be
@@ -134,6 +136,12 @@ commands! {
                 },
                 "merge": match merge {
                     Some(area) => json!(area.to_text()),
+                    None => Json::Null,
+                },
+                // The **reading** of the text: the phonetic guide over
+                // it, when the cell carries one.
+                "phonetic": match entry.as_ref().and_then(|entry| entry.phonetic.as_ref()) {
+                    Some(phonetic) => phonetic.to_json(),
                     None => Json::Null,
                 },
                 "align": match entry.as_ref().and_then(|entry| entry.align) {

@@ -250,6 +250,7 @@ commands! {
             let mut formats = 0u64;
             let mut unread_formats = 0u64;
             let mut checkboxes = 0u64;
+            let mut readings = 0u64;
             let mut fonts = 0u64;
             let mut fills = 0u64;
             let mut aligns = 0u64;
@@ -371,6 +372,31 @@ commands! {
                     if let Some(value) = value {
                         entry.insert("value".to_string(), value.to_json());
                         filled += 1;
+                    }
+                    // The **reading** of the text: the phonetic guide
+                    // the file holds beside it.
+                    if let Some(phonetic) = &cell.phonetic {
+                        entry.insert(
+                            "phonetic".to_string(),
+                            crate::phonetic::Phonetic {
+                                runs: phonetic
+                                    .runs
+                                    .iter()
+                                    .map(|run| crate::phonetic::PhoneticRun {
+                                        start: run.start,
+                                        end: run.end,
+                                        text: run.text.clone(),
+                                    })
+                                    .collect(),
+                                props: phonetic.props.as_ref().map(|props| crate::phonetic::PhoneticProps {
+                                    font_id: props.font_id,
+                                    kind: props.kind.clone(),
+                                    alignment: props.alignment.clone(),
+                                }),
+                            }
+                            .to_json(),
+                        );
+                        readings += 1;
                     }
                     // The **checkbox** of the cell: a cell control the
                     // file holds beside its cells. The tree's own format
@@ -1258,6 +1284,9 @@ commands! {
             }
             if checkboxes > 0 {
                 summary.push_str(&format!("; {checkboxes} checkbox(es) were imported"));
+            }
+            if readings > 0 {
+                summary.push_str(&format!("; {readings} reading(s) were imported"));
             }
             if unread_names > 0 {
                 summary.push_str(&format!(

@@ -123,6 +123,7 @@ commands! {
                     font: None,
                     locked: None,
                     fill: None,
+                    phonetic: None,
                 });
                 entry.format = look.format.clone();
                 entry.font = look.font.clone();

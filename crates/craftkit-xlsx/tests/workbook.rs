@@ -2062,3 +2062,77 @@ fn a_setting_that_is_not_read_is_said() {
     );
     assert_eq!(workbook.warnings.len(), 2, "and both are said: {}", workbook.warnings.join("; "));
 }
+
+/// A **reading** of a text — the phonetic guide a file holds beside it
+/// — is read with the text it is over.
+#[test]
+fn the_reading_of_a_text_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/sharedStrings.xml",
+            r#"<sst count="1" uniqueCount="1"><si><t>東京都</t><rPh sb="0" eb="2"><t>トウキョウ</t></rPh><rPh sb="2" eb="3"><t>ト</t></rPh><phoneticPr fontId="1" type="noConversion" alignment="center"/></si></sst>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let cell = &workbook.sheets[0].cells[0];
+    assert_eq!(cell.value, Value::Text("東京都".to_string()), "the text is the text");
+    let phonetic = cell.phonetic.as_ref().expect("the reading is read");
+    assert_eq!(phonetic.runs.len(), 2, "two runs of the reading");
+    assert_eq!(phonetic.runs[0].start, 0, "the first run starts at the beginning");
+    assert_eq!(phonetic.runs[0].end, 2, "and ends after the first two units");
+    assert_eq!(phonetic.runs[0].text, "トウキョウ", "and holds the reading");
+    let props = phonetic.props.as_ref().expect("the properties are read");
+    assert_eq!(props.font_id, Some(1), "the font of the reading");
+    assert_eq!(props.kind.as_deref(), Some("noConversion"), "and its kind");
+    assert_eq!(props.alignment.as_deref(), Some("center"), "and how it sits");
+    assert!(workbook.warnings.is_empty(), "and nothing was left out");
+}
+
+/// A reading that does not fit the text is **not read**: the tree says
+/// how many it left out rather than repairing them.
+#[test]
+fn a_reading_that_does_not_fit_is_not_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/sharedStrings.xml",
+            r#"<sst count="1" uniqueCount="1"><si><t>ab</t><rPh sb="0" eb="9"><t>past the end</t></rPh><rPh sb="1" eb="0"><t>the wrong way round</t></rPh><rPh sb="0"><t>no end</t></rPh><rPh sb="0" eb="1"><t>ok</t></rPh></si></sst>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let phonetic = workbook.sheets[0].cells[0].phonetic.as_ref().expect("the reading is read");
+    assert_eq!(phonetic.runs.len(), 1, "only the run that fits is read");
+    assert_eq!(phonetic.runs[0].text, "ok", "and it is the one that fits");
+    assert_eq!(workbook.warnings.len(), 1, "and the three that do not fit are said");
+}

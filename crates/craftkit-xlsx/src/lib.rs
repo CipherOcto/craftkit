@@ -63,6 +63,7 @@
 
 mod calculation;
 mod featurebags;
+mod phonetic;
 mod rels;
 mod styles;
 mod theme;
@@ -72,6 +73,7 @@ pub use calculation::{
     read as read_calculation,
 };
 pub use featurebags::{MAX_BAGS, checkbox_complements, xf_is_checkbox};
+pub use phonetic::{Phonetic, PhoneticProps, PhoneticRun};
 pub use rels::{Rel, rels_of, resolve, split_dir};
 pub use styles::{
     Alignment, Border, Borders, Fill, Font, Protection, Styles, Underline, Vert, read_styles,
@@ -210,6 +212,13 @@ pub struct Cell {
     /// The reader says that the cell is a checkbox; what a checkbox is
     /// in the tree that reads the file is that tree's own business.
     pub checkbox: bool,
+    /// The **reading** of the text of the cell: the phonetic guide the
+    /// file holds beside it.
+    ///
+    /// A reading is a fact of a text and not of a cell, but the file
+    /// holds it beside the text and the reader reports it with the
+    /// cell that carries it.
+    pub phonetic: Option<Phonetic>,
 }
 
 /// The **kind** of a formula: what the file says the formula is.
@@ -1449,7 +1458,7 @@ fn shared_strings(
     package: &mut craftkit_zip::Package<'_>,
     workbook_rels: &[Rel],
     warnings: &mut Vec<String>,
-) -> Result<Vec<String>, Error> {
+) -> Result<Vec<SharedString>, Error> {
     let Some(relation) = workbook_rels.iter().find(|rel| rel.kind == "sharedStrings") else {
         return Ok(Vec::new());
     };
@@ -1458,10 +1467,54 @@ fn shared_strings(
         return Ok(Vec::new());
     };
     let mut strings = Vec::new();
+    let mut dropped = 0usize;
     for item in root.kids("si") {
-        strings.push(rich_text(item));
+        let text = rich_text(item);
+        let (phonetic, said) = phonetic::read(item, &text);
+        dropped += said;
+        strings.push(SharedString { text, phonetic });
+    }
+    if dropped > 0 {
+        warnings.push(format!(
+            "{dropped} reading(s) of the shared strings were not read: their offsets do not fit the text"
+        ));
     }
     Ok(strings)
+}
+
+/// The **reading** of the text of a cell: the phonetic guide the file
+/// holds beside it, and how many readings were not read.
+///
+/// A cell that holds a **shared** text takes the reading of that text;
+/// a cell that holds its text **in itself** takes the reading it holds
+/// beside it.
+fn reading_of(cell: &craftkit_xml::El, strings: &[SharedString]) -> (Option<Phonetic>, usize) {
+    match cell.attr("t") {
+        Some("s") => {
+            let index = cell.child("v").and_then(|value| value.text.trim().parse::<usize>().ok());
+            match index.and_then(|index| strings.get(index)) {
+                Some(string) => (string.phonetic.clone(), 0),
+                None => (None, 0),
+            }
+        }
+        Some("inlineStr") => match cell.child("is") {
+            Some(item) => {
+                let (phonetic, dropped) = phonetic::read(item, &rich_text(item));
+                (phonetic, dropped)
+            }
+            None => (None, 0),
+        },
+        _ => (None, 0),
+    }
+}
+
+/// A **shared string** of a workbook: the text its cells share, and the
+/// **reading** the file may hold beside it.
+struct SharedString {
+    /// The text itself.
+    text: String,
+    /// The reading of the text, when the file holds one.
+    phonetic: Option<Phonetic>,
 }
 
 /// The text of a shared string: its own text and the text of its rich
@@ -1489,7 +1542,7 @@ fn rich_text(element: &craftkit_xml::El) -> String {
 fn read_sheet(
     package: &mut craftkit_zip::Package<'_>,
     part: &str,
-    strings: &[String],
+    strings: &[SharedString],
     styles: &Styles,
     theme: &Theme,
     workbook_rels: &[Rel],
@@ -1650,6 +1703,14 @@ fn read_sheet(
             }
             next_column = column + 1;
             let value = value_of(cell, strings, system);
+            // The **reading** of the text: the phonetic guide the file
+            // holds beside it.
+            let (phonetic, said) = reading_of(cell, strings);
+            if said > 0 {
+                warnings.push(format!(
+                    "{said} reading(s) of the sheet were not read: their offsets do not fit the text"
+                ));
+            }
             // The **formula** of the cell: the file's own text. A cell
             // that **shares** a formula with other cells writes the
             // formula once, in the cell at the top left of its group,
@@ -1722,6 +1783,7 @@ fn read_sheet(
                 protection,
                 shared: None,
                 checkbox,
+                phonetic,
             });
             if let Some(index) = shared_master {
                 // The cell names a shared formula: the group's master
@@ -2514,12 +2576,12 @@ fn filter_op(operation: Option<&str>) -> &'static str {
 }
 
 /// The **value** of a cell, as the file holds it.
-fn value_of(cell: &craftkit_xml::El, strings: &[String], system: DateSystem) -> Value {
+fn value_of(cell: &craftkit_xml::El, strings: &[SharedString], system: DateSystem) -> Value {
     let raw = cell.child("v").map(|v| v.text.trim().to_string());
     match cell.attr("t").unwrap_or("n") {
         "s" => match raw.as_deref().and_then(|text| text.parse::<usize>().ok()) {
             Some(index) => match strings.get(index) {
-                Some(text) => Value::Text(text.clone()),
+                Some(string) => Value::Text(string.text.clone()),
                 None => Value::Empty,
             },
             None => Value::Empty,

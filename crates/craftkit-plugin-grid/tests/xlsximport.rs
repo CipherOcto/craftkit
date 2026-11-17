@@ -2016,3 +2016,44 @@ fn a_workbook_of_the_tree_calculates_by_itself() {
     assert_eq!(calculation["iterative"], json!(false), "and it does not iterate");
     assert_eq!(calculation["max_iterations"], json!(100), "a hundred times at most");
 }
+
+/// The **reading** of a text — the phonetic guide a file holds beside
+/// it — is imported with the text.
+#[test]
+fn the_reading_of_a_text_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/sharedStrings.xml",
+            r#"<sst count="1" uniqueCount="1"><si><t>東京都</t><rPh sb="0" eb="2"><t>トウキョウ</t></rPh><phoneticPr fontId="1" type="noConversion"/></si></sst>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let cell =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(cell.data["value"], json!("東京都"), "the text is the text");
+    let phonetic = &cell.data["phonetic"];
+    assert_eq!(phonetic["runs"].as_array().map(|runs| runs.len()), Some(1), "one run of the reading");
+    assert_eq!(phonetic["runs"][0]["text"], json!("トウキョウ"), "and it holds the reading");
+    assert_eq!(phonetic["props"]["kind"], json!("noConversion"), "and the reading has a kind");
+}

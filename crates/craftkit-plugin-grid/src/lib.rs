@@ -459,6 +459,7 @@ mod odds;
 mod outline;
 pub mod outside;
 mod pdfexport;
+mod phonetic;
 mod pictures;
 mod pivotfields;
 mod pivots;
@@ -828,6 +829,7 @@ pub(crate) fn cell_from(entry: &Json) -> Cell {
     let font = entry.get("font").and_then(formula::Font::from_json);
     let locked = entry.get("locked").and_then(|locked| locked.as_bool());
     let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
+    let phonetic = entry.get("phonetic").and_then(crate::phonetic::Phonetic::from_json);
     let mut cell = Cell::default();
     match (value, formula) {
         (_, Some(formula)) => cell.formula = Some(formula),
@@ -840,6 +842,7 @@ pub(crate) fn cell_from(entry: &Json) -> Cell {
     cell.font = font;
     cell.locked = locked;
     cell.fill = fill;
+    cell.phonetic = phonetic;
     cell
 }
 
@@ -855,8 +858,8 @@ pub(crate) fn cells_into(cells: &Cells) -> Json {
 /// The **entry** of a cell, as the answer holds it.
 ///
 /// A cell is more than its value: it holds a formula, a format, a
-/// style, an alignment, a font and a fill, and the entry is all of
-/// them.
+/// style, an alignment, a font, a fill and a reading, and the entry is
+/// all of them.
 pub(crate) fn cell_into(entry: &Cell) -> Json {
     let mut one = serde_json::Map::new();
     if let Some(formula) = &entry.formula {
@@ -882,6 +885,9 @@ pub(crate) fn cell_into(entry: &Cell) -> Json {
     }
     if let Some(fill) = &entry.fill {
         one.insert("fill".to_string(), Json::String(fill.clone()));
+    }
+    if let Some(phonetic) = &entry.phonetic {
+        one.insert("phonetic".to_string(), phonetic.to_json());
     }
     Json::Object(one)
 }

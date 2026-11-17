@@ -1690,6 +1690,9 @@ pub struct Cell {
     /// here the fill is the cell's own, as the format, the alignment
     /// and the font are.
     pub fill: Option<String>,
+    /// The **reading** of the text of the cell: the phonetic guide
+    /// over it, when it has one.
+    pub phonetic: Option<crate::phonetic::Phonetic>,
 }
 
 impl Cells {
@@ -1716,7 +1719,17 @@ impl Cells {
         let fill = self.cells.get(&cell).and_then(|entry| entry.fill.clone());
         self.cells.insert(
             cell,
-            Cell { value: Some(value), formula: None, format, style, align, font, locked, fill },
+            Cell {
+                value: Some(value),
+                formula: None,
+                format,
+                style,
+                align,
+                font,
+                locked,
+                fill,
+                phonetic: None,
+            },
         );
     }
 
@@ -1733,7 +1746,17 @@ impl Cells {
         let fill = self.cells.get(&cell).and_then(|entry| entry.fill.clone());
         self.cells.insert(
             cell,
-            Cell { value: None, formula: Some(formula), format, style, align, font, locked, fill },
+            Cell {
+                value: None,
+                formula: Some(formula),
+                format,
+                style,
+                align,
+                font,
+                locked,
+                fill,
+                phonetic: None,
+            },
         );
     }
 
@@ -1760,6 +1783,7 @@ impl Cells {
                         font: None,
                         locked: None,
                         fill: None,
+                        phonetic: None,
                         format,
                     },
                 );
@@ -1790,6 +1814,7 @@ impl Cells {
                         font: None,
                         locked: None,
                         fill: None,
+                        phonetic: None,
                         style,
                     },
                 );
@@ -1820,6 +1845,7 @@ impl Cells {
                         font: None,
                         locked: None,
                         fill: None,
+                        phonetic: None,
                         align,
                     },
                 );
@@ -1850,6 +1876,7 @@ impl Cells {
                         align: None,
                         locked: None,
                         fill: None,
+                        phonetic: None,
                         font,
                     },
                 );
@@ -1880,6 +1907,7 @@ impl Cells {
                         align: None,
                         font: None,
                         fill: None,
+                        phonetic: None,
                         locked,
                     },
                 );
@@ -1911,6 +1939,7 @@ impl Cells {
                         font: None,
                         locked: None,
                         fill,
+                        phonetic: None,
                     },
                 );
             }
