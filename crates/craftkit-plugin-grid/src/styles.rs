@@ -389,6 +389,15 @@ commands! {
             /// Where the text sits **above or below** its line: baseline,
             /// superscript or subscript.
             vert: Option<Text>,
+            /// Whether the text is **bold**: the opposite of what it is when
+            /// this is not named.
+            bold: Option<Bool>,
+            /// Whether the text is **italic**: the opposite of what it is
+            /// when this is not named.
+            italic: Option<Bool>,
+            /// Whether the text is **struck through**: the opposite of what
+            /// it is when this is not named.
+            strike: Option<Bool>,
         },
         run: {
             let id = "grid.style.font".to_string();
@@ -401,10 +410,10 @@ commands! {
                 self.underline.as_ref(),
                 self.vert.as_ref(),
             )?;
-            if parts.is_empty() {
+            if parts.is_empty() && self.bold.is_none() && self.italic.is_none() && self.strike.is_none() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what to set: the face, the size, the underline or the place of the text"
+                    message: "name what to set: the face, the size, the underline, the place of the text,                               the bold, the italic or the strike"
                         .to_string(),
                 });
             }
@@ -421,7 +430,31 @@ commands! {
                 .into_iter()
                 .map(|style| {
                     if style.name.eq_ignore_ascii_case(&name) {
-                        let font = parts.apply(style.font.unwrap_or_else(Font::plain));
+                        let mut font = parts.apply(style.font.unwrap_or_else(Font::plain));
+                        // The **marks** of the text: the tree's buttons, and
+                        // a button pressed twice does the opposite. A mark
+                        // that is not named is left as it is, unless the
+                        // command names nothing else — then it is the
+                        // button that was pressed.
+                        let only_mark = parts.is_empty()
+                            && self.bold.is_none()
+                            && self.italic.is_none()
+                            && self.strike.is_none();
+                        font.bold = match self.bold {
+                            Some(on) => on.0,
+                            None if only_mark => !font.bold,
+                            None => font.bold,
+                        };
+                        font.italic = match self.italic {
+                            Some(on) => on.0,
+                            None if only_mark => !font.italic,
+                            None => font.italic,
+                        };
+                        font.strike = match self.strike {
+                            Some(on) => on.0,
+                            None if only_mark => !font.strike,
+                            None => font.strike,
+                        };
                         Style { font: Some(font), ..style }.to_json()
                     } else {
                         style.to_json()
