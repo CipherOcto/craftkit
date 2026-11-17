@@ -296,3 +296,25 @@ fn a_filter_may_keep_the_rows_above_the_average() {
         .expect("the sheet is filtered");
     assert_eq!(hidden_rows(&mut session, sheet), vec![2, 3], "and the rows above it are hidden");
 }
+
+/// The number a filter's criterion is compared with is read by the
+/// tree's own rule of numbers, so a date is a number.
+#[test]
+fn a_filter_criterion_is_read_by_the_trees_own_rule_of_numbers() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 43831.0);
+    a_number(&mut session, sheet, "A2", 44000.0);
+    session
+        .execute(
+            "grid.filter.set",
+            &json!({ "sheet": sheet, "column": "A", "op": ">=", "value": "1/1/2020" }),
+        )
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), Vec::<u64>::new(), "every row is after the date");
+    // The first of June 2020 is between the two numbers.
+    session
+        .execute("grid.filter.set", &json!({ "sheet": sheet, "column": "A", "op": ">", "value": "6/1/2020" }))
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![1], "and the first row is before it");
+}

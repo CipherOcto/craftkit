@@ -783,14 +783,19 @@ impl Criterion {
     ///
     /// The comparison operations compare **numbers**: an empty cell is
     /// zero, as it is in the tree, and a cell that holds text is not a
-    /// number and does not match. The equality operations compare the
-    /// **text** of the cell, and the tree's `*` is a wildcard.
-    pub fn matches(&self, value: &Value) -> bool {
+    /// number and does not match. The number the criterion is compared
+    /// with is read by the tree's **own rule of numbers** — the rule
+    /// `VALUE` reads a text by — so a currency sign, thousands
+    /// separators and a date are numbers here too.
+    ///
+    /// The equality operations compare the **text** of the cell, and
+    /// the tree's `*` is a wildcard.
+    pub fn matches(&self, value: &Value, system: crate::dates::System) -> bool {
         match self.op.as_str() {
             "=" => wildcard(&self.value, &display_text(value)),
             "!=" => !wildcard(&self.value, &display_text(value)),
             "<" | "<=" | ">" | ">=" => {
-                let Some(criterion) = self.value.trim().parse::<f64>().ok() else {
+                let Some(criterion) = crate::textvalue::number_of(&self.value, system) else {
                     return false;
                 };
                 let cell = match value {
@@ -2227,7 +2232,9 @@ impl Book {
             // judges one cell, and groups judge the groups one by one —
             // a row that matches **any** group is kept.
             let hidden = match filter {
-                Filter::Column { column, criterion } => !criterion.matches(&value_at(*column, cell.row)),
+                Filter::Column { column, criterion } => {
+                    !criterion.matches(&value_at(*column, cell.row), self.system())
+                }
                 Filter::Values { column, values, blanks } => {
                     // The **text** the cell shows, and it is without
                     // case: the tree's own rule.
@@ -2269,7 +2276,9 @@ impl Book {
                     }
                 }
                 Filter::Groups(groups) => !groups.iter().any(|group| {
-                    group.iter().all(|(column, criterion)| criterion.matches(&value_at(*column, cell.row)))
+                    group.iter().all(|(column, criterion)| {
+                        criterion.matches(&value_at(*column, cell.row), self.system())
+                    })
                 }),
                 Filter::Advanced { list, .. } => {
                     // The tree's own advanced filter: the rows of the

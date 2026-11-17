@@ -1684,7 +1684,7 @@ commands! {
             // format that matches it, if there is one — a rule is on top
             // of a fact — and otherwise the format of the style it names,
             // if it names one, and its own otherwise.
-            let format = match conditional::format_for(node, cell, &value) {
+            let format = match conditional::format_for(node, cell, &value, crate::system_of(session, sheet)) {
                 Some(code) => Format::parse(&code).unwrap_or(Format::General),
                 None => format_of(session, sheet, &cells, cell),
             };

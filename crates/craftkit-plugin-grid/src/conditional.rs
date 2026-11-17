@@ -156,14 +156,19 @@ pub struct Looks {
 ///
 /// And the tree's **stop if true**: a rule that matched and says stop
 /// ends the walk, and the rules after it are not tried.
-pub fn looks_for(node: &craftkit_sdk::Node, cell: CellRef, value: &crate::formula::Value) -> Looks {
+pub fn looks_for(
+    node: &craftkit_sdk::Node,
+    cell: CellRef,
+    value: &crate::formula::Value,
+    system: crate::dates::System,
+) -> Looks {
     let mut looks = Looks::default();
     for conditional in ordered_conditionals(node) {
         let Some(area) = area_of(&conditional.range) else { continue };
         if !area.covers(cell) {
             continue;
         }
-        if !conditional.criterion.matches(value) {
+        if !conditional.criterion.matches(value, system) {
             continue;
         }
         if looks.format.is_none() {
@@ -183,8 +188,13 @@ pub fn looks_for(node: &craftkit_sdk::Node, cell: CellRef, value: &crate::formul
 ///
 /// The first one that matches wins, and the rules are tried in
 /// priority.
-pub fn format_for(node: &craftkit_sdk::Node, cell: CellRef, value: &crate::formula::Value) -> Option<String> {
-    looks_for(node, cell, value).format
+pub fn format_for(
+    node: &craftkit_sdk::Node,
+    cell: CellRef,
+    value: &crate::formula::Value,
+    system: crate::dates::System,
+) -> Option<String> {
+    looks_for(node, cell, value, system).format
 }
 
 commands! {
@@ -486,7 +496,7 @@ commands! {
                     let value = book.value_of(&name, cell);
                     let matched = conditionals.iter().find(|conditional| {
                         area_of(&conditional.range).is_some_and(|area| area.covers(cell))
-                            && conditional.criterion.matches(&value)
+                            && conditional.criterion.matches(&value, book.system())
                     });
                     if let Some(matched) = matched {
                         cells.push(json!({

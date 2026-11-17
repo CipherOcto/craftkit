@@ -21,6 +21,11 @@
 //! value — and the value may hold the tree's `*` wildcard: `*abc*` is
 //! "contains abc" and `abc*` is "begins with abc".
 //!
+//! And the number a comparison operation is compared with is read by
+//! the tree's **own rule of numbers** — the rule `VALUE` reads a text
+//! by — so a currency sign, thousands separators and a date are
+//! numbers here too.
+//!
 //! # What the port found
 //!
 //! - **The tree's filter has many kinds of criterion and this one has
@@ -113,7 +118,12 @@ commands! {
                 });
             }
             let value = self.value.0.clone();
-            if (op == "<" || op == "<=" || op == ">" || op == ">=") && value.trim().parse::<f64>().is_err() {
+            // The **number** the operation compares with is read by the
+            // tree's own rule of numbers — the rule `VALUE` reads a text
+            // by — so a currency sign, thousands separators and a date
+            // are numbers.
+            let number = crate::textvalue::number_of(&value, crate::system_of(session, sheet));
+            if (op == "<" || op == "<=" || op == ">" || op == ">=") && number.is_none() {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!("the operation `{op}` compares numbers, and `{value}` is not one"),

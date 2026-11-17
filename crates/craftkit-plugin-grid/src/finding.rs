@@ -68,10 +68,12 @@ pub(crate) fn text_of(
     // cell itself.
     let node = session.document().node(sheet);
     let format = match node {
-        Some(node) => match crate::conditional::format_for(node, cell, &value) {
-            Some(code) => crate::format::Format::parse(&code).unwrap_or(crate::format::Format::General),
-            None => crate::format_of(session, sheet, cells, cell),
-        },
+        Some(node) => {
+            match crate::conditional::format_for(node, cell, &value, crate::system_of(session, sheet)) {
+                Some(code) => crate::format::Format::parse(&code).unwrap_or(crate::format::Format::General),
+                None => crate::format_of(session, sheet, cells, cell),
+            }
+        }
         None => crate::format::Format::General,
     };
     // The **fill** of the text: the formats that fill the cell are

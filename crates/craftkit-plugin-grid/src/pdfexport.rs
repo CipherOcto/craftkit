@@ -236,7 +236,7 @@ fn look_of(
         .and_then(|entry| entry.style.as_deref())
         .and_then(|name| styles.iter().find(|style| style.name == name));
     let own = cells.get(cell);
-    let looks = crate::conditional::looks_for(node, cell, value);
+    let looks = crate::conditional::looks_for(node, cell, value, crate::system_of(session, sheet));
     Look {
         font: own.and_then(|entry| entry.font.clone()).or_else(|| style.and_then(|style| style.font.clone())),
         align: own.and_then(|entry| entry.align).or_else(|| style.and_then(|style| style.align)),
