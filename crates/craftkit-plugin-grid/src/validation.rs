@@ -291,7 +291,7 @@ fn rules_into(node: &mut Node, rules: &[Rule]) {
 }
 
 /// The area a rule's range names.
-fn area_of(rule: &Rule) -> Option<Area> {
+pub(crate) fn area_of(rule: &Rule) -> Option<Area> {
     let text = rule.range.trim();
     let mut parts = text.split(':');
     let first = CellRef::parse(parts.next()?)?;

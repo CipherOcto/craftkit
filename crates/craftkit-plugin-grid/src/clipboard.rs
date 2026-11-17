@@ -34,7 +34,12 @@
 //! - the **comments** and the **notes** of the copied cells are the
 //!   comments and the notes of the cells they land on: a comment
 //!   travels with the cell it is on. A paste of the values and a paste
-//!   of the formats do not carry them.
+//!   of the formats do not carry them;
+//! - the **validation** of the copied cells is the validation of the
+//!   cells they land on: the rules move with the cells, and a rule
+//!   that reaches out of the copied range does not travel — half a
+//!   rule is not a rule. A paste of the values and a paste of the
+//!   formats do not carry it, and a transposed paste does not either.
 //!
 //! And a paste may be a paste of the **formats**: the look of the
 //! copied cells is written onto the cells they land on and what those
@@ -187,20 +192,54 @@ fn clipboard_sheet(node: &Node) -> Option<u64> {
     node.data.get("clipboard")?.get("sheet")?.as_u64()
 }
 
+/// The **facts of the cells** that travel with them: the borders, the
+/// comments, the notes and the validation.
+///
+/// They are facts of the sheet and not of the cell — a border is none
+/// of the four things a cell is — so the clipboard keeps them as
+/// themselves, and the paste writes them.
+struct Carried {
+    /// The borders, by the address of the cell they are on.
+    borders: BTreeMap<String, BTreeMap<String, crate::borders::Border>>,
+    /// The comments, by the address of the cell they are on.
+    comments: BTreeMap<String, crate::comments::Comment>,
+    /// The notes, by the address of the cell they are on.
+    notes: BTreeMap<String, crate::notes::Note>,
+    /// The **validation** of the cells: the rules that lie inside the
+    /// range.
+    validations: Vec<craftkit_sdk::serde_json::Value>,
+}
+
+impl Carried {
+    /// The facts of the cells of a range of a sheet.
+    fn of(node: &Node, area: &crate::formula::Area) -> Carried {
+        let borders = crate::borders::borders_of(node);
+        let comments = crate::comments::comments_of(node);
+        let notes = crate::notes::notes_of(node);
+        // The **validation**: the rules that lie inside the range. A rule
+        // that reaches out of the range does not travel — half a rule is
+        // not a rule.
+        let mut validations: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+        for rule in crate::validation::rules_of(node) {
+            let Some(rule_area) = crate::validation::area_of(&rule) else { continue };
+            if rule_area.start.row >= area.start.row
+                && rule_area.end.row <= area.end.row
+                && rule_area.start.col >= area.start.col
+                && rule_area.end.col <= area.end.col
+            {
+                validations.push(rule.to_json());
+            }
+        }
+        Carried { borders, comments, notes, validations }
+    }
+}
+
 /// Put the **cells** into the clipboard of a workbook.
 ///
 /// The cells are stored with the addresses they have, and the place
 /// they were copied from — so that a paste knows how far they have
 /// travelled.
-fn copy_into(
-    node: &mut Node,
-    sheet: u64,
-    cells: &Cells,
-    first: CellRef,
-    borders: &BTreeMap<String, BTreeMap<String, crate::borders::Border>>,
-    comments: &BTreeMap<String, crate::comments::Comment>,
-    notes: &BTreeMap<String, crate::notes::Note>,
-) {
+fn copy_into(node: &mut Node, sheet: u64, cells: &Cells, first: CellRef, carried: &Carried) {
     let mut copied = craftkit_sdk::serde_json::Map::new();
     for (cell, entry) in cells.iter() {
         copied.insert(cell.to_text(), crate::cell_into(entry));
@@ -208,7 +247,7 @@ fn copy_into(
     // The **borders** of the copied cells: a border is part of the look
     // of a cell, and the look is pasted with it.
     let mut held = BTreeMap::new();
-    for (address, edges) in borders {
+    for (address, edges) in &carried.borders {
         if copied.contains_key(address) {
             held.insert(address.clone(), edges.clone());
         }
@@ -216,17 +255,20 @@ fn copy_into(
     // The **comments** and the **notes** of the copied cells: a comment
     // travels with the cell it is on.
     let mut held_comments = BTreeMap::new();
-    for (address, comment) in comments {
+    for (address, comment) in &carried.comments {
         if copied.contains_key(address) {
             held_comments.insert(address.clone(), comment.clone());
         }
     }
     let mut held_notes = BTreeMap::new();
-    for (address, note) in notes {
+    for (address, note) in &carried.notes {
         if copied.contains_key(address) {
             held_notes.insert(address.clone(), note.clone());
         }
     }
+    // The **validation** of the copied cells: the rules that lie inside
+    // the range that was copied.
+    let validations: Vec<craftkit_sdk::serde_json::Value> = carried.validations.to_vec();
     node.data["clipboard"] = json!({
         "sheet": sheet,
         "at": first.to_text(),
@@ -234,6 +276,7 @@ fn copy_into(
         "borders": crate::borders::borders_into(&held),
         "comments": crate::comments::comments_into(&held_comments),
         "notes": crate::notes::notes_into(&held_notes),
+        "validations": Json::Array(validations),
     });
 }
 
@@ -292,11 +335,9 @@ commands! {
                     message: format!("the sheet `{sheet}` is in no workbook"),
                 });
             };
-            let borders = crate::borders::borders_of(node);
-            let comments = crate::comments::comments_of(node);
-            let notes = crate::notes::notes_of(node);
+            let carried = Carried::of(node, &area);
             if let Some(node) = session.document_mut()?.node_mut(workbook) {
-                copy_into(node, sheet, &copied, area.start, &borders, &comments, &notes);
+                copy_into(node, sheet, &copied, area.start, &carried);
             }
             Ok(Outcome::changed(format!("{count} cell(s) of `{}` were copied", self.range.0))
                 .with_data(json!({
@@ -367,11 +408,9 @@ commands! {
                     message: format!("the sheet `{sheet}` is in no workbook"),
                 });
             };
-            let borders = crate::borders::borders_of(node);
-            let comments = crate::comments::comments_of(node);
-            let notes = crate::notes::notes_of(node);
+            let carried = Carried::of(node, &area);
             if let Some(node) = session.document_mut()?.node_mut(workbook) {
-                copy_into(node, sheet, &copied, area.start, &borders, &comments, &notes);
+                copy_into(node, sheet, &copied, area.start, &carried);
             }
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 node.data["cells"] = crate::cells_into(&taken);
@@ -752,6 +791,95 @@ commands! {
                     node.data["notes"] = crate::notes::notes_into(&sheet_notes);
                 }
             }
+            // The **validation** that travelled and the rules that were
+            // left behind.
+            let mut moved_count = 0usize;
+            let mut left_behind_count = 0usize;
+            // The **validation** of the copied cells is the validation of
+            // the cells they land on: the rules move with the cells, and
+            // the rules that were there are taken away. A rule that
+            // would land off the sheet is not written, and it is
+            // counted.
+            if !values && !formats && !transpose {
+                let stored = book
+                    .data
+                    .get("clipboard")
+                    .and_then(|clipboard| clipboard.get("validations"))
+                    .and_then(|validations| validations.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let block_row = at.row as i64 - from.row as i64;
+                let block_col = at.col as i64 - from.col as i64;
+                let mut moved: Vec<crate::validation::Rule> = Vec::new();
+                let mut left_behind = 0usize;
+                for value in &stored {
+                    let Some(mut rule) = crate::validation::Rule::from_json(value) else { continue };
+                    let Some(rule_area) = crate::validation::area_of(&rule) else { continue };
+                    let start = CellRef {
+                        col: (rule_area.start.col as i64 + block_col) as u32,
+                        row: (rule_area.start.row as i64 + block_row) as u32,
+                    };
+                    let end = CellRef {
+                        col: (rule_area.end.col as i64 + block_col) as u32,
+                        row: (rule_area.end.row as i64 + block_row) as u32,
+                    };
+                    if start.row as u64 >= MAX_ROWS
+                        || end.row as u64 >= MAX_ROWS
+                        || start.col as u64 >= MAX_COLS
+                        || end.col as u64 >= MAX_COLS
+                    {
+                        left_behind += 1;
+                        continue;
+                    }
+                    rule.range = crate::formula::Area::new(start, end).to_text();
+                    moved.push(rule);
+                }
+                moved_count = moved.len();
+                left_behind_count = left_behind;
+                // The **landing**: the block the cells come to.
+                let landing = pasted.iter().fold(
+                    None::<crate::formula::Area>,
+                    |held, (_, (row, col), _)| {
+                        let cell = CellRef { col: *col, row: *row };
+                        Some(match held {
+                            None => crate::formula::Area::new(cell, cell),
+                            Some(area) => crate::formula::Area::new(
+                                crate::formula::CellRef {
+                                    col: area.start.col.min(cell.col),
+                                    row: area.start.row.min(cell.row),
+                                },
+                                crate::formula::CellRef {
+                                    col: area.end.col.max(cell.col),
+                                    row: area.end.row.max(cell.row),
+                                },
+                            ),
+                        })
+                    },
+                );
+                if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                    let mut rules = crate::validation::rules_of(node);
+                    if let Some(landing) = landing {
+                        // The rules that were there are taken away: the
+                        // validation of the pasted cells is the validation
+                        // of the copied cells.
+                        rules.retain(|rule| {
+                            let Some(rule_area) = crate::validation::area_of(rule) else {
+                                return true;
+                            };
+                            let over = rule_area.start.row <= landing.end.row
+                                && rule_area.end.row >= landing.start.row
+                                && rule_area.start.col <= landing.end.col
+                                && rule_area.end.col >= landing.start.col;
+                            !over
+                        });
+                    }
+                    for rule in moved {
+                        rules.push(rule);
+                    }
+                    node.data["validations"] =
+                        craftkit_sdk::serde_json::Value::Array(rules.iter().map(|rule| rule.to_json()).collect());
+                }
+            }
             Ok(Outcome::changed(format!("{count} cell(s) were pasted at {}", at.to_text()))
                 .with_data(json!({
                     "sheet": sheet,
@@ -766,6 +894,8 @@ commands! {
                         Some(operation) => json!(operation),
                         None => Json::Null,
                     },
+                    "validations": moved_count,
+                    "validationsLeftBehind": left_behind_count,
                 })))
 
         }

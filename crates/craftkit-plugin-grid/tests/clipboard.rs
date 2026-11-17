@@ -678,3 +678,94 @@ fn an_operation_that_is_not_one_of_the_trees_is_refused() {
     );
     assert!(outcome.is_err(), "an operation is one of the tree's");
 }
+
+/// The **validation** of the copied cells is pasted with them.
+#[test]
+fn the_validation_of_the_copied_cells_is_pasted_with_them() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute(
+            "grid.validation.set",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "kind": "whole",
+                "operator": "between",
+                "formula1": "1",
+                "formula2": "10",
+            }),
+        )
+        .expect("the rule is set");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1:A2" }))
+        .expect("the cells are copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1" }))
+        .expect("the cells are pasted");
+    // The rule moved to the cells it landed on.
+    let outcome = session
+        .execute("grid.validation.check", &json!({ "sheet": sheet, "cell": "C1", "input": "50" }))
+        .expect("the cell is checked");
+    assert_eq!(outcome.data["ok"], json!(false), "the rule is on the pasted cell");
+}
+
+/// A rule that reaches out of the copied range does **not** travel.
+#[test]
+fn a_rule_that_reaches_out_of_the_copied_range_does_not_travel() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute(
+            "grid.validation.set",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A9",
+                "kind": "whole",
+                "operator": "between",
+                "formula1": "1",
+                "formula2": "10",
+            }),
+        )
+        .expect("the rule is set");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1:A2" }))
+        .expect("the cells are copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1" }))
+        .expect("the cells are pasted");
+    let outcome = session
+        .execute("grid.validation.check", &json!({ "sheet": sheet, "cell": "C1", "input": "50" }))
+        .expect("the cell is checked");
+    assert_eq!(outcome.data["ok"], json!(true), "the rule did not travel");
+}
+
+/// A paste of the **values** does not carry the validation.
+#[test]
+fn a_paste_of_the_values_does_not_carry_the_validation() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute(
+            "grid.validation.set",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "kind": "whole",
+                "operator": "between",
+                "formula1": "1",
+                "formula2": "10",
+            }),
+        )
+        .expect("the rule is set");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1:A2" }))
+        .expect("the cells are copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "values": true }))
+        .expect("the values are pasted");
+    let outcome = session
+        .execute("grid.validation.check", &json!({ "sheet": sheet, "cell": "C1", "input": "50" }))
+        .expect("the cell is checked");
+    assert_eq!(outcome.data["ok"], json!(true), "the validation did not travel");
+}
