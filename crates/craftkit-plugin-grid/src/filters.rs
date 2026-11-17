@@ -21,6 +21,11 @@
 //! value — and the value may hold the tree's `*` wildcard: `*abc*` is
 //! "contains abc" and `abc*` is "begins with abc".
 //!
+//! And the criterion has four **operations on the text** of a cell
+//! beside the four comparisons: `beginsWith`, `endsWith`, `contains`
+//! and `notContains`. The words are the words there, and not
+//! wildcards.
+//!
 //! And the number a comparison operation is compared with is read by
 //! the tree's **own rule of numbers** — the rule `VALUE` reads a text
 //! by — so a currency sign, thousands separators and a date are
@@ -78,7 +83,9 @@ commands! {
             sheet: NodeRef,
             /// Which column it filters: `A`, `B`, `AA`.
             column: Text,
-            /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
+            /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`, or one
+            /// of the four on the **text** of a cell: `beginsWith`,
+            /// `endsWith`, `contains` or `notContains`.
             op: Text,
             /// The value it compares with. A comparison operation needs a
             /// **number**, and the value may hold the tree's `*`.

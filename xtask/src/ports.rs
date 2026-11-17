@@ -1474,6 +1474,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/filters.rs",
         section: "§1014",
     },
+    Port {
+        rule: "a filter may look for the words a cell holds",
+        from: "gridcraft/crates/engine/src/cmd/data/filter.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/filters.rs",
+        command: "grid.filter.set",
+        test: "crates/craftkit-plugin-grid/tests/filters.rs",
+        section: "§1015",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -732,7 +732,12 @@ pub enum Filter {
 }
 
 /// The **operations** a filter may have.
-pub const FILTER_OPS: [&str; 6] = ["=", "!=", "<", "<=", ">", ">="];
+///
+/// The four comparisons of numbers and of texts, and the four
+/// **operations on the text** of a cell: the words it begins with, the
+/// words it ends with, and whether it holds the words at all.
+pub const FILTER_OPS: [&str; 10] =
+    ["=", "!=", "<", "<=", ">", ">=", "beginsWith", "endsWith", "contains", "notContains"];
 
 /// The **average** of the numbers of a column, and nothing when the
 /// column holds no number.
@@ -794,6 +799,18 @@ impl Criterion {
         match self.op.as_str() {
             "=" => wildcard(&self.value, &display_text(value)),
             "!=" => !wildcard(&self.value, &display_text(value)),
+            "beginsWith" | "endsWith" | "contains" | "notContains" => {
+                // The **text** of the cell and the text of the
+                // criterion, and they are compared without case.
+                let text = display_text(value).to_lowercase();
+                let criterion = self.value.to_lowercase();
+                match self.op.as_str() {
+                    "beginsWith" => text.starts_with(&criterion),
+                    "endsWith" => text.ends_with(&criterion),
+                    "contains" => text.contains(&criterion),
+                    _ => !text.contains(&criterion),
+                }
+            }
             "<" | "<=" | ">" | ">=" => {
                 let Some(criterion) = crate::textvalue::number_of(&self.value, system) else {
                     return false;

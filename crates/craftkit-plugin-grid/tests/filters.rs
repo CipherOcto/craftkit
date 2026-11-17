@@ -318,3 +318,31 @@ fn a_filter_criterion_is_read_by_the_trees_own_rule_of_numbers() {
         .expect("the sheet is filtered");
     assert_eq!(hidden_rows(&mut session, sheet), vec![1], "and the first row is before it");
 }
+
+/// A filter may look for the **words** a cell begins with, and the
+/// words it holds.
+#[test]
+fn a_filter_may_look_for_the_words_a_cell_holds() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": "the cat sat" }))
+        .expect("the cell is set");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A2", "value": "the dog sat" }))
+        .expect("the cell is set");
+    session
+        .execute(
+            "grid.filter.set",
+            &json!({ "sheet": sheet, "column": "A", "op": "beginsWith", "value": "the ca" }),
+        )
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![2], "the row that does not begin with it is hidden");
+    session
+        .execute(
+            "grid.filter.set",
+            &json!({ "sheet": sheet, "column": "A", "op": "contains", "value": "dog" }),
+        )
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![1], "and the row that does not hold it");
+}

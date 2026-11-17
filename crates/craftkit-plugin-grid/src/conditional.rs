@@ -213,7 +213,9 @@ commands! {
             sheet: NodeRef,
             /// The range it is about: `A1:A10`.
             range: Text,
-            /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
+            /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`, or one
+            /// of the four on the **text** of a cell: `beginsWith`,
+            /// `endsWith`, `contains` or `notContains`.
             op: Text,
             /// The value it compares with.
             value: Text,
