@@ -4458,6 +4458,7 @@ so.
 | a **criterion is counted in the code units of its text** | **built.** The bound is two hundred and fifty-five units and not characters, and the cut keeps the characters that fit (§1011) | §1011 |
 | a **filter may keep the highest values of a column** | **built.** The top ten is a filter of its own, and the threshold is the count-th highest number (§1012) | §1012 |
 | a **filter may keep the rows above the average** | **built.** The above-the-average is a filter of its own, and the average is the average of the column (§1013) | §1013 |
+| a **filter's criterion is read by the tree's own rule of numbers** | **built.** A currency, a fraction and a date are numbers in a criterion, read by the rule `VALUE` reads a text by (§1014) | §1014 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -65846,5 +65847,57 @@ average.
 
 - **The tree's filter has no range**: a filter is a column of a sheet,
   and the average it judges is the average of the whole column.
+- **The tree's filter does not judge the colour of a cell or the icon
+  of an outline**: those are not in the tree's filter.
+
+## 1014. A filter's criterion is read by the tree's own rule of numbers
+
+A filter's criterion may hold a number, and the number is read the
+way the tree reads a number.
+
+### What was built
+
+- The number a **filter's criterion** is compared with is read by the
+  tree's **own rule of numbers** — the rule `VALUE` reads a text by —
+  so a sign, a **currency sign**, **thousands separators**, a
+  **percent sign**, an **exponent**, **parentheses**, a **fraction**, a
+  **date** and a **time** are all numbers.
+- A date is read in the **date system of the workbook**, as a date is
+  everywhere else in the tree.
+- The **conditional format**'s criterion reads its number the same
+  way: it is the same criterion the filter has, and the tree has one
+  rule for it.
+
+### What the port found
+
+- **The reference's filter reads the number of its criterion by the
+  reference's rule of number-texts, and this tree's filter read it
+  with a plain number.** So a criterion of `">$1,000"` or
+  `">=1/1/2020"` was refused here and was a number there. Here the
+  rule is the tree's own, and the criterion is read by it.
+- **The reference reads a date in a criterion in the 1900 system**,
+  whatever the workbook's system is. Here a date is read in the **date
+  system of the workbook**, as it is everywhere else in the tree — and
+  that is the tree's rule.
+- **The reference's filter may judge the colour of a cell and the icon
+  of an outline.** The tree's filter does not, and its criterion is a
+  value and not a look.
+
+### What it cost
+
+- **No new command**: the criterion is a parameter of `grid.filter.set`,
+  and the grid battery still carries **243** commands.
+- **One rule that was already there**: the tree's rule of numbers —
+  the rule `VALUE` reads a text by — and the criterion reads by it
+  now.
+- **One test** in the grid battery (`tests/filters.rs`): the filter's
+  criterion being read by the tree's own rule of numbers.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's filter compares the text of the cell for equality**:
+  the criterion `5.0` does not meet the cell that holds the number
+  five, and the reference compares the numbers and says that it does.
 - **The tree's filter does not judge the colour of a cell or the icon
   of an outline**: those are not in the tree's filter.
