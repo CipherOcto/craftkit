@@ -232,6 +232,49 @@ commands! {
         }
     }
 
+    /// The **objects** of a workbook: whether they are drawn.
+    ///
+    /// A workbook says so in its `workbookPr`: the charts, the
+    /// pictures, the shapes and the slicers are drawn (`all`), drawn as
+    /// **placeholders** (`placeholders`), or not drawn at all (`none`).
+    ///
+    /// The tree does not draw the objects of a workbook — a front end
+    /// does — and the answer says what the file says, so that a front
+    /// end may honour it.
+    grid.workbook.objects {
+        area: "grid",
+        layer: "grid",
+        icon: "eye",
+        params: {
+            /// The workbook whose objects are read.
+            workbook: NodeRef,
+        },
+        run: {
+            let id = "grid.workbook.objects".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed { id, message: format!("there is no workbook `{workbook}`") });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let objects = node
+                .data
+                .get("objects")
+                .and_then(|objects| objects.as_str())
+                .unwrap_or("all")
+                .to_string();
+            Ok(Outcome::new(format!("the objects of the workbook `{}`", node.name)).with_data(json!({
+                "workbook": workbook,
+                "objects": objects,
+            })))
+
+        }
+    }
+
     /// The **calculation settings** of a workbook: how it calculates.
     ///
     /// The settings are how the workbook says it calculates: by itself,

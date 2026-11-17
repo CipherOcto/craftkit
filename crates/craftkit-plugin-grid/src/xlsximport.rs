@@ -239,6 +239,7 @@ commands! {
                     "properties": properties_to_json(&workbook.properties),
                     "theme": theme_to_json(&workbook.theme),
                     "calculation": calculation_to_json(&workbook.calculation),
+                    "objects": workbook.objects.name(),
                     "protection": protection,
                 }),
             );

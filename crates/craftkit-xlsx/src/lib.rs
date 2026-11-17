@@ -1210,6 +1210,8 @@ pub struct Workbook {
     /// The **calculation settings** of the workbook: how the file says
     /// it calculates.
     pub calculation: Calculation,
+    /// Whether the **objects** of the workbook are drawn.
+    pub objects: ShowObjects,
     /// The **warnings**: what could not be read, and what was kept
     /// instead.
     ///
@@ -1217,6 +1219,33 @@ pub struct Workbook {
     /// says what it had to leave out rather than refusing the whole
     /// file.
     pub warnings: Vec<String>,
+}
+
+/// Whether the **objects** of a workbook are drawn.
+///
+/// A file says so in its `workbookPr`: the charts, the pictures, the
+/// shapes and the slicers of the workbook are drawn (`all`), drawn as
+/// **placeholders** (`placeholders`), or not drawn at all (`none`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ShowObjects {
+    /// The objects are drawn.
+    #[default]
+    All,
+    /// The objects are drawn as placeholders.
+    Placeholders,
+    /// The objects are not drawn.
+    None,
+}
+
+impl ShowObjects {
+    /// The **name** of the way, as the tree says it.
+    pub fn name(&self) -> &'static str {
+        match self {
+            ShowObjects::All => "all",
+            ShowObjects::Placeholders => "placeholders",
+            ShowObjects::None => "none",
+        }
+    }
 }
 
 /// The **protection** of a workbook: what the file locks.
@@ -1267,10 +1296,16 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
 
     // The **date system** is a fact of the workbook, and every number
     // of every sheet is counted in it.
-    if let Some(properties) = workbook_xml.child("workbookPr")
-        && properties.flag("date1904", false)
-    {
-        workbook.system = DateSystem::Y1904;
+    if let Some(properties) = workbook_xml.child("workbookPr") {
+        if properties.flag("date1904", false) {
+            workbook.system = DateSystem::Y1904;
+        }
+        // The **objects** of the workbook: whether they are drawn.
+        workbook.objects = match properties.attr("showObjects") {
+            Some("none") => ShowObjects::None,
+            Some("placeholders") => ShowObjects::Placeholders,
+            _ => ShowObjects::All,
+        };
     }
 
     // The **protection** of the workbook: what the file locks.

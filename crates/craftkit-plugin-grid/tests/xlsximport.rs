@@ -2057,3 +2057,36 @@ fn the_reading_of_a_text_is_imported() {
     assert_eq!(phonetic["runs"][0]["text"], json!("トウキョウ"), "and it holds the reading");
     assert_eq!(phonetic["props"]["kind"], json!("noConversion"), "and the reading has a kind");
 }
+
+/// Whether the **objects** of a file are drawn is imported with the
+/// workbook.
+#[test]
+fn the_objects_of_a_file_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><workbookPr showObjects="placeholders"/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let answer = session
+        .execute("grid.workbook.objects", &json!({ "workbook": workbook }))
+        .expect("the objects are read");
+    assert_eq!(answer.data["objects"], json!("placeholders"), "the objects are placeholders");
+}
