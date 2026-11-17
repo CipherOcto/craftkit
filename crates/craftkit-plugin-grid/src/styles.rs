@@ -515,6 +515,9 @@ commands! {
                     });
                 }
             }
+            // The **locks** the styles of the workbook carry: they are
+            // read before the document is borrowed for the change.
+            let locks = crate::style_locks(session, sheet);
             let Some(node) = session.document_mut()?.node_mut(sheet) else {
                 return Err(EngineError::Failed { id, message: format!("there is no sheet `{sheet}`") });
             };
@@ -525,6 +528,9 @@ commands! {
                 });
             }
             crate::protection::refuse_format(node, &id)?;
+            // A **locked** cell of a protected sheet may not be changed,
+            // and naming a style is a change of the cell.
+            crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
             let mut cells = crate::sheet_cells_mut(node);
             cells.set_style(cell, if name.is_empty() { None } else { Some(name.clone()) });
             node.data["cells"] = crate::cells_into(&cells);
@@ -614,6 +620,73 @@ commands! {
             }
             Ok(Outcome::changed(format!("the style `{name}` is in the workbook"))
                 .with_data(json!({ "workbook": workbook, "name": name, "format": format })))
+
+        }
+    }
+
+    /// A **range** of cells names a style.
+    ///
+    /// The style must be one the workbook has — a name that is not there
+    /// is refused, and never quietly ignored. An **empty name** means the
+    /// cells name no style, and they are written with their own format.
+    grid.range.style {
+        area: "grid",
+        layer: "grid",
+        icon: "paint",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the cells are in.
+            sheet: NodeRef,
+            /// The **range** of cells: `A1`, `B2:D4`.
+            range: Text,
+            /// The name of the style.
+            style: Text,
+        },
+        run: {
+            let id = "grid.range.style".to_string();
+            let sheet = self.sheet.0;
+            let area = crate::fill::area_at(&self.range.0, &id)?;
+            let name = self.style.0.trim().to_string();
+            if !name.is_empty() {
+                let styles = crate::styles_of(session, sheet);
+                if !styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("there is no style `{name}` in the workbook"),
+                    });
+                }
+            }
+            // The **locks** the styles of the workbook carry: they are
+            // read before the document is borrowed for the change.
+            let locks = crate::style_locks(session, sheet);
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed { id, message: format!("there is no sheet `{sheet}`") });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            crate::protection::refuse_format(node, &id)?;
+            // The **cells** the style is given to.
+            let mut cells: Vec<crate::formula::CellRef> = Vec::new();
+            for row in area.start.row..=area.end.row {
+                for col in area.start.col..=area.end.col {
+                    cells.push(crate::formula::CellRef { col, row });
+                }
+            }
+            // A **locked** cell of a protected sheet may not be changed,
+            // and naming a style is a change of the cell.
+            crate::protection::refuse_locked(node, &locks, &cells, &id)?;
+            let mut held = crate::sheet_cells_mut(node);
+            for cell in &cells {
+                held.set_style(*cell, if name.is_empty() { None } else { Some(name.clone()) });
+            }
+            node.data["cells"] = crate::cells_into(&held);
+            Ok(Outcome::changed(format!("the cells of {} name the style `{name}`", area.to_text()))
+                .with_data(json!({ "sheet": sheet, "range": area.to_text(), "style": name })))
 
         }
     }
