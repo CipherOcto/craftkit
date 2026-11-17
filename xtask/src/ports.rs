@@ -1456,6 +1456,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/filters.rs",
         section: "§1012",
     },
+    Port {
+        rule: "a filter may keep the rows above the average",
+        from: "gridcraft/crates/engine/src/cmd/data/filter.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/filters.rs",
+        command: "grid.filter.average",
+        test: "crates/craftkit-plugin-grid/tests/filters.rs",
+        section: "§1013",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -31,7 +31,9 @@
 //!   filter of its own (`grid.filter.values`); the other kinds are
 //!   commands of their own when they come — and §1012 says otherwise:
 //!   the **top ten** is here (`grid.filter.top10`), and the
-//!   above-the-average and the colours are not.
+//!   above-the-average and the colours are not — and §1013 says
+//!   otherwise as well: the **above-the-average** is here
+//!   (`grid.filter.average`), and the colours are not.
 //! - **The tree's filter is over a range and this one's is over a
 //!   column.** The tree's filter has a range and a criterion for each
 //!   column of it. Here a sheet has **one** filter, and it is either
@@ -216,6 +218,63 @@ commands! {
                     "percent": percent,
                     "bottom": bottom,
                 })))
+
+        }
+    }
+
+    /// **Filter** a sheet by the rows that are **above** the average of
+    /// a column — or below it.
+    ///
+    /// The **average** is the average of the numbers of the column, and
+    /// a row is kept when its number is above it. A cell that does not
+    /// hold a number is not kept.
+    grid.filter.average {
+        area: "grid",
+        layer: "grid",
+        icon: "filter",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+            sheet: NodeRef,
+            /// Which column it filters: `A`, `B`, `AA`.
+            column: Text,
+            /// Whether the rows **above** the average are kept; the rows
+            /// below it are kept when they are not.
+            above: Option<Bool>,
+        },
+        run: {
+            let id = "grid.filter.average".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            crate::protection::refuse_filter(node, &id)?;
+            let column = self.column.0.trim().to_uppercase();
+            if CellRef::column_index(&column).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
+                });
+            };
+            let above = self.above.map(|above| above.0).unwrap_or(true);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["filter"] = json!({
+                    "column": column,
+                    "average": { "above": above },
+                });
+            }
+            Ok(Outcome::changed(format!("the sheet `{sheet}` is filtered by the column {column}"))
+                .with_data(json!({ "sheet": sheet, "column": column, "above": above })))
 
         }
     }

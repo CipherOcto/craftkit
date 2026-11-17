@@ -767,6 +767,15 @@ pub(crate) fn book_of(document: &Document) -> Book {
                 if let Some(column) = column {
                     book.set_filter(&node.name, formula::Filter::Top10 { column, bottom, percent, count });
                 }
+            } else if let Some(average) = filter.get("average").and_then(|average| average.as_object()) {
+                // The tree's own **above-the-average** filter: a
+                // column, and the numbers of it that are kept.
+                let column =
+                    filter.get("column").and_then(|column| column.as_str()).and_then(CellRef::column_index);
+                let above = average.get("above").and_then(|above| above.as_bool()).unwrap_or(true);
+                if let Some(column) = column {
+                    book.set_filter(&node.name, formula::Filter::Average { column, above });
+                }
             } else if let Some(values) = filter.get("values").and_then(|values| values.as_array()) {
                 // The tree's own **list** filter: a column and the
                 // values that are kept.

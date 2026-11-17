@@ -658,6 +658,7 @@ pub struct Criterion {
 ///   column does not match are hidden;
 /// - a column and its **highest** (or **lowest**) values — the
 ///   **top ten**;
+/// - a column and the rows **above** (or below) its **average**;
 /// - **groups** of criteria — the columns of a group are judged
 ///   together, and the groups are judged one by one. A row is hidden
 ///   when it matches **none** of the groups.
@@ -702,6 +703,19 @@ pub enum Filter {
         /// How many: a count of rows, or a percent.
         count: u32,
     },
+    /// The rows of a column that are **above** its average — or below
+    /// it.
+    ///
+    /// The **average** is the average of the numbers of the column, and
+    /// a row is kept when its number is above it. A cell that does not
+    /// hold a number is not kept.
+    Average {
+        /// The column it filters, counted from zero.
+        column: u32,
+        /// Whether the rows **above** the average are kept; the rows
+        /// below it are kept when they are not.
+        above: bool,
+    },
     /// Groups of criteria: the columns of a group are judged together.
     Groups(Vec<Vec<(u32, Criterion)>>),
     /// The tree's own **advanced filter**: a **list** of rows under a row
@@ -719,6 +733,20 @@ pub enum Filter {
 
 /// The **operations** a filter may have.
 pub const FILTER_OPS: [&str; 6] = ["=", "!=", "<", "<=", ">", ">="];
+
+/// The **average** of the numbers of a column, and nothing when the
+/// column holds no number.
+fn column_average(cells: &Cells, column: u32) -> Option<f64> {
+    let numbers: Vec<f64> = cells
+        .iter()
+        .filter(|(cell, _)| cell.col == column)
+        .filter_map(|(_, cell)| cell.value.as_ref().and_then(|value| value.as_number()))
+        .collect();
+    if numbers.is_empty() {
+        return None;
+    }
+    Some(numbers.iter().sum::<f64>() / numbers.len() as f64)
+}
 
 /// The **threshold** of a top-ten filter: the count-th highest number
 /// of a column, or the count-th lowest.
@@ -2221,6 +2249,20 @@ impl Book {
                                 number > threshold
                             } else {
                                 number < threshold
+                            }
+                        }
+                        _ => true,
+                    }
+                }
+                Filter::Average { column, above } => {
+                    // The **average** of the numbers of the column.
+                    let average = column_average(cells, *column);
+                    match (value_at(*column, cell.row).as_number(), average) {
+                        (Some(number), Some(average)) => {
+                            if *above {
+                                number <= average
+                            } else {
+                                number >= average
                             }
                         }
                         _ => true,

@@ -277,3 +277,22 @@ fn a_top_ten_filter_may_keep_the_lowest_rows() {
     // the second highest, and the lowest row is hidden.
     assert_eq!(hidden_rows(&mut session, sheet), vec![1], "the lowest row is hidden");
 }
+
+/// A filter may keep the rows that are **above** the average of a
+/// column, and the rows that are below it.
+#[test]
+fn a_filter_may_keep_the_rows_above_the_average() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 5.0);
+    a_number(&mut session, sheet, "A3", 9.0);
+    session
+        .execute("grid.filter.average", &json!({ "sheet": sheet, "column": "A" }))
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![1, 2], "the rows at the average and below are hidden");
+    session
+        .execute("grid.filter.average", &json!({ "sheet": sheet, "column": "A", "above": false }))
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![2, 3], "and the rows above it are hidden");
+}
