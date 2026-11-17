@@ -1357,6 +1357,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/spelling.rs",
         section: "§1001",
     },
+    Port {
+        rule: "the functions of the tree may be listed",
+        from: "gridcraft/crates/engine/src/cmd/formulas.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/inventory.rs",
+        command: "grid.formula.functions",
+        test: "crates/craftkit-plugin-grid/tests/inventory.rs",
+        section: "§1002",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

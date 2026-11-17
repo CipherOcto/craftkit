@@ -154,3 +154,52 @@ fn the_trees_booleans_are_functions_as_well_as_values() {
         "the tree's booleans take no arguments"
     );
 }
+
+/// **The functions of the tree may be listed.** The answer is the
+/// registry itself, with the family of each name.
+#[test]
+fn the_functions_of_the_tree_may_be_listed() {
+    let mut session = session();
+    let outcome = session.execute("grid.formula.functions", &json!({})).expect("the functions are listed");
+    let functions = outcome.data["functions"].as_array().expect("the functions are a list");
+    assert_eq!(functions.len(), inventory().len(), "every function is in the list");
+    let sum = functions.iter().find(|function| function["name"] == json!("SUM")).expect("SUM is there");
+    assert_eq!(sum["family"], json!("core"), "and the family of it is said");
+    assert!(sum.get("reason").is_none(), "and a function that is here has no reason to be elsewhere");
+    // A function that is **refused** is in the list with the **reason**
+    // it is not here: a function that is refused with a reason is not
+    // missing, it is answered.
+    let offset =
+        functions.iter().find(|function| function["name"] == json!("OFFSET")).expect("OFFSET is there");
+    assert_eq!(offset["family"], json!("host"), "the family of it is said");
+    assert_eq!(
+        offset["reason"],
+        json!("not supported yet: a reference that is worked out"),
+        "and the reason it is not here is said"
+    );
+}
+
+/// The list may be **searched** and **kept to one family**.
+#[test]
+fn the_list_may_be_searched() {
+    let mut session = session();
+    let outcome = session
+        .execute("grid.formula.functions", &json!({ "search": "count" }))
+        .expect("the functions are listed");
+    let functions = outcome.data["functions"].as_array().expect("the functions are a list");
+    assert!(!functions.is_empty(), "some names hold the text");
+    for function in functions {
+        assert!(
+            function["name"].as_str().unwrap_or_default().to_lowercase().contains("count"),
+            "the name holds the text: {function}"
+        );
+    }
+    let outcome = session
+        .execute("grid.formula.functions", &json!({ "category": "arithmetic" }))
+        .expect("the functions are listed");
+    let functions = outcome.data["functions"].as_array().expect("the functions are a list");
+    assert!(!functions.is_empty(), "the family has functions");
+    for function in functions {
+        assert_eq!(function["family"], json!("arithmetic"), "the family is the one that was asked for");
+    }
+}

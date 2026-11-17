@@ -27,6 +27,11 @@
 //! here. A function that is answered with a reason is in the registry
 //! like any other: it is answered.
 
+use craftkit_derive::commands;
+
+use craftkit_sdk::serde_json::json;
+use craftkit_sdk::{Outcome, Text};
+
 /// The **family** of a function: the module that answers it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Family {
@@ -224,4 +229,84 @@ pub fn functions() -> Vec<(&'static str, &'static str)> {
 /// Whether the battery knows a **name**.
 pub fn knows(name: &str) -> bool {
     family_of(name).is_some()
+}
+
+/// The **families** the registry holds, in the order of the table.
+///
+/// The two families that are not in the table — the **world outside**
+/// and the **refused** — are in the list too: a function they carry is
+/// in the registry like any other.
+pub fn families() -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = FAMILIES.iter().map(|(family, _)| family.name()).collect();
+    for name in [Family::Outside.name(), Family::Refused.name()] {
+        if !out.contains(&name) {
+            out.push(name);
+        }
+    }
+    out
+}
+
+/// The **reason** a name is not here, when it is not here.
+fn reason_of(name: &str) -> Option<&'static str> {
+    crate::refused::reason_for(name)
+        .or_else(|| crate::outside::reason_for(name))
+        .or_else(|| crate::host::reason_for(name))
+}
+
+commands! {
+    /// The **functions** of the tree's formula language.
+    ///
+    /// The answer is every function the tree knows, with the **family**
+    /// that carries it.
+    ///
+    /// A function that is **refused** — one that gives back a table, or
+    /// that needs a lambda, or that gives back a reference, or that
+    /// belongs to the world outside — is in the answer as well, with
+    /// the **reason** it is not here: a function that is refused with a
+    /// reason is not missing, it is answered.
+    ///
+    /// The **category** keeps one family, and the **search** looks for
+    /// a text in the name of the functions.
+    grid.formula.functions {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The family to keep: `aggregate`, `text`, `lookup`, and the
+            /// rest. Without it, every family is kept.
+            category: Option<Text>,
+            /// The text to look for in the name of the functions.
+            search: Option<Text>,
+        },
+        run: {
+            let category = self.category.as_ref().map(|category| category.0.trim().to_string());
+            let search = self.search.as_ref().map(|search| search.0.trim().to_lowercase());
+            let mut functions: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+            for (name, family) in crate::inventory::functions() {
+                if let Some(category) = &category
+                    && !family.eq_ignore_ascii_case(category)
+                {
+                    continue;
+                }
+                if let Some(search) = &search
+                    && !name.to_lowercase().contains(search)
+                {
+                    continue;
+                }
+                let mut entry = craftkit_sdk::serde_json::Map::new();
+                entry.insert("name".to_string(), json!(name));
+                entry.insert("family".to_string(), json!(family));
+                if let Some(reason) = crate::inventory::reason_of(name) {
+                    entry.insert("reason".to_string(), json!(reason));
+                }
+                functions.push(craftkit_sdk::serde_json::Value::Object(entry));
+            }
+            Ok(Outcome::new(format!("{} function(s)", functions.len())).with_data(json!({
+                "functions": functions,
+                "count": functions.len(),
+                "families": crate::inventory::families(),
+            })))
+
+        }
+    }
 }
