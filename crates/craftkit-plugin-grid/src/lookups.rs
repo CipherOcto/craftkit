@@ -230,16 +230,10 @@ fn order_of(value: &Value, needle: &Value, order: Order) -> Option<std::cmp::Ord
             (Value::Text(one), Value::Text(other)) => Some(crate::criteria::compare_text(one, other)),
             _ => None,
         },
-        Order::EveryKind => {
-            // The **kinds** decide first, and then the values of the
-            // same kind are compared as the tree compares them.
-            let rank = crate::sorting::rank(value).cmp(&crate::sorting::rank(needle));
-            Some(if rank == std::cmp::Ordering::Equal {
-                crate::sorting::compare(value, needle)
-            } else {
-                rank
-            })
-        }
+        // The tree's order over every kind: the **kinds** decide
+        // first, and then the values of the same kind are compared as
+        // the tree compares them.
+        Order::EveryKind => Some(crate::sorting::compare(value, needle)),
     }
 }
 

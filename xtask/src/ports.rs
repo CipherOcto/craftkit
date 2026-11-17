@@ -1420,6 +1420,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/xlookups.rs",
         section: "§1008",
     },
+    Port {
+        rule: "a sort puts the numbers before the text",
+        from: "gridcraft/crates/engine/src/cmd/data/sort.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/sorting.rs",
+        command: "grid.sort",
+        test: "crates/craftkit-plugin-grid/tests/sorting.rs",
+        section: "§1009",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

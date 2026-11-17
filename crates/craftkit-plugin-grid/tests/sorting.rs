@@ -361,3 +361,24 @@ fn a_list_that_is_not_there_is_refused() {
     let message = failure.to_string();
     assert!(message.contains("there is no list"), "the refusal says why: {message}");
 }
+
+/// The values of **different kinds** are ordered by their kind: the
+/// numbers, then the text, then the booleans, then the errors, and the
+/// empty cells last.
+#[test]
+fn the_values_of_different_kinds_are_ordered_by_their_kind() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("banana"));
+    value(&mut session, sheet, "A2", json!(true));
+    value(&mut session, sheet, "A3", json!(2));
+    value(&mut session, sheet, "A4", json!("apple"));
+    session
+        .execute("grid.sort", &json!({ "sheet": sheet, "range": "A1:A4", "column": "A", "header": false }))
+        .expect("the range is sorted");
+    let values = values_of(&mut session, sheet, "A1:A4");
+    assert_eq!(values[0][0], json!(2.0), "the number is first");
+    assert_eq!(values[1][0], json!("apple"), "then the text");
+    assert_eq!(values[2][0], json!("banana"), "then the other text");
+    assert_eq!(values[3][0], json!(true), "and the boolean is last");
+}
