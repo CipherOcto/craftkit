@@ -4452,6 +4452,7 @@ so.
 | a **sort may order the words by one of the workbook's lists** | **built.** The words of the list in the order of the list, and the others after them (§1005) | §1005 |
 | the **objects of a workbook are shown or not** | **built.** The file says whether its charts, pictures and slicers are drawn, and the tree says it too (§1006) | §1006 |
 | a **lookup that does not match exactly finds the largest value below the needle** | **built.** The exact match is the answer, and when there is none the largest value that is not greater than the needle is (§1007) | §1007 |
+| a **search that is a bisection finds the value the tree's order puts next to the needle** | **built.** The binary search is over every kind of value, in the tree's order, and it is not refused any more (§1008) | §1008 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -57968,7 +57969,8 @@ are a pair.
   refused here — the same way the approximate search of `MATCH` and
   `VLOOKUP` is refused (§370) — and §1007 says otherwise: the
   approximate search is not refused any more, and the binary search
-  alone is.
+  alone is — and §1008 says otherwise as well: the binary search is
+  here too, with the rule written down in a sentence.
 - **The tree's numbers are ordered exactly in a lookup, and not as the
   fifteen digits of an equality.** The tree's `=` says that `0.1 + 0.2`
   and `0.3` are the same number, and its lookups do not: they order
@@ -57998,7 +58000,8 @@ are a pair.
   the search going from the last to the first, the binary search being
   refused, the lookup array being a row or a column and the return
   array being of the same shape, the return of a whole row being
-  refused, the place of a needle, and the modes of `XMATCH`.
+  refused, the place of a needle, and the modes of `XMATCH` — and the
+  binary search being refused then, which §1008 says otherwise.
 - **No new command**: the finding is a function of the formula
   language. The grid battery still carries **188** commands and the MCP
   server **1045**.
@@ -65479,6 +65482,86 @@ value **below** the needle.
 - **The tree's binary search is still not here**: the search mode `2`
   and the `-2` of `XLOOKUP` and `XMATCH` are a bisection over the
   whole vector, and a bisection is not a rule that can be written down
-  in a sentence (§875).
+  in a sentence (§875) — and §1008 says otherwise: the binary search
+  is here, and the rule is written down in a sentence.
 - **The tree does not answer the way a bisection answers**: on data
   that is not sorted, this tree's search answers its own rule.
+
+## 1008. A search that is a bisection finds the value the tree's order puts next to the needle
+
+A search that is a bisection is a search over **every** kind of value,
+in one order.
+
+### What was built
+
+- The **binary search** — the search mode `2` and the `-2` of
+  `XLOOKUP` and `XMATCH` — is here, and it is the tree's own rule:
+  - it is over **every kind** of value, and not only over the values of
+    the needle's own kind;
+  - the order is the tree's order: the **numbers**, then the **text**,
+    then the **booleans**, then the **errors**, and the **empty cells
+    last**;
+  - the answer is the value that order puts next to the needle: the
+    **exact** one when there is one, and otherwise the **largest value
+    that is not greater** than the needle, or the **smallest value that
+    is not less** than it, as the match mode says;
+  - the **wildcards** are not used in it: the search is the exact one;
+  - and the search mode `-2` reads the vector the other way round, as
+    every other search does.
+- The tree's **order** is one order now: the sort of a range compares
+  two values the same way, and the binary search of a lookup orders
+  the **kinds** as well.
+
+### What the port found
+
+- **The reference's binary search is a bisection over sorted data, and
+  a bisection is not a rule.** The reference probes the middle of what
+  is left and answers what its own application answers on data that is
+  not sorted. Here the rule is written down in a sentence and the scan
+  is over the whole vector: on **sorted** data the two agree, and on
+  **unsorted** data this tree answers its own rule.
+- **The reference's binary search reads a value of another kind.** Its
+  order is over every kind — the numbers before the text, the text
+  before the logicals, the logicals before the errors — so a text
+  needle may find a number that comes before it. Here the same: the
+  kinds are in the tree's order, and a text needle may find a number.
+- **The reference's empty cells are last in both directions.** Its
+  order turns the other way round for the search mode `-2`, and the
+  empty cells stay last. Here the same.
+- **The reference's wildcards are not used in a binary search**, and it
+  falls back to the exact search. Here the same.
+- **The reference's texts are equal when they are the same without
+  case**, and its order has nothing to say about the capitals. The
+  tree's order puts the capitals after the small letters, as the
+  sort's order does — and the tree's exact search says that two texts
+  that are the same without case are the same, so the capitals make no
+  difference to the answer.
+- **The reference's duplicates are the last of the run in one
+  direction and the first in the other.** Here the **first** match in
+  the search's direction is the answer, as it is for every other search
+  of the tree — so a table with the same key twice gives a different
+  row from the reference's in one of the two directions.
+
+### What it cost
+
+- **No new command**: the finding is a function of the formula
+  language, and the grid battery still carries **241** commands.
+- **One rule that was already there**: the tree's order of the values
+  — numbers, then text, then booleans, then errors, and the empty
+  cells last — is the order of the binary search as well as the order
+  of a sort.
+- **Three tests** in the grid battery (`tests/xlookups.rs`): the
+  binary search finding the value the order puts next to the needle,
+  the binary search reading a number for a text needle, and the binary
+  search going from the last to the first.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not bisect**: the search is over the whole vector,
+  and on data that is not sorted it answers the tree's rule and not the
+  reference's.
+- **The tree's sort does not order two values of different kinds**: a
+  sort compares the values of a column, and a number and a text beside
+  it keep the places they are in. The binary search is where the kinds
+  are ordered.
