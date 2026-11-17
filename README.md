@@ -4442,6 +4442,7 @@ so.
 | the **validation of the copied cells is pasted with them** | **built.** The rules move with the cells, and a rule that reaches out of the copied range does not travel (§994) | §994 |
 | the **link of a copied cell is pasted with it** | **built.** The link and its tooltip travel with the cell they are on (§995) | §995 |
 | the **checkbox of a cell is read from the file** | **built.** The bags of the file are read, and a cell the file says is a checkbox is one here (§997) | §997 |
+| the **calculation settings of a workbook are read from the file** | **built.** How a workbook says it calculates is read and kept, and a setting the tree cannot read is said (§998) | §998 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -55984,7 +55985,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 237 |
+| grid | 238 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -64921,3 +64922,63 @@ names it.
   this tree has no word for, and they are not carried.
 - **The tree does not draw the box**: the front end draws it, and the
   tree says a cell is a checkbox.
+## 998. The calculation settings of a workbook are read from the file
+
+A workbook says **how it calculates**, and the saying is a fact of the
+workbook like the calendar its serials are counted in.
+
+### What was built
+
+- The **calculation settings** of a file are read: how the workbook
+  calculates — by itself, by itself except for its tables, or when it
+  is told to — whether it calculates **circular references** by
+  iterating, how many times it iterates, how much a value may change
+  before it stops, and whether it calculates with the precision of what
+  is **shown**.
+- A new **command**, `grid.workbook.calculation`, reads the settings of
+  a workbook. A workbook of the tree's own calculates by itself, and
+  that is what the answer says.
+- The import **keeps** the settings on the workbook, as it keeps the
+  theme and the date system.
+- A setting the tree cannot read is **not read**: the reader says so in
+  the warnings of the file and keeps the default, rather than guessing
+  at what the file meant.
+
+### What the port found
+
+- **The reference clamps and the tree does not.** The reference keeps
+  the number of iterations within `1..=32767` and takes the magnitude
+  of the change, whatever the file says. Here an iteration count that
+  is out of range, or a change that is not a number, is **not read**:
+  the tree says so and keeps the default. A setting that is quietly
+  wrong is worse than a setting that is missing.
+- **The reference reads a mode it does not know as the automatic one**,
+  in silence. Here the tree says that the mode is not one it knows and
+  uses the automatic one — the answer is the same and the difference is
+  said.
+- **The reference reads the "precision as displayed" and acts on it**:
+  a workbook that says it calculates with what is shown rounds its
+  numbers before it compares them. Here the setting is read and kept,
+  and the tree calculates with the precision of the number whatever the
+  file says.
+
+### What it cost
+
+- **One new command**: the grid battery carries **238** commands.
+- **One rule that was already there**: the facts of a workbook are read
+  into the document, and a fact that is not read is said.
+- **Four tests**: the settings that are read, the workbook that says
+  nothing, the setting that is not read, and the settings that are
+  imported.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not iterate**: a workbook that says it calculates
+  circular references is read, and the tree still refuses a circular
+  reference.
+- **The tree does not calculate by hand**: the tree calculates when a
+  cell is read, and a workbook that says otherwise is read with that
+  said.
+- **The tree does not set the settings**: there is no command that
+  changes them, because the tree has nothing that would act on them.
