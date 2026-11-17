@@ -4444,6 +4444,7 @@ so.
 | the **checkbox of a cell is read from the file** | **built.** The bags of the file are read, and a cell the file says is a checkbox is one here (§997) | §997 |
 | the **calculation settings of a workbook are read from the file** | **built.** How a workbook says it calculates is read and kept, and a setting the tree cannot read is said (§998) | §998 |
 | the **reading of a text is read from the file** | **built.** The phonetic guide a file holds beside a text is read with it, and a reading that does not fit is said (§999) | §999 |
+| a **pivot value may be the product, the spread or the variance of the numbers** | **built.** Six more ways of putting numbers together, and the tree's own rules for a spread (§1000) | §1000 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -65036,3 +65037,55 @@ a Japanese text, the pinyin of a Chinese one — beside the text itself.
 - **The tree does not write a reading**: putting a value in a cell
   takes the reading away, because the reading was of the text that is
   gone.
+## 1000. A pivot value may be the product, the spread or the variance of the numbers
+
+A pivot gathers the rows of a range and puts the numbers of each group
+together, and there are more ways to put numbers together than a sum.
+
+### What was built
+
+- A pivot's value may be put together in **six more ways**:
+  - **`countNumbers`** — how many of the values are **numbers**, and
+    not how many values there are;
+  - **`product`** — their product;
+  - **`stdDev`** and **`stdDevP`** — their **spread**: the standard
+    deviation of a sample of them, and of all of them;
+  - **`var`** and **`varP`** — their **variance**: the variance of a
+    sample of them, and of all of them.
+- The spread and the variance are the tree's **own** rules: the same
+  ones its `STDEV`, `STDEVP`, `VAR` and `VARP` use — a sample needs
+  two numbers at least, and all of them need one.
+- A count is a count and not a putting together: a group with nothing
+  in it has **no numbers**, and that is **zero** and not nothing.
+
+### What the port found
+
+- **The reference answers `#DIV/0!` where the tree answers nothing.**
+  A group of one number has no sample variance, and the reference
+  writes the error into the cell. Here the cell is **empty**: the
+  tree's pivot leaves a cell empty when it has no answer, and it has
+  always done so — the average of no numbers is empty here as well.
+- **The reference counts the numbers and the values apart**, and so does
+  the tree: `count` counts the values and `countNumbers` counts the
+  numbers.
+- **The reference's product of no numbers is zero**, and so is the
+  tree's — except that the tree does not reach it, for a group with no
+  numbers has no product either.
+
+### What it cost
+
+- **No new command**: `grid.pivot.create` already had the way of
+  putting numbers together, and the grid battery carries **238**
+  commands.
+- **One rule that was already there**: the spread and the variance of
+  the tree's own statistics (§ the statistics of the tree).
+- **Two tests**: the ways of putting numbers together, and the spread
+  of a group.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not write an error into a pivot**: a group that has
+  no answer has an empty cell, and the tree says so nowhere else.
+- **The tree does not weigh the values**: the ways of putting numbers
+  together are the tree's eleven and no more.
