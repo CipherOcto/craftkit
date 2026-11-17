@@ -4448,6 +4448,7 @@ so.
 | a **misspelled word may be changed in the text** | **built.** The first time the word is in the text is the time it is changed, and a word that is not there is refused (§1001) | §1001 |
 | the **functions of the tree may be listed** | **built.** The registry is answered: every function, its family, and the reason a refused one is not here (§1002) | §1002 |
 | a **range may be read as it is shown** | **built.** The text a cell shows, written with the format of the cell, and not its value (§1003) | §1003 |
+| a **sort may have more than one key** | **built.** The first key decides and the next one is looked at when it cannot (§1004) | §1004 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -65238,3 +65239,54 @@ the same thing, and a caller may want either.
 - **The tree does not read the shape of a cell**: the text is the text,
   and the width of the column is the width it has.
 - **The tree does not answer with both at once**: that is two reads.
+## 1004. A sort may have more than one key
+
+A sort that has one key leaves many rows to chance: the rows that share
+the value of the key are in whatever order they were in.
+
+### What was built
+
+- `grid.sort` gains **`keys`**: a **list** of them, and the first is the
+  one that decides. A key names the **column** it sorts by and says
+  whether the order is **descending**.
+- The next key is looked at **only when the first cannot** tell two rows
+  apart.
+- The **empty cells are last**, whatever the order is — for every key,
+  as for one.
+- The keys and the **column** may not be given together: a sort is
+  sorted by its keys or by its column, and not by both, and the two
+  together are refused by name.
+
+### What the port found
+
+- **The reference's sort takes a list of keys and a list of orders**,
+  and the key is an object with a column, an order and a way of
+  comparing. Here the key is an object with a **column** and a
+  **descending** flag: the tree's own words for the two.
+- **The reference's sort may sort by the colour of a cell** — its fill
+  or its font — and by a **custom list** of the tree's own. Here it
+  does not: a sort is by the **values** of the cells, which is what the
+  tree's order is.
+- **The reference's sort may sort by rows instead of by columns**, and
+  it asks for a dialog when it has no keys at all. Here the sort is by
+  the rows of the range, and a sort with no key is refused.
+
+### What it cost
+
+- **No new command**: `grid.sort` already sorted a range, and the grid
+  battery carries **240** commands.
+- **One rule that was already there**: the tree's order of the values —
+  numbers, then text, then booleans, then errors, and the empty cells
+  last.
+- **Three tests**: the sort with two keys, the descending key, and the
+  keys and the column together.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not sort by a colour**: the fill and the font are
+  facts of a cell, and the order of them is not the tree's.
+- **The tree does not sort by a custom list**: the lists of the tree
+  are for the words of a cell, and not for the order of a sort.
+- **The tree does not sort the columns of a range**: the rows are the
+  rows.
