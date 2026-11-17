@@ -4445,6 +4445,7 @@ so.
 | the **calculation settings of a workbook are read from the file** | **built.** How a workbook says it calculates is read and kept, and a setting the tree cannot read is said (§998) | §998 |
 | the **reading of a text is read from the file** | **built.** The phonetic guide a file holds beside a text is read with it, and a reading that does not fit is said (§999) | §999 |
 | a **pivot value may be the product, the spread or the variance of the numbers** | **built.** Six more ways of putting numbers together, and the tree's own rules for a spread (§1000) | §1000 |
+| a **misspelled word may be changed in the text** | **built.** The first time the word is in the text is the time it is changed, and a word that is not there is refused (§1001) | §1001 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -55987,7 +55988,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 238 |
+| grid | 239 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -65089,3 +65090,50 @@ together, and there are more ways to put numbers together than a sum.
   no answer has an empty cell, and the tree says so nowhere else.
 - **The tree does not weigh the values**: the ways of putting numbers
   together are the tree's eleven and no more.
+## 1001. A misspelled word may be changed in the text
+
+The **check** finds the words that are not words; the **change** writes
+the correction in their place.
+
+### What was built
+
+- A new **command**, `grid.spelling.change`, changes a word in the text
+  of a cell: the word is the one the check found and the correction is
+  the one the caller gives.
+- The **first** time the word is in the text is the time it is changed:
+  the check found the word there.
+- The cell keeps its **format**, and a cell that is **locked** or
+  covered by a merge is not written.
+- A word that is **not** in the text is **refused**, and so is a cell
+  that holds a **formula**: the check does not look at formulas, and a
+  formula is not a misspelling.
+
+### What the port found
+
+- **The reference changes the text of a cell without saying whether the
+  word was in it**: a word that is not there leaves the cell as it was.
+  Here the word that is not there is **refused** — a change that changes
+  nothing is not a change, and the tree says so.
+- **The reference's change of a cell writes its text as it is**, and a
+  number that is written as a text stays a text. Here the cell keeps
+  the **value** it had, with the text changed in it — the change is of
+  a word and not of a cell's kind.
+- **The reference changes every cell of the workbook when it is asked
+  to** (`all`). The tree has `grid.replace` for that, and one command
+  does one thing.
+
+### What it cost
+
+- **One new command**: the grid battery carries **239** commands.
+- **One rule that was already there**: a cell that is locked or covered
+  is not written, and a word that is not known is refused.
+- **Three tests**: the word that is changed, the word that is not there,
+  and the formula that is not changed.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not choose the correction**: the caller gives it, and
+  the tree does not ask.
+- **The tree does not change a word in every cell**: that is
+  `grid.replace`, and this is one cell.
