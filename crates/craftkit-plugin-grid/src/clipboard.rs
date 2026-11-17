@@ -62,6 +62,10 @@
 //! holds nothing writes nothing over the cell it lands on, for a blank
 //! is nothing and nothing writes nothing.
 //!
+//! And a paste may be a paste of **links**: the cells hold a formula
+//! that reads the cells they came from, and the reference is anchored,
+//! so it does not move.
+//!
 //! And a paste may be worked out in an **operation**: the number of the
 //! clipboard is put together with the number that is there — added,
 //! subtracted, multiplied or divided. A cell that holds a text or an
@@ -477,6 +481,11 @@ commands! {
             /// The number of the clipboard is put together with the number
             /// that is there.
             operation: Option<Text>,
+            /// Whether the cells hold a **formula that reads** the cells they
+            /// came from.
+            ///
+            /// The reference is anchored, so it does not move.
+            link: Option<Bool>,
         },
         run: {
             let id = "grid.range.paste".to_string();
@@ -554,7 +563,18 @@ commands! {
                     message: "paste the values or the formats, and not both".to_string(),
                 });
             }
-            let source = if values || operation.is_some() {
+            // A **link** is a formula, and a formula is not a value and not
+            // a look.
+            let link = matches!(self.link, Some(Bool(true)));
+            if link && (values || formats || operation.is_some()) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a link is a formula, and it may not be pasted with the values, the formats \
+                              or an operation"
+                        .to_string(),
+                });
+            }
+            let source = if values || operation.is_some() || link {
                 let Some(source) = clipboard_sheet(&book) else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
@@ -606,6 +626,16 @@ commands! {
                 // cell it lands on, when the file says so: a blank is
                 // nothing, and nothing writes nothing.
                 if skip_blanks && entry.value.is_none() && entry.formula.is_none() {
+                    continue;
+                }
+                if link {
+                    // The **formula** that reads the cell it was copied
+                    // from: the reference is anchored, so it does not move.
+                    let anchor = crate::formula::Anchor { cell, row_abs: true, col_abs: true };
+                    let mut entry = entry.clone();
+                    entry.formula = Some(format!("{source}!{}", anchor.to_text()));
+                    entry.value = None;
+                    pasted.push((cell, (row as u32, col as u32), entry));
                     continue;
                 }
                 if formats {
@@ -941,6 +971,7 @@ commands! {
                     },
                     "validations": moved_count,
                     "validationsLeftBehind": left_behind_count,
+                    "link": link,
                 })))
 
         }

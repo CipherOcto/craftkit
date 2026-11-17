@@ -820,3 +820,40 @@ fn a_cell_that_is_pasted_over_loses_the_link_it_had() {
         .expect("the cell is pasted");
     assert_eq!(link_of(&mut session, sheet, "C1"), Json::Null, "the link of the cell that was there is gone");
 }
+
+/// The pasted cells hold a **formula that reads** the cells they came
+/// from.
+#[test]
+fn the_pasted_cells_hold_a_formula_that_reads_the_cells_they_came_from() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 7.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "link": true }))
+        .expect("the cells are pasted");
+    assert_eq!(
+        formula_of(&mut session, sheet, "C1"),
+        Some("Sheet1!$A$1".to_string()),
+        "the cell reads the cell it came from"
+    );
+    let outcome = session.execute("grid.calc", &json!({ "sheet": sheet })).expect("the sheet is calculated");
+    assert_eq!(outcome.data["cells"]["C1"], json!(7.0), "and the value is the value of that cell");
+}
+
+/// A **link** may not be pasted with the values, the formats or an
+/// operation.
+#[test]
+fn a_link_may_not_be_pasted_with_the_values_or_the_formats() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 7.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    let outcome = session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "link": true, "values": true }));
+    assert!(outcome.is_err(), "a link is a formula, and it is not a value");
+}
