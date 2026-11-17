@@ -4441,6 +4441,7 @@ so.
 | a **paste may be worked out in an operation** | **built.** The number of the clipboard is put together with the number that is there — added, subtracted, multiplied or divided (§993) | §993 |
 | the **validation of the copied cells is pasted with them** | **built.** The rules move with the cells, and a rule that reaches out of the copied range does not travel (§994) | §994 |
 | the **link of a copied cell is pasted with it** | **built.** The link and its tooltip travel with the cell they are on (§995) | §995 |
+| the **checkbox of a cell is read from the file** | **built.** The bags of the file are read, and a cell the file says is a checkbox is one here (§997) | §997 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -44946,7 +44947,8 @@ ticked and unticked by a command.
   battery does.
 - **The tree's boxes survive a file.** The tree writes a checkbox into
   an xlsx as a **cell control**, and reads it back as one. Nothing here
-  writes a checkbox to a file.
+  writes a checkbox to a file, and a checkbox of a file is read back as
+  one as well (§997).
 - **The tree's box is drawn by the renderer** and may be clicked. Here
   a boolean in a checkbox cell is written as the **glyph** of a box —
   `☑` when it is ticked and `☐` when it is not — and there is no widget
@@ -64863,3 +64865,59 @@ window when it is pasted somewhere else.
 - **The tree does not follow a link out of the workbook**: a link may
   name a place outside it, and the tree's commands never reach outside
   the program.
+## 997. The checkbox of a cell is read from the file
+
+A **checkbox** is a cell control, and a file does not hold it in the
+cell: it holds it **beside** the cells, and the cell's style is what
+names it.
+
+### What was built
+
+- The **feature property bags** of a file are read: the chain of four
+  bags that says a cell is a checkbox, and the cell's style that names
+  the place in that chain.
+- A cell that the file says is a checkbox is a checkbox **here**: the
+  import gives it the tree's own format for a checkbox (§681), and so
+  `grid.cell.checkbox.toggle` ticks it as one.
+- The **number format** of a checkbox cell is not carried: a box is not
+  a way of writing a number, and the format of a checkbox is the format
+  of the tree's checkbox.
+- A **broken chain** resolves to nothing: a bag that points at a bag
+  that is not there, or at a bag of another kind, is not a checkbox.
+  Half a chain is not a checkbox.
+- The import **counts** the checkboxes it carried, and says so.
+
+### What the port found
+
+- **The reference overrides the number format** of a checkbox cell with
+  its own `checkbox` format, and it writes the bags when it saves. Here
+  the same, with one difference: the **reader says** that a cell is a
+  checkbox and does not name the tree's formats. The reader knows the
+  file's words; what a checkbox is in the tree that reads the file is
+  that tree's own business.
+- **The reference's chain is four bags deep**, and every step points at
+  an earlier bag. The tree reads the chain the same way, and it reads it
+  against a bound: a file may name **100 000** complements, and the rest
+  are not read.
+- **The reference's boxes survive a file** (§681 said so): a file that
+  holds a checkbox reads back as one, and this arc is the way back.
+
+### What it cost
+
+- **No new command**: the tree already had the checkbox (§681) and the
+  import (§905); what was missing was the way **into** them.
+- **One rule that was already there**: a checkbox is a cell control, and
+  the tree's format of it is the format of the tree's checkbox.
+- **Three tests**: the checkbox that is read, the broken chain that is
+  not, and the checkbox that is imported and ticked.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree writes no file**: there is no writer, so the bags are read
+  and never written, and a checkbox of this tree does not survive a trip
+  out of the program.
+- **The tree keeps no other cell control**: a file may hold controls
+  this tree has no word for, and they are not carried.
+- **The tree does not draw the box**: the front end draws it, and the
+  tree says a cell is a checkbox.
