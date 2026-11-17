@@ -4447,6 +4447,7 @@ so.
 | a **pivot value may be the product, the spread or the variance of the numbers** | **built.** Six more ways of putting numbers together, and the tree's own rules for a spread (§1000) | §1000 |
 | a **misspelled word may be changed in the text** | **built.** The first time the word is in the text is the time it is changed, and a word that is not there is refused (§1001) | §1001 |
 | the **functions of the tree may be listed** | **built.** The registry is answered: every function, its family, and the reason a refused one is not here (§1002) | §1002 |
+| a **range may be read as it is shown** | **built.** The text a cell shows, written with the format of the cell, and not its value (§1003) | §1003 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -65192,3 +65193,48 @@ do.
   the name and the family, and the answer is those.
 - **The tree does not describe a function**: the answer says that it is
   here, and not what it does.
+## 1003. A range may be read as it is shown
+
+A cell holds a **value**, and it **shows** a **text**: the two are not
+the same thing, and a caller may want either.
+
+### What was built
+
+- `grid.range.read` gains **`formatted`**: the cells are given as they
+  are **shown** — the text the cell shows, written with the format of
+  the cell, and with the conditional format that matches it.
+- The **values** are still the values: a read that does not ask for the
+  text gives the number itself.
+- The two ways of reading a range are **exclusive**: a range is read
+  for its **formulas** or for the **text** it shows, and not for both,
+  and the two together are refused by name.
+
+### What the port found
+
+- **The reference prefers the formulas**: a read that asks for both
+  gives the formulas and says nothing about the text. Here the two
+  together are **refused** — a read that answers with one thing when
+  another was asked for is a read that answers with something else.
+- **The reference writes the text of the cell with the format of the
+  cell**, and the text of a cell whose format fills it is filled to the
+  width of the column. Here the same: the text is the tree's own text,
+  written by the tree's own format.
+- **The reference's read of a whole column is cut to the used range**,
+  so that a read of `A:A` does not read a million cells. The tree's
+  read of a range is of the range it is given.
+
+### What it cost
+
+- **No new command**: `grid.range.read` already read a range, and the
+  grid battery carries **240** commands.
+- **One rule that was already there**: the text a cell shows is the
+  value written with the format of the cell (§ the format of a cell).
+- **Two tests**: the range that is read as it is shown, and the range
+  that is read for two things at once.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not read the shape of a cell**: the text is the text,
+  and the width of the column is the width it has.
+- **The tree does not answer with both at once**: that is two reads.
