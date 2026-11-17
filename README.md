@@ -4446,6 +4446,7 @@ so.
 | the **reading of a text is read from the file** | **built.** The phonetic guide a file holds beside a text is read with it, and a reading that does not fit is said (§999) | §999 |
 | a **pivot value may be the product, the spread or the variance of the numbers** | **built.** Six more ways of putting numbers together, and the tree's own rules for a spread (§1000) | §1000 |
 | a **misspelled word may be changed in the text** | **built.** The first time the word is in the text is the time it is changed, and a word that is not there is refused (§1001) | §1001 |
+| the **functions of the tree may be listed** | **built.** The registry is answered: every function, its family, and the reason a refused one is not here (§1002) | §1002 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -55988,7 +55989,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 239 |
+| grid | 240 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -65137,3 +65138,57 @@ the correction in their place.
   the tree does not ask.
 - **The tree does not change a word in every cell**: that is
   `grid.replace`, and this is one cell.
+## 1002. The functions of the tree may be listed
+
+A tree that says what it can do is a tree that may be asked what it can
+do.
+
+### What was built
+
+- A new **command**, `grid.formula.functions`, answers with the
+  **registry** of the tree: every function it knows, with the **family**
+  that carries it.
+- The answer may be **searched** — a text in the name of the functions —
+  and **kept to one family** — `aggregate`, `text`, `lookup`, and the
+  rest.
+- A function that is **refused** is in the answer too, with the
+  **reason** it is not here: a function that is refused with a reason
+  is not missing, it is answered.
+- The answer says the **families** the registry holds, so that a caller
+  may ask for one of them by name.
+
+### What the port found
+
+- **The reference answers with a signature and a description** for each
+  function, because its registry keeps them: a function is a name, a
+  number of arguments, a category, a signature and a sentence. This
+  tree's registry keeps the **name** and the **family**, and so the
+  answer is those two — and nothing more. A tree that says a function
+  exists and does not say what it takes is a tree that is half a
+  catalogue, and that is what it is.
+- **The reference's categories are its own** — `Math & Trig`,
+  `Financial`, `Lookup & Reference` — and this tree's families are the
+  **modules** that answer the functions. A caller asks for
+  `arithmetic` here and for `Math & Trig` there, and the two are the
+  tree's own words.
+- **The reference keeps the refused functions out of its catalogue** and
+  answers them with a reason when they are called. Here they are in the
+  answer, with the reason: the tree's own rule is that a function that
+  is refused with a reason is answered.
+
+### What it cost
+
+- **One new command**: the grid battery carries **240** commands.
+- **One rule that was already there**: the registry of the battery is
+  public and says what the battery knows (§ the registry of the
+  battery).
+- **Two tests**: the list that is the registry, and the list that is
+  searched.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not say what a function takes**: the registry keeps
+  the name and the family, and the answer is those.
+- **The tree does not describe a function**: the answer says that it is
+  here, and not what it does.
