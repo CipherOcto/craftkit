@@ -237,6 +237,7 @@ commands! {
             let mut unread = 0u64;
             let mut formats = 0u64;
             let mut unread_formats = 0u64;
+            let mut checkboxes = 0u64;
             let mut fonts = 0u64;
             let mut fills = 0u64;
             let mut aligns = 0u64;
@@ -359,12 +360,20 @@ commands! {
                         entry.insert("value".to_string(), value.to_json());
                         filled += 1;
                     }
-                    // The **format** of the cell: the file's own code,
-                    // and only when this tree's format language can
-                    // read it. A code that is not read is not carried:
-                    // a format that is quietly wrong is worse than a
-                    // format that is missing.
-                    if let Some(code) = &cell.format
+                    // The **checkbox** of the cell: a cell control the
+                    // file holds beside its cells. The tree's own format
+                    // for it is the format of the tree's checkbox, and a
+                    // cell that is a checkbox is that and not a number
+                    // format: a box is not a way of writing a number.
+                    if cell.checkbox {
+                        entry.insert("format".to_string(), json!(crate::checkboxes::CHECKBOX));
+                        checkboxes += 1;
+                    } else if let Some(code) = &cell.format
+                        // The **format** of the cell: the file's own code,
+                        // and only when this tree's format language can
+                        // read it. A code that is not read is not carried:
+                        // a format that is quietly wrong is worse than a
+                        // format that is missing.
                         && crate::format::Format::parse(code).is_some()
                     {
                         entry.insert("format".to_string(), json!(code));
@@ -1235,6 +1244,9 @@ commands! {
                     "; {unread_formats} format(s) could not be read and were not imported"
                 ));
             }
+            if checkboxes > 0 {
+                summary.push_str(&format!("; {checkboxes} checkbox(es) were imported"));
+            }
             if unread_names > 0 {
                 summary.push_str(&format!(
                     "; {unread_names} name(s) could not be read and were not imported"
@@ -1299,6 +1311,7 @@ commands! {
                 "unread_formulas": unread,
                 "formats": formats,
                 "unread_formats": unread_formats,
+                "checkboxes": checkboxes,
                 "fonts": fonts,
                 "fills": fills,
                 "aligns": aligns,

@@ -1908,3 +1908,57 @@ fn the_theme_of_the_file_is_read() {
         session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
     assert_eq!(cell.data["fill"], json!("#4472c4"), "the cell is filled with the theme's colour");
 }
+
+/// A **checkbox** of a file is imported: the cell is a checkbox in the
+/// tree, and it is ticked as one.
+#[test]
+fn the_checkbox_of_a_cell_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2022/11/relationships/FeaturePropertyBag" Target="featurePropertyBag/featurePropertyBag.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><cellXfs><xf numFmtId="0"/><xf numFmtId="0"><extLst><ext uri="{C7286773-470A-42A8-94C5-96B5CB345126}" xmlns:xfpb="http://schemas.microsoft.com/office/spreadsheetml/2022/featurepropertybag"><xfpb:xfComplement i="0"/></ext></extLst></xf></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/featurePropertyBag/featurePropertyBag.xml",
+            r#"<FeaturePropertyBags xmlns="http://schemas.microsoft.com/office/spreadsheetml/2022/featurepropertybag" count="4"><bag type="Checkbox"/><bag type="XFControls"><bagId k="CellControl">0</bagId></bag><bag type="XFComplement"><bagId k="XFControls">1</bagId></bag><bag type="XFComplements"><a k="MappedFeaturePropertyBags"><bagId>2</bagId></a></bag></FeaturePropertyBags>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" s="1" t="b"><v>1</v></c><c r="B1" t="b"><v>0</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["checkboxes"].as_u64(), Some(1), "one checkbox was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let cell =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(cell.data["format"], json!("checkbox"), "the cell is a checkbox");
+    assert_eq!(cell.data["value"], json!(true), "and it holds what the file holds");
+    // The **box** is ticked: a checkbox of a file is a checkbox here,
+    // and it ticks as one.
+    let ticked = session
+        .execute("grid.cell.checkbox.toggle", &json!({ "sheet": sheet, "cell": "A1" }))
+        .expect("the checkbox is toggled");
+    assert_eq!(ticked.data["value"], json!(false), "the box is unticked");
+    // A cell that is **not** a checkbox is left as it is.
+    let other = session
+        .execute("grid.cell.checkbox.toggle", &json!({ "sheet": sheet, "cell": "B1" }))
+        .expect("the cell is asked");
+    assert_eq!(other.data["toggled"], json!(false), "the cell is not a checkbox");
+}

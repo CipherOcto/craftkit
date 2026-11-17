@@ -1312,6 +1312,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/clipboard.rs",
         section: "§996",
     },
+    Port {
+        rule: "the checkbox of a cell is read from the file",
+        from: "gridcraft/crates/xlsx/src/feature_bags.rs",
+        to: "craftkit-xlsx",
+        module: "src/featurebags.rs",
+        command: "craftkit-xlsx::read",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§997",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

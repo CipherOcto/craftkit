@@ -61,12 +61,17 @@
 )]
 #![forbid(unsafe_code)]
 
+mod featurebags;
 mod rels;
 mod styles;
 mod theme;
 
+pub use featurebags::{MAX_BAGS, checkbox_complements, xf_is_checkbox};
 pub use rels::{Rel, rels_of, resolve, split_dir};
-pub use styles::{Alignment, Border, Borders, Fill, Font, Protection, Styles, Underline, Vert, read_styles};
+pub use styles::{
+    Alignment, Border, Borders, Fill, Font, Protection, Styles, Underline, Vert, read_styles,
+    read_styles_with,
+};
 pub use theme::{SLOTS, Theme, apply_tint, read_theme};
 
 /// The most **rows** a sheet may have: the tree's own bound.
@@ -194,6 +199,12 @@ pub struct Cell {
     /// here is the **master's** text, and the deltas say how far this
     /// cell is from the master.
     pub shared: Option<Shared>,
+    /// Whether the cell is a **checkbox**: a cell control the file
+    /// holds beside the cells rather than in them.
+    ///
+    /// The reader says that the cell is a checkbox; what a checkbox is
+    /// in the tree that reads the file is that tree's own business.
+    pub checkbox: bool,
 }
 
 /// The **kind** of a formula: what the file says the formula is.
@@ -1663,6 +1674,10 @@ fn read_sheet(
             };
             let style = cell.attr_u32("s");
             let format = styles.format(style).map(|code| code.to_string());
+            // The **checkbox** of the cell: a cell control the file
+            // holds beside its cells, and the cell's style is what
+            // names it.
+            let checkbox = styles.is_checkbox(style);
             // The **font**, the **fill** and the **alignment** of the
             // cell: only when the cell names a style of its own. A
             // cell that names no style has the sheet's own face, and
@@ -1692,6 +1707,7 @@ fn read_sheet(
                 borders,
                 protection,
                 shared: None,
+                checkbox,
             });
             if let Some(index) = shared_master {
                 // The cell names a shared formula: the group's master
@@ -2679,6 +2695,10 @@ fn read_styles_of(
     warnings: &mut Vec<String>,
     theme: &Theme,
 ) -> Styles {
+    // The **checkboxes** of the file: the cell controls it holds beside
+    // its cells. They are read before the styles, because a style is
+    // what names them.
+    let complements = read_complements_of(package, workbook_rels, warnings);
     let Some(relation) = workbook_rels.iter().find(|rel| rel.kind == "styles") else {
         return Styles::default();
     };
@@ -2686,7 +2706,28 @@ fn read_styles_of(
         warnings.push(format!("the part {} could not be read", relation.target));
         return Styles::default();
     };
-    read_styles(&root, theme)
+    styles::read_styles_with(&root, theme, &complements)
+}
+
+/// The **complements** of a workbook: for each one the file names,
+/// whether it is a checkbox.
+///
+/// The cell controls of a file live in the **feature property bags**,
+/// and the styles point at them. A workbook with no bags has no
+/// complements, and that is not an error.
+fn read_complements_of(
+    package: &mut craftkit_zip::Package<'_>,
+    workbook_rels: &[Rel],
+    warnings: &mut Vec<String>,
+) -> Vec<bool> {
+    let Some(relation) = workbook_rels.iter().find(|rel| rel.kind == "FeaturePropertyBag") else {
+        return Vec::new();
+    };
+    let Some(root) = read_xml(package, &relation.target).ok().flatten() else {
+        warnings.push(format!("the part {} could not be read", relation.target));
+        return Vec::new();
+    };
+    featurebags::checkbox_complements(&root)
 }
 
 /// Read a part of the package as XML.

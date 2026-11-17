@@ -273,6 +273,13 @@ pub struct Styles {
     /// The **palette** of the workbook: the colours it names by their
     /// number.
     palette: Vec<u32>,
+    /// The **checkboxes** of the workbook, by the number of the cell
+    /// format: whether the cells of that format are checkboxes.
+    ///
+    /// A checkbox is a cell control, and a file holds it beside the
+    /// cells rather than in them, so a format is a checkbox or it is
+    /// not.
+    checkboxes: Vec<bool>,
 }
 
 impl Styles {
@@ -340,6 +347,16 @@ impl Styles {
         &self.palette
     }
 
+    /// Whether the cells of that format are **checkboxes**.
+    ///
+    /// A cell that names no style has the **first** format of the
+    /// workbook, as the tree's reader has it, and that is the general
+    /// format: a cell with no format of its own is not a checkbox.
+    pub fn is_checkbox(&self, style: Option<u32>) -> bool {
+        let index = style.unwrap_or(0) as usize;
+        self.checkboxes.get(index).copied().unwrap_or(false)
+    }
+
     /// Whether there are **no** styles at all: a workbook with no
     /// styles part has no formats.
     pub fn is_empty(&self) -> bool {
@@ -349,6 +366,16 @@ impl Styles {
 
 /// Read the **styles** part of a workbook.
 pub fn read_styles(root: &El, theme: &Theme) -> Styles {
+    read_styles_with(root, theme, &[])
+}
+
+/// Read the **styles** part of a workbook, against the **complements**
+/// of the file.
+///
+/// A **complement** is a cell control a file holds beside its cells:
+/// for each one the file names, whether it is a checkbox. A workbook
+/// with no complements has no checkboxes, and that is not an error.
+pub fn read_styles_with(root: &El, theme: &Theme, complements: &[bool]) -> Styles {
     // The **palette** of the file: the colours it names by their
     // number. A file that names no palette has the tree's own.
     let mut palette: Vec<u32> = INDEXED.to_vec();
@@ -399,6 +426,9 @@ pub fn read_styles(root: &El, theme: &Theme) -> Styles {
     let mut aligns = Vec::new();
     let mut border_ids = Vec::new();
     let mut protections = Vec::new();
+    // The **checkboxes**: the cell formats whose cells are a cell
+    // control of the file's own.
+    let mut checkboxes = Vec::new();
     if let Some(cells) = root.child("cellXfs") {
         for format in cells.kids("xf") {
             let id = format.attr_u32("numFmtId").unwrap_or(0);
@@ -414,6 +444,7 @@ pub fn read_styles(root: &El, theme: &Theme) -> Styles {
             aligns.push(format.child("alignment").map(read_alignment));
             border_ids.push(format.attr_u32("borderId").unwrap_or(0));
             protections.push(format.child("protection").map(read_protection));
+            checkboxes.push(crate::featurebags::xf_is_checkbox(format, complements));
         }
     }
     // The **base formats** of the named styles: the look of each
@@ -472,6 +503,7 @@ pub fn read_styles(root: &El, theme: &Theme) -> Styles {
         dxfs,
         named,
         palette,
+        checkboxes,
     }
 }
 
