@@ -4455,6 +4455,7 @@ so.
 | a **search that is a bisection finds the value the tree's order puts next to the needle** | **built.** The binary search is over every kind of value, in the tree's order, and it is not refused any more (§1008) | §1008 |
 | a **sort puts the numbers before the text** | **built.** The kinds are ordered as the tree's order says, and the sort and the binary search share it (§1009) | §1009 |
 | a **criterion is read by the tree's own rule of numbers** | **built.** A currency, a fraction and a date are numbers in a criterion, read by the rule `VALUE` reads a text by (§1010) | §1010 |
+| a **criterion is counted in the code units of its text** | **built.** The bound is two hundred and fifty-five units and not characters, and the cut keeps the characters that fit (§1011) | §1011 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -25603,7 +25604,9 @@ cells that meet it and `SUMIF` adds them.
   too.** The tree refuses a text criterion of more than two hundred
   and fifty-five characters, and says it checked it on two versions of
   its own application; here the bound is the same, and a criterion
-  over it is an error and not a truncated criterion.
+  over it is an error and not a truncated criterion — and §1011 says
+  otherwise: the count is in the code units of the text, and not in
+  its characters.
 - **The tree's criterion may be a date and this tree's is not.** The
   tree reads a criterion that looks like a date as the number of that
   date; here a criterion is a number, a boolean or text, and a date is
@@ -65688,7 +65691,60 @@ number.
 ### What it does not settle
 
 - **The tree's criterion is still counted in characters**, where the
-  reference counts the code units of its own strings.
+  reference counts the code units of its own strings — and §1011 says
+  otherwise: the count is in the code units, and the cut keeps the
+  characters that fit.
 - **The tree's number-text rule reads a date in the workbook's system,
   and the reference's criteria read one in the 1900 system** — so a
   workbook in the 1904 system answers differently here and there.
+
+## 1011. A criterion is counted in the code units of its text
+
+A criterion has a **bound**, and the bound is counted in the units the
+tree's own application counts in.
+
+### What was built
+
+- The **length** of a criterion is counted in the **code units** of its
+  text — the units the tree's own application counts in — and not in
+  the characters of it. So a text of astral characters is counted
+  twice over: two hundred and fifty-four letters and one emoji are
+  two hundred and fifty-five characters and two hundred and fifty-six
+  units, and a criterion of them is over the bound.
+- The **cut** of a criterion — the one the counting functions with two
+  conditions make — keeps the **characters that fit** in the bound: the
+  emoji is left out, and the criterion is a whole text.
+
+### What the port found
+
+- **The reference counts a criterion in the code units of its text**,
+  and its note says it checked it on two versions of its own
+  application: `"a"` times 254 and an emoji is 255 characters and 256
+  units, and it is `#VALUE!`. Here the count was in characters, and a
+  criterion of them was not over the bound — and the tree's own words
+  said the count was made the same way, and they were not. Now they
+  are.
+- **The reference's cut may leave half a character behind.** Its cut
+  through the two halves of a character leaves the high half alone,
+  and a criterion like that matches nothing for `=` and everything for
+  `<>`; and for `<`, `<=`, `>` and `>=` it sorts just above the text
+  that was kept. Here the cut keeps the **characters that fit** and
+  leaves the rest out, so the criterion is a whole text and it matches
+  what it says.
+
+### What it cost
+
+- **No new command**: the counting is a function of the formula
+  language, and the grid battery still carries **241** commands.
+- **One rule that was already there**: the tree's bound of two hundred
+  and fifty-five — and the count is made the way the bound is counted.
+- **Two tests** in the grid battery (`tests/counting.rs` and
+  `tests/aggregates.rs`): the criterion counted in the code units of
+  its text, and the cut keeping the characters that fit.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's cut leaves a character out and the reference's leaves
+  half of one behind**: a criterion cut out of a text of astral
+  characters matches a cell here and not there.
