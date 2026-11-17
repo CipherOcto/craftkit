@@ -4449,6 +4449,7 @@ so.
 | the **functions of the tree may be listed** | **built.** The registry is answered: every function, its family, and the reason a refused one is not here (§1002) | §1002 |
 | a **range may be read as it is shown** | **built.** The text a cell shows, written with the format of the cell, and not its value (§1003) | §1003 |
 | a **sort may have more than one key** | **built.** The first key decides and the next one is looked at when it cannot (§1004) | §1004 |
+| a **sort may order the words by one of the workbook's lists** | **built.** The words of the list in the order of the list, and the others after them (§1005) | §1005 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -65287,6 +65288,53 @@ the value of the key are in whatever order they were in.
 - **The tree does not sort by a colour**: the fill and the font are
   facts of a cell, and the order of them is not the tree's.
 - **The tree does not sort by a custom list**: the lists of the tree
-  are for the words of a cell, and not for the order of a sort.
+  are for the words of a cell, and not for the order of a sort — and
+  §1005 says otherwise: a key may order the words by one of them.
 - **The tree does not sort the columns of a range**: the rows are the
+  rows.
+## 1005. A sort may order the words by one of the workbook's lists
+
+The order of the days and the order of the months are orders that no
+alphabet makes: a workbook may be **taught** them.
+
+### What was built
+
+- A key of a sort may name the **list** the words are ordered by — the
+  place of the list in the workbook, as the tree names a list
+  everywhere else.
+- The words of the list are in the **order of the list**, and the words
+  that are **not** in it come after them, in the tree's own order.
+- A key that names a list that is **not there** is refused: a list that
+  is not there orders nothing, and a sort that says nothing is not a
+  sort.
+
+### What the port found
+
+- **The reference's custom list is given in the key itself** — the
+  words, in the key. Here the list is the **workbook's own**: the
+  workbook is taught its lists, and the sort names one of them. A list
+  that is taught is a list that travels with the workbook.
+- **The reference's custom list orders the words that are in it** and
+  leaves the others in their own order, which is what this tree does
+  too — and the tree puts them **after**, where the reference leaves
+  them wherever they were.
+- **The reference's list may be given with a key that sorts by a
+  colour**, and the two are one key there. Here the key is the column
+  and the order and the list, and the colour is not one of them.
+
+### What it cost
+
+- **No new command**: `grid.sort` already sorted a range, and the grid
+  battery carries **240** commands.
+- **One rule that was already there**: the lists of the workbook are
+  taught to it, and a list is named by its place.
+- **Two tests**: the sort that orders the words by a list, and the list
+  that is not there.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not sort by a colour**: the fill and the font are
+  facts of a cell, and the order of them is not the tree's.
+- **The tree does not sort by the rows of a range**: the rows are the
   rows.
