@@ -38,7 +38,7 @@
 //!   not count, and so a table with two matching records and one of
 //!   them empty has one value and not an error. Here the same.
 
-use crate::criteria::{Condition, compare_text, number_text};
+use crate::criteria::{Condition, compare_text};
 use crate::formula::Value;
 pub(crate) const NAMES: &[&str] = &[
     "DSUM", "DAVERAGE", "DCOUNT", "DCOUNTA", "DGET", "DMAX", "DMIN", "DPRODUCT", "DVAR", "DVARP", "DSTDEV",
@@ -76,21 +76,21 @@ fn field_of(header: &[Value], field: &Value) -> Result<Option<usize>, String> {
 }
 
 /// The **condition** a criteria cell is.
-fn condition_of(value: &Value) -> Option<Condition> {
+fn condition_of(value: &Value, system: crate::dates::System) -> Option<Condition> {
     match value {
         Value::Empty => None,
         Value::Text(text) => {
             let plain = !text.starts_with(['=', '<', '>'])
-                && number_text(text).is_none()
+                && crate::textvalue::number_of(text, system).is_none()
                 && !text.eq_ignore_ascii_case("TRUE")
                 && !text.eq_ignore_ascii_case("FALSE");
             if plain && !text.ends_with('*') {
-                Some(Condition::parse(&Value::Text(format!("{text}*"))))
+                Some(Condition::parse(&Value::Text(format!("{text}*")), system))
             } else {
-                Some(Condition::parse(value))
+                Some(Condition::parse(value, system))
             }
         }
-        other => Some(Condition::parse(other)),
+        other => Some(Condition::parse(other, system)),
     }
 }
 
@@ -98,7 +98,11 @@ fn condition_of(value: &Value) -> Option<Condition> {
 ///
 /// The rows are the ones after the header, and their numbers are
 /// their places in the table.
-pub(crate) fn matching_records(database: &Table, criteria: &Table) -> Vec<usize> {
+pub(crate) fn matching_records(
+    database: &Table,
+    criteria: &Table,
+    system: crate::dates::System,
+) -> Vec<usize> {
     let header = database.first().map(Vec::as_slice).unwrap_or(&[]);
     let labels = criteria.first().map(Vec::as_slice).unwrap_or(&[]);
     // Every condition row: the conditions of one row.
@@ -106,7 +110,7 @@ pub(crate) fn matching_records(database: &Table, criteria: &Table) -> Vec<usize>
     for row in criteria.iter().skip(1) {
         let mut conditions = Vec::new();
         for (index, cell) in row.iter().enumerate() {
-            let Some(condition) = condition_of(cell) else { continue };
+            let Some(condition) = condition_of(cell, system) else { continue };
             let column = labels.get(index).and_then(|label| match label {
                 Value::Text(text) => column_of(header, text),
                 Value::Number(_) => {
@@ -164,13 +168,14 @@ pub(crate) fn call(
     database: &Table,
     criteria: &Table,
     field: Option<&Value>,
+    system: crate::dates::System,
 ) -> Result<Value, String> {
     let header = database.first().map(Vec::as_slice).unwrap_or(&[]);
     let field = match field {
         Some(field) => field_of(header, field)?,
         None => None,
     };
-    let records = matching_records(database, criteria);
+    let records = matching_records(database, criteria, system);
     let numbers = match field {
         Some(field) => field_numbers(database, &records, field),
         None => Vec::new(),

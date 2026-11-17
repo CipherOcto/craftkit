@@ -96,7 +96,7 @@ fn split_op(text: &str) -> (&str, &str) {
 
 /// Whether a cell **matches** a criterion: the tree's own
 /// `criterion_matches`.
-fn criterion_matches(value: &Value, text: &str, criterion: &Value) -> bool {
+fn criterion_matches(value: &Value, text: &str, criterion: &Value, system: crate::dates::System) -> bool {
     let criterion_text = match criterion {
         Value::Empty => return true,
         Value::Number(number) => {
@@ -116,7 +116,7 @@ fn criterion_matches(value: &Value, text: &str, criterion: &Value) -> bool {
             _ => true,
         };
     }
-    let number = crate::criteria::number_text(operand);
+    let number = crate::textvalue::number_of(operand, system);
     let lower_text = text.to_lowercase();
     let lower_operand = operand.to_lowercase();
     let comparison: Option<std::cmp::Ordering> = match (value, number) {
@@ -169,7 +169,13 @@ fn criterion_matches(value: &Value, text: &str, criterion: &Value) -> bool {
 /// together, the rows of the criteria are judged one by one, and with
 /// the tree's own **unique** rule only the first row of a set of the
 /// same values is kept.
-pub fn kept_rows(cells: &Cells, list: &Area, criteria: &Area, unique: bool) -> Result<Vec<u32>, String> {
+pub fn kept_rows(
+    cells: &Cells,
+    list: &Area,
+    criteria: &Area,
+    unique: bool,
+    system: crate::dates::System,
+) -> Result<Vec<u32>, String> {
     // The **headings** of the list.
     let mut headings: Vec<String> = Vec::new();
     for column in list.start.col..=list.end.col {
@@ -222,7 +228,7 @@ pub fn kept_rows(cells: &Cells, list: &Area, criteria: &Area, unique: bool) -> R
                 let cell = CellRef { col: list.start.col + offset, row };
                 let value = cells.get(cell).and_then(|entry| entry.value.clone()).unwrap_or(Value::Empty);
                 let text = text_of(&value);
-                criterion_matches(&value, &text, criterion)
+                criterion_matches(&value, &text, criterion, system)
             });
             if all {
                 matches = true;
@@ -319,7 +325,7 @@ commands! {
             // The **rows of the list** that match: the rows of the criteria
             // are judged one by one, and the columns of a row together.
             let unique = matches!(self.unique, Some(Bool(true)));
-            let kept = kept_rows(&cells, &list, &criteria, unique)
+            let kept = kept_rows(&cells, &list, &criteria, unique, crate::system_of(session, sheet))
                 .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
             // The rows of the list are counted from **one**, as the rows of
             // a filter are: the tree's own counting.

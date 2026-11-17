@@ -14,6 +14,11 @@
 //! So `">2"` is *greater than two*, `"apple"` is *the text apple*, and
 //! `"<>apple"` is *anything that is not the text apple*.
 //!
+//! And what follows the operator is read as a **number** by the tree's
+//! own rule of numbers — the rule `VALUE` reads a text by — so a
+//! currency sign, thousands separators, a percent sign, a fraction, a
+//! date and a time are all numbers here.
+//!
 //! # The wildcards
 //!
 //! A text criterion may hold the wildcards the tree has:
@@ -38,13 +43,15 @@
 //!   tree reads a criterion that looks like a date as the number of
 //!   that date, so `">=1/1/2020"` is a date and not text; here a
 //!   criterion is a number, a boolean or text, and a date is not one
-//!   of them.
+//!   of them — and §1010 says otherwise: a criterion is read by the
+//!   tree's own rule of numbers, and a date is one of them.
 //! - **The tree's criterion may be an error and this tree's is too.**
 //!   An error criterion is not raised: it is the condition *that the
 //!   cell holds that error*, and a cell that holds it matches.
 
 use std::cmp::Ordering;
 
+use crate::dates::System;
 use crate::formula::Value;
 
 /// The most characters a text criterion may hold.
@@ -100,6 +107,9 @@ pub struct Condition {
     /// The criterion was a **bare empty text** — `""` — and it matches
     /// the empty cells and the empty texts.
     bare_empty: bool,
+    /// The **date system** of the workbook: a criterion that holds a
+    /// date is read in it.
+    system: System,
 }
 
 impl Condition {
@@ -108,17 +118,21 @@ impl Condition {
     /// A number is the number, a boolean is the boolean, an error is
     /// the error, an empty value is the number zero, and text is a
     /// condition written out.
-    pub fn parse(value: &Value) -> Condition {
+    pub fn parse(value: &Value, system: System) -> Condition {
         match value {
             Value::Number(number) => {
-                Condition { op: Op::Eq, operand: Operand::Number(*number), bare_empty: false }
+                Condition { op: Op::Eq, operand: Operand::Number(*number), bare_empty: false, system }
             }
-            Value::Bool(flag) => Condition { op: Op::Eq, operand: Operand::Bool(*flag), bare_empty: false },
+            Value::Bool(flag) => {
+                Condition { op: Op::Eq, operand: Operand::Bool(*flag), bare_empty: false, system }
+            }
             Value::Error(message) => {
-                Condition { op: Op::Eq, operand: Operand::Error(message.clone()), bare_empty: false }
+                Condition { op: Op::Eq, operand: Operand::Error(message.clone()), bare_empty: false, system }
             }
-            Value::Empty => Condition { op: Op::Eq, operand: Operand::Number(0.0), bare_empty: false },
-            Value::Text(text) => Condition::parse_text(text),
+            Value::Empty => {
+                Condition { op: Op::Eq, operand: Operand::Number(0.0), bare_empty: false, system }
+            }
+            Value::Text(text) => Condition::parse_text(text, system),
         }
     }
 
@@ -127,7 +141,7 @@ impl Condition {
     /// A text criterion over the bound is an error: the tree refuses
     /// it, and a truncated criterion is a criterion that is not the
     /// one that was written.
-    pub fn parse_argument(value: &Value) -> Result<Condition, String> {
+    pub fn parse_argument(value: &Value, system: System) -> Result<Condition, String> {
         if let Value::Text(text) = value
             && text.chars().count() > MAX_CRITERION_CHARS
         {
@@ -136,7 +150,7 @@ impl Condition {
                 text.chars().count()
             ));
         }
-        Ok(Condition::parse(value))
+        Ok(Condition::parse(value, system))
     }
 
     /// The criterion of an **argument** in a function that takes more
@@ -146,25 +160,30 @@ impl Condition {
     /// to its first two hundred and fifty-five characters and matches
     /// that. So a criterion over the bound is a shorter condition and
     /// not an error.
-    pub fn parse_argument_truncated(value: &Value) -> Condition {
+    pub fn parse_argument_truncated(value: &Value, system: System) -> Condition {
         match value {
             Value::Text(text) if text.chars().count() > MAX_CRITERION_CHARS => {
                 let cut: String = text.chars().take(MAX_CRITERION_CHARS).collect();
-                Condition::parse_text(&cut)
+                Condition::parse_text(&cut, system)
             }
-            other => Condition::parse(other),
+            other => Condition::parse(other, system),
         }
     }
 
     /// A criterion written out in **text**.
-    fn parse_text(text: &str) -> Condition {
+    ///
+    /// What follows the operator is read as a **number** by the tree's
+    /// own rule — the rule `VALUE` reads a text by — so a sign, a
+    /// currency sign, thousands separators, a percent sign, an
+    /// exponent, parentheses, a date and a time are all numbers here.
+    fn parse_text(text: &str, system: System) -> Condition {
         if text.is_empty() {
-            return Condition { op: Op::Eq, operand: Operand::Blank, bare_empty: true };
+            return Condition { op: Op::Eq, operand: Operand::Blank, bare_empty: true, system };
         }
         let (op, rest) = split_op(text);
         let operand = if rest.is_empty() {
             Operand::Blank
-        } else if let Some(number) = number_text(rest) {
+        } else if let Some(number) = crate::textvalue::number_of(rest, system) {
             Operand::Number(number)
         } else if rest.eq_ignore_ascii_case("TRUE") {
             Operand::Bool(true)
@@ -173,7 +192,7 @@ impl Condition {
         } else {
             Operand::Text(rest.to_string())
         };
-        Condition { op, operand, bare_empty: false }
+        Condition { op, operand, bare_empty: false, system }
     }
 
     /// Whether a **value** meets the criterion.
@@ -220,7 +239,9 @@ impl Condition {
             // A number written as text matches **only** for equality:
             // `COUNTIF(range,"1")` counts the cell that holds the text
             // `1`, and `COUNTIF(range,">1")` does not.
-            Value::Text(text) if matches!(self.op, Op::Eq | Op::Ne) => number_text(text),
+            Value::Text(text) if matches!(self.op, Op::Eq | Op::Ne) => {
+                crate::textvalue::number_of(text, self.system)
+            }
             _ => None,
         };
         match cell {
@@ -314,19 +335,6 @@ pub fn compare_text(left: &str, right: &str) -> Ordering {
             _ => {}
         }
     }
-}
-
-/// A **number written as text**: what it is, if it is one.
-///
-/// A number is a number, and a percentage is the number it is a
-/// percentage of. A date is not a number here — see the module's
-/// note.
-pub(crate) fn number_text(text: &str) -> Option<f64> {
-    let text = text.trim();
-    if let Some(rest) = text.strip_suffix('%') {
-        return number_text(rest).map(|number| number / 100.0);
-    }
-    text.parse::<f64>().ok().filter(|number| number.is_finite())
 }
 
 /// Whether a **text** meets a **pattern**: the wildcards and all.

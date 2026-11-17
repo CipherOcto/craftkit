@@ -721,7 +721,7 @@ impl Book {
                     match value {
                         Value::Number(number) => numbers.push(number),
                         Value::Bool(flag) => numbers.push(if flag { 1.0 } else { 0.0 }),
-                        Value::Text(text) => match crate::criteria::number_text(&text) {
+                        Value::Text(text) => match crate::textvalue::number_of(&text, self.system()) {
                             Some(number) => numbers.push(number),
                             None => return Err("#VALUE!".to_string()),
                         },

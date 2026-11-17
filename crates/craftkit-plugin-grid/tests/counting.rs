@@ -187,3 +187,19 @@ fn a_counting_function_over_a_range_that_is_not_there_is_an_error() {
     let value = value_of(&mut session, sheet, "C1");
     assert_eq!(value["error"].as_str(), Some("there is no sheet `Other`"), "it says why: {value}");
 }
+
+/// A criterion that holds a **number** is read by the tree's own rule
+/// — the rule `VALUE` reads a text by — so a currency sign, thousands
+/// separators and a date are all numbers.
+#[test]
+fn a_criterion_is_read_by_the_trees_own_rule_of_numbers() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(1000));
+    value(&mut session, sheet, "A2", json!(500));
+    value(&mut session, sheet, "A3", json!(43831));
+    formula(&mut session, sheet, "C1", "=COUNTIF(A1:A2,\"$1,000\")");
+    assert_eq!(value_of(&mut session, sheet, "C1"), json!(1.0), "the thousand is a number");
+    formula(&mut session, sheet, "C2", "=COUNTIF(A3:A3,\">=1/1/2020\")");
+    assert_eq!(value_of(&mut session, sheet, "C2"), json!(1.0), "and the date is a date");
+}

@@ -195,7 +195,7 @@ impl Book {
             Err(message) => return Value::Error(message),
         };
         let criterion = self.evaluate(sheet, &arguments[1], being);
-        let condition = match Condition::parse_argument(&criterion) {
+        let condition = match Condition::parse_argument(&criterion, self.system()) {
             Ok(condition) => condition,
             Err(message) => return Value::Error(message),
         };
@@ -262,9 +262,9 @@ impl Book {
             let (name, area) = self.area_of(sheet, range)?;
             let value = self.evaluate(sheet, criterion, being);
             let condition = if one_pair {
-                Condition::parse_argument(&value)?
+                Condition::parse_argument(&value, self.system())?
             } else {
-                Condition::parse_argument_truncated(&value)
+                Condition::parse_argument_truncated(&value, self.system())
             };
             pairs.push(Pair { sheet: name, area, condition });
         }

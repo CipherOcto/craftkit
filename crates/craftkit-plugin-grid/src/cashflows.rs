@@ -123,7 +123,7 @@ impl Book {
                     match value {
                         Value::Number(number) => flows.push(number),
                         Value::Bool(flag) => flows.push(if flag { 1.0 } else { 0.0 }),
-                        Value::Text(text) => match crate::criteria::number_text(&text) {
+                        Value::Text(text) => match crate::textvalue::number_of(&text, self.system()) {
                             Some(number) => flows.push(number),
                             None => return Err("#VALUE!".to_string()),
                         },

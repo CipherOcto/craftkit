@@ -2140,7 +2140,7 @@ impl Book {
         // worked out once.
         let advanced: Option<Vec<u32>> = match filter {
             Filter::Advanced { list, criteria, unique } => {
-                crate::advancedfilter::kept_rows(cells, list, criteria, *unique).ok()
+                crate::advancedfilter::kept_rows(cells, list, criteria, *unique, self.system()).ok()
             }
             _ => None,
         };
@@ -2873,7 +2873,7 @@ impl Book {
             Err(message) => return Value::Error(message),
         };
         let condition = self.evaluate(sheet, &arguments[1], being);
-        let condition = match crate::criteria::Condition::parse_argument(&condition) {
+        let condition = match crate::criteria::Condition::parse_argument(&condition, self.system()) {
             Ok(condition) => condition,
             Err(message) => return Value::Error(message),
         };
@@ -2910,7 +2910,7 @@ impl Book {
             Err(message) => return Value::Error(message),
         };
         let condition = self.evaluate(sheet, &arguments[1], being);
-        let condition = match crate::criteria::Condition::parse_argument(&condition) {
+        let condition = match crate::criteria::Condition::parse_argument(&condition, self.system()) {
             Ok(condition) => condition,
             Err(message) => return Value::Error(message),
         };
@@ -2982,7 +2982,7 @@ impl Book {
             }
             None => None,
         };
-        match crate::database::call(name, &database, &criteria, field.as_ref()) {
+        match crate::database::call(name, &database, &criteria, field.as_ref(), self.system()) {
             Ok(value) => value,
             Err(message) => Value::Error(message),
         }
