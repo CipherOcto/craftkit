@@ -4456,6 +4456,7 @@ so.
 | a **sort puts the numbers before the text** | **built.** The kinds are ordered as the tree's order says, and the sort and the binary search share it (§1009) | §1009 |
 | a **criterion is read by the tree's own rule of numbers** | **built.** A currency, a fraction and a date are numbers in a criterion, read by the rule `VALUE` reads a text by (§1010) | §1010 |
 | a **criterion is counted in the code units of its text** | **built.** The bound is two hundred and fifty-five units and not characters, and the cut keeps the characters that fit (§1011) | §1011 |
+| a **filter may keep the highest values of a column** | **built.** The top ten is a filter of its own, and the threshold is the count-th highest number (§1012) | §1012 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56011,7 +56012,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 241 |
+| grid | 242 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -65748,3 +65749,56 @@ tree's own application counts in.
 - **The tree's cut leaves a character out and the reference's leaves
   half of one behind**: a criterion cut out of a text of astral
   characters matches a cell here and not there.
+
+## 1012. A filter may keep the highest values of a column
+
+A filter may keep the **top** rows of a column, and not only the rows
+that meet a condition.
+
+### What was built
+
+- A new **command**, `grid.filter.top10`, filters a sheet by the
+  **highest** — or the **lowest** — values of a column.
+- The **threshold** is the count-th highest number of the column, or
+  the count-th lowest for the lowest; and a row is kept when its
+  number is **at the threshold or above it**, and the other rows are
+  hidden.
+- The count is a count of rows — **ten** of them by default — or a
+  **percent** of the numbers of the column, and it is rounded **up**.
+- A cell that does **not hold a number** is not kept.
+
+### What the port found
+
+- **The reference's filter is over a range and has a heading row, and
+  this tree's filter has neither.** The reference's filter is a range
+  with a criterion for each column of it, and the numbers it sorts
+  are those **under the heading**. Here a sheet has one filter and it
+  is over a column, and the numbers are those of the column — and a
+  heading, which is text, is not a number and so is not kept.
+- **The reference's count of the top ten is clamped into the numbers it
+  has, and here it is too**: a count that is over the number of the
+  numbers keeps them all. But the tree **refuses** a count that is not
+  a whole number of rows, and a percent that is over a hundred.
+- **The reference's filter may judge the colour of a cell and the icon
+  of an outline**, and it may judge a **custom criterion** of two
+  conditions joined by *and* or by *or*. The tree's custom criterion
+  is its **groups** of criteria — the columns of a group are judged
+  together and the groups are judged one by one — and the tree has no
+  colours in a filter and no icons.
+
+### What it cost
+
+- **One new command**: the grid battery carries **242** commands.
+- **One rule that was already there**: the rows a filter hides are
+  derived from the cells, and they are not written down.
+- **Two tests** in the grid battery (`tests/filters.rs`): the top-ten
+  filter keeping the highest rows, and the filter keeping the lowest
+  rows and taking a percent.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's filter has no range**: a filter is a column of a sheet,
+  and the numbers it judges are those of the whole column.
+- **The tree's filter does not judge the colour of a cell or the icon
+  of an outline**: those are not in the tree's filter.
