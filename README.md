@@ -4436,6 +4436,7 @@ so.
 | the **comment of a copied cell is pasted with it** | **built.** The comment and the note travel with the cell they are on, and a paste of the values does not carry them (§988) | §988 |
 | a **style may be made from the look of a cell** | **built.** The format, the font and the alignment of the cell become a style of the workbook, and the lock is not taken (§989) | §989 |
 | a **range of cells names a style** | **built.** Every cell of the range names the style, and a locked cell of a protected sheet is refused (§990) | §990 |
+| a **named style may be bold, italic or struck through** | **built.** The marks of the text of a style are named with the font, and the bold may be taken away (§991) | §991 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64505,3 +64506,63 @@ is a range of cells.
 - **The tree does not unlock a cell**: a style that a cell names may
   say that the cell is locked (§ the style module), and that is a
   lock the tree reads, and not one this command writes.
+
+## 991. A named style may be bold, italic or struck through
+
+A style that a file carries may be bold; a style that is made in the
+tree may not — and that is a hole in the tree's own rule.
+
+### What was built
+
+- The command **`grid.style.font`** takes a **`bold`**, an **`italic`**
+  and a **`strike`** now.
+- The **marks** are the tree's buttons: a mark that is not named and
+  that is the only thing the command names is **turned over**, and a
+  mark that is named is **set** — `false` takes it away.
+- A mark that is not named, when the command names something **else**,
+  is **left as it is**: naming the face of a style does not turn its
+  bold away.
+- A command that names **nothing at all** is refused: there is
+  nothing to set.
+
+### What the port found
+
+- **The reference's cell style holds the whole font** — the face, the
+  size, the bold, the italic, the strike, the underline and the place
+  of the text — and it is set in one go. Here the style's font takes
+  the face, the size, the underline and the place of the text (§ the
+  style module), and now the three marks as well: the font of this
+  tree is one font, and the style's font is that font.
+- **The reference's bold is a button**, and a button pressed twice
+  does the opposite. Here the marks of a style are the **same
+  buttons**, and the same rule: a mark that is named is set, and a
+  mark that is not named — and is the only thing named — is turned
+  over.
+- **The reference's style of a cell is the whole style of it**, and
+  the file's styles carry the bold (§970). Here a style read from a
+  file was already bold and a style made in the tree was not: the
+  tree's own rule said a style carries a font, and the tree's own
+  command could not write the whole of that font. That is now closed.
+
+### What it cost
+
+- **One command that was already there**: `grid.style.font` takes the
+  three marks, and the grid battery carries **237** commands.
+- **One rule that was already there**: the font of a cell and the font
+  of a style are the same font, and the tree's button rule.
+- **Five tests** (`tests/stylefont.rs`): the style that is bold, the
+  style that is italic and struck through, the bold taken away by
+  name, the face that does not turn the bold away, and a style that is
+  not there.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not make a style with a fill or with borders**: they
+  are facts of the sheet beside the cells, and a style is the
+  workbook's.
+- **The tree does not give a cell the marks of a style without the
+  style**: the cell names the style, and the marks are the style's.
+- **The tree does not read the style of a file as a whole**: the file
+  carries the whole style, and the tree reads the parts of it that it
+  has a word for.
