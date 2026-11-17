@@ -4454,6 +4454,7 @@ so.
 | a **lookup that does not match exactly finds the largest value below the needle** | **built.** The exact match is the answer, and when there is none the largest value that is not greater than the needle is (§1007) | §1007 |
 | a **search that is a bisection finds the value the tree's order puts next to the needle** | **built.** The binary search is over every kind of value, in the tree's order, and it is not refused any more (§1008) | §1008 |
 | a **sort puts the numbers before the text** | **built.** The kinds are ordered as the tree's order says, and the sort and the binary search share it (§1009) | §1009 |
+| a **criterion is read by the tree's own rule of numbers** | **built.** A currency, a fraction and a date are numbers in a criterion, read by the rule `VALUE` reads a text by (§1010) | §1010 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -25606,7 +25607,8 @@ cells that meet it and `SUMIF` adds them.
 - **The tree's criterion may be a date and this tree's is not.** The
   tree reads a criterion that looks like a date as the number of that
   date; here a criterion is a number, a boolean or text, and a date is
-  not one of them.
+  not one of them — and §1010 says otherwise: a criterion is read by
+  the tree's own rule of numbers, and a date is one of them.
 - **The tree's condition that is an error is not raised.** An error
   criterion is the condition *that the cell holds that error*, and a
   cell that holds it matches; so does this one.
@@ -65630,3 +65632,63 @@ in the tree's order.
 - **The tree's sort is by the values only**: the reference's sort may
   sort by the colour of a cell and by a list of the tree's own words
   (§1004, §1005), and it may sort the columns of a range.
+
+## 1010. A criterion is read by the tree's own rule of numbers
+
+A criterion that holds a number is read the way the tree reads a
+number.
+
+### What was built
+
+- A **criterion** written in text is read by the tree's **own rule of
+  numbers** — the rule `VALUE` reads a text by — so what follows the
+  operator may be:
+  - a number with a **sign**, a **currency sign**, **thousands
+    separators**, a **percent sign** or an **exponent**;
+  - a number in **parentheses**, which is the negative of it;
+  - a **fraction**;
+  - a **date** or a **time** — and a date is read in the **date system
+    of the workbook**, as a date is everywhere else in the tree.
+- So `">=1/1/2020"` is a date and not text, and `"$1,000"` is the
+  number one thousand.
+- The **rule is one rule**: the tree had a second and smaller rule for
+  reading a number out of a text — a number and a percent sign — and
+  it is gone. Every place that reads a number out of a text reads it
+  by the tree's rule now: the **criterion**, the **advanced filter**'s
+  operand, the **rates of the bonds**, the **numbers of the
+  aggregates**, and the **condition of the database**.
+
+### What the port found
+
+- **The reference's criterion is a number read by the reference's rule
+  of number-texts, and this tree's criterion was a number read by a
+  smaller rule of its own.** So a criterion of `"$1,000"` was text
+  here and a number there, and a criterion of `">=1/1/2020"` was text
+  here and a date there. Here the rule is the tree's own — the one
+  `VALUE` uses — and a criterion is read by it.
+- **The reference reads a date in a criterion in the 1900 system,
+  whatever the workbook's system is.** Here a date is read in the
+  **date system of the workbook**, as a date is everywhere else in the
+  tree — and that is the tree's rule, not the reference's.
+- **The reference's criterion counts its length in the code units of
+  its own strings**, and so a text of astral characters is counted
+  twice over. This tree counts **characters** — and that difference is
+  of its own, and it is stated in §1011's place rather than here.
+
+### What it cost
+
+- **No new command**: the counting is a function of the formula
+  language, and the grid battery still carries **241** commands.
+- **One rule that was already there**: the tree's rule of numbers —
+  the rule `VALUE` reads a text by — and a criterion reads by it now.
+- **One test** in the grid battery (`tests/counting.rs`): the
+  criterion being read by the tree's own rule of numbers.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's criterion is still counted in characters**, where the
+  reference counts the code units of its own strings.
+- **The tree's number-text rule reads a date in the workbook's system,
+  and the reference's criteria read one in the 1900 system** — so a
+  workbook in the 1904 system answers differently here and there.
