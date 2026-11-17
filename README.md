@@ -4453,6 +4453,7 @@ so.
 | the **objects of a workbook are shown or not** | **built.** The file says whether its charts, pictures and slicers are drawn, and the tree says it too (§1006) | §1006 |
 | a **lookup that does not match exactly finds the largest value below the needle** | **built.** The exact match is the answer, and when there is none the largest value that is not greater than the needle is (§1007) | §1007 |
 | a **search that is a bisection finds the value the tree's order puts next to the needle** | **built.** The binary search is over every kind of value, in the tree's order, and it is not refused any more (§1008) | §1008 |
+| a **sort puts the numbers before the text** | **built.** The kinds are ordered as the tree's order says, and the sort and the binary search share it (§1009) | §1009 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -26061,7 +26062,9 @@ the values of one of its columns.
   are.
 - The **order** is the tree's: the numbers, then the text, then the
   booleans, then the errors, and the **empty** cells last whatever the
-  order is. The text is compared without case.
+  order is. The text is compared without case — and §1009 says
+  otherwise: the kinds are ordered as well, and the order is one order
+  for the sort and for the binary search of a lookup.
 - The first row of the range is a **header** when it is guessed to be
   one — a column whose first cell is text and whose second cell is
   not votes for it — and the header stays where it is. The guess may
@@ -65302,7 +65305,8 @@ the value of the key are in whatever order they were in.
   battery carries **240** commands.
 - **One rule that was already there**: the tree's order of the values —
   numbers, then text, then booleans, then errors, and the empty cells
-  last.
+  last — and §1009 says otherwise: the kinds are ordered as well, and
+  the order is one order for the sort and for the binary search.
 - **Three tests**: the sort with two keys, the descending key, and the
   keys and the column together.
 - **No new dependency**.
@@ -65564,4 +65568,65 @@ in one order.
 - **The tree's sort does not order two values of different kinds**: a
   sort compares the values of a column, and a number and a text beside
   it keep the places they are in. The binary search is where the kinds
-  are ordered.
+  are ordered — and §1009 says otherwise: the sort orders the kinds
+  too, and the order is one order.
+
+## 1009. A sort puts the numbers before the text
+
+A column may hold values of more than one kind, and a sort puts them
+in the tree's order.
+
+### What was built
+
+- The tree's **order** decides by the **kind** first: the **numbers**,
+  then the **text**, then the **booleans**, then the **errors**, and
+  the **empty cells last** — and then two values of the same kind are
+  compared as they are: two numbers as numbers, two texts as texts
+  without case, two booleans as booleans, and two errors by their
+  message.
+- A **sort** of a range is that order: a column that holds a number
+  and a text puts the number first, and a column that holds a text and
+  a boolean puts the text first.
+- The order is **one order** now: the sort of a range uses it, and so
+  does the **binary search** of a lookup (§1008).
+
+### What the port found
+
+- **The reference's sort orders the kinds, and this tree's sort did
+  not.** The reference's order is over every kind — the numbers before
+  the text, the text before the logicals, the logicals before the
+  errors — and a column of mixed kinds is put in that order. Here a
+  sort compared the two values of a column and left the two kinds
+  where they were, and the tree's own words about the order (§372)
+  were not true. Now they are.
+- **The reference's errors are equal to one another in a sort.** Its
+  order says two errors are the same, whatever their messages. Here
+  two errors are ordered by their message, as they are everywhere else
+  in the tree — and the kind of an error still puts it after the
+  booleans and before the empty cells.
+- **The reference's empty cells are last whatever the order is**, and
+  so are the tree's: the descending order turns the kinds the other way
+  round, and the empty cells stay where they are.
+- **The reference's sort may sort by a colour and by a list of words**
+  (§1004, §1005), and it may sort the columns of a range; here the
+  sort is by the values, and the rows are the rows.
+
+### What it cost
+
+- **No new command**: `grid.sort` already sorted a range, and the
+  grid battery still carries **241** commands.
+- **One rule that was already there**: the tree's order of the values
+  — numbers, then text, then booleans, then errors, and the empty
+  cells last — and it is now the order of a sort and of the binary
+  search alike.
+- **One test** in the grid battery (`tests/sorting.rs`): the values of
+  different kinds being ordered by their kind.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's errors are ordered by their message**, where the
+  reference's errors are equal to one another in a sort.
+- **The tree's sort is by the values only**: the reference's sort may
+  sort by the colour of a cell and by a list of the tree's own words
+  (§1004, §1005), and it may sort the columns of a range.
