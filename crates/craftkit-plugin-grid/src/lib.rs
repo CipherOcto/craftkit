@@ -190,14 +190,15 @@
 //! (the module `matrices`).
 //!
 //! And a formula may **find** a value in a range — `MATCH`, `VLOOKUP`
-//! and `INDEX` — and the search is the **exact** one; the tree's
-//! approximate search is not here, and a lookup that asks for it says
-//! so. And it may ask for the **shape** of a range — how many rows it
-//! has and how many columns (the module `lookups`).
+//! and `INDEX` — and the search is the tree's: the exact match is the
+//! answer, and when there is none the answer is the largest value that
+//! is not greater than the needle. And it may ask for the **shape** of
+//! a range — how many rows it has and how many columns (the module
+//! `lookups`).
 //!
 //! And a formula may **find a value across** a table — `HLOOKUP` —
-//! and it may look a value up in a **vector**: the tree's `LOOKUP` is
-//! a bisection, and that is not here either (the module `lookups`).
+//! and it may look a value up in a **vector**: the tree's `LOOKUP` has
+//! the same approximate search (the module `lookups`).
 //!
 //! And a formula may **find a value the tree's way** — `XLOOKUP` gives
 //! the value at the place of the needle, and `XMATCH` gives the place

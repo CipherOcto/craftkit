@@ -103,18 +103,39 @@ fn a_value_that_is_not_there_is_not_found() {
     assert_eq!(value["error"], Json::String("#N/A".to_string()), "it is not found");
 }
 
-/// The **approximate** search is refused.
+/// The **approximate** search finds the largest value that is not
+/// greater than the needle.
 #[test]
-fn the_approximate_search_is_refused() {
+fn the_approximate_search_finds_the_largest_value_below_the_needle() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
     a_table(&mut session, sheet);
     formula(&mut session, sheet, "D1", "=MATCH(2.5,A1:A3,1)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!(2.0), "the second place");
+    formula(&mut session, sheet, "D2", "=MATCH(2.5,A1:A3)");
+    assert_eq!(value_of(&mut session, sheet, "D2"), json!(2.0), "and the default is the same");
+}
+
+/// The approximate search the **other way** finds the smallest value
+/// that is not less than the needle.
+#[test]
+fn the_approximate_search_the_other_way_finds_the_smallest_value_above_the_needle() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_table(&mut session, sheet);
+    formula(&mut session, sheet, "D1", "=MATCH(2.5,A1:A3,-1)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!(3.0), "the third place");
+}
+
+/// A match type that is **none of the three** is a value error.
+#[test]
+fn a_match_type_that_is_none_of_the_three_is_a_value_error() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_table(&mut session, sheet);
+    formula(&mut session, sheet, "D1", "=MATCH(2,A1:A3,7)");
     let value = value_of(&mut session, sheet, "D1");
-    assert!(
-        value["error"].as_str().is_some_and(|message| message.contains("not supported yet")),
-        "it says why: {value}"
-    );
+    assert_eq!(value["error"], Json::String("#VALUE!".to_string()), "it is an error");
 }
 
 /// The value of a **column** of the row that holds the needle is
@@ -130,19 +151,18 @@ fn the_value_of_a_column_of_the_row_that_holds_the_needle_is_found() {
     assert_eq!(value_of(&mut session, sheet, "D2"), json!(30.0), "and the thirty");
 }
 
-/// A lookup that does not say that it is **exact** is refused, because
-/// the tree's default is the approximate search.
+/// A lookup that does not say that it is **exact** finds the largest
+/// value that is not greater than the needle.
 #[test]
-fn a_lookup_that_does_not_say_that_it_is_exact_is_refused() {
+fn a_lookup_that_does_not_say_that_it_is_exact_finds_the_largest_value_below_the_needle() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
     a_table(&mut session, sheet);
-    formula(&mut session, sheet, "D1", "=VLOOKUP(2,A1:B3,2)");
-    let value = value_of(&mut session, sheet, "D1");
-    assert!(
-        value["error"].as_str().is_some_and(|message| message.contains("not supported yet")),
-        "it says why: {value}"
-    );
+    formula(&mut session, sheet, "D1", "=VLOOKUP(2.5,A1:B3,2)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!(20.0), "the row of the two");
+    formula(&mut session, sheet, "D2", "=VLOOKUP(2.5,A1:B3,2,FALSE)");
+    let value = value_of(&mut session, sheet, "D2");
+    assert_eq!(value["error"], Json::String("#N/A".to_string()), "and the exact one is not there");
 }
 
 /// A column that is **not there** is an error.
@@ -222,7 +242,8 @@ fn the_value_of_a_row_of_the_column_that_holds_the_needle_is_found() {
 }
 
 /// A row that is **not there** is an error, and a lookup that does not
-/// say that it is exact is refused — as it is for `VLOOKUP`.
+/// say that it is exact finds the largest value that is not greater
+/// than the needle — as it does for `VLOOKUP`.
 #[test]
 fn a_row_that_is_not_there_is_an_error() {
     let mut session = session();
@@ -231,26 +252,38 @@ fn a_row_that_is_not_there_is_an_error() {
     formula(&mut session, sheet, "D1", "=HLOOKUP(2,A1:C2,3,FALSE)");
     let value = value_of(&mut session, sheet, "D1");
     assert_eq!(value["error"], Json::String("#REF!".to_string()), "it is an error");
-    formula(&mut session, sheet, "D2", "=HLOOKUP(2,A1:C2,2)");
-    let value = value_of(&mut session, sheet, "D2");
-    assert!(
-        value["error"].as_str().is_some_and(|message| message.contains("not supported yet")),
-        "it says why: {value}"
-    );
+    formula(&mut session, sheet, "D2", "=HLOOKUP(2.5,A1:C2,2)");
+    assert_eq!(value_of(&mut session, sheet, "D2"), json!(20.0), "and the second column");
 }
 
-/// The tree's `LOOKUP` is a **bisection** over a sorted vector, and
-/// that is not here.
+/// The tree's `LOOKUP` finds the largest value that is not greater
+/// than the needle, and the value at that place is the answer.
 #[test]
-fn the_lookup_of_a_vector_is_not_here() {
+fn the_lookup_of_a_vector_finds_the_largest_value_below_the_needle() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
     a_table_across(&mut session, sheet);
-    formula(&mut session, sheet, "D1", "=LOOKUP(2,A1:C1,A1:C2)");
-    let value = value_of(&mut session, sheet, "D1");
-    assert_eq!(
-        value["error"],
-        Json::String("not supported yet: a bisection".to_string()),
-        "it says why: {value}"
-    );
+    formula(&mut session, sheet, "D1", "=LOOKUP(2.5,A1:C1,A2:C2)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!(20.0), "the twenty");
+    formula(&mut session, sheet, "D2", "=LOOKUP(2.5,A1:C1)");
+    assert_eq!(value_of(&mut session, sheet, "D2"), json!(2.0), "and the two of the vector");
+}
+
+/// The tree's `LOOKUP` over a **wide table** answers with the last row
+/// of it, and over a **tall table** with its last column.
+#[test]
+fn the_lookup_of_a_table_answers_with_its_last_row() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_table_across(&mut session, sheet);
+    formula(&mut session, sheet, "D1", "=LOOKUP(2.5,A1:C2)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!(20.0), "the last row");
+    value(&mut session, sheet, "D4", json!(1));
+    value(&mut session, sheet, "E4", json!(10));
+    value(&mut session, sheet, "D5", json!(2));
+    value(&mut session, sheet, "E5", json!(20));
+    value(&mut session, sheet, "D6", json!(3));
+    value(&mut session, sheet, "E6", json!(30));
+    formula(&mut session, sheet, "D3", "=LOOKUP(2.5,D4:E6)");
+    assert_eq!(value_of(&mut session, sheet, "D3"), json!(20.0), "and the last column");
 }

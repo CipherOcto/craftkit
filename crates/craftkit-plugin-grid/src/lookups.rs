@@ -1,11 +1,15 @@
 //! The **finding** of a value in a range.
 //!
-//! Three functions look for something in a range of cells:
+//! Five functions look for something in a range of cells:
 //!
 //! - `MATCH(needle, range)` — the **place** of the needle in the
 //!   range, counted from one;
 //! - `VLOOKUP(needle, table, column)` — the value of the **column**
 //!   of the row whose first column holds the needle;
+//! - `HLOOKUP(needle, table, row)` — the value of the **row** of the
+//!   column whose first row holds the needle;
+//! - `LOOKUP(needle, vector)` — the value of the **vector** at the
+//!   place of the needle;
 //! - `INDEX(range, row, [column])` — the value at a **place**.
 //!
 //! # The search
@@ -20,18 +24,37 @@
 //!   an empty value matches an empty value;
 //! - the **first** match is the match.
 //!
-//! # The search that is not here
+//! # The approximate search
 //!
-//! The tree has an **approximate** search: the largest value that is
-//! not greater than the needle, found by a bisection over the whole
-//! range. That search answers what the tree's own application answers
-//! on data that is not sorted, and it is not a rule that can be
-//! written down in a sentence. So it is **not here**: a lookup that
-//! asks for it is refused with a message that says so.
+//! A lookup that does not find the needle exactly may look for the
+//! **largest value that is not greater than the needle** — or, the
+//! other way, for the **smallest value that is not less than it**.
+//! That is a rule that can be written down in a sentence, and it is
+//! the rule of this tree:
 //!
-//! And `MATCH` and `VLOOKUP` differ from the tree in their **default**:
-//! the tree's default is the approximate search, and here the default
-//! is the exact one.
+//! - the **exact** match is the answer, and it is the first one;
+//! - when there is none, the answer is the largest value that is not
+//!   greater than the needle — or the smallest value that is not less
+//!   than it, when the search is the other way;
+//! - a value of another kind is not ordered against the needle, and so
+//!   is not a candidate;
+//! - and of the values that are the best, the **first** is the answer.
+//!
+//! The **needle** of a lookup is a value, and an empty one is the
+//! number zero — as it is for `XLOOKUP`.
+//!
+//! The four functions that look for something have the search, and it
+//! is what they do when they are not told to be exact:
+//!
+//! - `MATCH(needle, range, [match_type])` — the match type `0` is the
+//!   exact search, `1` is the approximate one, and `-1` is the
+//!   approximate one the other way; the default is `1`;
+//! - `VLOOKUP(needle, table, column, [range_lookup])` — the range
+//!   lookup `FALSE` is the exact search and `TRUE` is the approximate
+//!   one; the default is `TRUE`;
+//! - `HLOOKUP(needle, table, row, [range_lookup])` — the same;
+//! - `LOOKUP(needle, vector, [result])` — the approximate search, and
+//!   nothing else.
 //!
 //! # The tree's other two
 //!
@@ -226,8 +249,72 @@ fn lookup_needle(value: &Value) -> Value {
     }
 }
 
-/// The message of the search that is **not here**.
-const APPROXIMATE: &str = "not supported yet: an approximate search";
+/// The **match type** of a search: how a value may meet the needle.
+///
+/// This is the tree's rule, and it is one sentence: the **exact**
+/// match is the answer, and when there is none the answer is the
+/// largest value that is not greater than the needle — or the
+/// smallest value that is not less than it, when the search is the
+/// other way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MatchType {
+    /// The **exact** search, and nothing else.
+    Exact,
+    /// The exact search first, and then the **largest** value that is
+    /// not greater than the needle.
+    Largest,
+    /// The exact search first, and then the **smallest** value that is
+    /// not less than the needle.
+    Smallest,
+}
+
+/// The **place** of a needle in a vector of values, when the search is
+/// the tree's.
+///
+/// The exact match is the answer, and it is the **first** one. When
+/// there is none, the answer is the best candidate: the largest value
+/// that is not greater than the needle, or the smallest value that is
+/// not less than it. A value of another kind is not ordered against
+/// the needle, and so is not a candidate — and of the values that are
+/// the best, the **first** is the answer.
+fn place_by_type(needle: &Value, values: &[Value], kind: MatchType) -> Option<usize> {
+    if let Some(place) = values.iter().position(|value| lookup_equal(needle, value)) {
+        return Some(place);
+    }
+    if kind == MatchType::Exact {
+        return None;
+    }
+    let mut best: Option<usize> = None;
+    for place in 0..values.len() {
+        let Some(order) = order_of(&values[place], needle) else { continue };
+        let candidate = match kind {
+            MatchType::Largest => order != std::cmp::Ordering::Greater,
+            MatchType::Smallest => order != std::cmp::Ordering::Less,
+            MatchType::Exact => false,
+        };
+        if !candidate {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some(previous) => match order_of(&values[previous], needle) {
+                // The best candidate is the one **closest** to the
+                // needle: the largest below it, and the smallest
+                // above it.
+                Some(previous_order) => match kind {
+                    MatchType::Largest => previous_order == std::cmp::Ordering::Less,
+                    MatchType::Smallest => previous_order == std::cmp::Ordering::Greater,
+                    MatchType::Exact => false,
+                },
+                None => true,
+            },
+        };
+        if better {
+            best = Some(place);
+        }
+    }
+    best
+}
 
 /// Whether a **needle** and a **value** are the same.
 ///
@@ -258,7 +345,7 @@ impl Book {
             "MATCH" => self.match_call(sheet, arguments, being),
             "VLOOKUP" => self.vlookup_call(sheet, arguments, being),
             "HLOOKUP" => self.hlookup_call(sheet, arguments, being),
-            "LOOKUP" => Value::Error("not supported yet: a bisection".to_string()),
+            "LOOKUP" => self.lookup_call(sheet, arguments, being),
             "INDEX" => self.index_call(sheet, arguments, being),
             "ROWS" | "COLUMNS" => self.shape_call(sheet, name, arguments, being),
             "XLOOKUP" => self.xlookup_call(sheet, arguments, being),
@@ -314,6 +401,13 @@ impl Book {
     }
 
     /// The tree's `MATCH`: the **place** of a value in a range.
+    ///
+    /// The **match type** says how a value may meet the needle: `0`
+    /// is the exact search, `1` is the approximate one — the largest
+    /// value that is not greater than the needle — and `-1` is the
+    /// approximate one the other way, the smallest value that is not
+    /// less than the needle. The default is `1`, and a match type that
+    /// is none of the three is a value error.
     fn match_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
         if arguments.len() < 2 || arguments.len() > 3 {
             return Value::Error("#VALUE!".to_string());
@@ -322,20 +416,32 @@ impl Book {
         if let Value::Error(message) = &needle {
             return Value::Error(message.clone());
         }
-        // The **match type**: the exact search, or the approximate one
-        // that is not here.
-        if let Some(argument) = arguments.get(2) {
-            let value = self.evaluate(sheet, argument, being);
-            let kind = value.as_number().unwrap_or(1.0);
-            if kind != 0.0 {
-                return Value::Error(APPROXIMATE.to_string());
+        let needle = lookup_needle(&needle);
+        // The **match type**: the exact search, the approximate one, or
+        // the approximate one the other way.
+        let kind = match arguments.get(2) {
+            None => MatchType::Largest,
+            Some(argument) => {
+                let value = self.evaluate(sheet, argument, being);
+                let Some(number) = value.as_number() else {
+                    return Value::Error("#VALUE!".to_string());
+                };
+                if !number.is_finite() {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                match number.trunc() as i64 {
+                    0 => MatchType::Exact,
+                    1 => MatchType::Largest,
+                    -1 => MatchType::Smallest,
+                    _ => return Value::Error("#VALUE!".to_string()),
+                }
             }
-        }
+        };
         let (_name, _area, values) = match self.values_of(sheet, &arguments[1], being) {
             Ok(values) => values,
             Err(message) => return Value::Error(message),
         };
-        match values.iter().position(|value| lookup_equal(&needle, value)) {
+        match place_by_type(&needle, &values, kind) {
             Some(place) => Value::Number((place + 1) as f64),
             None => Value::Error("#N/A".to_string()),
         }
@@ -351,6 +457,7 @@ impl Book {
         if let Value::Error(message) = &needle {
             return Value::Error(message.clone());
         }
+        let needle = lookup_needle(&needle);
         // The **column** that is wanted: counted from one.
         let column = self.evaluate(sheet, &arguments[2], being);
         let Some(column) = column.as_number() else {
@@ -360,19 +467,19 @@ impl Book {
             return Value::Error("#VALUE!".to_string());
         }
         let column = column.trunc() as usize - 1;
-        // The **range lookup**: the exact search, or the approximate one
-        // that is not here. The tree's default is the approximate one.
-        match arguments.get(3) {
+        // The **range lookup**: the exact search, or the approximate
+        // one. The default is the approximate one.
+        let kind = match arguments.get(3) {
+            None => MatchType::Largest,
             Some(argument) => {
                 let value = self.evaluate(sheet, argument, being);
                 match crate::formula::truth_of(&value) {
-                    Ok(true) => return Value::Error(APPROXIMATE.to_string()),
-                    Ok(false) => {}
+                    Ok(true) => MatchType::Largest,
+                    Ok(false) => MatchType::Exact,
                     Err(message) => return Value::Error(message),
                 }
             }
-            None => return Value::Error(APPROXIMATE.to_string()),
-        }
+        };
         let (name, area, values) = match self.values_of(sheet, &arguments[1], being) {
             Ok(values) => values,
             Err(message) => return Value::Error(message),
@@ -383,15 +490,12 @@ impl Book {
             return Value::Error("#REF!".to_string());
         }
         // The **keys** are the first column of the table.
-        for row in 0..rows {
-            let key = &values[row * columns];
-            if !lookup_equal(&needle, key) {
-                continue;
-            }
-            let cell = CellRef { col: area.start.col + column as u32, row: area.start.row + row as u32 };
-            return self.value_of_guarded(&name, cell, being);
-        }
-        Value::Error("#N/A".to_string())
+        let keys: Vec<Value> = (0..rows).map(|row| values[row * columns].clone()).collect();
+        let Some(place) = place_by_type(&needle, &keys, kind) else {
+            return Value::Error("#N/A".to_string());
+        };
+        let cell = CellRef { col: area.start.col + column as u32, row: area.start.row + place as u32 };
+        self.value_of_guarded(&name, cell, being)
     }
 
     /// The tree's `INDEX`: the value at a **place**.
@@ -443,9 +547,8 @@ impl Book {
     /// is a **row** of it — the tree's `HLOOKUP` is the `VLOOKUP` of
     /// the table the other way round.
     ///
-    /// The search is the **exact** one, with the tree's wildcards in
-    /// it, and the approximate search of the tree — which is the
-    /// default — is refused, as it is for `VLOOKUP`.
+    /// The search is the tree's, and it is the **approximate** one
+    /// unless the lookup says it is exact — as it is for `VLOOKUP`.
     fn hlookup_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
         if arguments.len() < 3 || arguments.len() > 4 {
             return Value::Error("#VALUE!".to_string());
@@ -454,6 +557,7 @@ impl Book {
         if let Value::Error(message) = &needle {
             return Value::Error(message.clone());
         }
+        let needle = lookup_needle(&needle);
         // The **row** that is wanted: counted from one.
         let row = self.evaluate(sheet, &arguments[2], being);
         let Some(row) = row.as_number() else {
@@ -464,19 +568,18 @@ impl Book {
         }
         let row = row.trunc() as usize - 1;
         // The **range lookup**: the exact search, or the approximate
-        // one that is not here. The tree's default is the approximate
-        // one.
-        match arguments.get(3) {
+        // one. The default is the approximate one.
+        let kind = match arguments.get(3) {
+            None => MatchType::Largest,
             Some(argument) => {
                 let value = self.evaluate(sheet, argument, being);
                 match crate::formula::truth_of(&value) {
-                    Ok(true) => return Value::Error(APPROXIMATE.to_string()),
-                    Ok(false) => {}
+                    Ok(true) => MatchType::Largest,
+                    Ok(false) => MatchType::Exact,
                     Err(message) => return Value::Error(message),
                 }
             }
-            None => return Value::Error(APPROXIMATE.to_string()),
-        }
+        };
         let (name, area, values) = match self.values_of(sheet, &arguments[1], being) {
             Ok(values) => values,
             Err(message) => return Value::Error(message),
@@ -487,14 +590,97 @@ impl Book {
             return Value::Error("#REF!".to_string());
         }
         // The **keys** are the first row of the table.
-        for (column, key) in values.iter().enumerate().take(columns) {
-            if !lookup_equal(&needle, key) {
-                continue;
+        let keys: Vec<Value> = values.iter().take(columns).cloned().collect();
+        let Some(place) = place_by_type(&needle, &keys, kind) else {
+            return Value::Error("#N/A".to_string());
+        };
+        let cell = CellRef { col: area.start.col + place as u32, row: area.start.row + row as u32 };
+        self.value_of_guarded(&name, cell, being)
+    }
+
+    /// The tree's `LOOKUP`: the value of a **vector** at the place of
+    /// the needle.
+    ///
+    /// The **keys** are the vector, and the **answer** is the value at
+    /// that place in it — or in the vector that is given as the third
+    /// argument, at the same place. A **table** of results is answered
+    /// by its first column, and it must have a row for every key.
+    ///
+    /// The search is the **approximate** one, and nothing else: the
+    /// exact match is the answer when there is one, and the largest
+    /// value that is not greater than the needle when there is not.
+    ///
+    /// A **table** may be given instead of a vector: the keys are its
+    /// first row when it is wider than it is tall, and its first
+    /// column when it is taller than it is wide; and the answer is
+    /// the entry of its last row, or of its last column, at that
+    /// place.
+    fn lookup_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let needle = self.evaluate(sheet, &arguments[0], being);
+        if let Value::Error(message) = &needle {
+            return Value::Error(message.clone());
+        }
+        let needle = lookup_needle(&needle);
+        let (name, area, values) = match self.values_of(sheet, &arguments[1], being) {
+            Ok(values) => values,
+            Err(message) => return Value::Error(message),
+        };
+        let rows = (area.end.row - area.start.row + 1) as usize;
+        let columns = (area.end.col - area.start.col + 1) as usize;
+        // The **wide** table: its keys are its first row, and its
+        // answer is in its last row.
+        let wide = columns > rows;
+        // The **keys**: a vector, or the first row of a wide table, or
+        // the first column of a tall one.
+        let keys: Vec<Value> = if rows == 1 || columns == 1 {
+            values.clone()
+        } else if wide {
+            values.iter().take(columns).cloned().collect()
+        } else {
+            (0..rows).map(|row| values[row * columns].clone()).collect()
+        };
+        let Some(place) = place_by_type(&needle, &keys, MatchType::Largest) else {
+            return Value::Error("#N/A".to_string());
+        };
+        // The **result**: the vector that is given, or the table
+        // itself.
+        if let Some(argument) = arguments.get(2) {
+            let (result_name, result_area, result_values) = match self.values_of(sheet, argument, being) {
+                Ok(values) => values,
+                Err(message) => return Value::Error(message),
+            };
+            let result_rows = (result_area.end.row - result_area.start.row + 1) as usize;
+            let result_columns = (result_area.end.col - result_area.start.col + 1) as usize;
+            if result_rows == 1 || result_columns == 1 {
+                let Some(value) = result_values.get(place) else {
+                    return Value::Error("#N/A".to_string());
+                };
+                return value.clone();
             }
-            let cell = CellRef { col: area.start.col + column as u32, row: area.start.row + row as u32 };
+            // A table of results: the first column of it, at that
+            // place — and it must have a row for every key.
+            if result_rows < keys.len() {
+                return Value::Error("#N/A".to_string());
+            }
+            let cell = CellRef { col: result_area.start.col, row: result_area.start.row + place as u32 };
+            return self.value_of_guarded(&result_name, cell, being);
+        }
+        // The **answer** in the table itself.
+        if rows == 1 || columns == 1 {
+            let Some(value) = values.get(place) else {
+                return Value::Error("#N/A".to_string());
+            };
+            return value.clone();
+        }
+        if wide {
+            let cell = CellRef { col: area.start.col + place as u32, row: area.end.row };
             return self.value_of_guarded(&name, cell, being);
         }
-        Value::Error("#N/A".to_string())
+        let cell = CellRef { col: area.end.col, row: area.start.row + place as u32 };
+        self.value_of_guarded(&name, cell, being)
     }
 
     /// The tree's `XLOOKUP`: the value of the **return array** at the
