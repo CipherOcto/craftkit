@@ -1267,6 +1267,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/stylefont.rs",
         section: "§991",
     },
+    Port {
+        rule: "a blank of the clipboard writes nothing over what is there",
+        from: "gridcraft/crates/engine/src/cmd/edit/paste_special.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/clipboard.rs",
+        command: "grid.range.paste",
+        test: "crates/craftkit-plugin-grid/tests/clipboard.rs",
+        section: "§992",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

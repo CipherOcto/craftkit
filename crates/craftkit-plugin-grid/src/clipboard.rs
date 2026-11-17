@@ -50,6 +50,10 @@
 //! the columns of the block, and the columns become the rows. A cell
 //! may not land **off the sheet** — a sheet has so many rows and so
 //! many columns.
+//!
+//! And a paste may **skip the blanks**: a cell of the clipboard that
+//! holds nothing writes nothing over the cell it lands on, for a blank
+//! is nothing and nothing writes nothing.
 
 use std::collections::BTreeMap;
 
@@ -331,6 +335,9 @@ commands! {
             /// What the cells hold is not touched, and it may not be given
             /// with the values.
             formats: Option<Bool>,
+            /// Whether the cells of the clipboard that hold **nothing** are
+            /// skipped: a blank writes nothing over the cell it lands on.
+            skip_blanks: Option<Bool>,
         },
         run: {
             let id = "grid.range.paste".to_string();
@@ -372,6 +379,7 @@ commands! {
                 });
             };
             let transpose = matches!(self.transpose, Some(Bool(true)));
+            let skip_blanks = matches!(self.skip_blanks, Some(Bool(true)));
             // A paste of **values** and a paste of **formats** are two
             // different pastes, and a paste is one of them.
             let formats = matches!(self.formats, Some(Bool(true)));
@@ -435,6 +443,12 @@ commands! {
                 }
                 let row_delta = row - cell.row as i64;
                 let col_delta = col - cell.col as i64;
+                // A cell that holds **nothing** writes nothing over the
+                // cell it lands on, when the file says so: a blank is
+                // nothing, and nothing writes nothing.
+                if skip_blanks && entry.value.is_none() && entry.formula.is_none() {
+                    continue;
+                }
                 if formats {
                     // The **look** of the cell: its format, its font, its
                     // alignment and its fill. The value and the formula
@@ -615,6 +629,7 @@ commands! {
                     "values": values,
                     "transpose": transpose,
                     "formats": formats,
+                    "skipBlanks": skip_blanks,
                 })))
 
         }

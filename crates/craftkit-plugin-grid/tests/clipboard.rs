@@ -508,3 +508,46 @@ fn a_paste_of_the_values_does_not_carry_the_comment() {
         .expect("the values are pasted");
     assert_eq!(comment_of(&mut session, sheet, "C1"), Json::Null, "the comment did not travel");
 }
+
+/// A cell of the clipboard that holds **nothing** writes nothing over
+/// the cell it lands on.
+#[test]
+fn a_blank_of_the_clipboard_writes_nothing_over_the_cell_it_lands_on() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    // A cell that holds a look and no value: it is a blank that is
+    // shown.
+    session
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "0.00" }))
+        .expect("the cell is formatted");
+    set_number(&mut session, sheet, "C1", 5.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute(
+            "grid.range.paste",
+            &json!({ "sheet": sheet, "at": "C1", "overwrite": true, "skip_blanks": true }),
+        )
+        .expect("the cells are pasted");
+    assert_eq!(cell_of(&mut session, sheet, "C1")["value"], json!(5.0), "the cell still holds what it held");
+}
+
+/// Without the **skip**, a blank of the clipboard writes over the cell
+/// it lands on.
+#[test]
+fn without_the_skip_a_blank_of_the_clipboard_writes_over_the_cell() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "0.00" }))
+        .expect("the cell is formatted");
+    set_number(&mut session, sheet, "C1", 5.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "overwrite": true }))
+        .expect("the cells are pasted");
+    assert_eq!(cell_of(&mut session, sheet, "C1")["value"], Json::Null, "the cell holds nothing now");
+}
