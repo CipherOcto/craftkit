@@ -1348,6 +1348,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/pivots.rs",
         section: "§1000",
     },
+    Port {
+        rule: "a misspelled word may be changed in the text",
+        from: "gridcraft/crates/engine/src/cmd/spelling.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/spelling.rs",
+        command: "grid.spelling.change",
+        test: "crates/craftkit-plugin-grid/tests/spelling.rs",
+        section: "§1001",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -363,6 +363,112 @@ commands! {
         }
     }
 
+    /// **Change** a misspelled word in the text of a cell.
+    ///
+    /// The word is the one the **check** found, and the correction is the
+    /// one the caller gives: the **first** time the word is in the text
+    /// of the cell is the time it is changed, and the cell keeps its
+    /// **format**.
+    ///
+    /// A cell that holds a **formula** is not changed: the check does
+    /// not look at formulas, and a formula is not a misspelling.
+    grid.spelling.change {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the cell is in.
+            sheet: NodeRef,
+            /// The cell whose text is changed.
+            cell: Text,
+            /// The word to change.
+            word: Text,
+            /// What to write in its place.
+            to: Text,
+        },
+        run: {
+            let id = "grid.spelling.change".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let word = self.word.0.clone();
+            if word.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a word is not empty".to_string(),
+                });
+            }
+            let to = self.to.0.clone();
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let cells = crate::cells_of(&node);
+            let Some(entry) = cells.get(cell) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the cell {} holds nothing", cell.to_text()),
+                });
+            };
+            if entry.formula.is_some() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the cell {} holds a formula, and a formula is not a misspelling",
+                        cell.to_text()
+                    ),
+                });
+            }
+            let Some(Value::Text(text)) = entry.value.clone() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the cell {} holds no text", cell.to_text()),
+                });
+            };
+            // The **first** time the word is in the text is the time it
+            // is changed: the check found the word there.
+            let Some(at) = text.find(&word) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the word `{word}` is not in the text of the cell {}",
+                        cell.to_text()
+                    ),
+                });
+            };
+            let mut new = String::with_capacity(text.len());
+            new.push_str(&text[..at]);
+            new.push_str(&to);
+            new.push_str(&text[at + word.len()..]);
+            // The cells that are **locked** or **covered** are not
+            // written.
+            crate::protection::refuse_locked(&node, &crate::style_locks(session, sheet), &[cell], &id)?;
+            crate::merges::refuse_covered(&node, &[cell], &id)?;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                let mut cells: crate::formula::Cells = crate::sheet_cells_mut(node);
+                cells.set_value(cell, Value::Text(new.clone()));
+                node.data["cells"] = crate::cells_into(&cells);
+            }
+            Ok(Outcome::changed(format!("the word `{word}` of {} is changed", cell.to_text())).with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "word": word,
+                "with": to,
+                "text": new,
+            })))
+
+        }
+    }
+
     /// The **thesaurus**: the words that share a **stem** with a word.
     ///
     /// The stem of a word is the word without its last two letters, and

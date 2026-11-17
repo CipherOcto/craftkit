@@ -193,3 +193,48 @@ fn the_thesaurus_gives_the_words_that_share_a_stem() {
     assert!(!names.contains(&"caterpillar"), "a word that is too long is not related: {names:?}");
     assert!(!names.contains(&"dog"), "a word that does not share the stem is not related: {names:?}");
 }
+
+/// **A misspelled word may be changed in the text.**
+#[test]
+fn a_misspelled_word_is_changed_in_the_text() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("the teh cat"));
+    let outcome = session
+        .execute("grid.spelling.change", &json!({ "sheet": sheet, "cell": "A1", "word": "teh", "to": "the" }))
+        .expect("the word is changed");
+    assert_eq!(outcome.data["text"], json!("the the cat"), "the first time the word is, it changes");
+    let cell =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(cell.data["value"], json!("the the cat"), "and the cell holds the new text");
+}
+
+/// A word that is **not** in the text is refused: a change of a word
+/// that is not there is not a change.
+#[test]
+fn a_word_that_is_not_in_the_text_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("the cat sat"));
+    let failure = session
+        .execute("grid.spelling.change", &json!({ "sheet": sheet, "cell": "A1", "word": "teh", "to": "the" }))
+        .expect_err("the change is refused");
+    let message = failure.to_string();
+    assert!(message.contains("is not in the text"), "the refusal says why: {message}");
+}
+
+/// A cell that holds a **formula** is not changed: a formula is not a
+/// misspelling.
+#[test]
+fn a_cell_with_a_formula_is_not_changed() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.formula.set", &json!({ "sheet": sheet, "cell": "A1", "formula": "=\"teh\"" }))
+        .expect("the formula is set");
+    let failure = session
+        .execute("grid.spelling.change", &json!({ "sheet": sheet, "cell": "A1", "word": "teh", "to": "the" }))
+        .expect_err("the change is refused");
+    let message = failure.to_string();
+    assert!(message.contains("a formula is not a misspelling"), "the refusal says why: {message}");
+}
