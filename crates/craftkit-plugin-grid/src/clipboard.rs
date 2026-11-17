@@ -35,6 +35,8 @@
 //!   comments and the notes of the cells they land on: a comment
 //!   travels with the cell it is on. A paste of the values and a paste
 //!   of the formats do not carry them;
+//! - the **links** of the copied cells are the links of the cells they
+//!   land on: a link belongs to the cell it is on;
 //! - the **validation** of the copied cells is the validation of the
 //!   cells they land on: the rules move with the cells, and a rule
 //!   that reaches out of the copied range does not travel — half a
@@ -205,6 +207,8 @@ struct Carried {
     comments: BTreeMap<String, crate::comments::Comment>,
     /// The notes, by the address of the cell they are on.
     notes: BTreeMap<String, crate::notes::Note>,
+    /// The links, by the address of the cell they are on.
+    links: BTreeMap<String, crate::links::Link>,
     /// The **validation** of the cells: the rules that lie inside the
     /// range.
     validations: Vec<craftkit_sdk::serde_json::Value>,
@@ -216,6 +220,7 @@ impl Carried {
         let borders = crate::borders::borders_of(node);
         let comments = crate::comments::comments_of(node);
         let notes = crate::notes::notes_of(node);
+        let links = crate::links::links_of(node);
         // The **validation**: the rules that lie inside the range. A rule
         // that reaches out of the range does not travel — half a rule is
         // not a rule.
@@ -230,7 +235,7 @@ impl Carried {
                 validations.push(rule.to_json());
             }
         }
-        Carried { borders, comments, notes, validations }
+        Carried { borders, comments, notes, links, validations }
     }
 }
 
@@ -268,6 +273,12 @@ fn copy_into(node: &mut Node, sheet: u64, cells: &Cells, first: CellRef, carried
     }
     // The **validation** of the copied cells: the rules that lie inside
     // the range that was copied.
+    let mut held_links = BTreeMap::new();
+    for (address, link) in &carried.links {
+        if copied.contains_key(address) {
+            held_links.insert(address.clone(), link.clone());
+        }
+    }
     let validations: Vec<craftkit_sdk::serde_json::Value> = carried.validations.to_vec();
     node.data["clipboard"] = json!({
         "sheet": sheet,
@@ -276,6 +287,7 @@ fn copy_into(node: &mut Node, sheet: u64, cells: &Cells, first: CellRef, carried
         "borders": crate::borders::borders_into(&held),
         "comments": crate::comments::comments_into(&held_comments),
         "notes": crate::notes::notes_into(&held_notes),
+        "links": crate::links::links_into(&held_links),
         "validations": Json::Array(validations),
     });
 }
@@ -789,6 +801,39 @@ commands! {
                     }
                     node.data["comments"] = crate::comments::comments_into(&sheet_comments);
                     node.data["notes"] = crate::notes::notes_into(&sheet_notes);
+                }
+                // The **links** of the copied cells are the links of the
+                // cells they land on: a link belongs to the cell it is
+                // on.
+                let links = book
+                    .data
+                    .get("clipboard")
+                    .and_then(|clipboard| clipboard.get("links"))
+                    .and_then(|links| links.as_object())
+                    .map(|links| {
+                        links
+                            .iter()
+                            .filter_map(|(address, link)| {
+                                crate::links::link_from(link).map(|link| (address.to_string(), link))
+                            })
+                            .collect::<BTreeMap<String, crate::links::Link>>()
+                    })
+                    .unwrap_or_default();
+                if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                    let mut sheet_links = crate::links::links_of(node);
+                    for (cell, (row, col), _) in &pasted {
+                        let address = CellRef { col: *col, row: *row }.to_text();
+                        let source = cell.to_text();
+                        match links.get(&source) {
+                            Some(link) => {
+                                sheet_links.insert(address, link.clone());
+                            }
+                            None => {
+                                sheet_links.remove(&address);
+                            }
+                        }
+                    }
+                    node.data["links"] = crate::links::links_into(&sheet_links);
                 }
             }
             // The **validation** that travelled and the rules that were

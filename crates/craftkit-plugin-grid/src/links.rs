@@ -33,6 +33,13 @@ pub struct Link {
     pub tooltip: Option<String>,
 }
 
+/// The **link** a value holds, if it holds one.
+pub fn link_from(value: &Json) -> Option<Link> {
+    let target = value.get("target")?.as_str()?.to_string();
+    let tooltip = value.get("tooltip").and_then(|tooltip| tooltip.as_str()).map(|text| text.to_string());
+    Some(Link { target, tooltip })
+}
+
 /// The **links** of a sheet: by the address of the cell they are on.
 pub fn links_of(node: &Node) -> BTreeMap<String, Link> {
     let mut links = BTreeMap::new();
@@ -40,9 +47,8 @@ pub fn links_of(node: &Node) -> BTreeMap<String, Link> {
         return links;
     };
     for (address, link) in map {
-        let Some(target) = link.get("target").and_then(|target| target.as_str()) else { continue };
-        let tooltip = link.get("tooltip").and_then(|tooltip| tooltip.as_str()).map(|text| text.to_string());
-        links.insert(address.to_string(), Link { target: target.to_string(), tooltip });
+        let Some(link) = link_from(link) else { continue };
+        links.insert(address.to_string(), link);
     }
     links
 }

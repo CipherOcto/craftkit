@@ -769,3 +769,54 @@ fn a_paste_of_the_values_does_not_carry_the_validation() {
         .expect("the cell is checked");
     assert_eq!(outcome.data["ok"], json!(true), "the validation did not travel");
 }
+
+/// The **link** on a cell, as the answer holds it.
+fn link_of(session: &mut Session, sheet: u64, cell: &str) -> Json {
+    let outcome = session
+        .execute("grid.cell.link.get", &json!({ "sheet": sheet, "cell": cell }))
+        .expect("the link is read");
+    outcome.data["link"].clone()
+}
+
+/// The **link** of a copied cell is pasted with it.
+#[test]
+fn the_link_of_a_copied_cell_is_pasted_with_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute(
+            "grid.cell.link.set",
+            &json!({ "sheet": sheet, "cell": "A1", "target": "https://example.org", "tooltip": "the site" }),
+        )
+        .expect("the link is written");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session.execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1" })).expect("the cell is pasted");
+    let link = link_of(&mut session, sheet, "C1");
+    assert_eq!(link["target"], json!("https://example.org"), "the link is on the cell");
+    assert_eq!(link["tooltip"], json!("the site"), "and so is the tooltip");
+}
+
+/// A cell that is pasted over **loses** the link it had.
+#[test]
+fn a_cell_that_is_pasted_over_loses_the_link_it_had() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 1.0);
+    set_number(&mut session, sheet, "C1", 2.0);
+    session
+        .execute(
+            "grid.cell.link.set",
+            &json!({ "sheet": sheet, "cell": "C1", "target": "https://example.org" }),
+        )
+        .expect("the link is written");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C1", "overwrite": true }))
+        .expect("the cell is pasted");
+    assert_eq!(link_of(&mut session, sheet, "C1"), Json::Null, "the link of the cell that was there is gone");
+}
