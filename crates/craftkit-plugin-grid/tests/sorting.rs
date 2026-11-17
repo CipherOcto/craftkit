@@ -303,3 +303,61 @@ fn the_keys_and_the_column_are_not_given_together() {
     let message = failure.to_string();
     assert!(message.contains("and not by both"), "the refusal says why: {message}");
 }
+
+/// A key may order the words by one of the workbook's **lists**: the
+/// words of the list in the order of the list, and the words that are
+/// not in it after them.
+#[test]
+fn a_key_may_order_the_words_by_a_list() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let workbook = session
+        .document()
+        .walk()
+        .find(|node| node.kind == "grid.workbook")
+        .expect("the workbook is there")
+        .id;
+    session
+        .execute("grid.workbook.list.add", &json!({ "workbook": workbook, "words": "Mon\nTue\nWed" }))
+        .expect("the list is taught");
+    value(&mut session, sheet, "A1", json!("Wed"));
+    value(&mut session, sheet, "A2", json!("Mon"));
+    value(&mut session, sheet, "A3", json!("Tue"));
+    value(&mut session, sheet, "A4", json!("Sat"));
+    session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A4",
+                "keys": [{ "column": "A", "list": 1 }],
+            }),
+        )
+        .expect("the range is sorted");
+    let values = values_of(&mut session, sheet, "A1:A4");
+    assert_eq!(values[0][0], json!("Mon"), "the Monday is first");
+    assert_eq!(values[1][0], json!("Tue"), "then the Tuesday");
+    assert_eq!(values[2][0], json!("Wed"), "then the Wednesday");
+    assert_eq!(values[3][0], json!("Sat"), "and a word that is not in the list is last");
+}
+
+/// A key that names a list that is **not there** is refused.
+#[test]
+fn a_list_that_is_not_there_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("b"));
+    value(&mut session, sheet, "A2", json!("a"));
+    let failure = session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "keys": [{ "column": "A", "list": 3 }],
+            }),
+        )
+        .expect_err("the sort is refused");
+    let message = failure.to_string();
+    assert!(message.contains("there is no list"), "the refusal says why: {message}");
+}

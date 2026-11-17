@@ -56,6 +56,33 @@ fn column_at(text: &str, id: &str) -> Result<u32, EngineError> {
     })
 }
 
+/// The **text** a value shows: the tree's own text of a cell.
+fn text_of(value: &Value) -> String {
+    match value {
+        Value::Empty => String::new(),
+        Value::Number(number) => number.to_string(),
+        Value::Text(text) => text.clone(),
+        Value::Bool(flag) => if *flag { "TRUE" } else { "FALSE" }.to_string(),
+        Value::Error(message) => message.clone(),
+    }
+}
+
+/// The **order** of two values by a **list**: the words of the list in
+/// the order of the list, and the words that are not in it after them,
+/// in the tree's own order.
+fn compare_by_list(left: &Value, right: &Value, list: &[String]) -> Ordering {
+    let place = |value: &Value| {
+        let text = text_of(value);
+        list.iter().position(|word| *word == text)
+    };
+    match (place(left), place(right)) {
+        (Some(one), Some(other)) => one.cmp(&other),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => compare(left, right),
+    }
+}
+
 /// The **order** of two values, the tree's way.
 ///
 /// The empty cells are last, and the numbers come before the text,
@@ -110,13 +137,16 @@ fn guess_header(cells: &Cells, area: &Area) -> bool {
     votes > 0
 }
 
-/// A **key** of a sort: the column it sorts by, and whether the order
-/// is **descending**.
+/// A **key** of a sort: the column it sorts by, whether the order is
+/// **descending**, and the **list** it orders the words by, when it
+/// orders them by a list.
 struct Key {
     /// The column the key sorts by.
     column: u32,
     /// Whether the order is descending.
     descending: bool,
+    /// The place of the list the words are ordered by, when they are.
+    list: Option<u64>,
 }
 
 /// The **keys** of a sort, from the caller's list.
@@ -140,7 +170,8 @@ fn keys_of(value: &Json, id: &str) -> Result<Vec<Key>, EngineError> {
             });
         };
         let descending = key.get("descending").and_then(|descending| descending.as_bool()).unwrap_or(false);
-        keys.push(Key { column: column_at(column, id)?, descending });
+        let list = key.get("list").and_then(|list| list.as_u64());
+        keys.push(Key { column: column_at(column, id)?, descending, list });
     }
     if keys.is_empty() {
         return Err(EngineError::Failed {
@@ -177,7 +208,9 @@ commands! {
             header: Option<Bool>,
             /// The **keys** of the sort: a list of them, and the first is
             /// the one that decides. Each key names the **column** it
-            /// sorts by and says whether the order is **descending**.
+            /// sorts by, says whether the order is **descending**, and may
+            /// name the **list** the words are ordered by — the place of
+            /// the list in the workbook.
             ///
             /// The keys and the column may not be given together: a sort
             /// is sorted by its keys or by its column, and not by both.
@@ -226,10 +259,29 @@ commands! {
                         Some(column) => column_at(&column.0, &id)?,
                         None => area.start.col,
                     };
-                    vec![Key { column, descending: self.descending.map(|flag| flag.0).unwrap_or(false) }]
+                    vec![Key {
+                        column,
+                        descending: self.descending.map(|flag| flag.0).unwrap_or(false),
+                        list: None,
+                    }]
                 }
             };
+            // The **lists** of the workbook: a key may order the words
+            // by one of them, and a key that names a list that is not
+            // there is refused.
+            let lists = crate::custom_lists_of(session, sheet);
             for key in &keys {
+                if let Some(place) = key.list
+                    && (place == 0 || place as usize > lists.len())
+                {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the workbook has {} list(s), and there is no list {place}",
+                            lists.len()
+                        ),
+                    });
+                }
                 if key.column < area.start.col || key.column > area.end.col {
                     return Err(EngineError::Failed {
                         id: id.clone(),
@@ -297,7 +349,13 @@ commands! {
                 let left = &rows[*one].1;
                 let right = &rows[*other].1;
                 for (index, key) in keys.iter().enumerate() {
-                    let ordering = compare(&left[index], &right[index]);
+                    let ordering = match key.list {
+                        Some(place) => {
+                            let list = lists.get(place.saturating_sub(1) as usize).cloned().unwrap_or_default();
+                            compare_by_list(&left[index], &right[index], &list)
+                        }
+                        None => compare(&left[index], &right[index]),
+                    };
                     if ordering == Ordering::Equal {
                         continue;
                     }

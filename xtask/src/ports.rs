@@ -1384,6 +1384,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/sorting.rs",
         section: "§1004",
     },
+    Port {
+        rule: "a sort may order the words by one of the workbook's lists",
+        from: "gridcraft/crates/engine/src/cmd/data/sort.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/sorting.rs",
+        command: "grid.sort",
+        test: "crates/craftkit-plugin-grid/tests/sorting.rs",
+        section: "§1005",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
