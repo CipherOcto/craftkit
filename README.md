@@ -4441,6 +4441,7 @@ so.
 | a **paste may be worked out in an operation** | **built.** The number of the clipboard is put together with the number that is there — added, subtracted, multiplied or divided (§993) | §993 |
 | the **validation of the copied cells is pasted with them** | **built.** The rules move with the cells, and a rule that reaches out of the copied range does not travel (§994) | §994 |
 | the **link of a copied cell is pasted with it** | **built.** The link and its tooltip travel with the cell they are on (§995) | §995 |
+| a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64802,54 +64803,63 @@ its link.
   their own links.
 - **The tree does not open a link**: that is the host's business, and
   the tree's commands never reach outside the program.
+## 996. A pasted range may link to the cells it came from
 
-## 995. The link of a copied cell is pasted with it
-
-A link belongs to the cell it is on, and a cell that is copied keeps
-its link.
+A cell may be a window onto another cell, and a copy of it may stay a
+window when it is pasted somewhere else.
 
 ### What was built
 
-- The **link** of the copied cells — the target and the tooltip — is
-  the link of the cells they land on.
-- A cell that is pasted over **loses** the link it had: the cell that
-  is pasted is the cell that was copied, and it holds what that one
-  holds.
-- The link travels with a **plain paste**, like the borders (§986),
-  the comments (§988) and the validation (§994).
+- `grid.range.paste` gains **`link`**: the pasted cells hold a
+  **formula that reads the cells they came from** — the value is
+  emptied, and the formula gives it.
+- The reference is **anchored** (`Sheet1!$A$1`), so it does not move
+  when the cell that holds it is moved or copied again.
+- A link is a **formula**, and a formula is neither a value nor a
+  look: a paste of the values, of the formats or in an operation may
+  not be a paste of links, and it is refused by name.
+- The rest of the paste is the paste it has always been: the cells
+  land where they were going to land, and the borders, the comments,
+  the notes, the validation and the links of the copied cells travel
+  with them.
 
 ### What the port found
 
-- **The reference's link is a part of the cell**, and a copy carries
-  it without anybody thinking about it; the reference's paste special
-  also has a kind of its own for the comments and the notes. Here the
-  link is a **fact of the sheet** kept beside the cells for the reason
-  the notes are (§ the note module) — a cell is a value, a formula, a
-  format and a style, and a link is none of those four — so the
-  clipboard keeps the links **as links**, and the paste writes them.
-- **The reference's copy of a cell from another workbook re-makes the
-  link**, because the target of a link may name a sheet of that
-  workbook. Here the link is written as it is: the tree's links name a
-  place in this workbook or a place outside it, and the paste does not
-  change what a link says.
+- **The reference's linked paste writes the reference of the source
+  cell as it is** — a relative one, which moves when the cell that
+  holds it is copied again. Here the reference is **anchored**: a
+  link is a link to *that* cell, and a cell that is a window onto
+  another cell stays a window onto the same cell. The tree refuses to
+  clamp and refuses to guess, and a relative reference would guess
+  where the reader wants to look.
+- **The reference's linked paste ignores the kind of paste it was
+  asked for** — the link is written into every cell whatever the kind
+  says, except for the kinds that write no cells at all. Here the
+  kinds are **exclusive**, and a conflict is refused by name: a
+  paste of links is a paste of links.
+- **The reference's linked paste carries the trust of the source into
+  the destination**, because a formula that comes from an untrusted
+  file is active. The tree has no trust of that kind — every command
+  runs in this program and reaches nothing outside it — so a link is
+  a formula like any other.
 
 ### What it cost
 
 - **One command that was already there**: `grid.range.paste` carries
-  the links, and the grid battery carries **237** commands.
-- **One rule that was already there**: the rule that a link is a fact
-  of the sheet beside the cells, and the rule that a pasted cell holds
-  what the cell it was copied from holds.
-- **Two tests** (`tests/clipboard.rs`): the link pasted, and the link of
-  the cell that was there gone.
+  the link, and the grid battery carries **237** commands.
+- **One rule that was already there**: the rule that a formula is a
+  fact of a cell, and the rule that a paste is one kind at a time
+  (§981, §985, §992, §993).
+- **Two tests** (`tests/clipboard.rs`): the pasted cell reads the cell
+  it came from, and a link is refused with the values.
 - **No new dependency**.
 
 ### What it does not settle
 
-- **The tree does not re-make a link that names another workbook**: a
-  link is written as it is.
-- **The tree does not paste the links of a range as a link of the
-  range**: a link belongs to a cell, and the cells of the range get
-  their own links.
-- **The tree does not open a link**: that is the host's business, and
-  the tree's commands never reach outside the program.
+- **The tree does not write a relative link**: the reference is
+  anchored, and a cell that is a window onto another cell stays one.
+- **The tree does not link a range to a range**: the cells of the
+  range each read the cell they came from.
+- **The tree does not follow a link out of the workbook**: a link may
+  name a place outside it, and the tree's commands never reach outside
+  the program.
