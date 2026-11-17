@@ -4438,6 +4438,7 @@ so.
 | a **range of cells names a style** | **built.** Every cell of the range names the style, and a locked cell of a protected sheet is refused (§990) | §990 |
 | a **named style may be bold, italic or struck through** | **built.** The marks of the text of a style are named with the font, and the bold may be taken away (§991) | §991 |
 | a **blank of the clipboard writes nothing over what is there** | **built.** A cell of the clipboard that holds nothing is skipped, for a blank is nothing and nothing writes nothing (§992) | §992 |
+| a **paste may be worked out in an operation** | **built.** The number of the clipboard is put together with the number that is there — added, subtracted, multiplied or divided (§993) | §993 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64620,3 +64621,72 @@ always meant to take the cell that is there with it.
   nothing, and that includes its borders.
 - **The tree does not tile the clipboard over a bigger range**: the
   paste lands where it is told to land.
+
+## 993. A paste may be worked out in an operation
+
+A column of numbers may be put into another column of numbers: added,
+subtracted, multiplied or divided, one cell at a time.
+
+### What was built
+
+- The command **`grid.range.paste`** takes an **`operation`** now:
+  `add`, `subtract`, `multiply` or `divide`. An operation that is not
+  one of the tree's is refused by name.
+- The **number** of the clipboard is put together with the number that
+  is **there**: the cell that is there is the left side and the number
+  that is pasted is the right side.
+- A cell that holds a **text** or an **error** keeps what it holds: a
+  text is not a number, and a number cannot be put together with a
+  text.
+- A cell that holds **nothing** is given the number: there is nothing
+  to put the number together with, and nothing is not a zero.
+- A cell that holds a **formula** takes the operation into the
+  formula: the formula and the number, with the operation between
+  them — `(A1 * 2)+3`. A formula the tree cannot read is not written,
+  and the cell keeps what it holds.
+- A division by **zero** is an error, and the error is the tree's own:
+  `#DIV/0!`.
+
+### What the port found
+
+- **The reference's paste special has an operation** — `none`, `add`,
+  `subtract`, `multiply`, `divide` — and it works out the cell that is
+  there and the cell that is pasted in the same way: the cell that is
+  there on the left, the number that is pasted on the right, and a
+  formula that is there takes the operation into itself. Here the
+  operation is a **parameter** of the paste, and the four marks are
+  the tree's own.
+- **The reference counts an empty cell as a zero** when it works the
+  operation out, so an empty cell that is added to becomes the number.
+  Here a cell that holds **nothing** is given the number as it is:
+  nothing is an option and not a zero, and there is nothing to put
+  the number together with.
+- **The reference writes the operation into the formula of the cell**
+  in the reference's own way — `=(A1 * 2)+3` — with the `=` it writes
+  its formulas with. Here the formula is the tree's formula, written
+  without the `=`, and it is checked with the tree's own parser before
+  it is written.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` takes the
+  operation, and the grid battery carries **237** commands.
+- **One rule that was already there**: the tree's parser, its printer
+  and its `#DIV/0!` — the error a division by zero gives, and the
+  formula the tree writes and reads.
+- **Six tests** (`tests/clipboard.rs`): the numbers added, the numbers
+  multiplied, a cell that holds a text, a cell that holds a formula, a
+  division by zero, and an operation that is not one of the tree's.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree puts the numbers together in the cells that are there**:
+  the reference may tile the clipboard over a bigger range, and here
+  the paste lands where it is told to land.
+- **The tree does not put the number together with a text**: the cell
+  that holds a text keeps it, and the answer does not count what was
+  left alone — the tree's rule is that a text is not a number.
+- **The tree does not write the operation into a formula it cannot
+  read**: the cell keeps what it holds, and nothing is written that
+  the tree would have to guess at.
