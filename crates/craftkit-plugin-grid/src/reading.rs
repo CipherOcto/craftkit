@@ -72,6 +72,9 @@ commands! {
             range: Option<Text>,
             /// Whether the **formulas** are given instead of the values.
             formulas: Option<Bool>,
+            /// Whether the cells are given as they are **shown**: the
+            /// text the cell shows, written with the format of the cell.
+            formatted: Option<Bool>,
         },
         run: {
             let id = "grid.range.read".to_string();
@@ -103,6 +106,14 @@ commands! {
             // The **values** are derived: the book computes them.
             let book = crate::book_of(session.document());
             let formulas = self.formulas.map(|formulas| formulas.0).unwrap_or(false);
+            let formatted = self.formatted.map(|formatted| formatted.0).unwrap_or(false);
+            if formulas && formatted {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a range is read for its formulas or for the text it shows, and not for both"
+                        .to_string(),
+                });
+            }
             let mut rows: Vec<Vec<Json>> = Vec::new();
             for row in area.start.row..=area.end.row {
                 let mut cells_in_row: Vec<Json> = Vec::new();
@@ -122,6 +133,19 @@ commands! {
                             Some(formula) => Json::String(formula),
                             None => value.to_json(),
                         });
+                    } else if formatted {
+                        // The **text** the cell shows: the value written
+                        // with the format of the cell — the conditional
+                        // format that matches it first, and the format
+                        // of the style it names otherwise.
+                        let looks = crate::conditional::looks_for(node, cell, &value);
+                        let format = match &looks.format {
+                            Some(code) => crate::format::Format::parse(code).unwrap_or(crate::format::Format::General),
+                            None => crate::format_of(session, sheet, &cells, cell),
+                        };
+                        let width = crate::sizes::column_width(node, cell.col);
+                        let text = format.text_in(&value, crate::system_of(session, sheet), width);
+                        cells_in_row.push(Json::String(text));
                     } else {
                         cells_in_row.push(value.to_json());
                     }

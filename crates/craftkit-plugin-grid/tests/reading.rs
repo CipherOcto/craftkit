@@ -193,3 +193,49 @@ fn a_hidden_row_is_not_counted() {
     assert_eq!(outcome.data["count"], 1);
     assert_eq!(outcome.data["sum"], 1.0);
 }
+
+/// A range may be read as it is **shown**: the text the cell shows,
+/// written with the format of the cell.
+#[test]
+fn a_range_may_be_read_as_it_is_shown() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": 1234.5678 }))
+        .expect("the value is set");
+    session
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "0.00" }))
+        .expect("the format is set");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A2", "value": "text" }))
+        .expect("the value is set");
+    let outcome = session
+        .execute("grid.range.read", &json!({ "sheet": sheet, "range": "A1:A2", "formatted": true }))
+        .expect("the range is read");
+    let values = outcome.data["values"].as_array().expect("the values are a list");
+    assert_eq!(values[0][0].as_str(), Some("1234.57"), "the number as it is shown");
+    assert_eq!(values[1][0].as_str(), Some("text"), "and a text as it is");
+    // The **values** are still the values: a read that is not a read of
+    // the text gives the number itself.
+    let outcome = session
+        .execute("grid.range.read", &json!({ "sheet": sheet, "range": "A1:A1" }))
+        .expect("the range is read");
+    let values = outcome.data["values"].as_array().expect("the values are a list");
+    assert_eq!(values[0][0], json!(1234.5678), "the value is the value");
+}
+
+/// A range is read for its **formulas** or for the **text** it shows,
+/// and not for both.
+#[test]
+fn a_range_is_not_read_for_its_formulas_and_its_text() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let failure = session
+        .execute(
+            "grid.range.read",
+            &json!({ "sheet": sheet, "range": "A1:A1", "formulas": true, "formatted": true }),
+        )
+        .expect_err("the read is refused");
+    let message = failure.to_string();
+    assert!(message.contains("and not for both"), "the refusal says why: {message}");
+}
