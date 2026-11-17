@@ -4457,6 +4457,7 @@ so.
 | a **criterion is read by the tree's own rule of numbers** | **built.** A currency, a fraction and a date are numbers in a criterion, read by the rule `VALUE` reads a text by (§1010) | §1010 |
 | a **criterion is counted in the code units of its text** | **built.** The bound is two hundred and fifty-five units and not characters, and the cut keeps the characters that fit (§1011) | §1011 |
 | a **filter may keep the highest values of a column** | **built.** The top ten is a filter of its own, and the threshold is the count-th highest number (§1012) | §1012 |
+| a **filter may keep the rows above the average** | **built.** The above-the-average is a filter of its own, and the average is the average of the column (§1013) | §1013 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56012,7 +56013,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 242 |
+| grid | 243 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -65800,5 +65801,50 @@ that meet a condition.
 
 - **The tree's filter has no range**: a filter is a column of a sheet,
   and the numbers it judges are those of the whole column.
+- **The tree's filter does not judge the colour of a cell or the icon
+  of an outline**: those are not in the tree's filter.
+
+## 1013. A filter may keep the rows above the average
+
+A filter may keep the rows of a column that are **above** its
+average.
+
+### What was built
+
+- A new **command**, `grid.filter.average`, filters a sheet by the
+  rows that are **above** the average of a column — or the rows that
+  are **below** it.
+- The **average** is the average of the numbers of the column, and a
+  row is kept when its number is above it: the row that holds the
+  average itself is not kept, because the average is not above the
+  average.
+- A cell that does **not hold a number** is not kept.
+
+### What the port found
+
+- **The reference's filter is over a range and has a heading row, and
+  this tree's filter has neither.** The reference's average is the
+  average of the numbers **under the heading** of the range it
+  filters. Here a sheet has one filter and it is over a column, and
+  the average is the average of the numbers of that column.
+- **The reference's filter may judge the colour of a cell and the icon
+  of an outline**, and it may judge a **custom criterion** of two
+  conditions joined by *and* or by *or*. The tree's custom criterion
+  is its **groups** of criteria, and the tree has no colours in a
+  filter and no icons.
+
+### What it cost
+
+- **One new command**: the grid battery carries **243** commands.
+- **One rule that was already there**: the rows a filter hides are
+  derived from the cells, and they are not written down.
+- **One test** in the grid battery (`tests/filters.rs`): the filter
+  keeping the rows above the average, and the rows below it.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's filter has no range**: a filter is a column of a sheet,
+  and the average it judges is the average of the whole column.
 - **The tree's filter does not judge the colour of a cell or the icon
   of an outline**: those are not in the tree's filter.
