@@ -4437,6 +4437,7 @@ so.
 | a **style may be made from the look of a cell** | **built.** The format, the font and the alignment of the cell become a style of the workbook, and the lock is not taken (§989) | §989 |
 | a **range of cells names a style** | **built.** Every cell of the range names the style, and a locked cell of a protected sheet is refused (§990) | §990 |
 | a **named style may be bold, italic or struck through** | **built.** The marks of the text of a style are named with the font, and the bold may be taken away (§991) | §991 |
+| a **blank of the clipboard writes nothing over what is there** | **built.** A cell of the clipboard that holds nothing is skipped, for a blank is nothing and nothing writes nothing (§992) | §992 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64566,3 +64567,56 @@ tree may not — and that is a hole in the tree's own rule.
 - **The tree does not read the style of a file as a whole**: the file
   carries the whole style, and the tree reads the parts of it that it
   has a word for.
+
+## 992. A blank of the clipboard writes nothing over what is there
+
+A table is copied with the blanks that are in it, and a blank is not
+always meant to take the cell that is there with it.
+
+### What was built
+
+- The command **`grid.range.paste`** takes a **`skip_blanks`** now.
+- A cell of the clipboard that holds **nothing** — no value and no
+  formula — writes **nothing** over the cell it lands on: not its
+  contents and not its look.
+- A blank that is **not** skipped writes over the cell as every paste
+  does: that is the tree's rule, and the answer says which was used.
+- The skip and the **overwrite** are two different things: the
+  overwrite says that the cells that hold something may be written
+  over, and the skip says that the blanks of the clipboard are not
+  written at all.
+
+### What the port found
+
+- **The reference's paste special has a "skip blanks" tick**, and it
+  is one of the options of the dialog. Here it is a **parameter** of
+  the paste: the tree's paste is one command, and what it does is
+  named in the call.
+- **The reference's clipboard holds the whole block**, blanks and all,
+  because a selection is a rectangle. Here the clipboard holds the
+  **cells that are there**, so a blank of the clipboard is a cell that
+  holds a look and no value — and it is the one that is skipped.
+- **The reference's skip leaves the contents of the cell alone and
+  pastes the formats of the blank**, and here a blank writes
+  **nothing at all**: a blank is nothing, and nothing writes nothing.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` takes the
+  skip, and the grid battery carries **237** commands.
+- **One rule that was already there**: the rule that a paste writes
+  the whole of the cell, and the rule that "nothing" is an option and
+  not a zero.
+- **Two tests** (`tests/clipboard.rs`): the blank that writes nothing,
+  and the blank that writes over the cell when it is not skipped.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's clipboard holds the cells that are there**: a cell that
+  is not there at all is not in the clipboard, and there is nothing to
+  skip.
+- **The tree does not skip the borders of a blank**: a blank writes
+  nothing, and that includes its borders.
+- **The tree does not tile the clipboard over a bigger range**: the
+  paste lands where it is told to land.
