@@ -3817,7 +3817,7 @@ so.
 | the **note** on a cell | **built.** A cell may carry a note, and the note belongs to the sheet and names the cell (§367) | §367 |
 | the **link** on a cell | **built.** A cell may carry a link, and whether the target is inside this workbook is derived (§368) | §368 |
 | the **shaping** of a text | **built.** A formula may shape a text: take a part of it, count it, fold it or clean it (§369) | §369 |
-| the **finding** of a value in a range | **built.** MATCH, VLOOKUP and INDEX find a value in a range, and the approximate search is not here (§370) | §370 |
+| the **finding** of a value in a range | **built.** MATCH, VLOOKUP and INDEX find a value in a range, and the approximate search is not here (§370) — and §1007 says otherwise: the approximate search is here, and it is the default | §370 |
 | the **parts** of a date | **built.** DATE makes a date and YEAR, MONTH and DAY take it apart, in the date system of the workbook (§371) | §371 |
 | the **sorting** of a range | **built.** The rows of a range are put in order, and what a row holds travels with it (§372) | §372 |
 | the **protection** of a sheet | **built.** A protected sheet locks its cells and says what may still be done to it (§373) | §373 |
@@ -4327,7 +4327,7 @@ so.
 | the **rounding** to a multiple | **built.** CEILING.MATH, CEILING.PRECISE, ISO.CEILING, FLOOR.MATH and FLOOR.PRECISE round a number to a multiple, and the mode says what a negative number does (§879) | §879 |
 | the **text** around a mark | **built.** TEXTBEFORE and TEXTAFTER take the text before a mark and the text after it — with the tree's instance, its match mode and its match end (§880) | §880 |
 | the **text** of a number | **built.** FIXED and DOLLAR write a number as text, and NUMBERVALUE reads a text with the separators of the text's own (§881) | §881 |
-| the **lookup** across | **built.** HLOOKUP finds the value of a row of the column that holds the needle, and the tree's LOOKUP — a bisection — is refused and says why (§882) | §882 |
+| the **lookup** across | **built.** HLOOKUP finds the value of a row of the column that holds the needle, and the tree's LOOKUP — a bisection — is refused and says why (§882) — and §1007 says otherwise: the LOOKUP is here, with the rule written down | §882 |
 | the **worth** today | **built.** NPV is the sum of what each payment of a series is worth today, and the first payment is discounted once (§883) | §883 |
 | a **thing** bought on a day | **built.** AMORLINC and AMORDEGRC are the straight line and the declining balance of a thing bought on a day, with the tree's first period and its coefficient (§884) | §884 |
 | the tree's **arrays** | **built.** The twenty-eight functions of the tree that give back a table are listed and refused, each with the reason that a formula here is a value (§885) | §885 |
@@ -4451,6 +4451,7 @@ so.
 | a **sort may have more than one key** | **built.** The first key decides and the next one is looked at when it cannot (§1004) | §1004 |
 | a **sort may order the words by one of the workbook's lists** | **built.** The words of the list in the order of the list, and the others after them (§1005) | §1005 |
 | the **objects of a workbook are shown or not** | **built.** The file says whether its charts, pictures and slicers are drawn, and the tree says it too (§1006) | §1006 |
+| a **lookup that does not match exactly finds the largest value below the needle** | **built.** The exact match is the answer, and when there is none the largest value that is not greater than the needle is (§1007) | §1007 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -25929,12 +25930,17 @@ Three functions look for something in a range of cells: `MATCH`,
   it is exact here — `VLOOKUP(2,A1:B3,2,FALSE)` — and a lookup that
   does not say is refused with *not supported yet: an approximate
   search*. The tree's `MATCH` has no such default here: it looks for
-  the exact match when no match type is given.
+  the exact match when no match type is given — and §1007 says
+  otherwise: the default here is the approximate search as well, and a
+  lookup that does not say that it is exact is not refused.
 - **The tree's approximate search is a bisection and not a rule.** The
   tree says so in its own words: it probes the middle of what is left
   and answers what the tree's own application answers on data that is
   not sorted, and it skips the entries of other kinds. That is not a
-  rule that can be written down in a sentence, and so it is not here.
+  rule that can be written down in a sentence, and so it is not here —
+  and §1007 says otherwise: the rule is written down in a sentence
+  here, the scan is over the whole vector, and on data that is not
+  sorted this tree answers its own rule.
 - **The tree's needle may hold the wildcards and so does this one's.**
   The tree's exact search matches a text needle with the wildcards,
   and `B*` matches `banana`; so does this one, and the text is
@@ -25962,11 +25968,14 @@ Three functions look for something in a range of cells: `MATCH`,
 - **The tree's other lookups are not here.** The tree has `HLOOKUP`,
   `LOOKUP`, `XLOOKUP`, `XMATCH`, `ROWS`, `COLUMNS`, `TRANSPOSE` and
   `ADDRESS`, and each of them finds something in a range; here three
-  do.
+  do — and §875, §882 and §1007 say otherwise: all of them but
+  `TRANSPOSE` are here, and `TRANSPOSE` is an array.
 - **The tree's search may go backwards.** The tree's `MATCH` with a
   negative match type looks for the smallest value that is not less
   than the needle, in a range that is sorted the other way; that is
-  the approximate search again, and it is not here.
+  the approximate search again, and it is not here — and §1007 says
+  otherwise: the match type `-1` looks for the smallest value that is
+  not less than the needle.
 
 ## 371. The parts of a date
 
@@ -57957,7 +57966,9 @@ are a pair.
   rule that can be written down in a sentence.** The tree's search mode
   `2` and `-2` are that search, over data that is sorted. They are
   refused here — the same way the approximate search of `MATCH` and
-  `VLOOKUP` is refused (§370).
+  `VLOOKUP` is refused (§370) — and §1007 says otherwise: the
+  approximate search is not refused any more, and the binary search
+  alone is.
 - **The tree's numbers are ordered exactly in a lookup, and not as the
   fifteen digits of an equality.** The tree's `=` says that `0.1 + 0.2`
   and `0.3` are the same number, and its lookups do not: they order
@@ -57997,7 +58008,8 @@ are a pair.
 - **The tree's `HLOOKUP` and `LOOKUP` are not here.** `HLOOKUP` is the
   lookup across, and `LOOKUP` is the lookup of a vector — and the
   tree's `LOOKUP` is the approximate search from end to end, so it is
-  the search that is not here.
+  the search that is not here — and §882 and §1007 say otherwise: the
+  lookup across and the lookup of a vector are here.
 - **The tree's `LOOKUP` may search a wide array by its first row**,
   and this tree has no arrays.
 - **The tree's `XLOOKUP` may take a needle that is a range**, and that
@@ -58430,10 +58442,13 @@ reads a **vector**.
   - the search is the **exact** one, with the tree's wildcards in it;
   - a row that is **not there** is `#REF!`;
   - a lookup that does not say that it is exact is **refused**, as it
-    is for `VLOOKUP`: the tree's default is the approximate search.
+    is for `VLOOKUP`: the tree's default is the approximate search —
+    and §1007 says otherwise: the approximate search is here, and it
+    is the default.
 - `LOOKUP` is **refused**, and it says why: the tree's `LOOKUP` is a
   **bisection** over a sorted vector, and a bisection is not a rule
-  that can be written down in a sentence.
+  that can be written down in a sentence — and §1007 says otherwise:
+  the `LOOKUP` is here, with the rule written down in a sentence.
 
 ### What the port found
 
@@ -58446,7 +58461,9 @@ reads a **vector**.
   It is not a search that may be exact — it is a bisection over a
   sorted vector — so it is refused here with the message that says
   what is missing, as the approximate search of `MATCH` and `VLOOKUP`
-  is refused.
+  is refused — and §1007 says otherwise: the `LOOKUP` has the
+  approximate search, and the exact match is the answer when there is
+  one.
 - **The tree's exact search in `HLOOKUP` uses the wildcards.** The
   tree's `HLOOKUP` and its `VLOOKUP` both match a text needle with
   the tree's wildcards, and so does this tree's.
@@ -58465,9 +58482,12 @@ reads a **vector**.
 
 - **The tree's `LOOKUP` over a wide array** — the one that searches
   the first row of a table — is not here, and it is not here for the
-  same reason: it is a bisection.
+  same reason: it is a bisection — and §1007 says otherwise: the
+  `LOOKUP` over a wide **table** is here, and its keys are the first
+  row of it; and this tree has no arrays, so an array is not.
 - **The tree's approximate search is not here** — in `MATCH`, in
-  `VLOOKUP`, in `HLOOKUP` or in `LOOKUP`.
+  `VLOOKUP`, in `HLOOKUP` or in `LOOKUP` — and §1007 says otherwise:
+  all four of them have it.
 
 ## 883. The worth today
 
@@ -65380,3 +65400,85 @@ slicers are **not drawn**.
   file says about them, and the drawing is the front end's.
 - **The tree does not change the setting**: a workbook that says its
   objects are drawn is read as one that says they are not.
+
+## 1007. A lookup that does not match exactly finds the largest value below the needle
+
+A lookup that finds nothing exactly may still find something: the
+value **below** the needle.
+
+### What was built
+
+- The **approximate search** of the tree: the **exact** match is the
+  answer, and when there is none the answer is the **largest value
+  that is not greater than the needle**. A value of another kind is
+  not ordered against the needle, and so is not a candidate; and of
+  the values that are the best, the **first** is the answer.
+- `MATCH(needle, range, [match_type])` has it: the match type `0` is
+  the **exact** search, `1` is the approximate one, and `-1` is the
+  approximate one the other way — the **smallest value that is not
+  less than the needle**. The default is `1`, and a match type that is
+  none of the three is a value error.
+- `VLOOKUP(needle, table, column, [range_lookup])` and `HLOOKUP` have
+  it: the range lookup `FALSE` is the exact search and `TRUE` is the
+  approximate one, and the default is `TRUE`.
+- `LOOKUP(needle, vector, [result])` is here now: it has the
+  approximate search and nothing else. The keys are the vector, and
+  the answer is the value at that place in it — or in the vector that
+  is given as the third argument. A **table** may be given instead of
+  a vector: the keys are its first row when it is wider than it is
+  tall and its first column when it is taller than it is wide, and the
+  answer is the entry of its last row, or of its last column, at that
+  place.
+- The **needle** of a lookup is a value, and an empty one is the
+  number zero — as it is for `XLOOKUP`.
+
+### What the port found
+
+- **The reference's approximate search is a bisection, and a bisection
+  is not a rule.** The reference probes the middle of what is left and
+  answers what its own application answers on data that is not sorted.
+  Here the rule is written down in a sentence and the scan is over the
+  whole vector: on **sorted** data the two agree, and on **unsorted**
+  data this tree answers its own rule and the reference answers the
+  bisection.
+- **The reference's exact search and its approximate search are one
+  search.** The reference's approximate search finds the equal entry
+  too — an equal entry is the largest value that is not greater than
+  the needle. Here the exact match is looked for **first** and the
+  best candidate is the answer only when there is none, so a lookup
+  that finds the needle exactly is not changed by this arc.
+- **The reference's duplicates are the last of the run.** Its bisection
+  takes the run of equal entries that follows the probe, so a sorted
+  table with the same key twice gives the second one. Here the
+  **first** of the values that are the best is the answer, as it is
+  for every other search of the tree.
+- **The reference's `LOOKUP` over a table answers with its last row or
+  its last column**, and so does this one — and the reference's
+  `LOOKUP` over a table of results answers with its **first column**,
+  and a table of results must have a row for every key.
+- **The reference's `MATCH` may answer with a match type of any
+  number.** It reads `1`, `0` and `-1` and takes anything else as
+  `1`. Here a match type that is none of the three is a value error:
+  the tree refuses rather than guesses.
+
+### What it cost
+
+- **No new command**: the finding is a function of the formula
+  language, and the grid battery still carries **241** commands.
+- **One rule that was already there**: the tree's own order of two
+  numbers, and the tree's first match is the match.
+- **Six tests** in the grid battery (`tests/lookups.rs`): the
+  approximate search and the approximate search the other way, the
+  match type that is none of the three, the lookup that does not say
+  that it is exact, the lookup of a vector, and the lookup of a table —
+  three of them new, and three that said *not supported yet* before.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's binary search is still not here**: the search mode `2`
+  and the `-2` of `XLOOKUP` and `XMATCH` are a bisection over the
+  whole vector, and a bisection is not a rule that can be written down
+  in a sentence (§875).
+- **The tree does not answer the way a bisection answers**: on data
+  that is not sorted, this tree's search answers its own rule.
