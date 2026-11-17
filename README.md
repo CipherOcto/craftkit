@@ -4459,6 +4459,7 @@ so.
 | a **filter may keep the highest values of a column** | **built.** The top ten is a filter of its own, and the threshold is the count-th highest number (§1012) | §1012 |
 | a **filter may keep the rows above the average** | **built.** The above-the-average is a filter of its own, and the average is the average of the column (§1013) | §1013 |
 | a **filter's criterion is read by the tree's own rule of numbers** | **built.** A currency, a fraction and a date are numbers in a criterion, read by the rule `VALUE` reads a text by (§1014) | §1014 |
+| a **filter may look for the words a cell holds** | **built.** The criterion has the four operations on the text of a cell, and the filter and the conditional format share it (§1015) | §1015 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -65901,3 +65902,53 @@ way the tree reads a number.
   five, and the reference compares the numbers and says that it does.
 - **The tree's filter does not judge the colour of a cell or the icon
   of an outline**: those are not in the tree's filter.
+
+## 1015. A filter may look for the words a cell holds
+
+A filter may ask not for a number but for the **words** of a cell.
+
+### What was built
+
+- The tree's **criterion** has four **operations on the text** of a
+  cell, beside the four comparisons of numbers and of texts:
+  - `beginsWith` — the text of the cell begins with the words;
+  - `endsWith` — the text of the cell ends with them;
+  - `contains` — the text of the cell holds them;
+  - `notContains` — and it does not hold them.
+- The comparison of text is **without case**, as it is everywhere else
+  in the tree, and the words are **not** wildcards: they are the words.
+- A **filter** may use them (`grid.filter.set`), and so may a
+  **conditional format** (`grid.conditional.set`) — it is the same
+  criterion.
+
+### What the port found
+
+- **The reference's filter has the four operations on the text, and
+  this tree's filter had the six comparisons only.** So a filter of
+  *begins with* was not possible here and was possible there. Here the
+  criterion has them, and the conditional format has them too — the
+  reference's conditional format has them as rules of their own
+  (`beginsWith`, `endsWith`, `containsText`), and here they are
+  operations of the one criterion.
+- **The reference's conditional format has many kinds of rule** — a
+  colour scale, a data bar, an icon set, a formula, and more — and
+  this tree's has the one criterion. The text operations are the part
+  of it that is here.
+
+### What it cost
+
+- **No new command**: the operation is a parameter of `grid.filter.set`,
+  and the grid battery still carries **243** commands.
+- **One rule that was already there**: the comparison of text is
+  without case, and the tree's criterion is one criterion.
+- **One test** in the grid battery (`tests/filters.rs`): the filter
+  looking for the words a cell holds.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's conditional format has one kind of rule**: the
+  reference's has a colour scale, a data bar, an icon set, a formula
+  and more, and they are not here.
+- **The tree's words are not wildcards**: the criterion of a `contains`
+  is the words themselves, and the tree's `*` is not a wildcard there.
