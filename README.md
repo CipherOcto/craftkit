@@ -4450,6 +4450,7 @@ so.
 | a **range may be read as it is shown** | **built.** The text a cell shows, written with the format of the cell, and not its value (§1003) | §1003 |
 | a **sort may have more than one key** | **built.** The first key decides and the next one is looked at when it cannot (§1004) | §1004 |
 | a **sort may order the words by one of the workbook's lists** | **built.** The words of the list in the order of the list, and the others after them (§1005) | §1005 |
+| the **objects of a workbook are shown or not** | **built.** The file says whether its charts, pictures and slicers are drawn, and the tree says it too (§1006) | §1006 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -55992,7 +55993,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 240 |
+| grid | 241 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -65338,3 +65339,44 @@ alphabet makes: a workbook may be **taught** them.
   facts of a cell, and the order of them is not the tree's.
 - **The tree does not sort by the rows of a range**: the rows are the
   rows.
+## 1006. The objects of a workbook are shown or not
+
+A file may say that its charts, its pictures, its shapes and its
+slicers are **not drawn**.
+
+### What was built
+
+- The **objects** of a workbook are read: the file says in its
+  `workbookPr` whether they are drawn (`all`), drawn as
+  **placeholders** (`placeholders`), or not drawn at all (`none`).
+- A new **command**, `grid.workbook.objects`, says it.
+- The import keeps it on the workbook, as it keeps the theme and the
+  calculation settings.
+
+### What the port found
+
+- **The reference keeps the setting in its model of the workbook** and
+  reads it with the date system. Here the same: it is a fact of the
+  workbook, and it is read with the rest of it.
+- **The reference draws its objects by that setting** — a workbook whose
+  objects are not drawn shows placeholders of them. The tree draws
+  nothing: a front end draws, and the answer says what the file says,
+  so that a front end may honour it. The tree's **theme** is the same
+  kind of fact: the tree carries the colours and the fonts of a theme
+  and reports them, and the drawing is the front end's.
+
+### What it cost
+
+- **One new command**: the grid battery carries **241** commands.
+- **One rule that was already there**: the facts of a workbook are read
+  into the document, and the front end draws.
+- **Three tests**: the objects that are not drawn, the workbook that
+  says nothing, and the objects that are imported.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not draw the objects of a workbook**: it says what the
+  file says about them, and the drawing is the front end's.
+- **The tree does not change the setting**: a workbook that says its
+  objects are drawn is read as one that says they are not.
