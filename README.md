@@ -4440,6 +4440,7 @@ so.
 | a **blank of the clipboard writes nothing over what is there** | **built.** A cell of the clipboard that holds nothing is skipped, for a blank is nothing and nothing writes nothing (§992) | §992 |
 | a **paste may be worked out in an operation** | **built.** The number of the clipboard is put together with the number that is there — added, subtracted, multiplied or divided (§993) | §993 |
 | the **validation of the copied cells is pasted with them** | **built.** The rules move with the cells, and a rule that reaches out of the copied range does not travel (§994) | §994 |
+| the **link of a copied cell is pasted with it** | **built.** The link and its tooltip travel with the cell they are on (§995) | §995 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64387,9 +64388,9 @@ the cell it is on.
 - **The tree does not carry the replies of a thread across a
   transpose**: a transposed paste carries the comment with the cell,
   and the replies travel with the comment.
-- **The tree does not paste the hyperlinks**: they are facts of a
-  cell and not of its look, and the reference's kinds that carry them
-  are not here.
+- **The tree pastes the hyperlinks of the cells as well** (§995): they
+  are facts of a cell and not of its look, and a fact of a cell
+  travels with the cell.
 
 ## 989. A style may be made from the look of a cell
 
@@ -64750,3 +64751,105 @@ is over may be copied.
 - **The tree does not merge the rules that are there with the rules
   that travel**: the rules that were over the pasted cells are taken
   away, and the rules of the copied cells are written.
+
+## 995. The link of a copied cell is pasted with it
+
+A link belongs to the cell it is on, and a cell that is copied keeps
+its link.
+
+### What was built
+
+- The **link** of the copied cells — the target and the tooltip — is
+  the link of the cells they land on.
+- A cell that is pasted over **loses** the link it had: the cell that
+  is pasted is the cell that was copied, and it holds what that one
+  holds.
+- The link travels with a **plain paste**, like the borders (§986),
+  the comments (§988) and the validation (§994).
+
+### What the port found
+
+- **The reference's link is a part of the cell**, and a copy carries
+  it without anybody thinking about it; the reference's paste special
+  also has a kind of its own for the comments and the notes. Here the
+  link is a **fact of the sheet** kept beside the cells for the reason
+  the notes are (§ the note module) — a cell is a value, a formula, a
+  format and a style, and a link is none of those four — so the
+  clipboard keeps the links **as links**, and the paste writes them.
+- **The reference's copy of a cell from another workbook re-makes the
+  link**, because the target of a link may name a sheet of that
+  workbook. Here the link is written as it is: the tree's links name a
+  place in this workbook or a place outside it, and the paste does not
+  change what a link says.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` carries
+  the links, and the grid battery carries **237** commands.
+- **One rule that was already there**: the rule that a link is a fact
+  of the sheet beside the cells, and the rule that a pasted cell holds
+  what the cell it was copied from holds.
+- **Two tests** (`tests/clipboard.rs`): the link pasted, and the link of
+  the cell that was there gone.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not re-make a link that names another workbook**: a
+  link is written as it is.
+- **The tree does not paste the links of a range as a link of the
+  range**: a link belongs to a cell, and the cells of the range get
+  their own links.
+- **The tree does not open a link**: that is the host's business, and
+  the tree's commands never reach outside the program.
+
+## 995. The link of a copied cell is pasted with it
+
+A link belongs to the cell it is on, and a cell that is copied keeps
+its link.
+
+### What was built
+
+- The **link** of the copied cells — the target and the tooltip — is
+  the link of the cells they land on.
+- A cell that is pasted over **loses** the link it had: the cell that
+  is pasted is the cell that was copied, and it holds what that one
+  holds.
+- The link travels with a **plain paste**, like the borders (§986),
+  the comments (§988) and the validation (§994).
+
+### What the port found
+
+- **The reference's link is a part of the cell**, and a copy carries
+  it without anybody thinking about it; the reference's paste special
+  also has a kind of its own for the comments and the notes. Here the
+  link is a **fact of the sheet** kept beside the cells for the reason
+  the notes are (§ the note module) — a cell is a value, a formula, a
+  format and a style, and a link is none of those four — so the
+  clipboard keeps the links **as links**, and the paste writes them.
+- **The reference's copy of a cell from another workbook re-makes the
+  link**, because the target of a link may name a sheet of that
+  workbook. Here the link is written as it is: the tree's links name a
+  place in this workbook or a place outside it, and the paste does not
+  change what a link says.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` carries
+  the links, and the grid battery carries **237** commands.
+- **One rule that was already there**: the rule that a link is a fact
+  of the sheet beside the cells, and the rule that a pasted cell holds
+  what the cell it was copied from holds.
+- **Two tests** (`tests/clipboard.rs`): the link pasted, and the link of
+  the cell that was there gone.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not re-make a link that names another workbook**: a
+  link is written as it is.
+- **The tree does not paste the links of a range as a link of the
+  range**: a link belongs to a cell, and the cells of the range get
+  their own links.
+- **The tree does not open a link**: that is the host's business, and
+  the tree's commands never reach outside the program.
