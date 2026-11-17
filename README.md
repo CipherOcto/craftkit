@@ -4439,6 +4439,7 @@ so.
 | a **named style may be bold, italic or struck through** | **built.** The marks of the text of a style are named with the font, and the bold may be taken away (§991) | §991 |
 | a **blank of the clipboard writes nothing over what is there** | **built.** A cell of the clipboard that holds nothing is skipped, for a blank is nothing and nothing writes nothing (§992) | §992 |
 | a **paste may be worked out in an operation** | **built.** The number of the clipboard is put together with the number that is there — added, subtracted, multiplied or divided (§993) | §993 |
+| the **validation of the copied cells is pasted with them** | **built.** The rules move with the cells, and a rule that reaches out of the copied range does not travel (§994) | §994 |
 
 ### The list of things that are honestly not there: empty
 
@@ -64690,3 +64691,62 @@ subtracted, multiplied or divided, one cell at a time.
 - **The tree does not write the operation into a formula it cannot
   read**: the cell keeps what it holds, and nothing is written that
   the tree would have to guess at.
+
+## 994. The validation of the copied cells is pasted with them
+
+A rule of validation belongs to the cells it is over, and the cells it
+is over may be copied.
+
+### What was built
+
+- The **validation** of the copied cells is the validation of the cells
+  they land on: the rules **move** with the cells, and the rules that
+  were there are taken away — the validation of the pasted cells is
+  the validation of the copied cells.
+- A rule that **reaches out of the copied range** does not travel:
+  half a rule is not a rule.
+- A rule that would land **off the sheet** is not written, and it is
+  **counted** in the answer: a rule that is not in the sheet is not a
+  rule, and the tree does not drop it silently.
+- A paste of the **values** and a paste of the **formats** do not
+  carry the validation, and a **transposed** paste does not either: a
+  rule is over a range, and the tree has no rule over a transposed
+  range.
+
+### What the port found
+
+- **The reference's paste special has a kind of its own for the
+  validation**, and a paste of everything carries it as well. Here the
+  validation travels with a **plain paste**, like the borders (§986)
+  and the comments (§988): what a cell is and what is on it travel
+  together.
+- **The reference's validation is a part of the style of a cell**, and
+  it moves with the cell and with the style. Here the rules are a
+  **list of the sheet**, each over a range, so the clipboard keeps
+  them as rules and the paste writes them where the cells land.
+- **The reference's rule that reaches out of the copied range is
+  moved as it is**, with the part that was not copied still over the
+  cells it was over. Here a rule that reaches out of the copied range
+  does **not** travel at all: a rule is over a range, and half a rule
+  is not a rule.
+
+### What it cost
+
+- **One command that was already there**: `grid.range.paste` carries
+  the validation, and the grid battery carries **237** commands.
+- **One rule that was already there**: the rule that a rule is over a
+  range of cells, and the rule that the rules of a sheet are a list.
+- **Three tests** (`tests/clipboard.rs`): the validation pasted, a
+  rule that reaches out of the copied range, and a paste of the values
+  that carries no validation.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not move a rule that reaches out of the copied
+  range**: the rule stays where it is and does not travel.
+- **The tree does not carry the validation in a transposed paste**: a
+  rule over a transposed range is not a rule this tree has.
+- **The tree does not merge the rules that are there with the rules
+  that travel**: the rules that were over the pasted cells are taken
+  away, and the rules of the copied cells are written.
