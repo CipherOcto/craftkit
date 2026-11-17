@@ -51,6 +51,18 @@ pub enum Aggregate {
     Max,
     /// How many of them there are.
     Count,
+    /// How many of them are **numbers**.
+    CountNumbers,
+    /// Their product.
+    Product,
+    /// Their **spread**: the standard deviation of a sample of them.
+    StdDev,
+    /// Their spread: the standard deviation of all of them.
+    StdDevP,
+    /// Their **variance**: the variance of a sample of them.
+    Var,
+    /// Their variance: the variance of all of them.
+    VarP,
 }
 
 impl Aggregate {
@@ -62,6 +74,12 @@ impl Aggregate {
             "min" | "minimum" => Some(Aggregate::Min),
             "max" | "maximum" => Some(Aggregate::Max),
             "count" => Some(Aggregate::Count),
+            "countnumbers" | "count numbers" => Some(Aggregate::CountNumbers),
+            "product" => Some(Aggregate::Product),
+            "stddev" => Some(Aggregate::StdDev),
+            "stddevp" => Some(Aggregate::StdDevP),
+            "var" => Some(Aggregate::Var),
+            "varp" => Some(Aggregate::VarP),
             _ => None,
         }
     }
@@ -74,7 +92,18 @@ impl Aggregate {
             Aggregate::Min => "min",
             Aggregate::Max => "max",
             Aggregate::Count => "count",
+            Aggregate::CountNumbers => "countNumbers",
+            Aggregate::Product => "product",
+            Aggregate::StdDev => "stdDev",
+            Aggregate::StdDevP => "stdDevP",
+            Aggregate::Var => "var",
+            Aggregate::VarP => "varP",
         }
+    }
+
+    /// The names of the ways, as the tree says them, for a message.
+    pub fn names() -> &'static str {
+        "sum, average, min, max, count, countNumbers, product, stdDev, stdDevP, var or varP"
     }
 }
 
@@ -564,8 +593,9 @@ commands! {
             column: Option<Text>,
             /// The column it puts together, as `B`.
             value: Option<Text>,
-            /// The way it puts them together: `sum`, `average`, `min`, `max` or
-            /// `count`.
+            /// The way it puts them together: `sum`, `average`, `min`, `max`,
+            /// `count`, `countNumbers`, `product`, `stdDev`, `stdDevP`, `var`
+            /// or `varP`.
             aggregate: Option<Text>,
         },
         run: {
@@ -653,8 +683,9 @@ commands! {
                         return Err(EngineError::Failed {
                             id: id.clone(),
                             message: format!(
-                                "`{}` is not a way of putting numbers together: sum, average, min, max or count",
-                                aggregate.0.trim()
+                                "`{}` is not a way of putting numbers together: {}",
+                                aggregate.0.trim(),
+                                Aggregate::names()
                             ),
                         });
                     };
@@ -1285,8 +1316,15 @@ commands! {
 
             // The **numbers** of a group, put together.
             let put_together = |numbers: &[Value]| -> Option<f64> {
+                // The **counts** are counts of things and not a putting
+                // together of numbers: they have an answer when there
+                // is nothing to count.
                 if pivot.aggregate == Aggregate::Count {
                     let count = numbers.iter().filter(|value| !matches!(value, Value::Empty)).count();
+                    return Some(count as f64);
+                }
+                if pivot.aggregate == Aggregate::CountNumbers {
+                    let count = numbers.iter().filter(|value| value.as_number().is_some()).count();
                     return Some(count as f64);
                 }
                 let values: Vec<f64> = numbers.iter().filter_map(|value| value.as_number()).collect();
@@ -1299,6 +1337,29 @@ commands! {
                     Aggregate::Min => values.iter().copied().fold(f64::INFINITY, f64::min),
                     Aggregate::Max => values.iter().copied().fold(f64::NEG_INFINITY, f64::max),
                     Aggregate::Count => values.len() as f64,
+                    Aggregate::CountNumbers => values.len() as f64,
+                    Aggregate::Product => values.iter().product(),
+                    // The **spread** and the **variance**: the same
+                    // rules the tree's own `STDEV` and `VAR` use — a
+                    // sample needs two numbers at least, and all of
+                    // them need one — and a group that has not that
+                    // many has no answer at all.
+                    Aggregate::StdDev => match crate::statistics::variance(&values, true) {
+                        Ok(variance) => variance.sqrt(),
+                        Err(_) => return None,
+                    },
+                    Aggregate::Var => match crate::statistics::variance(&values, true) {
+                        Ok(variance) => variance,
+                        Err(_) => return None,
+                    },
+                    Aggregate::StdDevP => match crate::statistics::variance(&values, false) {
+                        Ok(variance) => variance.sqrt(),
+                        Err(_) => return None,
+                    },
+                    Aggregate::VarP => match crate::statistics::variance(&values, false) {
+                        Ok(variance) => variance,
+                        Err(_) => return None,
+                    },
                 })
             };
 

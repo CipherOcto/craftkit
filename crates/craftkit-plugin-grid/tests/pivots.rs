@@ -261,7 +261,11 @@ fn an_aggregate_that_is_not_one_is_refused() {
         )
         .expect_err("the pivot is refused");
     let message = failure.to_string();
-    assert!(message.contains("sum, average, min, max or count"), "the refusal says why: {message}");
+    assert!(
+        message
+            .contains("sum, average, min, max, count, countNumbers, product, stdDev, stdDevP, var or varP"),
+        "the refusal says why: {message}"
+    );
 }
 
 /// **The summary is derived: a number that is changed is in the
@@ -300,4 +304,85 @@ fn a_pivot_is_taken_away() {
         .expect_err("there is no pivot now");
     let message = failure.to_string();
     assert!(message.contains("there is no pivot"), "the refusal says why: {message}");
+}
+
+/// **A pivot may put the numbers together in more ways than a sum.**
+#[test]
+fn a_pivot_puts_the_numbers_together_in_more_ways() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    // The **product** of the numbers of a group.
+    session
+        .execute(
+            "grid.pivot.create",
+            &json!({
+                "sheet": sheet,
+                "name": "the product",
+                "range": "A1:C4",
+                "row": "A",
+                "value": "B",
+                "aggregate": "product",
+            }),
+        )
+        .expect("the pivot is made");
+    let made = rows(&mut session, sheet, "the product");
+    assert_eq!(made[0]["key"], "ann");
+    assert_eq!(made[0]["value"], 6.0, "three times two");
+    assert_eq!(made[1]["value"], 5.0, "and five times one");
+    // How many of them are **numbers**.
+    session
+        .execute(
+            "grid.pivot.create",
+            &json!({
+                "sheet": sheet,
+                "name": "the numbers",
+                "range": "A1:C4",
+                "row": "A",
+                "value": "B",
+                "aggregate": "countNumbers",
+            }),
+        )
+        .expect("the pivot is made");
+    let counted = rows(&mut session, sheet, "the numbers");
+    assert_eq!(counted[0]["value"], 2.0, "two numbers");
+    assert_eq!(counted[1]["value"], 1.0, "and one");
+}
+
+/// **The spread of a group is the spread of its numbers.**
+#[test]
+fn a_pivot_measures_the_spread_of_a_group() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    session
+        .execute(
+            "grid.pivot.create",
+            &json!({
+                "sheet": sheet,
+                "name": "the variance",
+                "range": "A1:C4",
+                "row": "A",
+                "value": "B",
+                "aggregate": "var",
+            }),
+        )
+        .expect("the pivot is made");
+    let spread = rows(&mut session, sheet, "the variance");
+    assert_eq!(spread[0]["key"], "ann");
+    assert_eq!(spread[0]["value"], 0.5, "the variance of three and two");
+    assert!(spread[1]["value"].is_null(), "and a group of one number has no variance");
+    session
+        .execute(
+            "grid.pivot.create",
+            &json!({
+                "sheet": sheet,
+                "name": "the spread",
+                "range": "A1:C4",
+                "row": "A",
+                "value": "B",
+                "aggregate": "stdDevP",
+            }),
+        )
+        .expect("the pivot is made");
+    let measured = rows(&mut session, sheet, "the spread");
+    assert_eq!(measured[0]["value"], 0.5, "the spread of three and two");
 }
