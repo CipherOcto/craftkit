@@ -223,3 +223,83 @@ fn a_range_with_a_merge_in_it_is_refused() {
         .expect_err("it is refused");
     assert!(error.to_string().contains("merge"), "it says why: {error}");
 }
+
+/// A sort may have **more than one key**: the first is the one that
+/// decides, and the next is looked at only when the first cannot.
+#[test]
+fn a_sort_may_have_more_than_one_key() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    // Three rows: two of them share a name, and the second key tells
+    // them apart.
+    value(&mut session, sheet, "A1", json!("ann"));
+    value(&mut session, sheet, "B1", json!(2));
+    value(&mut session, sheet, "A2", json!("bob"));
+    value(&mut session, sheet, "B2", json!(1));
+    value(&mut session, sheet, "A3", json!("ann"));
+    value(&mut session, sheet, "B3", json!(1));
+    session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:B3",
+                "keys": [{ "column": "A" }, { "column": "B" }],
+            }),
+        )
+        .expect("the range is sorted");
+    let values = values_of(&mut session, sheet, "A1:B3");
+    assert_eq!(values[0][0], json!("ann"), "the ann is first");
+    assert_eq!(values[0][1], json!(1.0), "and the one of it");
+    assert_eq!(values[1][0], json!("ann"), "then the other ann");
+    assert_eq!(values[1][1], json!(2.0), "and the two of it");
+    assert_eq!(values[2][0], json!("bob"), "and the bob is last");
+}
+
+/// A key may be **descending**, and the rest of the keys decide when it
+/// cannot.
+#[test]
+fn a_key_may_be_descending() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("ann"));
+    value(&mut session, sheet, "B1", json!(1));
+    value(&mut session, sheet, "A2", json!("ann"));
+    value(&mut session, sheet, "B2", json!(2));
+    session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:B2",
+                "keys": [{ "column": "A" }, { "column": "B", "descending": true }],
+            }),
+        )
+        .expect("the range is sorted");
+    let values = values_of(&mut session, sheet, "A1:B2");
+    assert_eq!(values[0][1], json!(2.0), "the two of the ann is first");
+    assert_eq!(values[1][1], json!(1.0), "and the one of it is last");
+}
+
+/// The **keys** and the **column** may not be given together: a sort is
+/// sorted by one of them.
+#[test]
+fn the_keys_and_the_column_are_not_given_together() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(2));
+    value(&mut session, sheet, "A2", json!(1));
+    let failure = session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "column": "A",
+                "keys": [{ "column": "A" }],
+            }),
+        )
+        .expect_err("the sort is refused");
+    let message = failure.to_string();
+    assert!(message.contains("and not by both"), "the refusal says why: {message}");
+}

@@ -1,7 +1,8 @@
 //! The **sorting** of a range.
 //!
 //! A range of cells may be **sorted**: the rows of the range are put
-//! in order by the values of one of its columns.
+//! in order by the values of one of its columns — or of several, for
+//! the rows the first one cannot tell apart.
 //!
 //! # What moves with a row
 //!
@@ -28,7 +29,7 @@ use std::cmp::Ordering;
 
 use craftkit_derive::commands;
 
-use craftkit_sdk::serde_json::json;
+use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{Area, CellRef, Cells, Value};
@@ -109,8 +110,53 @@ fn guess_header(cells: &Cells, area: &Area) -> bool {
     votes > 0
 }
 
+/// A **key** of a sort: the column it sorts by, and whether the order
+/// is **descending**.
+struct Key {
+    /// The column the key sorts by.
+    column: u32,
+    /// Whether the order is descending.
+    descending: bool,
+}
+
+/// The **keys** of a sort, from the caller's list.
+///
+/// A key names the **column** it sorts by, and says whether the order is
+/// **descending**. A list with no key in it is refused: a sort with no
+/// key is not a sort.
+fn keys_of(value: &Json, id: &str) -> Result<Vec<Key>, EngineError> {
+    let Some(list) = value.as_array() else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "the keys of a sort are a list".to_string(),
+        });
+    };
+    let mut keys = Vec::new();
+    for key in list {
+        let Some(column) = key.get("column").and_then(|column| column.as_str()) else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: "a key names the column it sorts by".to_string(),
+            });
+        };
+        let descending = key.get("descending").and_then(|descending| descending.as_bool()).unwrap_or(false);
+        keys.push(Key { column: column_at(column, id)?, descending });
+    }
+    if keys.is_empty() {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "a sort has at least one key".to_string(),
+        });
+    }
+    Ok(keys)
+}
+
 commands! {
     /// **Sort** a range of cells by one of its columns.
+    ///
+    /// The **keys** of the sort may be more than one: the first key is
+    /// the one that decides, and the next one is looked at only when the
+    /// first cannot tell two rows apart.
     grid.sort {
         area: "grid",
         layer: "grid",
@@ -129,6 +175,13 @@ commands! {
             descending: Option<Bool>,
             /// Whether the first row is a **header** and stays where it is.
             header: Option<Bool>,
+            /// The **keys** of the sort: a list of them, and the first is
+            /// the one that decides. Each key names the **column** it
+            /// sorts by and says whether the order is **descending**.
+            ///
+            /// The keys and the column may not be given together: a sort
+            /// is sorted by its keys or by its column, and not by both.
+            keys: Option<Json>,
         },
         run: {
             let id = "grid.sort".to_string();
@@ -156,20 +209,37 @@ commands! {
                     None => return Ok(Outcome::new(format!("{name} holds nothing to sort"))),
                 },
             };
-            // The **key column**: the one that was named, or the first.
-            let column = match &self.column {
-                Some(column) => column_at(&column.0, &id)?,
-                None => area.start.col,
+            // The **keys**: the ones that were named, or the one column
+            // that was named, or the first column of the range.
+            let keys = match &self.keys {
+                Some(keys) => {
+                    if self.column.is_some() || self.descending.is_some() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a sort is sorted by its keys or by its column, and not by both".to_string(),
+                        });
+                    }
+                    keys_of(keys, &id)?
+                }
+                None => {
+                    let column = match &self.column {
+                        Some(column) => column_at(&column.0, &id)?,
+                        None => area.start.col,
+                    };
+                    vec![Key { column, descending: self.descending.map(|flag| flag.0).unwrap_or(false) }]
+                }
             };
-            if column < area.start.col || column > area.end.col {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "the column {} is not in the range {}",
-                        CellRef::column_text(column),
-                        area.to_text()
-                    ),
-                });
+            for key in &keys {
+                if key.column < area.start.col || key.column > area.end.col {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the column {} is not in the range {}",
+                            CellRef::column_text(key.column),
+                            area.to_text()
+                        ),
+                    });
+                }
             }
             // A **merge** in the range: the tree refuses, because a merged
             // region is one cell and a row of a range is not.
@@ -198,34 +268,48 @@ commands! {
             } else {
                 area
             };
-            let descending = self.descending.map(|flag| flag.0).unwrap_or(false);
-            // The **keys**: the value of the key cell of every row.
+            // The **keys**: the value of the key cell of every row, for
+            // every key.
             let book = crate::book_of(session.document());
-            let mut rows: Vec<(u32, Value)> = Vec::new();
+            let mut rows: Vec<(u32, Vec<Value>)> = Vec::new();
             for row in body.start.row..=body.end.row {
-                let cell = CellRef { col: column, row };
-                let value = match cells.get(cell) {
-                    Some(entry) => match (&entry.value, &entry.formula) {
-                        (Some(value), _) => value.clone(),
-                        (None, Some(_)) => book.value_of(&name, cell),
-                        (None, None) => Value::Empty,
-                    },
-                    None => Value::Empty,
-                };
-                rows.push((row, value));
+                let mut values = Vec::with_capacity(keys.len());
+                for key in &keys {
+                    let cell = CellRef { col: key.column, row };
+                    let value = match cells.get(cell) {
+                        Some(entry) => match (&entry.value, &entry.formula) {
+                            (Some(value), _) => value.clone(),
+                            (None, Some(_)) => book.value_of(&name, cell),
+                            (None, None) => Value::Empty,
+                        },
+                        None => Value::Empty,
+                    };
+                    values.push(value);
+                }
+                rows.push((row, values));
             }
             // The **order**: the rows are put in order, and the empty cells
-            // are last whatever the order is.
+            // are last whatever the order is. The first key that tells the
+            // two rows apart decides, and the next one is looked at only
+            // when the first cannot.
             let mut order: Vec<usize> = (0..rows.len()).collect();
             order.sort_by(|one, other| {
                 let left = &rows[*one].1;
                 let right = &rows[*other].1;
-                let ordering = compare(left, right);
-                if descending && !matches!(left, Value::Empty) && !matches!(right, Value::Empty) {
-                    ordering.reverse()
-                } else {
-                    ordering
+                for (index, key) in keys.iter().enumerate() {
+                    let ordering = compare(&left[index], &right[index]);
+                    if ordering == Ordering::Equal {
+                        continue;
+                    }
+                    if key.descending
+                        && !matches!(left[index], Value::Empty)
+                        && !matches!(right[index], Value::Empty)
+                    {
+                        return ordering.reverse();
+                    }
+                    return ordering;
                 }
+                Ordering::Equal
             });
             if order.iter().enumerate().all(|(index, source)| index == *source) {
                 return Ok(Outcome::new(format!("{name}!{} is already in order", area.to_text())).with_data(
@@ -349,12 +433,24 @@ commands! {
             node.data["notes"] = crate::notes::notes_into(&notes);
             node.data["links"] = crate::links::links_into(&links);
             node.data["comments"] = crate::comments::comments_into(&comments);
+            // The **keys** of the sort, as the answer says them: the
+            // column of each of them and whether it is descending.
+            let said: Vec<Json> = keys
+                .iter()
+                .map(|key| {
+                    json!({
+                        "column": CellRef::column_text(key.column),
+                        "descending": key.descending,
+                    })
+                })
+                .collect();
             Ok(Outcome::changed(format!("sorted {name}!{}", area.to_text())).with_data(json!({
                 "sheet": sheet,
                 "range": area.to_text(),
-                "column": CellRef::column_text(column),
+                "column": CellRef::column_text(keys[0].column),
                 "header": header,
-                "descending": descending,
+                "descending": keys[0].descending,
+                "keys": said,
                 "moved": moved,
             })))
 
