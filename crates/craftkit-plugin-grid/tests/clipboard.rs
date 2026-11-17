@@ -551,3 +551,130 @@ fn without_the_skip_a_blank_of_the_clipboard_writes_over_the_cell() {
         .expect("the cells are pasted");
     assert_eq!(cell_of(&mut session, sheet, "C1")["value"], Json::Null, "the cell holds nothing now");
 }
+
+/// The number of the clipboard is put together with the number that is
+/// **there**.
+#[test]
+fn the_number_of_the_clipboard_is_put_together_with_the_number_that_is_there() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 10.0);
+    set_number(&mut session, sheet, "C1", 5.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute(
+            "grid.range.paste",
+            &json!({ "sheet": sheet, "at": "C1", "overwrite": true, "operation": "add" }),
+        )
+        .expect("the numbers are put together");
+    assert_eq!(cell_of(&mut session, sheet, "C1")["value"], json!(15.0), "the numbers are added");
+}
+
+/// The **multiply** puts the numbers together as well.
+#[test]
+fn the_multiply_puts_the_numbers_together_as_well() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 10.0);
+    set_number(&mut session, sheet, "C1", 5.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute(
+            "grid.range.paste",
+            &json!({ "sheet": sheet, "at": "C1", "overwrite": true, "operation": "multiply" }),
+        )
+        .expect("the numbers are put together");
+    assert_eq!(cell_of(&mut session, sheet, "C1")["value"], json!(50.0), "the numbers are multiplied");
+}
+
+/// A cell that holds a **text** keeps it.
+#[test]
+fn a_cell_that_holds_a_text_keeps_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 10.0);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "C1", "value": "five" }))
+        .expect("the cell is set");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute(
+            "grid.range.paste",
+            &json!({ "sheet": sheet, "at": "C1", "overwrite": true, "operation": "add" }),
+        )
+        .expect("the numbers are put together");
+    assert_eq!(cell_of(&mut session, sheet, "C1")["value"], json!("five"), "the text is still there");
+}
+
+/// A cell that holds a **formula** takes the operation into the formula.
+#[test]
+fn a_cell_that_holds_a_formula_takes_the_operation_into_the_formula() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 2.0);
+    set_number(&mut session, sheet, "B1", 3.0);
+    session
+        .execute("grid.formula.set", &json!({ "sheet": sheet, "cell": "C1", "formula": "A1 * 2" }))
+        .expect("the formula is set");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "B1" }))
+        .expect("the cell is copied");
+    session
+        .execute(
+            "grid.range.paste",
+            &json!({ "sheet": sheet, "at": "C1", "overwrite": true, "operation": "add" }),
+        )
+        .expect("the numbers are put together");
+    assert_eq!(
+        formula_of(&mut session, sheet, "C1"),
+        Some("(A1 * 2)+3".to_string()),
+        "the formula takes the number"
+    );
+    let outcome = session.execute("grid.calc", &json!({ "sheet": sheet })).expect("the sheet is calculated");
+    assert_eq!(outcome.data["cells"]["C1"], json!(7.0), "and the value is worked out");
+}
+
+/// A division by **zero** is an error.
+#[test]
+fn a_division_by_zero_is_an_error() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 0.0);
+    set_number(&mut session, sheet, "C1", 5.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    session
+        .execute(
+            "grid.range.paste",
+            &json!({ "sheet": sheet, "at": "C1", "overwrite": true, "operation": "divide" }),
+        )
+        .expect("the numbers are put together");
+    assert_eq!(
+        cell_of(&mut session, sheet, "C1")["value"]["error"],
+        json!("#DIV/0!"),
+        "the division by zero is an error"
+    );
+}
+
+/// An **operation** that is not one of the tree's is refused.
+#[test]
+fn an_operation_that_is_not_one_of_the_trees_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    set_number(&mut session, sheet, "A1", 10.0);
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "A1" }))
+        .expect("the cell is copied");
+    let outcome = session.execute(
+        "grid.range.paste",
+        &json!({ "sheet": sheet, "at": "C1", "overwrite": true, "operation": "modulo" }),
+    );
+    assert!(outcome.is_err(), "an operation is one of the tree's");
+}

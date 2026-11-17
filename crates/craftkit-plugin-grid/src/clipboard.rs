@@ -54,6 +54,12 @@
 //! And a paste may **skip the blanks**: a cell of the clipboard that
 //! holds nothing writes nothing over the cell it lands on, for a blank
 //! is nothing and nothing writes nothing.
+//!
+//! And a paste may be worked out in an **operation**: the number of the
+//! clipboard is put together with the number that is there — added,
+//! subtracted, multiplied or divided. A cell that holds a text or an
+//! error keeps what it holds, for a number cannot be put together with
+//! a text, and a division by zero is the tree's own error.
 
 use std::collections::BTreeMap;
 
@@ -98,6 +104,82 @@ fn clipboard_of(node: &Node) -> Option<(Cells, CellRef)> {
         held.set_entry(cell, crate::cell_from(entry));
     }
     Some((held, first))
+}
+
+/// The **operations** a paste may be worked out in: the name that is
+/// given and the mark it is written with.
+const OPERATIONS: [(&str, &str); 4] = [("add", "+"), ("subtract", "-"), ("multiply", "*"), ("divide", "/")];
+
+/// The **combination** of the cell that is there and the cell that is
+/// pasted: what is written over it.
+#[derive(Debug, Clone, PartialEq)]
+enum Combination {
+    /// The cell that is there **keeps** what it holds.
+    Keep,
+    /// The cell holds a **value**.
+    Value(crate::formula::Value),
+    /// The cell holds a **formula**.
+    Formula(String),
+}
+
+/// The **combination** of a cell and a number, worked out in the
+/// operation that is named.
+///
+/// The rules:
+///
+/// - the cell that is there and the number must both be **numbers**:
+///   a text is not a number, and a number cannot be put together with a
+///   text;
+/// - a cell that holds **nothing** is given the number: there is
+///   nothing to put the number together with, and nothing is not a
+///   zero;
+/// - a cell that holds a **formula** takes the operation into the
+///   formula: the formula and the number, with the operation between
+///   them;
+/// - a division by **zero** is an error, and the error is the tree's
+///   own: `#DIV/0!`.
+fn combine(operation: &str, current: &crate::formula::Cell, source: &crate::formula::Value) -> Combination {
+    let crate::formula::Value::Number(number) = source else {
+        return Combination::Keep;
+    };
+    let number = *number;
+    let text = crate::formula::display_text(&crate::formula::Value::Number(number));
+    if let Some(formula) = &current.formula {
+        let Some((_, symbol)) = OPERATIONS.iter().find(|(name, _)| *name == operation) else {
+            return Combination::Keep;
+        };
+        let combined = format!("({formula}){symbol}{text}");
+        // A formula the tree cannot read is not written: the cell keeps
+        // what it holds.
+        if crate::formula::parse(&combined).is_err() {
+            return Combination::Keep;
+        }
+        return Combination::Formula(combined);
+    }
+    match &current.value {
+        Some(crate::formula::Value::Number(old)) => {
+            let old = *old;
+            let value = match operation {
+                "add" => crate::formula::Value::Number(old + number),
+                "subtract" => crate::formula::Value::Number(old - number),
+                "multiply" => crate::formula::Value::Number(old * number),
+                "divide" => {
+                    if number == 0.0 {
+                        crate::formula::Value::Error("#DIV/0!".to_string())
+                    } else {
+                        crate::formula::Value::Number(old / number)
+                    }
+                }
+                _ => return Combination::Keep,
+            };
+            Combination::Value(value)
+        }
+        // The cell holds **nothing**: there is nothing to put the number
+        // together with.
+        None => Combination::Value(crate::formula::Value::Number(number)),
+        // A **text** or an **error** stays as it is.
+        _ => Combination::Keep,
+    }
 }
 
 /// The **sheet** the cells of the clipboard were copied from.
@@ -338,6 +420,12 @@ commands! {
             /// Whether the cells of the clipboard that hold **nothing** are
             /// skipped: a blank writes nothing over the cell it lands on.
             skip_blanks: Option<Bool>,
+            /// The **operation** the paste is worked out in: `add`,
+            /// `subtract`, `multiply` or `divide`.
+            ///
+            /// The number of the clipboard is put together with the number
+            /// that is there.
+            operation: Option<Text>,
         },
         run: {
             let id = "grid.range.paste".to_string();
@@ -388,6 +476,25 @@ commands! {
             // sheet the cells were copied from — the value of a formula
             // is derived, and it is derived where the formula is.
             let values = matches!(self.values, Some(Bool(true)));
+            // The **operation** the paste is worked out in.
+            let operation = match &self.operation {
+                None => None,
+                Some(text) => {
+                    let given = text.0.trim().to_lowercase();
+                    match OPERATIONS.iter().find(|(name, _)| *name == given) {
+                        Some((name, _)) => Some(*name),
+                        None => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!(
+                                    "`{given}` is not an operation: an operation is one of {}",
+                                    OPERATIONS.iter().map(|(name, _)| *name).collect::<Vec<_>>().join(", ")
+                                ),
+                            });
+                        }
+                    }
+                }
+            };
             // A paste of **values** and a paste of **formats** are two
             // different pastes, and a paste is one of them.
             if formats && values {
@@ -396,7 +503,7 @@ commands! {
                     message: "paste the values or the formats, and not both".to_string(),
                 });
             }
-            let source = if values {
+            let source = if values || operation.is_some() {
                 let Some(source) = clipboard_sheet(&book) else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
@@ -413,7 +520,8 @@ commands! {
             } else {
                 String::new()
             };
-            let book_of_values = if values { Some(crate::book_of(session.document())) } else { None };
+            let book_of_values =
+                if values || operation.is_some() { Some(crate::book_of(session.document())) } else { None };
             // The cells that are pasted: they land at the place that
             // is named, and their formulas are shifted.
             let mut pasted = Vec::new();
@@ -526,8 +634,32 @@ commands! {
                 .and_then(|clipboard| clipboard.get("borders"))
                 .map(crate::borders::borders_from)
                 .unwrap_or_default();
-            for (_, (row, col), entry) in &pasted {
+            for (cell, (row, col), entry) in &pasted {
                 let landing = CellRef { col: *col, row: *row };
+                if let Some(operation) = operation {
+                    // The **number** of the cell that is pasted: the value
+                    // of the cell it was copied from, computed in the sheet
+                    // it was copied from.
+                    let source_value = book_of_values
+                        .as_ref()
+                        .map(|book| book.value_of(&source, *cell))
+                        .unwrap_or(crate::formula::Value::Empty);
+                    let current = written.get(landing).cloned().unwrap_or_default();
+                    let mut entry = entry.clone();
+                    match combine(operation, &current, &source_value) {
+                        Combination::Keep => continue,
+                        Combination::Value(value) => {
+                            entry.value = Some(value);
+                            entry.formula = None;
+                        }
+                        Combination::Formula(formula) => {
+                            entry.formula = Some(formula);
+                            entry.value = None;
+                        }
+                    }
+                    written.set_entry(landing, entry);
+                    continue;
+                }
                 if formats {
                     // What the cell holds **stays**: only the look of the
                     // cell that was copied is written onto it.
@@ -630,6 +762,10 @@ commands! {
                     "transpose": transpose,
                     "formats": formats,
                     "skipBlanks": skip_blanks,
+                    "operation": match operation {
+                        Some(operation) => json!(operation),
+                        None => Json::Null,
+                    },
                 })))
 
         }
