@@ -29,7 +29,9 @@
 //!   or a colour. Here a criterion is **one** operation and **one**
 //!   value — the pair of comparisons — and the **list of values** is a
 //!   filter of its own (`grid.filter.values`); the other kinds are
-//!   commands of their own when they come.
+//!   commands of their own when they come — and §1012 says otherwise:
+//!   the **top ten** is here (`grid.filter.top10`), and the
+//!   above-the-average and the colours are not.
 //! - **The tree's filter is over a range and this one's is over a
 //!   column.** The tree's filter has a range and a criterion for each
 //!   column of it. Here a sheet has **one** filter, and it is either
@@ -49,7 +51,7 @@
 use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Text};
 
 use crate::formula::{CellRef, Criterion, FILTER_OPS};
 
@@ -124,6 +126,96 @@ commands! {
             }
             Ok(Outcome::changed(format!("the sheet `{sheet}` is filtered by the column {column}"))
                 .with_data(json!({ "sheet": sheet, "column": column, "op": op, "value": value })))
+
+        }
+    }
+
+    /// **Filter** a sheet by the **highest** (or the lowest) values of a
+    /// column.
+    ///
+    /// The **threshold** is the count-th highest number of the column —
+    /// or the count-th lowest, for the lowest — and a row is kept when
+    /// its number is at the threshold or above it. A cell that does not
+    /// hold a number is not kept.
+    ///
+    /// The count is a count of rows — ten of them by default — or a
+    /// **percent** of the numbers of the column, and it is rounded up.
+    grid.filter.top10 {
+        area: "grid",
+        layer: "grid",
+        icon: "filter",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+            sheet: NodeRef,
+            /// Which column it filters: `A`, `B`, `AA`.
+            column: Text,
+            /// How many rows are kept: ten of them by default.
+            count: Option<Number>,
+            /// Whether the count is a **percent** of the numbers of the
+            /// column.
+            percent: Option<Bool>,
+            /// Whether the **lowest** values are kept.
+            bottom: Option<Bool>,
+        },
+        run: {
+            let id = "grid.filter.top10".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            crate::protection::refuse_filter(node, &id)?;
+            let column = self.column.0.trim().to_uppercase();
+            if CellRef::column_index(&column).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
+                });
+            };
+            let count = self.count.map(|count| count.0).unwrap_or(10.0);
+            if !count.is_finite() || count < 1.0 || count.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the count of a top-ten filter is a whole number of rows, and `{count}` is not one"),
+                });
+            }
+            let count = count as u32;
+            let percent = self.percent.map(|percent| percent.0).unwrap_or(false);
+            if percent && count > 100 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the percent of a top-ten filter is a hundred at most, and this one is {count}"),
+                });
+            }
+            let bottom = self.bottom.map(|bottom| bottom.0).unwrap_or(false);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["filter"] = json!({
+                    "column": column,
+                    "top10": {
+                        "count": count,
+                        "percent": percent,
+                        "bottom": bottom,
+                    },
+                });
+            }
+            Ok(Outcome::changed(format!("the sheet `{sheet}` is filtered by the column {column}"))
+                .with_data(json!({
+                    "sheet": sheet,
+                    "column": column,
+                    "count": count,
+                    "percent": percent,
+                    "bottom": bottom,
+                })))
 
         }
     }

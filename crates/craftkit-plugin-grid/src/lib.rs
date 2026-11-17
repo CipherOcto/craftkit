@@ -756,6 +756,17 @@ pub(crate) fn book_of(document: &Document) -> Book {
                 if !groups.is_empty() {
                     book.set_filter(&node.name, formula::Filter::Groups(groups));
                 }
+            } else if let Some(top10) = filter.get("top10").and_then(|top10| top10.as_object()) {
+                // The tree's own **top ten** filter: a column, and the
+                // numbers of it that are kept.
+                let column =
+                    filter.get("column").and_then(|column| column.as_str()).and_then(CellRef::column_index);
+                let count = top10.get("count").and_then(|count| count.as_u64()).unwrap_or(10) as u32;
+                let percent = top10.get("percent").and_then(|percent| percent.as_bool()).unwrap_or(false);
+                let bottom = top10.get("bottom").and_then(|bottom| bottom.as_bool()).unwrap_or(false);
+                if let Some(column) = column {
+                    book.set_filter(&node.name, formula::Filter::Top10 { column, bottom, percent, count });
+                }
             } else if let Some(values) = filter.get("values").and_then(|values| values.as_array()) {
                 // The tree's own **list** filter: a column and the
                 // values that are kept.

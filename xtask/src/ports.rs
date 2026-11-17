@@ -1447,6 +1447,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/counting.rs",
         section: "§1011",
     },
+    Port {
+        rule: "a filter may keep the highest values of a column",
+        from: "gridcraft/crates/engine/src/cmd/data/filter.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/filters.rs",
+        command: "grid.filter.top10",
+        test: "crates/craftkit-plugin-grid/tests/filters.rs",
+        section: "§1012",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

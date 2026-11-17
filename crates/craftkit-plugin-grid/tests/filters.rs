@@ -241,3 +241,39 @@ fn the_filter_is_saved() {
     assert_eq!(node.data["filter"]["op"].as_str(), Some(">"), "and the operation");
     assert_eq!(node.data["filter"]["value"].as_str(), Some("10"), "and the value");
 }
+
+/// A **top-ten** filter keeps the rows whose number is at the
+/// threshold or above it, and hides the rest.
+#[test]
+fn a_top_ten_filter_keeps_the_highest_rows() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 5.0);
+    a_number(&mut session, sheet, "A3", 9.0);
+    session
+        .execute("grid.filter.top10", &json!({ "sheet": sheet, "column": "A", "count": 2 }))
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![1], "the lowest row is hidden");
+}
+
+/// A top-ten filter may keep the **lowest** rows, and its count may
+/// be a **percent** of the numbers of the column.
+#[test]
+fn a_top_ten_filter_may_keep_the_lowest_rows() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 5.0);
+    a_number(&mut session, sheet, "A3", 9.0);
+    session
+        .execute("grid.filter.top10", &json!({ "sheet": sheet, "column": "A", "count": 1, "bottom": true }))
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![2, 3], "the two highest rows are hidden");
+    session
+        .execute("grid.filter.top10", &json!({ "sheet": sheet, "column": "A", "count": 50, "percent": true }))
+        .expect("the sheet is filtered");
+    // Half of three rows is two of them, rounded up: the threshold is
+    // the second highest, and the lowest row is hidden.
+    assert_eq!(hidden_rows(&mut session, sheet), vec![1], "the lowest row is hidden");
+}

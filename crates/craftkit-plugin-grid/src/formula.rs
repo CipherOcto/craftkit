@@ -651,11 +651,13 @@ pub struct Criterion {
 
 /// A **filter**: what a sheet's rows are judged by.
 ///
-/// There are two kinds, and they are the same kind of thing at two
-/// sizes:
+/// There are several kinds, and they are the same kind of thing at
+/// two sizes:
 ///
 /// - a **column** and a **criterion** — the rows whose cell in that
 ///   column does not match are hidden;
+/// - a column and its **highest** (or **lowest**) values — the
+///   **top ten**;
 /// - **groups** of criteria — the columns of a group are judged
 ///   together, and the groups are judged one by one. A row is hidden
 ///   when it matches **none** of the groups.
@@ -682,6 +684,24 @@ pub enum Filter {
         /// Whether an empty cell is kept.
         blanks: bool,
     },
+    /// The **top ten** rows of a column: the highest values of it, or
+    /// the lowest.
+    ///
+    /// The **threshold** is the count-th highest number of the column —
+    /// or the count-th lowest, for the lowest — and a row is kept when
+    /// its number is at the threshold or above it. A cell that does not
+    /// hold a number is not kept.
+    Top10 {
+        /// The column it filters, counted from zero.
+        column: u32,
+        /// Whether the **lowest** values are kept.
+        bottom: bool,
+        /// Whether the count is a **percent** of the numbers of the
+        /// column.
+        percent: bool,
+        /// How many: a count of rows, or a percent.
+        count: u32,
+    },
     /// Groups of criteria: the columns of a group are judged together.
     Groups(Vec<Vec<(u32, Criterion)>>),
     /// The tree's own **advanced filter**: a **list** of rows under a row
@@ -699,6 +719,31 @@ pub enum Filter {
 
 /// The **operations** a filter may have.
 pub const FILTER_OPS: [&str; 6] = ["=", "!=", "<", "<=", ">", ">="];
+
+/// The **threshold** of a top-ten filter: the count-th highest number
+/// of a column, or the count-th lowest.
+///
+/// The count is a count of rows, or a **percent** of the numbers of the
+/// column, and it is rounded **up**. A count that is over the number of
+/// the numbers is the number of them.
+fn top10_threshold(cells: &Cells, column: u32, bottom: bool, percent: bool, count: u32) -> Option<f64> {
+    let mut numbers: Vec<f64> = cells
+        .iter()
+        .filter(|(cell, _)| cell.col == column)
+        .filter_map(|(_, cell)| cell.value.as_ref().and_then(|value| value.as_number()))
+        .collect();
+    if numbers.is_empty() {
+        return None;
+    }
+    numbers.sort_by(|one, other| {
+        if bottom { one.partial_cmp(other) } else { other.partial_cmp(one) }
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let wanted =
+        if percent { (numbers.len() as f64 * count as f64 / 100.0).ceil() as usize } else { count as usize };
+    let wanted = wanted.clamp(1, numbers.len());
+    numbers.get(wanted - 1).copied()
+}
 
 impl Criterion {
     /// Whether the operation is one of the tree's own.
@@ -2165,6 +2210,21 @@ impl Book {
                         values.iter().any(|value| value.eq_ignore_ascii_case(&text))
                     };
                     !kept
+                }
+                Filter::Top10 { column, bottom, percent, count } => {
+                    // The **threshold**: the count-th highest number of
+                    // the column, or the count-th lowest.
+                    let threshold = top10_threshold(cells, *column, *bottom, *percent, *count);
+                    match (value_at(*column, cell.row).as_number(), threshold) {
+                        (Some(number), Some(threshold)) => {
+                            if *bottom {
+                                number > threshold
+                            } else {
+                                number < threshold
+                            }
+                        }
+                        _ => true,
+                    }
                 }
                 Filter::Groups(groups) => !groups.iter().any(|group| {
                     group.iter().all(|(column, criterion)| criterion.matches(&value_at(*column, cell.row)))
