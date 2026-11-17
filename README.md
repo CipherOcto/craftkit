@@ -4443,6 +4443,7 @@ so.
 | the **link of a copied cell is pasted with it** | **built.** The link and its tooltip travel with the cell they are on (§995) | §995 |
 | the **checkbox of a cell is read from the file** | **built.** The bags of the file are read, and a cell the file says is a checkbox is one here (§997) | §997 |
 | the **calculation settings of a workbook are read from the file** | **built.** How a workbook says it calculates is read and kept, and a setting the tree cannot read is said (§998) | §998 |
+| the **reading of a text is read from the file** | **built.** The phonetic guide a file holds beside a text is read with it, and a reading that does not fit is said (§999) | §999 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -64982,3 +64983,56 @@ workbook like the calendar its serials are counted in.
   said.
 - **The tree does not set the settings**: there is no command that
   changes them, because the tree has nothing that would act on them.
+## 999. The reading of a text is read from the file
+
+A file may hold a **reading** of the text of a cell — the furigana of
+a Japanese text, the pinyin of a Chinese one — beside the text itself.
+
+### What was built
+
+- The **reading** of a text is read: a **run** of the reading over a
+  part of the text, and the **properties** of the reading — the font it
+  is written in, the kind of reading it is, and how it sits over the
+  text.
+- A cell that carries a reading **keeps** it: the import puts it in
+  the cell, and `grid.cell.get` says it.
+- A run says where it lies with two **offsets** into the text, counted
+  in UTF-16 code units, and a run that does not fit the text is **not
+  read**: the reader says how many it left out.
+- The reading of a text that the cell holds **in itself** — an inline
+  string — is read as well, and a reading that does not fit it is said
+  in the same way.
+
+### What the port found
+
+- **The reference repairs a run that reaches past the end of the
+  text**: it pulls the end back to the length of the text and keeps
+  the run. Here the run is **not read** and the count is said: a
+  repaired run says something the file did not say, and the tree does
+  not repair.
+- **The reference reads the reading of a shared string and ignores the
+  reading of a text a cell holds in itself**, although the format
+  gives both the same shape. Here both are read.
+- **The reference keeps the reading so that a file that is opened and
+  saved again still has it**. Here the reading is read and kept in the
+  document; the tree has no writer, so it is kept for the tree's own
+  sake and not for a file's.
+
+### What it cost
+
+- **No new command**: `grid.cell.get` says the reading of the cell it
+  reads, and the grid battery carries **238** commands.
+- **One rule that was already there**: a cell is more than its value —
+  it holds a formula, a format, a style, an alignment, a font, a fill
+  and a reading.
+- **Three tests**: the reading that is read, the reading that does not
+  fit, and the reading that is imported.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not draw the reading**: the front end draws it, and
+  the tree says a text carries one.
+- **The tree does not write a reading**: putting a value in a cell
+  takes the reading away, because the reading was of the text that is
+  gone.
