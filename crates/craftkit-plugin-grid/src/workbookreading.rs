@@ -4,8 +4,8 @@
 //! holds and everything that is said about it.
 //!
 //! The facts of a workbook are its **name**, the **names** it defines,
-//! the **styles** it carries, the **lists** of its own words, and the
-//! **calendar** its serials are counted in.
+//! the **styles** it carries, the **lists** of its own words, the
+//! **calendar** its serials are counted in, and how it **calculates**.
 //!
 //! One part of the answer is **derived**: the **sheets** of the
 //! workbook are its children, and the **used range** of each sheet is
@@ -48,6 +48,24 @@ pub(crate) fn theme_of(node: &craftkit_sdk::Node) -> Json {
         "colours": Json::Null,
         "major_font": Json::Null,
         "minor_font": Json::Null,
+    })
+}
+
+/// The **calculation settings** of a workbook: how it calculates.
+///
+/// A workbook that says nothing calculates by itself, does not iterate,
+/// and calculates with the precision of the number.
+pub(crate) fn calculation_of(node: &craftkit_sdk::Node) -> Json {
+    let calculation = node.data.get("calculation").cloned().unwrap_or(Json::Null);
+    if calculation.is_object() {
+        return calculation;
+    }
+    json!({
+        "mode": "automatic",
+        "iterative": false,
+        "max_iterations": craftkit_xlsx::DEFAULT_ITERATIONS,
+        "max_change": craftkit_xlsx::DEFAULT_CHANGE,
+        "precision_as_displayed": false,
     })
 }
 
@@ -209,6 +227,45 @@ commands! {
                 .with_data(json!({
                     "workbook": workbook,
                     "theme": theme,
+                })))
+
+        }
+    }
+
+    /// The **calculation settings** of a workbook: how it calculates.
+    ///
+    /// The settings are how the workbook says it calculates: by itself,
+    /// by itself except for its tables, or when it is told to; whether
+    /// it calculates **circular references** by iterating; how many
+    /// times it iterates; how much a value may change before it stops;
+    /// and whether it calculates with the precision of what is **shown**.
+    ///
+    /// A workbook that says nothing calculates by itself, and that is
+    /// what the answer says.
+    grid.workbook.calculation {
+        area: "grid",
+        layer: "grid",
+        icon: "calculator",
+        params: {
+            /// The workbook whose settings are read.
+            workbook: NodeRef,
+        },
+        run: {
+            let id = "grid.workbook.calculation".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed { id, message: format!("there is no workbook `{workbook}`") });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            Ok(Outcome::new(format!("the calculation settings of the workbook `{}`", node.name))
+                .with_data(json!({
+                    "workbook": workbook,
+                    "calculation": calculation_of(node),
                 })))
 
         }

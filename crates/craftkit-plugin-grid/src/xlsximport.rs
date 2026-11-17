@@ -88,6 +88,17 @@ fn properties_to_json(properties: &craftkit_xlsx::Properties) -> craftkit_sdk::s
     })
 }
 
+/// The **calculation settings** of a workbook, as the answer holds them.
+fn calculation_to_json(calculation: &craftkit_xlsx::Calculation) -> craftkit_sdk::serde_json::Value {
+    json!({
+        "mode": calculation.mode.name(),
+        "iterative": calculation.iterative,
+        "max_iterations": calculation.max_iterations,
+        "max_change": calculation.max_change,
+        "precision_as_displayed": calculation.precision_as_displayed,
+    })
+}
+
 /// The **theme** of a workbook, as the answer holds it.
 ///
 /// A colour the theme does not have is nothing, and the answer says so.
@@ -227,6 +238,7 @@ commands! {
                     "styles": styles,
                     "properties": properties_to_json(&workbook.properties),
                     "theme": theme_to_json(&workbook.theme),
+                    "calculation": calculation_to_json(&workbook.calculation),
                     "protection": protection,
                 }),
             );

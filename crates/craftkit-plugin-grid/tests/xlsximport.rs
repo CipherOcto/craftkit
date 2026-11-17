@@ -1962,3 +1962,57 @@ fn the_checkbox_of_a_cell_is_imported() {
         .expect("the cell is asked");
     assert_eq!(other.data["toggled"], json!(false), "the cell is not a checkbox");
 }
+
+/// The **calculation settings** of a file are imported: a workbook that
+/// calculates by hand says so here too.
+#[test]
+fn the_calculation_settings_of_a_file_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><calcPr calcMode="manual" iterate="1" iterateCount="50" iterateDelta="0.01"/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let answer = session
+        .execute("grid.workbook.calculation", &json!({ "workbook": workbook }))
+        .expect("the settings are read");
+    let calculation = &answer.data["calculation"];
+    assert_eq!(calculation["mode"], json!("manual"), "it calculates by hand");
+    assert_eq!(calculation["iterative"], json!(true), "and it iterates the circular references");
+    assert_eq!(calculation["max_iterations"], json!(50), "fifty times at most");
+    assert_eq!(calculation["max_change"], json!(0.01), "and it stops at a change of a hundredth");
+    assert_eq!(calculation["precision_as_displayed"], json!(false), "and it calculates with the number");
+}
+
+/// A workbook of the tree's own calculates by itself.
+#[test]
+fn a_workbook_of_the_tree_calculates_by_itself() {
+    let mut session = session();
+    let workbook =
+        session.execute("grid.workbook.add", &json!({ "name": "One" })).expect("the workbook is added");
+    let workbook = workbook.data["id"].as_u64().expect("the workbook has an id");
+    let answer = session
+        .execute("grid.workbook.calculation", &json!({ "workbook": workbook }))
+        .expect("the settings are read");
+    let calculation = &answer.data["calculation"];
+    assert_eq!(calculation["mode"], json!("automatic"), "it calculates by itself");
+    assert_eq!(calculation["iterative"], json!(false), "and it does not iterate");
+    assert_eq!(calculation["max_iterations"], json!(100), "a hundred times at most");
+}

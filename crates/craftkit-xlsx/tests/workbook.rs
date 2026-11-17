@@ -1965,3 +1965,100 @@ fn a_broken_chain_is_not_a_checkbox() {
     let workbook = read(&bytes).expect("the workbook is read");
     assert!(!workbook.sheets[0].cells[0].checkbox, "half a chain is not a checkbox");
 }
+
+/// The **calculation settings** of a workbook are read: how it
+/// calculates, whether it iterates, and how much.
+#[test]
+fn the_calculation_settings_of_a_workbook_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><calcPr calcMode="manual" iterate="1" iterateCount="50" iterateDelta="0.01" fullPrecision="0"/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let calculation = &workbook.calculation;
+    assert_eq!(calculation.mode, craftkit_xlsx::CalculationMode::Manual, "it calculates by hand");
+    assert!(calculation.iterative, "and it iterates the circular references");
+    assert_eq!(calculation.max_iterations, 50, "fifty times at most");
+    assert_eq!(calculation.max_change, 0.01, "and it stops at a change of a hundredth");
+    assert!(calculation.precision_as_displayed, "and it calculates with the precision shown");
+    assert!(workbook.warnings.is_empty(), "and nothing was left out");
+}
+
+/// A workbook that says nothing calculates by itself.
+#[test]
+fn a_workbook_without_settings_calculates_by_itself() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let calculation = &workbook.calculation;
+    assert_eq!(calculation.mode, craftkit_xlsx::CalculationMode::Automatic, "it calculates by itself");
+    assert!(!calculation.iterative, "and it does not iterate");
+    assert_eq!(calculation.max_iterations, craftkit_xlsx::DEFAULT_ITERATIONS, "a hundred times at most");
+    assert_eq!(
+        calculation.max_change,
+        craftkit_xlsx::DEFAULT_CHANGE,
+        "and it stops at a change of a thousandth"
+    );
+}
+
+/// A setting the tree cannot read is **not read**: the tree says so and
+/// keeps the default rather than guessing.
+#[test]
+fn a_setting_that_is_not_read_is_said() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><calcPr calcMode="whenever" iterateCount="999999"/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.calculation.mode, craftkit_xlsx::CalculationMode::Automatic, "the mode falls back");
+    assert_eq!(
+        workbook.calculation.max_iterations,
+        craftkit_xlsx::DEFAULT_ITERATIONS,
+        "and so do the iterations"
+    );
+    assert_eq!(workbook.warnings.len(), 2, "and both are said: {}", workbook.warnings.join("; "));
+}

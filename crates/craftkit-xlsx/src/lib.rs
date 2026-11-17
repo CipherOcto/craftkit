@@ -61,11 +61,16 @@
 )]
 #![forbid(unsafe_code)]
 
+mod calculation;
 mod featurebags;
 mod rels;
 mod styles;
 mod theme;
 
+pub use calculation::{
+    Calculation, DEFAULT_CHANGE, DEFAULT_ITERATIONS, MAX_ITERATIONS, Mode as CalculationMode,
+    read as read_calculation,
+};
 pub use featurebags::{MAX_BAGS, checkbox_complements, xf_is_checkbox};
 pub use rels::{Rel, rels_of, resolve, split_dir};
 pub use styles::{
@@ -1193,6 +1198,9 @@ pub struct Workbook {
     pub protection: Option<WorkbookProtection>,
     /// The **named styles** of the workbook: the styles the file names.
     pub named_styles: Vec<crate::styles::NamedStyle>,
+    /// The **calculation settings** of the workbook: how the file says
+    /// it calculates.
+    pub calculation: Calculation,
     /// The **warnings**: what could not be read, and what was kept
     /// instead.
     ///
@@ -1265,6 +1273,12 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
                 .any(|name| protection.attr(name).is_some()),
         });
     }
+
+    // The **calculation settings** of the workbook: how the file says it
+    // calculates.
+    let (calculation, said) = calculation::read(workbook_xml.child("calcPr"));
+    workbook.calculation = calculation;
+    workbook.warnings.extend(said);
 
     let sheet_names: Vec<String> = workbook_xml
         .child("sheets")
