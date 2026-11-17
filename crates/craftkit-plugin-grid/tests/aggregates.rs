@@ -202,3 +202,18 @@ fn a_criterion_over_the_bound_is_refused_and_cut() {
     formula(&mut session, sheet, "E3", &format!("=COUNTIFS(D1:D1,\"{long}\",C1:C1,1)"));
     assert_eq!(value_of(&mut session, sheet, "E3"), json!(1.0), "the cut criterion meets the cell");
 }
+
+/// The **cut** of a criterion keeps the characters that fit in the
+/// bound, counted in code units.
+#[test]
+fn the_cut_of_a_criterion_keeps_the_characters_that_fit() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    rows(&mut session, sheet);
+    // Two hundred and fifty-four letters and one emoji: the cut keeps
+    // the letters and leaves the emoji out.
+    let long = format!("{}😀", "x".repeat(254));
+    value(&mut session, sheet, "D1", json!("x".repeat(254)));
+    formula(&mut session, sheet, "E1", &format!("=COUNTIFS(D1:D1,\"{long}\",C1:C1,1)"));
+    assert_eq!(value_of(&mut session, sheet, "E1"), json!(1.0), "the cut criterion meets the cell");
+}

@@ -203,3 +203,18 @@ fn a_criterion_is_read_by_the_trees_own_rule_of_numbers() {
     formula(&mut session, sheet, "C2", "=COUNTIF(A3:A3,\">=1/1/2020\")");
     assert_eq!(value_of(&mut session, sheet, "C2"), json!(1.0), "and the date is a date");
 }
+
+/// A criterion is counted in the **code units** of its text, and a
+/// text of astral characters is counted twice over.
+#[test]
+fn a_criterion_is_counted_in_the_code_units_of_its_text() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    numbers(&mut session, sheet);
+    // Two hundred and fifty-four letters and one emoji: two hundred
+    // and fifty-five characters, and two hundred and fifty-six units.
+    let long = format!("{}😀", "x".repeat(254));
+    formula(&mut session, sheet, "C1", &format!("=COUNTIF(A1:A3,\"{long}\")"));
+    let value = value_of(&mut session, sheet, "C1");
+    assert!(value["error"].as_str().is_some_and(|message| message.contains("255")), "it says why: {value}");
+}

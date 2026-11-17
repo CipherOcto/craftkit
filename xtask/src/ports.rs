@@ -1438,6 +1438,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/counting.rs",
         section: "§1010",
     },
+    Port {
+        rule: "a criterion is counted in the code units of its text",
+        from: "gridcraft/crates/functions/src/criteria.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/criteria.rs",
+        command: "craftkit-plugin-grid::criteria",
+        test: "crates/craftkit-plugin-grid/tests/counting.rs",
+        section: "§1011",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

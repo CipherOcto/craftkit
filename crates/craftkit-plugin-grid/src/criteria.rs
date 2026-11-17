@@ -38,7 +38,9 @@
 //!   and the tree's note says it checked it on two versions of the
 //!   tree's own application. Here the bound is the same two hundred
 //!   and fifty-five characters, counted the same way, and a criterion
-//!   over it is an error and not a truncated criterion.
+//!   over it is an error and not a truncated criterion — and §1011 says
+//!   how the count is made: in the **code units** of the text, and not
+//!   in its characters.
 //! - **The tree's criterion may be a date and this tree's is not.** The
 //!   tree reads a criterion that looks like a date as the number of
 //!   that date, so `">=1/1/2020"` is a date and not text; here a
@@ -54,11 +56,36 @@ use std::cmp::Ordering;
 use crate::dates::System;
 use crate::formula::Value;
 
-/// The most characters a text criterion may hold.
+/// The most **code units** a text criterion may hold.
 ///
 /// The tree's bound: two hundred and fifty-five, and the tree refuses
-/// a criterion over it.
-const MAX_CRITERION_CHARS: usize = 255;
+/// a criterion over it. The count is in the **code units** of the
+/// text — as the tree's own application counts them — and so a text of
+/// astral characters is counted twice over.
+const MAX_CRITERION_UNITS: usize = 255;
+
+/// The **length** of a text in the tree's units: the code units of the
+/// text.
+fn units_of(text: &str) -> usize {
+    text.encode_utf16().count()
+}
+
+/// The **characters** of a text that fit in the bound, counted in code
+/// units.
+///
+/// A character that does not fit is not half-kept: the text ends
+/// before it.
+fn cut_to_units(text: &str, units: usize) -> String {
+    let mut count = 0;
+    for (index, character) in text.char_indices() {
+        let size = character.len_utf16();
+        if count + size > units {
+            return text[..index].to_string();
+        }
+        count += size;
+    }
+    text.to_string()
+}
 
 /// The **comparison** a criterion makes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -142,13 +169,14 @@ impl Condition {
     /// it, and a truncated criterion is a criterion that is not the
     /// one that was written.
     pub fn parse_argument(value: &Value, system: System) -> Result<Condition, String> {
-        if let Value::Text(text) = value
-            && text.chars().count() > MAX_CRITERION_CHARS
-        {
-            return Err(format!(
-                "a criterion may be {MAX_CRITERION_CHARS} characters at most, and this one is {}",
-                text.chars().count()
-            ));
+        if let Value::Text(text) = value {
+            let units = units_of(text);
+            if units > MAX_CRITERION_UNITS {
+                return Err(format!(
+                    "a criterion may be {MAX_CRITERION_UNITS} code units at most, and this one is \
+                     {units}"
+                ));
+            }
         }
         Ok(Condition::parse(value, system))
     }
@@ -162,8 +190,8 @@ impl Condition {
     /// not an error.
     pub fn parse_argument_truncated(value: &Value, system: System) -> Condition {
         match value {
-            Value::Text(text) if text.chars().count() > MAX_CRITERION_CHARS => {
-                let cut: String = text.chars().take(MAX_CRITERION_CHARS).collect();
+            Value::Text(text) if units_of(text) > MAX_CRITERION_UNITS => {
+                let cut = cut_to_units(text, MAX_CRITERION_UNITS);
                 Condition::parse_text(&cut, system)
             }
             other => Condition::parse(other, system),
