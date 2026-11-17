@@ -1411,6 +1411,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/lookups.rs",
         section: "§1007",
     },
+    Port {
+        rule: "a search that is a bisection finds the value the tree's order puts next to the needle",
+        from: "gridcraft/crates/functions/src/lookup.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/lookups.rs",
+        command: "craftkit-plugin-grid::lookups",
+        test: "crates/craftkit-plugin-grid/tests/xlookups.rs",
+        section: "§1008",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

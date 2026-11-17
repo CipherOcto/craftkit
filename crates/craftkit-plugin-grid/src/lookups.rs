@@ -76,17 +76,18 @@
 //! And the **search mode** is which way the search goes: `1` is from
 //! the first to the last, and `-1` is from the last to the first.
 //!
-//! The **binary search** — the search mode `2` and the `-2` — is not
-//! here: it is a bisection over the whole vector, and a bisection is
-//! not a rule that can be written down in a sentence. A search that
-//! asks for it is refused with a message that says so.
+//! The **binary search** — the search mode `2` and the `-2` — is over
+//! **every** kind of value, in the tree's order: the numbers, then the
+//! text, then the booleans, then the errors, and the empty cells
+//! last. The answer is the value that order puts next to the needle:
+//! the exact one when there is one, and otherwise the largest value
+//! that is not greater than the needle, or the smallest value that is
+//! not less than it, as the match mode says. The wildcards are not
+//! used in it: the search is the exact one.
 
 use crate::formula::{Book, CellRef, Expr, Value};
 pub const NAMES: &[&str] =
     &["MATCH", "VLOOKUP", "HLOOKUP", "LOOKUP", "INDEX", "ROWS", "COLUMNS", "XLOOKUP", "XMATCH", "ADDRESS"];
-
-/// The message of the search that is **not here**: the binary search.
-const BINARY: &str = "not supported yet: a binary search";
 
 /// The **match mode**: how a value may meet the needle.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -127,6 +128,10 @@ enum SearchMode {
     FirstToLast,
     /// From the **last** to the first.
     LastToFirst,
+    /// The **binary** search, from the first to the last.
+    Binary,
+    /// The **binary** search, from the last to the first.
+    BinaryReversed,
 }
 
 impl SearchMode {
@@ -141,16 +146,51 @@ impl SearchMode {
         match mode.trunc() as i64 {
             1 => Ok(SearchMode::FirstToLast),
             -1 => Ok(SearchMode::LastToFirst),
-            // The binary search is not here.
-            2 | -2 => Err(BINARY.to_string()),
+            2 => Ok(SearchMode::Binary),
+            -2 => Ok(SearchMode::BinaryReversed),
             _ => Err("#VALUE!".to_string()),
         }
     }
 
     /// Whether the search goes from the last to the first.
     fn reversed(self) -> bool {
-        self == SearchMode::LastToFirst
+        matches!(self, SearchMode::LastToFirst | SearchMode::BinaryReversed)
     }
+
+    /// Whether the search is the **binary** one.
+    fn binary(self) -> bool {
+        matches!(self, SearchMode::Binary | SearchMode::BinaryReversed)
+    }
+}
+
+/// The **match mode** of a search, when the search is the **binary**
+/// one.
+///
+/// The wildcards are not used in a binary search: the search is the
+/// exact one.
+fn mode_of(mode: MatchMode, search: SearchMode) -> MatchMode {
+    if search.binary() && mode == MatchMode::Wildcard {
+        return MatchMode::Exact;
+    }
+    mode
+}
+
+/// The **order** a search reads the values in: every kind for the
+/// binary search, and the needle's own kind for the other.
+fn order_for(search: SearchMode) -> Order {
+    if search.binary() { Order::EveryKind } else { Order::SameKind }
+}
+
+/// The **order** of the values of a search.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Order {
+    /// The order of the values of the **same kind** as the needle: the
+    /// numbers with the numbers and the texts with the texts.
+    SameKind,
+    /// The **tree's order** over every kind: the numbers, then the
+    /// text, then the booleans, then the errors, and the empty cells
+    /// last.
+    EveryKind,
 }
 
 /// Whether a **needle** and a **value** are the same, without the
@@ -179,11 +219,27 @@ fn same_value(needle: &Value, value: &Value) -> bool {
 /// **exactly** as numbers, and not as the fifteen digits of an
 /// equality — two texts as texts without case, and a value of one
 /// kind is not ordered against a needle of another kind.
-fn order_of(value: &Value, needle: &Value) -> Option<std::cmp::Ordering> {
-    match (value, needle) {
-        (Value::Number(one), Value::Number(other)) => one.partial_cmp(other),
-        (Value::Text(one), Value::Text(other)) => Some(crate::criteria::compare_text(one, other)),
-        _ => None,
+///
+/// The **binary** search is over every kind, and then the order is
+/// the tree's own: the numbers, then the text, then the booleans,
+/// then the errors, and the empty cells last.
+fn order_of(value: &Value, needle: &Value, order: Order) -> Option<std::cmp::Ordering> {
+    match order {
+        Order::SameKind => match (value, needle) {
+            (Value::Number(one), Value::Number(other)) => one.partial_cmp(other),
+            (Value::Text(one), Value::Text(other)) => Some(crate::criteria::compare_text(one, other)),
+            _ => None,
+        },
+        Order::EveryKind => {
+            // The **kinds** decide first, and then the values of the
+            // same kind are compared as the tree compares them.
+            let rank = crate::sorting::rank(value).cmp(&crate::sorting::rank(needle));
+            Some(if rank == std::cmp::Ordering::Equal {
+                crate::sorting::compare(value, needle)
+            } else {
+                rank
+            })
+        }
     }
 }
 
@@ -194,7 +250,17 @@ fn order_of(value: &Value, needle: &Value) -> Option<std::cmp::Ordering> {
 /// and the next larger try the **exact** search first, and then take
 /// the best candidate: the largest value below the needle, or the
 /// smallest above it.
-fn place_of(needle: &Value, values: &[Value], mode: MatchMode, reversed: bool) -> Option<usize> {
+///
+/// The **order** is the one the search reads the values in: the values
+/// of the needle's own kind, or — for the binary search — every kind,
+/// in the tree's order.
+fn place_of(
+    needle: &Value,
+    values: &[Value],
+    mode: MatchMode,
+    reversed: bool,
+    order: Order,
+) -> Option<usize> {
     let equal = |value: &Value| match mode {
         MatchMode::Wildcard => match (needle, value) {
             (Value::Text(pattern), Value::Text(text)) => crate::formula::wildcard(pattern, text),
@@ -202,26 +268,26 @@ fn place_of(needle: &Value, values: &[Value], mode: MatchMode, reversed: bool) -
         },
         _ => same_value(needle, value),
     };
-    let order: Vec<usize> =
+    let order_of_places: Vec<usize> =
         if reversed { (0..values.len()).rev().collect() } else { (0..values.len()).collect() };
-    if let Some(place) = order.iter().copied().find(|place| equal(&values[*place])) {
+    if let Some(place) = order_of_places.iter().copied().find(|place| equal(&values[*place])) {
         return Some(place);
     }
     if !matches!(mode, MatchMode::Smaller | MatchMode::Larger) {
         return None;
     }
     let mut best: Option<usize> = None;
-    for place in order {
-        let Some(order) = order_of(&values[place], needle) else { continue };
+    for place in order_of_places {
+        let Some(relation) = order_of(&values[place], needle, order) else { continue };
         let candidate = match mode {
-            MatchMode::Smaller => order == std::cmp::Ordering::Less,
-            MatchMode::Larger => order == std::cmp::Ordering::Greater,
+            MatchMode::Smaller => relation == std::cmp::Ordering::Less,
+            MatchMode::Larger => relation == std::cmp::Ordering::Greater,
             _ => false,
         };
         if !candidate {
             continue;
         }
-        let better = match best.map(|best| order_of(&values[best], needle)) {
+        let better = match best.map(|best| order_of(&values[best], needle, order)) {
             None => true,
             Some(None) => true,
             Some(Some(previous)) => match mode {
@@ -286,7 +352,7 @@ fn place_by_type(needle: &Value, values: &[Value], kind: MatchType) -> Option<us
     }
     let mut best: Option<usize> = None;
     for place in 0..values.len() {
-        let Some(order) = order_of(&values[place], needle) else { continue };
+        let Some(order) = order_of(&values[place], needle, Order::SameKind) else { continue };
         let candidate = match kind {
             MatchType::Largest => order != std::cmp::Ordering::Greater,
             MatchType::Smallest => order != std::cmp::Ordering::Less,
@@ -297,7 +363,7 @@ fn place_by_type(needle: &Value, values: &[Value], kind: MatchType) -> Option<us
         }
         let better = match best {
             None => true,
-            Some(previous) => match order_of(&values[previous], needle) {
+            Some(previous) => match order_of(&values[previous], needle, Order::SameKind) {
                 // The best candidate is the one **closest** to the
                 // needle: the largest below it, and the smallest
                 // above it.
@@ -743,7 +809,9 @@ impl Book {
             Err(message) => return Value::Error(message),
         };
         let values = self.vector_of(&lookup_sheet, &lookup, vertical, being);
-        let Some(place) = place_of(&needle, &values, mode, search.reversed()) else {
+        let Some(place) =
+            place_of(&needle, &values, mode_of(mode, search), search.reversed(), order_for(search))
+        else {
             // The needle that is **not there**.
             return match arguments.get(3) {
                 Some(argument) => self.evaluate(sheet, argument, being),
@@ -794,7 +862,7 @@ impl Book {
             Err(message) => return Value::Error(message),
         };
         let values = self.vector_of(&lookup_sheet, &lookup, columns == 1, being);
-        match place_of(&needle, &values, mode, search.reversed()) {
+        match place_of(&needle, &values, mode_of(mode, search), search.reversed(), order_for(search)) {
             Some(place) => Value::Number((place + 1) as f64),
             None => Value::Error("#N/A".to_string()),
         }

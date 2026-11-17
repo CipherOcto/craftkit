@@ -20,6 +20,11 @@
 //! compared without case, and a search that says the case matters
 //! puts the capitals after the small letters.
 //!
+//! And two values of **different kinds** are not ordered against each
+//! other here: a sort compares the values of a column, and a number
+//! and a text beside it keep the places they are in. The **binary
+//! search** of a lookup is where the kinds are ordered (§1008).
+//!
 //! The tree **guesses** whether the first row of the range is a
 //! **header**: a column whose first cell is text and whose second
 //! cell is not, votes for it. So does this one, and the guess may be
@@ -83,12 +88,33 @@ fn compare_by_list(left: &Value, right: &Value, list: &[String]) -> Ordering {
     }
 }
 
+/// The **place of a kind** in the tree's order: the numbers, then the
+/// text, then the booleans, then the errors, and the empty cells
+/// last.
+///
+/// This is the order of the **kinds**, and it is what the **binary
+/// search** of a lookup reads (§1008): a sort of a range compares two
+/// values of a column, and two values of different kinds are not
+/// ordered against each other there.
+pub(crate) fn rank(value: &Value) -> u8 {
+    match value {
+        Value::Number(_) => 0,
+        Value::Text(_) => 1,
+        Value::Bool(_) => 2,
+        Value::Error(_) => 3,
+        Value::Empty => 4,
+    }
+}
+
 /// The **order** of two values, the tree's way.
 ///
 /// The empty cells are last, and the numbers come before the text,
 /// and the text before the booleans, and the booleans before the
 /// errors.
-fn compare(left: &Value, right: &Value) -> Ordering {
+///
+/// This is the tree's one order: the sort of a range uses it, and so
+/// does the **binary search** of a lookup (§1008).
+pub(crate) fn compare(left: &Value, right: &Value) -> Ordering {
     match (left, right) {
         (Value::Empty, Value::Empty) => Ordering::Equal,
         (Value::Empty, _) => Ordering::Greater,

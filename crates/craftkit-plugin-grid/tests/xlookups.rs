@@ -142,15 +142,50 @@ fn the_search_may_go_from_the_last_to_the_first() {
     assert_eq!(value_of(&mut session, sheet, "D2"), json!(1.0), "and the first is the one");
 }
 
-/// The **binary search** is not here.
+/// The **binary search** is over every kind of value, in the tree's
+/// order, and it finds the value that order puts next to the needle.
 #[test]
-fn the_binary_search_is_not_here() {
+fn the_binary_search_finds_the_value_the_order_puts_next_to_the_needle() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
     keys(&mut session, sheet);
     formula(&mut session, sheet, "D1", "=XLOOKUP(\"banana\",A1:A3,B1:B3,0,0,2)");
-    let value = value_of(&mut session, sheet, "D1");
-    assert_eq!(value["error"].as_str(), Some("not supported yet: a binary search"), "it says why: {value}");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!(20.0), "the banana is the twenty");
+    formula(&mut session, sheet, "D2", "=XMATCH(\"cherry\",A1:A3,0,2)");
+    assert_eq!(value_of(&mut session, sheet, "D2"), json!(3.0), "and the cherry is the third");
+}
+
+/// The binary search reads a **number** for a text needle, because
+/// the numbers come before the text — and the search that is not
+/// binary does not.
+#[test]
+fn the_binary_search_reads_a_number_for_a_text_needle() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(5));
+    value(&mut session, sheet, "A2", json!("zebra"));
+    value(&mut session, sheet, "B1", json!("the five"));
+    value(&mut session, sheet, "B2", json!("the zebra"));
+    formula(&mut session, sheet, "D1", "=XLOOKUP(\"m\",A1:A2,B1:B2,0,-1,2)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!("the five"), "the five is below the m");
+    formula(&mut session, sheet, "D2", "=XLOOKUP(\"m\",A1:A2,B1:B2,\"none\",-1,1)");
+    assert_eq!(value_of(&mut session, sheet, "D2"), json!("none"), "and the other search does not");
+}
+
+/// The binary search may go from the **last** to the first, and the
+/// wildcards are not used in it.
+#[test]
+fn the_binary_search_may_go_from_the_last_to_the_first() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("apple"));
+    value(&mut session, sheet, "A2", json!("apple"));
+    value(&mut session, sheet, "B1", json!(1));
+    value(&mut session, sheet, "B2", json!(2));
+    formula(&mut session, sheet, "D1", "=XLOOKUP(\"apple\",A1:A2,B1:B2,0,0,-2)");
+    assert_eq!(value_of(&mut session, sheet, "D1"), json!(2.0), "the last apple is the two");
+    formula(&mut session, sheet, "D2", "=XLOOKUP(\"a*\",A1:A2,B1:B2,\"none\",2,2)");
+    assert_eq!(value_of(&mut session, sheet, "D2"), json!("none"), "and the wildcards are not used");
 }
 
 /// The lookup array is a **row or a column**, and the return array is
@@ -210,6 +245,5 @@ fn the_modes_of_xmatch() {
     let value = value_of(&mut session, sheet, "D3");
     assert_eq!(value["error"].as_str(), Some("#VALUE!"), "it says why: {value}");
     formula(&mut session, sheet, "D4", "=XMATCH(20,A1:A3,0,2)");
-    let value = value_of(&mut session, sheet, "D4");
-    assert_eq!(value["error"].as_str(), Some("not supported yet: a binary search"), "it says why: {value}");
+    assert_eq!(value_of(&mut session, sheet, "D4"), json!(2.0), "and the binary search finds it");
 }
