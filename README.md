@@ -4435,6 +4435,7 @@ so.
 | a **range may be pasted as its formats** | **built.** The look of the copied cells is written onto the cells they land on, and what those cells hold is not touched (§987) | §987 |
 | the **comment of a copied cell is pasted with it** | **built.** The comment and the note travel with the cell they are on, and a paste of the values does not carry them (§988) | §988 |
 | a **style may be made from the look of a cell** | **built.** The format, the font and the alignment of the cell become a style of the workbook, and the lock is not taken (§989) | §989 |
+| a **range of cells names a style** | **built.** Every cell of the range names the style, and a locked cell of a protected sheet is refused (§990) | §990 |
 
 ### The list of things that are honestly not there: empty
 
@@ -55975,7 +55976,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 236 |
+| grid | 237 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -64442,3 +64443,65 @@ places, and a **named style** is the name of that way.
   and the refusal is by name.
 - **The tree does not make a style from a range of cells**: a style is
   the look of a cell, and a range has no look of its own.
+
+## 990. A range of cells names a style
+
+A style is given to a **selection** in a spreadsheet, and a selection
+is a range of cells.
+
+### What was built
+
+- A new command: **`grid.range.style`**.
+- Every cell of the range **names the style**: the style is the
+  workbook's, and the cells of the range are given it one by one.
+- The style must be one the workbook has — a name that is not there is
+  refused, and never quietly ignored. An **empty name** means the
+  cells name no style, and they are written with their own format.
+- The **formatting** of a protected sheet that does not allow the
+  formatting is refused, and so is a **locked** cell of a protected
+  sheet: naming a style is a change of the cell, and a protected
+  sheet's cells may not be changed.
+- And the rule of the cell that names a style is now the rule of the
+  range that names a style: **`grid.cell.style` refuses a locked cell
+  too**. It did not before, and that was a hole in the tree's own
+  protection rule.
+
+### What the port found
+
+- **The reference's cell style is applied to the selection**, and the
+  selection may be a range of cells. Here the **range is named**, as
+  every command of this tree names what it acts on, and the cells of
+  the range are given the style one by one.
+- **The reference's style is applied to the cells whatever the
+  protection says**, for its protection is a thing of the sheet and
+  the style is a thing of the workbook. Here a **locked** cell is
+  refused: a protected sheet's cells may not be changed, and that is
+  the tree's rule (§967), and it holds for the style as it holds for
+  the value.
+- **The reference's style may be a style that is not there yet** — it
+  makes one. Here the style must be **one the workbook has**, and a
+  name that is not there is refused: that is the tree's rule, and a
+  cell that names a style that is not there is a cell that names
+  nothing.
+
+### What it cost
+
+- **One command** in a module that was already there (`src/styles.rs`):
+  the grid battery now carries **237** commands.
+- **One rule that was already there**: the rule that a style is the
+  workbook's and that a protected sheet's cells may not be changed.
+- **Four tests** (`tests/rangestyle.rs`): every cell of the range
+  naming the style, a style that is not there, an empty name, and a
+  locked cell of a protected sheet — refused by the range command and
+  by the cell command alike.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not make a style out of a range**: a style is the
+  look of a cell, and a range has no look of its own.
+- **The tree does not give a range a style of its own**: the style is
+  the workbook's, and every cell of the range names it.
+- **The tree does not unlock a cell**: a style that a cell names may
+  say that the cell is locked (§ the style module), and that is a
+  lock the tree reads, and not one this command writes.
