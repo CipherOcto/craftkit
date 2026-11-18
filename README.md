@@ -4466,6 +4466,7 @@ so.
 | a **criterion may name the empty cells and the cells that hold an error** | **built.** The four operations compare with nothing, and their criterion has no value at all (§1019) | §1019 |
 | a **workbook's conditional formats are read, and not only the comparisons** | **built.** The kinds of rule the tree has are read, and the ones it has not are counted and said (§1020) | §1020 |
 | a **conditional format may judge the top of a range** | **built.** The count highest numbers of the range, or the count lowest, and the threshold is the tree's own rule (§1021) | §1021 |
+| a **conditional format may judge the values repeated in a range** | **built.** The values held more than once, or held once and only once, and the counts are derived (§1022) | §1022 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56024,7 +56025,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 246 |
+| grid | 247 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -66295,13 +66296,13 @@ number is among the **highest** of it.
   its own too — a command of its own — and the **threshold** is the
   tree's own rule of the top ten, which the filter already had.
 - **The reference's rule of the top ten may be a percent**, and it
-  rounds the percent **up**, and here it does too: the tree's filter
-  (§1012) had the rule and this arc gave the conditional format the
-  same one.
-- **The reference's rule of the top ten counts the rows of the range**,
-  and the tree's counts the numbers of it — a cell that holds no
-  number is not one of them, where a row that holds no number is a row
-  all the same.
+  rounds the percent **down**, where the tree's rule rounds it **up**:
+  the tree's filter (§1012) had that rule, and this arc gave the
+  conditional format the same one. The **clamp** is the same on both
+  sides: a count that is over the number of the numbers keeps them all.
+- **The reference's rule of the top ten counts the numbers of the
+  range**, and here it does too: a cell that holds no number is not one
+  of them, and the rank is over the numbers and not over the rows.
 
 ### What it cost
 
@@ -66327,3 +66328,67 @@ number is among the **highest** of it.
 - **The rule of the duplicates and the rule of the above-the-average
   are not here yet**: they are rules about a range as a whole, and the
   machinery of this arc is what they need.
+
+## 1022. A conditional format may judge the values repeated in a range
+
+A conditional format may judge a cell by whether its **value** is
+repeated in the range.
+
+### What was built
+
+- A new command `grid.conditional.duplicate`: the cells whose value is
+  **repeated** in the range are the cells the rule holds for, and the
+  cells whose value is held **once and only once** are the cells it
+  holds for when the rule is about the values that are not repeated.
+- The **text** of a value is the text **without case** — the tree's own
+  rule of the text — and a number and the text of it are two values and
+  not one.
+- A cell that holds **nothing** is not a value and is not counted: a
+  blank cell is not a duplicate of another blank cell.
+- The **counts** of the values are **derived**: they are worked out once
+  for a read and read as often as a cell is read, as the numbers of the
+  top ten are (§1021).
+
+### What the port found
+
+- **The reference's conditional format has a rule of the duplicates**,
+  and one of the values held once. Here they are **one command** with a
+  flag, as the top ten is one command with the lowest as its flag
+  (§1021): the rule is one rule — *the value of the cell, in the
+  range* — and the two directions of it are one thing.
+- **The reference's rule of the duplicates counts the values by the
+  text they are shown with**, lower-cased: a cell that holds the
+  number one and a cell that holds the text "1" are one value there,
+  and a number shown as `1.50` is the text "1.50". Here the values are
+  counted by the **value**: the kinds are kept apart, so a number and
+  the text of it are two values and not one, and the tree's order of
+  the values (§1009) is the tree's order here too.
+- **The reference's rule of the duplicates does not count the empty
+  cells** — a cell that holds nothing is not a value there either — and
+  here a cell that holds nothing is not a value and is not counted:
+  nothing is an option and not a zero (§1020).
+
+### What it cost
+
+- **One new command**: `grid.conditional.duplicate`, and the grid
+  battery now carries **247** commands.
+- **One rule that was already there**: the **facts** of the ranges a
+  rule is about (§1021), which now carry the counts as well as the
+  numbers.
+- **Four tests** in the grid battery (`tests/conditional.rs`): the
+  repeated values, the values held once, the text without case, and
+  the cell that holds nothing.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's conditional format still has no colour scale, no data
+  bar and no icon set**: the reference's has them, and they are not
+  here.
+- **The rule of the above-the-average is not here yet**: it is a rule
+  about a range as a whole, and the machinery of §1021 is what it
+  needs.
+- **The tree's rule of the duplicates is over the values of the range
+  and not over the rows of it**: a row of a sheet may hold a value that
+  another row holds, and the tree's rule does not reach across the
+  rows of a sheet.
