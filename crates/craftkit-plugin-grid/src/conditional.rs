@@ -19,6 +19,11 @@
 //! rule about the cell and the cell's own format is a fact about the
 //! cell, and the rule is on top.
 //!
+//! And the criterion is the tree's **one criterion** (§347): the same
+//! operation and the same value the filter of a sheet uses, and the
+//! four operations that name a cell by **what it holds** — `isEmpty`,
+//! `isNotEmpty`, `isError` and `isNotError` — with no value at all.
+//!
 //! # What the port found
 //!
 //! - **The tree's rule is a style and this one's is a look.** The
@@ -252,10 +257,14 @@ commands! {
             range: Text,
             /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`, or one
             /// of the four on the **text** of a cell: `beginsWith`,
-            /// `endsWith`, `contains` or `notContains`.
+            /// `endsWith`, `contains` or `notContains`, or one of the
+            /// four that name a cell by **what it holds**: `isEmpty`,
+            /// `isNotEmpty`, `isError` or `isNotError`.
             op: Text,
-            /// The value it compares with.
-            value: Text,
+            /// The value it compares with. An operation that names a cell
+            /// by what it holds compares with nothing, and it takes no
+            /// value.
+            value: Option<Text>,
             /// The format the matching cells are written with. A rule may
             /// carry the format, the fill, or both.
             format: Option<Text>,
@@ -301,7 +310,10 @@ commands! {
                     ),
                 });
             }
-            let value = self.value.0.clone();
+            let value = match Criterion::value_of(&op, self.value.as_ref().map(|value| value.0.as_str())) {
+                Ok(value) => value,
+                Err(message) => return Err(EngineError::Failed { id: id.clone(), message }),
+            };
             // The **number** the operation compares with is read by the
             // tree's own rule of numbers — the rule `VALUE` reads a text
             // by — so a currency sign, thousands separators and a date

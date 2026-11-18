@@ -374,3 +374,58 @@ fn a_filter_may_judge_the_colour_of_the_cells() {
         .expect("the sheet is filtered");
     assert_eq!(hidden_rows(&mut session, sheet), vec![1, 2], "and no cell has a red text");
 }
+
+/// A filter may keep the rows whose cell is **empty**.
+#[test]
+fn a_filter_may_keep_the_rows_whose_cell_is_empty() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A3", 3.0);
+    session
+        .execute("grid.filter.set", &json!({ "sheet": sheet, "column": "A", "op": "isEmpty" }))
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![1, 3], "the rows that are not empty are hidden");
+}
+
+/// A filter may keep the rows whose cell holds an **error**.
+#[test]
+fn a_filter_may_keep_the_rows_whose_cell_holds_an_error() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": { "error": "#DIV/0!" } }))
+        .expect("the cell is set");
+    a_number(&mut session, sheet, "A2", 5.0);
+    session
+        .execute("grid.filter.set", &json!({ "sheet": sheet, "column": "A", "op": "isError" }))
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![2], "the row that holds no error is hidden");
+}
+
+/// A value with an operation that compares with **nothing** is refused.
+#[test]
+fn a_value_with_an_operation_that_compares_with_nothing_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    let failure = session
+        .execute("grid.filter.set", &json!({ "sheet": sheet, "column": "A", "op": "isEmpty", "value": "x" }))
+        .expect_err("the filter is refused");
+    let message = failure.to_string();
+    assert!(message.contains("compares with nothing"), "the refusal says why: {message}");
+}
+
+/// A comparison with **no value** is refused: the tree does not treat
+/// an absent value as an empty one.
+#[test]
+fn a_comparison_with_no_value_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    let failure = session
+        .execute("grid.filter.set", &json!({ "sheet": sheet, "column": "A", "op": ">" }))
+        .expect_err("the filter is refused");
+    let message = failure.to_string();
+    assert!(message.contains("compares with a value"), "the refusal says why: {message}");
+}

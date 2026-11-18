@@ -277,3 +277,51 @@ fn a_conditional_format_may_judge_the_cells_by_a_formula() {
     assert_eq!(text_of(&mut session, sheet, "A1"), "1", "and the one that does not is not");
     assert_eq!(matching(&mut session, sheet, "A1:A2"), vec!["A2".to_string()], "the cell matches");
 }
+
+/// A conditional format may judge the **empty** cells.
+#[test]
+fn a_conditional_format_may_judge_the_empty_cells() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute(
+            "grid.conditional.set",
+            &json!({ "sheet": sheet, "range": "A1:A2", "op": "isEmpty", "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A2"), vec!["A2".to_string()], "the empty cell matches");
+}
+
+/// A conditional format may judge the cells that hold an **error**.
+#[test]
+fn a_conditional_format_may_judge_the_cells_that_hold_an_error() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": { "error": "#DIV/0!" } }))
+        .expect("the cell is set");
+    a_number(&mut session, sheet, "A2", 5.0);
+    session
+        .execute(
+            "grid.conditional.set",
+            &json!({ "sheet": sheet, "range": "A1:A2", "op": "isError", "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A2"), vec!["A1".to_string()], "the error matches");
+}
+
+/// A value with an operation that compares with **nothing** is refused.
+#[test]
+fn a_value_with_an_operation_that_compares_with_nothing_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    let failure = session
+        .execute(
+            "grid.conditional.set",
+            &json!({ "sheet": sheet, "range": "A1:A1", "op": "isEmpty", "value": "x" }),
+        )
+        .expect_err("the conditional format is refused");
+    let message = failure.to_string();
+    assert!(message.contains("compares with nothing"), "the refusal says why: {message}");
+}

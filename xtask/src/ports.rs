@@ -1510,6 +1510,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/sorting.rs",
         section: "§1018",
     },
+    Port {
+        rule: "a criterion may name the empty cells and the cells that hold an error",
+        from: "gridcraft/crates/engine/src/cmd/insert/cond_format.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.filter.set",
+        test: "crates/craftkit-plugin-grid/tests/filters.rs",
+        section: "§1019",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -641,6 +641,10 @@ pub struct Name {
 ///
 /// The value may hold the tree's `*` wildcard — `*abc*` is "contains
 /// abc" and `abc*` is "begins with abc".
+///
+/// And four of the operations compare with **nothing**: they name a
+/// cell by what it holds, and their value is **absent** — and an absent
+/// value is not an empty one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Criterion {
     /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
@@ -750,9 +754,26 @@ pub enum Filter {
 ///
 /// The four comparisons of numbers and of texts, and the four
 /// **operations on the text** of a cell: the words it begins with, the
-/// words it ends with, and whether it holds the words at all.
-pub const FILTER_OPS: [&str; 10] =
-    ["=", "!=", "<", "<=", ">", ">=", "beginsWith", "endsWith", "contains", "notContains"];
+/// words it ends with, and whether it holds the words at all — and
+/// the four that name a cell by **what it holds** and not by a value:
+/// the empty cells, the cells that are not empty, the cells that hold
+/// an error and the cells that hold none.
+pub const FILTER_OPS: [&str; 14] = [
+    "=",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "beginsWith",
+    "endsWith",
+    "contains",
+    "notContains",
+    "isEmpty",
+    "isNotEmpty",
+    "isError",
+    "isNotError",
+];
 
 /// The **average** of the numbers of a column, and nothing when the
 /// column holds no number.
@@ -799,6 +820,32 @@ impl Criterion {
         FILTER_OPS.contains(&op)
     }
 
+    /// Whether the operation **compares with nothing**: it names a
+    /// cell by what it holds — the empty cells, the cells that are not
+    /// empty, the cells that hold an error and the cells that hold
+    /// none — and it takes no value.
+    pub fn op_takes_no_value(op: &str) -> bool {
+        matches!(op, "isEmpty" | "isNotEmpty" | "isError" | "isNotError")
+    }
+
+    /// The **value** of a criterion, from what the caller gave.
+    ///
+    /// An operation that compares with nothing takes no value, and an
+    /// operation that compares with a value needs one: the tree does
+    /// not guess, and an absent value is not an empty one.
+    ///
+    /// The error is the **message** the caller refuses with.
+    pub fn value_of(op: &str, value: Option<&str>) -> Result<String, String> {
+        match (value, Criterion::op_takes_no_value(op)) {
+            (Some(value), false) => Ok(value.to_string()),
+            (Some(_), true) => {
+                Err(format!("the operation `{op}` compares with nothing, and it takes no value"))
+            }
+            (None, true) => Ok(String::new()),
+            (None, false) => Err(format!("the operation `{op}` compares with a value, and there is none")),
+        }
+    }
+
     /// Whether a cell's **value** matches the criterion.
     ///
     /// The comparison operations compare **numbers**: an empty cell is
@@ -810,6 +857,11 @@ impl Criterion {
     ///
     /// The equality operations compare the **text** of the cell, and
     /// the tree's `*` is a wildcard.
+    ///
+    /// And the four that name a cell by **what it holds**: the empty
+    /// cells, the cells that are not empty, the cells that hold an
+    /// error and the cells that hold none. They compare with nothing,
+    /// and the criterion of such an operation has no value.
     pub fn matches(&self, value: &Value, system: crate::dates::System) -> bool {
         match self.op.as_str() {
             "=" => wildcard(&self.value, &display_text(value)),
@@ -826,6 +878,13 @@ impl Criterion {
                     _ => !text.contains(&criterion),
                 }
             }
+            // The four that name a cell by **what it holds**: nothing is
+            // an option and not a zero, so an empty cell is not the
+            // number zero and it is not the empty text either.
+            "isEmpty" => matches!(value, Value::Empty),
+            "isNotEmpty" => !matches!(value, Value::Empty),
+            "isError" => matches!(value, Value::Error(_)),
+            "isNotError" => !matches!(value, Value::Error(_)),
             "<" | "<=" | ">" | ">=" => {
                 let Some(criterion) = crate::textvalue::number_of(&self.value, system) else {
                     return false;

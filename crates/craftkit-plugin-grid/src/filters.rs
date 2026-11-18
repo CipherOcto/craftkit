@@ -26,6 +26,12 @@
 //! and `notContains`. The words are the words there, and not
 //! wildcards.
 //!
+//! And four operations that name a cell by **what it holds** and not
+//! by a value: `isEmpty`, `isNotEmpty`, `isError` and `isNotError`.
+//! They compare with nothing, so their criterion has **no value** — an
+//! absent value and an empty one are different things, and the tree
+//! refuses the one that does not belong.
+//!
 //! And a filter may judge the **colour** of a cell: the fill behind
 //! its text, or the colour of its text. That is a filter of its own
 //! (`grid.filter.colour`), because a colour is not a value.
@@ -89,11 +95,15 @@ commands! {
             column: Text,
             /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`, or one
             /// of the four on the **text** of a cell: `beginsWith`,
-            /// `endsWith`, `contains` or `notContains`.
+            /// `endsWith`, `contains` or `notContains`, or one of the
+            /// four that name a cell by **what it holds**: `isEmpty`,
+            /// `isNotEmpty`, `isError` or `isNotError`.
             op: Text,
             /// The value it compares with. A comparison operation needs a
-            /// **number**, and the value may hold the tree's `*`.
-            value: Text,
+            /// **number**, and the value may hold the tree's `*`. An
+            /// operation that names a cell by what it holds compares
+            /// with nothing, and it takes no value.
+            value: Option<Text>,
         },
         run: {
             let id = "grid.filter.set".to_string();
@@ -128,7 +138,10 @@ commands! {
                     ),
                 });
             }
-            let value = self.value.0.clone();
+            let value = match Criterion::value_of(&op, self.value.as_ref().map(|value| value.0.as_str())) {
+                Ok(value) => value,
+                Err(message) => return Err(EngineError::Failed { id: id.clone(), message }),
+            };
             // The **number** the operation compares with is read by the
             // tree's own rule of numbers — the rule `VALUE` reads a text
             // by — so a currency sign, thousands separators and a date
