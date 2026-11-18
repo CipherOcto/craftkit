@@ -30,6 +30,7 @@ pub fn dependents_of(book: &Book, sheet: &str, cell: CellRef) -> Vec<(String, Ce
         for (other, entry) in cells.iter() {
             let Some(formula) = &entry.formula else { continue };
             let Ok(expression) = formula::parse(formula) else { continue };
+            let expression = book.resolved(&expression, name, Some(other));
             for reference in formula::precedents(&expression, book.names()) {
                 let read = reference.sheet.as_deref().unwrap_or(name.as_str());
                 if read != sheet {
@@ -59,6 +60,7 @@ pub fn precedent_cells(book: &Book, sheet: &str, start: CellRef) -> Vec<(String,
         let Some(entry) = cells.get(cell) else { continue };
         let Some(formula) = &entry.formula else { continue };
         let Ok(expression) = formula::parse(formula) else { continue };
+        let expression = book.resolved(&expression, &name, Some(cell));
         for reference in formula::precedents(&expression, book.names()) {
             let read = reference.sheet.as_deref().unwrap_or(name.as_str());
             let Some(area) = book.sheet(read) else { continue };

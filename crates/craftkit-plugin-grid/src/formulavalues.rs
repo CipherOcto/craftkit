@@ -68,6 +68,11 @@ commands! {
             if let Some(sheet_cells) = book.sheet_mut(&name) {
                 *sheet_cells = cells_of(node);
             }
+            // The **structured references** are worked out into the
+            // ranges of cells they name, before the formula is worked
+            // out. A formula that is not in a cell does not know the
+            // row of a cell, and the reference to it is refused.
+            let expression = book.resolved(&expression, &name, None);
             let value = book.evaluate(&name, &expression, &mut Vec::new());
             Ok(Outcome::new(format!("the formula gives {}", kind_of(&value))).with_data(json!({
                 "sheet": sheet,
@@ -235,7 +240,7 @@ const MAX_STEPS: usize = 200;
 fn parts_of(expression: &crate::formula::Expr, parts: &mut Vec<crate::formula::Expr>) {
     use crate::formula::Expr;
     match expression {
-        Expr::Cell { .. } | Expr::Range { .. } => parts.push(expression.clone()),
+        Expr::Cell { .. } | Expr::Range { .. } | Expr::Struct { .. } => parts.push(expression.clone()),
         Expr::Call(_, arguments) => {
             parts.push(expression.clone());
             for argument in arguments {

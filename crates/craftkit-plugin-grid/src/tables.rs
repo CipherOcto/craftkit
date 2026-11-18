@@ -24,6 +24,12 @@
 //! A table does not keep a copy of its own fields, because a second
 //! copy is a copy that can be wrong.
 //!
+//! A formula may **name a column of a table**: `Orders[amount]` names the
+//! column `amount` of the table `Orders`, and `[@amount]` names the
+//! column of the table the cell is in. The name of a column is the text
+//! of its header cell, so it is **derived** as the fields are, and it is
+//! read without case.
+//!
 //! # What the port found
 //!
 //! - **The tree's table is an object with a name, a range, a header

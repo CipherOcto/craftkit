@@ -492,6 +492,7 @@ pub(crate) fn set_formula(
         });
     };
     node.data["cells"] = crate::cells_into(&cells);
+    let expression = book.resolved(&expression, &name, Some(cell));
     let precedents = precedents(&expression, book.names());
     Ok(Outcome::changed(format!("set the formula in {}", cell.to_text())).with_data(
         craftkit_sdk::serde_json::json!({
@@ -586,6 +587,23 @@ pub enum Expr {
     /// A **name**: a word that is not a cell and not a function, and
     /// that stands for a range of cells.
     Name(String),
+    /// A **structured reference**: a column of a table, or the table
+    /// itself.
+    ///
+    /// `Table1[Sales]` names the column `Sales` of the table
+    /// `Table1`, and `[@Sales]` names the column `Sales` of the table
+    /// the cell is in.
+    Struct {
+        /// The name of the table. It is empty when the reference names
+        /// the table of the cell the formula is in.
+        table: String,
+        /// The first column named, when a column is named.
+        first: Option<String>,
+        /// The last column named, when a range of columns is named.
+        last: Option<String>,
+        /// The **item** of the table the reference names.
+        item: StructItem,
+    },
     /// An **error**: a reference that is gone, or a value that is not
     /// one.
     ///
@@ -600,6 +618,34 @@ pub enum Expr {
     Negate(Box<Expr>),
     /// A binary operation.
     Binary(String, Box<Expr>, Box<Expr>),
+}
+
+/// The **item** of a table a structured reference names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StructItem {
+    /// The **whole table**: the headers and the data.
+    All,
+    /// The **data** of the table: the rows under the headers.
+    Data,
+    /// The **headers** of the table: the row that names the columns.
+    Headers,
+    /// The **totals** of the table: the row at the bottom of it.
+    Totals,
+    /// The **row** the cell the formula is in is in.
+    ThisRow,
+}
+
+impl StructItem {
+    /// The name of the item, as a formula writes it.
+    pub fn name(self) -> &'static str {
+        match self {
+            StructItem::All => "#All",
+            StructItem::Data => "#Data",
+            StructItem::Headers => "#Headers",
+            StructItem::Totals => "#Totals",
+            StructItem::ThisRow => "#This Row",
+        }
+    }
 }
 
 /// A **reference**: a sheet, maybe, and an area of cells in it.
@@ -635,6 +681,21 @@ pub struct Name {
     pub sheet: String,
     /// The area of cells.
     pub area: Area,
+}
+
+/// A **table** of a sheet, as the formulas see it.
+///
+/// A table is a range of cells with a name, and its first row names
+/// its columns. A formula may name the table and one of its columns,
+/// and the cells it reads are worked out from it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TableRef {
+    /// The name of the table.
+    pub name: String,
+    /// The range the table reaches.
+    pub range: Area,
+    /// Whether the table has a **totals row** at the bottom of it.
+    pub totals: bool,
 }
 
 /// A **criterion**: an operation and a value.
@@ -1107,6 +1168,11 @@ fn collect_precedents(expression: &Expr, names: &BTreeMap<String, Name>, found: 
         Expr::Range { sheet, start, end } => {
             found.push(Reference { sheet: sheet.clone(), area: Area::new(start.cell, end.cell) })
         }
+        Expr::Struct { .. } => {
+            // A **structured reference** is worked out into the range of
+            // cells it names before the cells a formula reads are
+            // looked for, and it is never here.
+        }
         Expr::Name(name) => {
             // A name stands for a range, and the range is what the
             // formula reads.
@@ -1169,6 +1235,16 @@ impl Parser {
         }
         self.at = at;
         true
+    }
+
+    /// Take the text until one of the characters, and leave that
+    /// character where it is.
+    fn take_until(&mut self, stops: &[char]) -> String {
+        let start = self.at;
+        while self.at < self.characters.len() && !stops.contains(&self.characters[self.at]) {
+            self.at += 1;
+        }
+        self.characters[start..self.at].iter().collect()
     }
 
     /// The error, with the place it happened.
@@ -1344,6 +1420,10 @@ impl Parser {
         if character == '#' {
             return self.error_literal();
         }
+        // A **structured reference** to the row of the cell: `[@Sales]`.
+        if character == '[' {
+            return self.structured(String::new());
+        }
         if character.is_ascii_digit() || (character == '.' && self.next_is_digit()) {
             return self.number();
         }
@@ -1442,6 +1522,11 @@ impl Parser {
             word.push_str(&tail);
             self.at = furthest;
         }
+        // A **structured reference**: a word and a bracket — the name
+        // of a table and a column of it.
+        if self.peek() == Some('[') {
+            return self.structured(word);
+        }
         // A **boolean**: `TRUE` or `FALSE`. The tree's word is also the
         // tree's **function** — `TRUE()` — and a word with a bracket
         // after it is a call and not a value.
@@ -1487,6 +1572,117 @@ impl Parser {
             return Ok(Expr::Name(word));
         }
         self.reference_to(word, None)
+    }
+
+    /// A **structured reference**: a column of a table, or the table
+    /// itself.
+    ///
+    /// The tree's own forms:
+    ///
+    /// - `Table1[Sales]` — the column `Sales` of the table;
+    /// - `Table1[[Sales]:[Cost]]` — two columns of it;
+    /// - `Table1[[#Data],[Sales]]` — the column of the data of it;
+    /// - `Table1[[#All]]` — the whole table;
+    /// - `[@Sales]` — the column of the table the cell is in.
+    fn structured(&mut self, table: String) -> Result<Expr, FormulaError> {
+        // The "[" is here.
+        self.at += 1;
+        let mut item = StructItem::Data;
+        let mut first: Option<String> = None;
+        let mut last: Option<String> = None;
+        loop {
+            self.skip_spaces();
+            match self.peek() {
+                // An **item** of the table: `#All`, `#Data`,
+                // `#Headers`, `#Totals` or `#This Row`.
+                Some('#') => {
+                    self.at += 1;
+                    let word = self.take_until(&[' ', ']', ',']);
+                    item = match word.as_str() {
+                        "All" => StructItem::All,
+                        "Data" => StructItem::Data,
+                        "Headers" => StructItem::Headers,
+                        "Totals" => StructItem::Totals,
+                        "This" => {
+                            // `#This Row`: the row the cell is in.
+                            self.skip_spaces();
+                            let row = self.take_until(&[']', ',']);
+                            if row != "Row" {
+                                return Err(self.error("`#This` names the row of the cell"));
+                            }
+                            StructItem::ThisRow
+                        }
+                        _ => {
+                            return Err(self.error(&format!("`#{word}` is not an item of a table")));
+                        }
+                    };
+                }
+                // The **row of the cell**: `[@Sales]`.
+                Some('@') => {
+                    self.at += 1;
+                    let name = self.take_until(&[']', ',']).trim().to_string();
+                    if name.is_empty() {
+                        return Err(self.error("the row of the cell names no column"));
+                    }
+                    item = StructItem::ThisRow;
+                    first = Some(name);
+                }
+                // A **column** in brackets: `[Sales]`, or two of them
+                // `[Sales]:[Cost]`.
+                Some('[') => {
+                    self.at += 1;
+                    let word = self.take_until(&[']']);
+                    if !self.take(']') {
+                        return Err(self.error("the bracket is not closed"));
+                    }
+                    if word.starts_with('#') {
+                        // An item in brackets: `[#Data]`.
+                        let Some(name) = word.strip_prefix('#') else { continue };
+                        item = match name {
+                            "All" => StructItem::All,
+                            "Data" => StructItem::Data,
+                            "Headers" => StructItem::Headers,
+                            "Totals" => StructItem::Totals,
+                            _ => {
+                                return Err(self.error(&format!("`#{name}` is not an item of a table")));
+                            }
+                        };
+                    } else {
+                        first = Some(word.trim().to_string());
+                        // The **second column** of a range of them.
+                        if self.peek() == Some(':') {
+                            self.at += 1;
+                            self.skip_spaces();
+                            if !self.take('[') {
+                                return Err(self.error("the range of columns is not in brackets"));
+                            }
+                            let word = self.take_until(&[']']);
+                            if !self.take(']') {
+                                return Err(self.error("the bracket is not closed"));
+                            }
+                            last = Some(word.trim().to_string());
+                        }
+                    }
+                }
+                // A **column** of its own: `Sales`.
+                Some(_) => {
+                    let word = self.take_until(&[']', ',']).trim().to_string();
+                    if word.is_empty() {
+                        return Err(self.error("the table names no column"));
+                    }
+                    first = Some(word);
+                }
+                None => return Err(self.error("the bracket is not closed")),
+            }
+            if self.take(']') {
+                break;
+            }
+            if self.take(',') {
+                continue;
+            }
+            return Err(self.error("the bracket is not closed"));
+        }
+        Ok(Expr::Struct { table, first, last, item })
     }
 
     /// A **reference**: the word that follows, in the sheet (maybe).
@@ -2297,6 +2493,8 @@ pub struct Book {
     filters: BTreeMap<String, Filter>,
     /// The **names**, by name.
     names: BTreeMap<String, Name>,
+    /// The **tables** of each sheet, by sheet name.
+    tables: BTreeMap<String, Vec<TableRef>>,
     /// The **date system** of the workbook the sheets are in.
     system: crate::dates::System,
 }
@@ -2310,6 +2508,7 @@ impl Book {
             hidden: BTreeMap::new(),
             filters: BTreeMap::new(),
             names: BTreeMap::new(),
+            tables: BTreeMap::new(),
             system,
         }
     }
@@ -2458,6 +2657,161 @@ impl Book {
         &self.names
     }
 
+    /// Put a **table** in a sheet of the workbook.
+    pub fn add_table(&mut self, sheet: &str, table: TableRef) {
+        self.tables.entry(sheet.to_string()).or_default().push(table);
+    }
+
+    /// The **table** of a name, in the workbook.
+    fn table_by_name(&self, name: &str) -> Option<(String, &TableRef)> {
+        for (sheet, tables) in &self.tables {
+            for table in tables {
+                if table.name.eq_ignore_ascii_case(name) {
+                    return Some((sheet.clone(), table));
+                }
+            }
+        }
+        None
+    }
+
+    /// The **table** a cell is in, in a sheet.
+    fn table_of_cell(&self, sheet: &str, cell: CellRef) -> Option<(String, &TableRef)> {
+        for (name, tables) in &self.tables {
+            for table in tables {
+                let range = table.range;
+                if name.eq_ignore_ascii_case(sheet)
+                    && cell.row >= range.start.row
+                    && cell.row <= range.end.row
+                    && cell.col >= range.start.col
+                    && cell.col <= range.end.col
+                {
+                    return Some((name.clone(), table));
+                }
+            }
+        }
+        None
+    }
+
+    /// The **column** a name says, in a table: the column of the
+    /// header row that holds the name.
+    fn column_of(&self, sheet: &str, range: Area, name: &str) -> Option<u32> {
+        let cells = self.sheets.get(sheet)?;
+        for col in range.start.col..=range.end.col {
+            let cell = CellRef { col, row: range.start.row };
+            let Some(value) = cells.get(cell).and_then(|cell| cell.value.as_ref()) else { continue };
+            if display_text(value).trim().eq_ignore_ascii_case(name) {
+                return Some(col);
+            }
+        }
+        None
+    }
+
+    /// The expression with the **structured references** in it worked
+    /// out: each one is the range of cells it names.
+    ///
+    /// A structured reference is **derived**: it is worked out every
+    /// time the formula is, and so it is always the table as it is
+    /// now.
+    pub fn resolved(&self, expression: &Expr, sheet: &str, cell: Option<CellRef>) -> Expr {
+        match expression {
+            Expr::Number(_)
+            | Expr::Text(_)
+            | Expr::Bool(_)
+            | Expr::Error(_)
+            | Expr::Cell { .. }
+            | Expr::Range { .. }
+            | Expr::Name(_) => expression.clone(),
+            Expr::Struct { .. } => self.resolved_struct(expression, sheet, cell),
+            Expr::Call(name, arguments) => Expr::Call(
+                name.clone(),
+                arguments.iter().map(|argument| self.resolved(argument, sheet, cell)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(self.resolved(inner, sheet, cell))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
+                operator.clone(),
+                Box::new(self.resolved(left, sheet, cell)),
+                Box::new(self.resolved(right, sheet, cell)),
+            ),
+        }
+    }
+
+    /// One **structured reference**, worked out into the range of cells
+    /// it names.
+    fn resolved_struct(&self, expression: &Expr, sheet: &str, cell: Option<CellRef>) -> Expr {
+        let Expr::Struct { table, first, last, item } = expression else { return expression.clone() };
+        // The **table**: by its name, or the one the cell is in.
+        let found = match table.is_empty() {
+            true => match cell {
+                Some(cell) => self.table_of_cell(sheet, cell),
+                None => {
+                    return Expr::Error("the row of the cell is not known here".to_string());
+                }
+            },
+            false => self.table_by_name(table),
+        };
+        let Some((sheet_of, found)) = found else {
+            return Expr::Error(match table.is_empty() {
+                true => {
+                    format!("the cell {} is in no table", cell.map(|cell| cell.to_text()).unwrap_or_default())
+                }
+                false => format!("there is no table `{table}`"),
+            });
+        };
+        let range = found.range;
+        let name = found.name.clone();
+        // The **rows**: the item of the table.
+        let data_last = match found.totals {
+            true => range.end.row.saturating_sub(1),
+            false => range.end.row,
+        };
+        let rows = match item {
+            StructItem::All => range.start.row..=range.end.row,
+            StructItem::Data => range.start.row + 1..=data_last,
+            StructItem::Headers => range.start.row..=range.start.row,
+            StructItem::Totals => match found.totals {
+                true => range.end.row..=range.end.row,
+                false => return Expr::Error(format!("the table `{name}` has no totals row")),
+            },
+            StructItem::ThisRow => match cell {
+                Some(cell) => cell.row..=cell.row,
+                None => return Expr::Error("the row of the cell is not known here".to_string()),
+            },
+        };
+        // The **columns**: the header row names them.
+        let columns = match (first, last) {
+            (None, _) => range.start.col..=range.end.col,
+            (Some(first), last) => {
+                let Some(start) = self.column_of(&sheet_of, range, first) else {
+                    return Expr::Error(format!("the table `{name}` has no column `{first}`"));
+                };
+                match last {
+                    None => start..=start,
+                    Some(last) => {
+                        let Some(end) = self.column_of(&sheet_of, range, last) else {
+                            return Expr::Error(format!("the table `{name}` has no column `{last}`"));
+                        };
+                        start.min(end)..=start.max(end)
+                    }
+                }
+            }
+        };
+        let start = CellRef { col: *columns.start(), row: *rows.start() };
+        let end = CellRef { col: *columns.end(), row: *rows.end() };
+        // The **row of the cell** is one cell, and it is the cell the
+        // formula is in.
+        if matches!(item, StructItem::ThisRow) {
+            return Expr::Cell {
+                sheet: Some(sheet_of),
+                anchor: Anchor { cell: start, row_abs: false, col_abs: false },
+            };
+        }
+        Expr::Range {
+            sheet: Some(sheet_of),
+            start: Anchor { cell: start, row_abs: false, col_abs: false },
+            end: Anchor { cell: end, row_abs: false, col_abs: false },
+        }
+    }
+
     /// Put a sheet in the workbook.
     pub fn add(&mut self, name: &str, cells: Cells) {
         if !self.order.iter().any(|sheet| sheet == name) {
@@ -2582,6 +2936,9 @@ impl Book {
             Ok(expression) => expression,
             Err(error) => return Value::Error(error.message),
         };
+        // The **structured references** are worked out into the ranges
+        // of cells they name, before the formula is worked out.
+        let expression = self.resolved(&expression, sheet, Some(cell));
         being.push((sheet.to_string(), cell));
         let value = self.evaluate(sheet, &expression, being);
         being.pop();
@@ -2612,6 +2969,12 @@ impl Book {
                     }
                 }
                 Value::Text(format!("{} values", values.len()))
+            }
+            Expr::Struct { table, .. } => {
+                // A **structured reference** is worked out into the
+                // range of cells it names before the formula is
+                // worked out, and it is never here.
+                Value::Error(format!("the table `{table}` is not worked out here"))
             }
             Expr::Name(name) => {
                 let Some(name) = self.names.get(name) else {
@@ -3891,6 +4254,10 @@ impl Expr {
                 end: *end,
             },
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **structured reference** does not move with the cell:
+            // it names a column of a table, and the table is where it
+            // is.
+            Expr::Struct { .. } => self.clone(),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
                 arguments.iter().map(|argument| argument.renamed_sheet(old, new)).collect(),
@@ -3931,6 +4298,10 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **structured reference** does not move with the cell:
+            // it names a column of a table, and the table is where it
+            // is.
+            Expr::Struct { .. } => self.clone(),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
                 arguments.iter().map(|argument| argument.shifted(row_delta, col_delta)).collect(),
@@ -3977,6 +4348,10 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **structured reference** does not move with the cell:
+            // it names a column of a table, and the table is where it
+            // is.
+            Expr::Struct { .. } => self.clone(),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
                 arguments.iter().map(|argument| argument.inserted(sheet, at, count)).collect(),
@@ -4031,6 +4406,10 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **structured reference** does not move with the cell:
+            // it names a column of a table, and the table is where it
+            // is.
+            Expr::Struct { .. } => self.clone(),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
                 arguments.iter().map(|argument| argument.deleted(sheet, at, count)).collect(),
@@ -4077,6 +4456,10 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **structured reference** does not move with the cell:
+            // it names a column of a table, and the table is where it
+            // is.
+            Expr::Struct { .. } => self.clone(),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
                 arguments.iter().map(|argument| argument.inserted_column(sheet, at, count)).collect(),
@@ -4131,6 +4514,10 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **structured reference** does not move with the cell:
+            // it names a column of a table, and the table is where it
+            // is.
+            Expr::Struct { .. } => self.clone(),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
                 arguments.iter().map(|argument| argument.deleted_column(sheet, at, count)).collect(),
@@ -4221,6 +4608,10 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **structured reference** does not move with the cell:
+            // it names a column of a table, and the table is where it
+            // is.
+            Expr::Struct { .. } => self.clone(),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
                 arguments.iter().map(|argument| argument.shifted_cells(sheet, band, way, insert)).collect(),
@@ -4277,6 +4668,10 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **structured reference** does not move with the cell:
+            // it names a column of a table, and the table is where it
+            // is.
+            Expr::Struct { .. } => self.clone(),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
                 arguments.iter().map(|argument| argument.moved_column(sheet, from, count, to)).collect(),
@@ -4455,6 +4850,7 @@ fn expression_text(expression: &Expr, min_precedence: u8) -> String {
         }
         Expr::Error(message) => message.clone(),
         Expr::Name(name) => name.clone(),
+        Expr::Struct { table, first, last, item } => struct_text(table, first, last, *item),
         Expr::Cell { sheet, anchor } => format!("{}{}", sheet_prefix(sheet), anchor.to_text()),
         Expr::Range { sheet, start, end } => {
             format!("{}{}:{}", sheet_prefix(sheet), start.to_text(), end.to_text())
@@ -4478,6 +4874,30 @@ fn expression_text(expression: &Expr, min_precedence: u8) -> String {
         }
     };
     if own < min_precedence { format!("({text})") } else { text }
+}
+
+/// A **structured reference**, as a formula writes it.
+///
+/// The tree's own spelling: the name of the table, the columns it names
+/// and the item of the table it names.
+fn struct_text(table: &str, first: &Option<String>, last: &Option<String>, item: StructItem) -> String {
+    let item_text = match item {
+        StructItem::ThisRow => String::new(),
+        item => format!("[{}]", item.name()),
+    };
+    let columns = match (first, last) {
+        (Some(first), Some(last)) => format!("[[{first}]:[{last}]]"),
+        (Some(first), None) => format!("[{first}]"),
+        (None, _) => item_text,
+    };
+    match (table.is_empty(), item) {
+        // The row of the cell the formula is in: `[@Sales]`.
+        (true, StructItem::ThisRow) => {
+            let column = first.clone().unwrap_or_default();
+            format!("[@{column}]")
+        }
+        _ => format!("{table}{columns}"),
+    }
 }
 
 /// A number, as a formula writes it.
@@ -4526,6 +4946,9 @@ pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Expr {
         // A **name** does not move: it stands for a range and not for
         // a place, so there is nothing relative in it.
         Expr::Name(_) => expression.clone(),
+        // A **structured reference** does not move either: it names a
+        // column of a table, and the table is where it is.
+        Expr::Struct { .. } => expression.clone(),
         Expr::Cell { sheet, anchor } => match anchor.moved(dr, dc) {
             Some(anchor) => Expr::Cell { sheet: sheet.clone(), anchor },
             None => Expr::Error(REF_ERROR.to_string()),

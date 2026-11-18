@@ -154,6 +154,13 @@
 //! `DPRODUCT`, `DVAR`, `DVARP`, `DSTDEV` and `DSTDEVP` (the module
 //! `database`).
 //!
+//! And a formula may **name a column of a table**: `Orders[amount]` names
+//! the column `amount` of the table `Orders`, and `[@amount]` names the
+//! column of the table the cell is in. The reference is **derived**: it is
+//! worked out into the range of cells it names every time the formula is
+//! worked out, and so it is always the table as it is now (the module
+//! `formula`).
+//!
 //! And a formula may **test a hypothesis**: a t-test, a chi-square
 //! test, an F-test and a z-test — the questions two sets of numbers
 //! ask of each other — and may ask how wide the **confidence** of a
@@ -723,6 +730,16 @@ pub(crate) fn book_of(document: &Document) -> Book {
             .map(|rows| rows.iter().filter_map(|row| row.as_u64()).collect())
             .unwrap_or_default();
         book.hide_rows(&node.name, hidden);
+        // The **tables** of the sheet: the columns a formula may name.
+        if let Some(list) = node.data.get("tables").and_then(|tables| tables.as_array()) {
+            for table in list {
+                let Some(name) = table.get("name").and_then(|name| name.as_str()) else { continue };
+                let Some(range) = table.get("range").and_then(|range| range.as_str()) else { continue };
+                let Some((_, area)) = crate::merges::parse_area(range) else { continue };
+                let totals = table.get("totals").and_then(|totals| totals.as_bool()).unwrap_or(false);
+                book.add_table(&node.name, formula::TableRef { name: name.to_string(), range: area, totals });
+            }
+        }
         // The **filter** of the sheet: the rows it hides are derived
         // from it.
         if let Some(filter) = node.data.get("filter") {
@@ -1867,6 +1884,7 @@ commands! {
                         .collect::<Vec<_>>(),
                 })));
             }
+            let expression = book.resolved(&expression, &node.name, Some(cell));
             let areas = formula::precedents(&expression, book.names());
             Ok(Outcome::new(format!("{} area(s)", areas.len())).with_data(json!({
                 "sheet": sheet,
@@ -1932,6 +1950,7 @@ commands! {
                 for (other, entry) in cells.iter() {
                     let Some(formula) = &entry.formula else { continue };
                     let Ok(expression) = formula::parse(formula) else { continue };
+                    let expression = book.resolved(&expression, &sheet_node.name, Some(other));
                     for reference in formula::precedents(&expression, book.names()) {
                         // A reference that names no sheet is a reference to
                         // the sheet the formula is in, and a reference that

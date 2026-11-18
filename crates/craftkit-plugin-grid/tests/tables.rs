@@ -223,3 +223,109 @@ fn the_fields_are_derived_from_the_header() {
     let fields = outcome.data["fields"].as_array().expect("the fields are a list");
     assert_eq!(fields[1]["name"], "sum");
 }
+
+/// A formula may **name a column of a table**: the column's cells are
+/// the ones the formula reads.
+#[test]
+fn a_formula_may_name_a_column_of_a_table() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    a_text(&mut session, sheet, "A3", "bob");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B3", "value": 4 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B3" }))
+        .expect("the table is made");
+    let outcome = session
+        .execute("grid.formula.evaluate", &json!({ "sheet": sheet, "formula": "=SUM(Orders[amount])" }))
+        .expect("the formula is worked out");
+    assert_eq!(outcome.data["value"].as_f64(), Some(7.0), "the column is summed");
+}
+
+/// The column of a table is read by its **name**, and without case.
+#[test]
+fn the_column_of_a_table_is_read_by_its_name() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B2" }))
+        .expect("the table is made");
+    let outcome = session
+        .execute("grid.formula.evaluate", &json!({ "sheet": sheet, "formula": "=SUM(Orders[AMOUNT])" }))
+        .expect("the formula is worked out");
+    assert_eq!(outcome.data["value"].as_f64(), Some(3.0), "the column is summed");
+}
+
+/// A table that is **not there**, and a column that is not there, are
+/// refused — and the refusal says why.
+#[test]
+fn a_table_that_is_not_there_is_refused() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B2" }))
+        .expect("the table is made");
+    let outcome = session
+        .execute("grid.formula.evaluate", &json!({ "sheet": sheet, "formula": "=SUM(Ledger[amount])" }))
+        .expect("the formula is worked out");
+    assert_eq!(outcome.data["type"].as_str(), Some("error"), "the table is not there");
+    let outcome = session
+        .execute("grid.formula.evaluate", &json!({ "sheet": sheet, "formula": "=SUM(Orders[cost])" }))
+        .expect("the formula is worked out");
+    assert_eq!(outcome.data["type"].as_str(), Some("error"), "the column is not there");
+}
+
+/// A formula in a **cell of the table** may name the column of its own
+/// row: `[@amount]`.
+#[test]
+fn a_formula_in_a_cell_of_a_table_may_name_its_own_column() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    a_text(&mut session, sheet, "A3", "bob");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B3", "value": 4 }))
+        .expect("the cell is set");
+    a_text(&mut session, sheet, "C1", "twice");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:C3" }))
+        .expect("the table is made");
+    // A formula in a **column of the table**: it names the column of
+    // the row it is in.
+    session
+        .execute("grid.formula.set", &json!({ "sheet": sheet, "cell": "C2", "formula": "=[@amount]*2" }))
+        .expect("the formula is set");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "C2" })).expect("the cell is read");
+    assert_eq!(outcome.data["value"].as_f64(), Some(6.0), "the row's own amount is doubled");
+    // A **copy** of the formula: the structured reference does not move
+    // with the cell, and the row it names is the row the cell is in.
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "C2" }))
+        .expect("the cell is copied");
+    session.execute("grid.range.paste", &json!({ "sheet": sheet, "at": "C3" })).expect("the cell is pasted");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "C3" })).expect("the cell is read");
+    assert_eq!(outcome.data["value"].as_f64(), Some(8.0), "the next row's own amount is doubled");
+    assert_eq!(outcome.data["formula"].as_str(), Some("=[@amount] * 2"), "and the formula is as it was");
+}
