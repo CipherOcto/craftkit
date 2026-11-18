@@ -4472,6 +4472,7 @@ so.
 | a **colour scale may have three colours** | **built.** The middle colour stands for the median of the numbers, and the fill is the mix of the two that hold the cell (§1025) | §1025 |
 | a **workbook's colour scales are read into the document** | **built.** The colours of the scale are read, and the stops the tree has are the ones it reads (§1026) | §1026 |
 | a **conditional format may draw a bar behind the cells of a range** | **built.** The bar is as long as the cell's number is between the lowest and the highest of the range (§1027) | §1027 |
+| a **workbook's rules of the top ten, of the average, of the duplicates and of the bar are read** | **built.** The kinds of rule the tree has are read, and the ones it has not are counted (§1028) | §1028 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -66694,3 +66695,61 @@ A conditional format may draw a **bar** behind the cells of a range.
   front end draws, and the tree has no icons in a cell.
 - **The rule of the time period is not here**: it is a rule about the
   dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
+
+## 1028. A workbook's rules of the top ten, of the average, of the duplicates and of the bar are read
+
+A workbook may hold rules that are about a range as a whole, and the
+reader reads the ones the tree has.
+
+### What was built
+
+- The **reader** reads the rules of a file that are about the range as
+  a whole:
+  - the **top ten** — the count of it is the value of the stop of the
+    rule, and a stop that is a **percent** of the numbers is a percent;
+  - the **above-the-average** — and the numbers below it when the rule
+    says so;
+  - the **duplicates** — and the values held once when the rule says
+    so;
+  - the **data bar** — the stops of it are the lowest and the highest
+    of the range, and it has a colour.
+- An above-the-average with a **standard deviation**, or one that
+  counts the numbers that are **equal** to the average, is a kind the
+  tree does not have: it is **counted**, and the reader says how many
+  it left out.
+- The battery **imports** the rules into the document, and they judge
+  the cells as the tree's own rules judge them (§1021–§1027).
+
+### What the port found
+
+- **The reference's reader reads every kind of rule**, and the tree's
+  reader reads the kinds the tree has — the comparisons, the formula,
+  the words, the blanks, the errors, the colour scale and now these
+  four.
+- **The reference's above-the-average has a standard deviation and a
+  flag for the numbers that are equal to the average**; the tree's rule
+  has neither: the threshold is the average and the numbers are above
+  it or below it.
+- **The reference's top ten counts the rows of the range**; the tree's
+  counts the numbers of it, and a file's stop of a percent is a percent
+  of the numbers ✔ — the same rule as the tree's (§1012).
+
+### What it cost
+
+- **No new command**: the reader is a library, and the grid battery
+  still carries **250** commands.
+- **Four rules that were already there**: the tree's top ten (§1021),
+  its average (§1023), its duplicates (§1022) and its bar (§1027).
+- **Three tests**: the reader's kinds of rule, the rule the tree does
+  not have, and the battery's import of them.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's reader still does not read the icon set** of a file,
+  and the tree has no icon in a cell to read it into.
+- **The tree's reader still does not read the rule of the time period**
+  of a file: it is about the dates of a range, and the tree refuses
+  `TODAY` and `NOW` (§347).
+- **The tree has no writer of workbooks**: the rules it reads are not
+  written back.
