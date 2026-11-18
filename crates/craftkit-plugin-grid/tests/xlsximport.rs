@@ -2090,3 +2090,64 @@ fn the_objects_of_a_file_are_imported() {
         .expect("the objects are read");
     assert_eq!(answer.data["objects"], json!("placeholders"), "the objects are placeholders");
 }
+
+/// The **kinds of rule** a file holds are imported: the words of a cell,
+/// the empty cells, the errors and the formula — and the kinds this tree
+/// does not have are counted, and the reader says so.
+#[test]
+fn the_kinds_of_conditional_format_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r##"<styleSheet><dxfs count="1"><dxf><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>"##,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>ann</t></is></c></row></sheetData><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="containsBlanks" priority="2"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="expression" priority="3"><formula>C1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["conditionals"].as_u64(), Some(3), "the three rules this tree has are imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let rules = &node.data["conditionals"];
+    assert_eq!(rules[0]["op"].as_str(), Some("contains"), "the first looks for the words");
+    assert_eq!(rules[0]["value"].as_str(), Some("ann"), "and the words are ann");
+    assert_eq!(rules[1]["op"].as_str(), Some("isEmpty"), "the second is the empty cells");
+    assert_eq!(rules[1]["value"].as_str(), Some(""), "and it has no value");
+    assert_eq!(rules[2]["formula"].as_str(), Some("C1>0"), "and the third is a formula");
+    assert!(rules[2]["op"].is_null(), "and it is not a criterion");
+    // The rule **judges**: the cell that holds the words is a cell the
+    // rule holds for.
+    let checked = session
+        .execute("grid.conditional.check", &json!({ "sheet": sheet, "range": "A1:A5" }))
+        .expect("the cells are read");
+    let cells = checked.data["cells"].as_array().map(|cells| cells.len()).unwrap_or(0);
+    assert_eq!(cells, 1, "the cell that holds the words matches");
+    // The kind this tree does not have is **counted**, and the reader
+    // says so.
+    let said = outcome.data["warnings"].as_array().map(|warnings| {
+        warnings.iter().filter_map(|warning| warning.as_str()).collect::<Vec<&str>>().join(" ")
+    });
+    assert!(
+        said.as_deref()
+            .is_some_and(|said| said.contains("1 conditional format(s) of a kind this tree does not have")),
+        "it says how many: {said:?}"
+    );
+}

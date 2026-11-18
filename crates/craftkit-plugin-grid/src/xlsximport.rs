@@ -882,10 +882,27 @@ commands! {
                 // that are about a range of cells.
                 let mut conditionals: Vec<Json> = Vec::new();
                 for rule in &sheet.conditionals {
-                    if !crate::formula::Criterion::op_is_known(&rule.op) {
-                        unread_conditionals += 1;
-                        continue;
-                    }
+                    // A rule is a **criterion** or a **formula**: the
+                    // cells whose formula is true are the cells that
+                    // match.
+                    let criterion = match &rule.formula {
+                        Some(formula) => {
+                            // A formula that does not parse is not a
+                            // rule this tree can judge.
+                            if crate::formula::parse(formula).is_err() {
+                                unread_conditionals += 1;
+                                continue;
+                            }
+                            None
+                        }
+                        None => {
+                            if !crate::formula::Criterion::op_is_known(&rule.op) {
+                                unread_conditionals += 1;
+                                continue;
+                            }
+                            Some((rule.op.clone(), rule.value.clone()))
+                        }
+                    };
                     // The **format** of the rule: only when this tree's
                     // format language can read it.
                     let format = match &rule.format {
@@ -898,8 +915,15 @@ commands! {
                     };
                     let mut entry = craftkit_sdk::serde_json::Map::new();
                     entry.insert("range".to_string(), json!(rule.range));
-                    entry.insert("op".to_string(), json!(rule.op));
-                    entry.insert("value".to_string(), json!(rule.value));
+                    match criterion {
+                        Some((op, value)) => {
+                            entry.insert("op".to_string(), json!(op));
+                            entry.insert("value".to_string(), json!(value));
+                        }
+                        None => {
+                            entry.insert("formula".to_string(), json!(rule.formula));
+                        }
+                    }
                     if let Some(format) = format {
                         entry.insert("format".to_string(), json!(format));
                     }

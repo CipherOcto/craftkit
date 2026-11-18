@@ -2187,3 +2187,56 @@ fn a_workbook_without_a_word_draws_its_objects() {
     let workbook = read(&bytes).expect("the workbook is read");
     assert_eq!(workbook.objects, craftkit_xlsx::ShowObjects::All, "the objects are drawn");
 }
+
+/// The **kinds of rule** a file holds are read: the words of a cell, the
+/// empty cells, the errors and the formula — and the kinds this tree does
+/// not have are counted, and the reader says so.
+#[test]
+fn the_kinds_of_conditional_format_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r##"<styleSheet><dxfs count="1"><dxf><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>"##,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="beginsWith" text="b" priority="2"><formula>LEFT(B1,1)="b"</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="containsBlanks" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="notContainsErrors" priority="4"/></conditionalFormatting><conditionalFormatting sqref="E1:E5"><cfRule type="expression" priority="5"><formula>E1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F5"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let rules = &workbook.sheets[0].conditionals;
+    assert_eq!(rules.len(), 5, "the five rules this tree has are read");
+    // The **words** of a cell: the rule is the operation and the words.
+    assert_eq!(rules[0].op, "contains", "the first looks for the words");
+    assert_eq!(rules[0].value, "ann", "and the words are ann");
+    assert_eq!(rules[0].fill.as_deref(), Some("#ffc7ce"), "and it carries the look of the rule");
+    assert_eq!(rules[1].op, "beginsWith", "the second is a begins-with");
+    assert_eq!(rules[1].value, "b", "and the word is b");
+    // The **empty cells** and the **errors**: the rule names a cell by
+    // what it holds, and it has no value.
+    assert_eq!(rules[2].op, "isEmpty", "the third is the empty cells");
+    assert_eq!(rules[2].value, "", "and it has no value");
+    assert_eq!(rules[3].op, "isNotError", "the fourth is the cells that hold no error");
+    // The **formula**: the cells whose formula is true are the cells
+    // that match.
+    assert_eq!(rules[4].formula.as_deref(), Some("E1>0"), "the fifth is a formula");
+    // The kind this tree does not have is **counted**, and the reader
+    // says so.
+    let said = workbook.warnings.join(" ");
+    assert!(
+        said.contains("1 conditional format(s) of a kind this tree does not have"),
+        "it says how many: {said}"
+    );
+}

@@ -873,20 +873,30 @@ pub struct Validation {
 
 /// A **conditional format** of a sheet: a rule about a range of cells.
 ///
-/// The rule is a **comparison**: the operation, the value, and the
-/// **look** of the cells that match. The kinds of rule this tree does
-/// not have — a colour scale, a data bar, an icon set, a formula — are
-/// not here.
+/// The rule is a **comparison** — the operation, the value and the
+/// **look** of the cells that match — or a **formula** the cells are
+/// judged by. The kinds of rule this tree does not have — a colour
+/// scale, a data bar, an icon set, the duplicates, the top ten — are
+/// not here, and the reader says how many it left out.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Conditional {
     /// The range of cells the rule is about.
     pub range: String,
     /// The **operation** the cell's value is judged by: `=`, `!=`,
-    /// `<`, `<=`, `>` or `>=`.
+    /// `<`, `<=`, `>` or `>=` — and the four that name a cell by **what
+    /// it holds**: `isEmpty`, `isNotEmpty`, `isError` and `isNotError`
+    /// — and the four on the **text** of a cell: `beginsWith`,
+    /// `endsWith`, `contains` and `notContains`.
     pub op: String,
     /// The **value** the cell's value is compared with, as the file
-    /// writes it.
+    /// writes it. An operation that names a cell by what it holds has
+    /// no value, and this is empty.
     pub value: String,
+    /// The **formula** the cells are judged by, when the rule is one.
+    ///
+    /// The formula is written as it is in the **top-left cell** of the
+    /// range, and it is moved with the cell it is judged for.
+    pub formula: Option<String>,
     /// The **number format** the matching cells are written with, when
     /// the rule names one.
     pub format: Option<String>,
@@ -1671,7 +1681,7 @@ fn read_sheet(
     sheet.view = read_view(&root);
     // The **conditional formats** of the sheet: the rules that are
     // about a range of cells.
-    sheet.conditionals = read_conditionals(&root, styles);
+    sheet.conditionals = read_conditionals(&root, styles, warnings);
     // The **validations** of the sheet: the rules on what a cell may
     // hold.
     sheet.validations = read_validations(&root);
@@ -1898,11 +1908,20 @@ fn read_view(root: &craftkit_xml::El) -> Option<SheetView> {
 /// is about **one** range — so a rule over two ranges is two rules
 /// here, with the same criterion and the same look.
 ///
-/// A rule that is not a **comparison** — a colour scale, a data bar, an
-/// icon set, a formula, a text that contains something — is not a rule
-/// this tree has, and it is not here.
-fn read_conditionals(root: &craftkit_xml::El, styles: &Styles) -> Vec<Conditional> {
+/// The kinds of rule this tree has are read: a **comparison**, a
+/// **formula**, the four that look for the **words** of a cell, and the
+/// four that name a cell by **what it holds**. The kinds it does not
+/// have — a colour scale, a data bar, an icon set, the duplicates, the
+/// top ten — are counted, and the reader says how many it left out.
+fn read_conditionals(
+    root: &craftkit_xml::El,
+    styles: &Styles,
+    warnings: &mut Vec<String>,
+) -> Vec<Conditional> {
     let mut formats = Vec::new();
+    // The rules of the kinds this tree does not have: they are counted,
+    // and the reader says how many there were.
+    let mut unread = 0u64;
     for block in root.kids("conditionalFormatting") {
         let Some(sqref) = block.attr("sqref") else { continue };
         let ranges: Vec<&str> = sqref.split_whitespace().collect();
@@ -1910,13 +1929,48 @@ fn read_conditionals(root: &craftkit_xml::El, styles: &Styles) -> Vec<Conditiona
             continue;
         }
         for rule in block.kids("cfRule") {
-            if rule.attr("type") != Some("cellIs") {
-                continue;
-            }
-            let Some(op) = rule.attr("operator").and_then(conditional_op) else { continue };
-            let Some(value) = rule.kids("formula").next().map(|formula| formula.text.trim().to_string())
-            else {
-                continue;
+            let kind = rule.attr("type").unwrap_or("cellIs");
+            // The **criterion** of the rule: the operation and the
+            // value, or the formula the cells are judged by.
+            let (op, value, formula) = match kind {
+                "cellIs" => {
+                    let Some(op) = rule.attr("operator").and_then(conditional_op) else {
+                        unread += 1;
+                        continue;
+                    };
+                    let Some(value) =
+                        rule.kids("formula").next().map(|formula| formula.text.trim().to_string())
+                    else {
+                        unread += 1;
+                        continue;
+                    };
+                    (op.to_string(), value, None)
+                }
+                "expression" => {
+                    let Some(formula) =
+                        rule.kids("formula").next().map(|formula| formula.text.trim().to_string())
+                    else {
+                        unread += 1;
+                        continue;
+                    };
+                    // The formula is written without the `=` the file
+                    // does not write.
+                    (String::new(), String::new(), Some(formula.trim_start_matches('=').to_string()))
+                }
+                "containsText" => ("contains".to_string(), rule.attr("text").unwrap_or("").to_string(), None),
+                "notContainsText" => {
+                    ("notContains".to_string(), rule.attr("text").unwrap_or("").to_string(), None)
+                }
+                "beginsWith" => ("beginsWith".to_string(), rule.attr("text").unwrap_or("").to_string(), None),
+                "endsWith" => ("endsWith".to_string(), rule.attr("text").unwrap_or("").to_string(), None),
+                "containsBlanks" => ("isEmpty".to_string(), String::new(), None),
+                "notContainsBlanks" => ("isNotEmpty".to_string(), String::new(), None),
+                "containsErrors" => ("isError".to_string(), String::new(), None),
+                "notContainsErrors" => ("isNotError".to_string(), String::new(), None),
+                _ => {
+                    unread += 1;
+                    continue;
+                }
             };
             let dxf = styles.dxf(rule.attr_u32("dxfId"));
             let format = dxf.and_then(|dxf| dxf.format.clone());
@@ -1926,8 +1980,9 @@ fn read_conditionals(root: &craftkit_xml::El, styles: &Styles) -> Vec<Conditiona
             for range in &ranges {
                 formats.push(Conditional {
                     range: range.replace('$', ""),
-                    op: op.to_string(),
+                    op: op.clone(),
                     value: value.clone(),
+                    formula: formula.clone(),
                     format: format.clone(),
                     fill: fill.clone(),
                     stop,
@@ -1935,6 +1990,12 @@ fn read_conditionals(root: &craftkit_xml::El, styles: &Styles) -> Vec<Conditiona
                 });
             }
         }
+    }
+    if unread > 0 {
+        warnings.push(format!(
+            "{unread} conditional format(s) of a kind this tree does not have were not read: \
+             a colour scale, a data bar, an icon set, the duplicates, the top ten and more"
+        ));
     }
     formats
 }

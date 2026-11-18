@@ -1519,6 +1519,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/filters.rs",
         section: "§1019",
     },
+    Port {
+        rule: "a workbook's conditional formats are read, and not only the comparisons",
+        from: "gridcraft/crates/xlsx/src/sheet_read/rules.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "craftkit-xlsx::read",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§1020",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
