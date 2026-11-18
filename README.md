@@ -4465,6 +4465,7 @@ so.
 | a **sort may put the columns of a range in order, by a row** | **built.** The orientation of the sort says which way it runs, and a key names the row it sorts by (§1018) | §1018 |
 | a **criterion may name the empty cells and the cells that hold an error** | **built.** The four operations compare with nothing, and their criterion has no value at all (§1019) | §1019 |
 | a **workbook's conditional formats are read, and not only the comparisons** | **built.** The kinds of rule the tree has are read, and the ones it has not are counted and said (§1020) | §1020 |
+| a **conditional format may judge the top of a range** | **built.** The count highest numbers of the range, or the count lowest, and the threshold is the tree's own rule (§1021) | §1021 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56023,7 +56024,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 245 |
+| grid | 246 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -66058,7 +66059,9 @@ A conditional format may ask not for a value but for a **formula**.
   comparison and a formula. The reference's has a colour scale, a
   data bar, an icon set and more, and they are not here — and §1019
   says otherwise: the **blanks** and the **errors** are here as well,
-  as four more operations of the one criterion.
+  as four more operations of the one criterion, and §1021 says
+  otherwise: the **top** of a range is here too. The colour scale, the
+  data bar and the icon set are not.
 - **The tree's formula must be true**: a formula that answers a number
   is not true and does not match, where the reference's may answer a
   number and mean it.
@@ -66260,3 +66263,67 @@ used to read the comparisons and to say nothing about the rest.
   range.
 - **The tree has no writer of workbooks**: the rules it reads are not
   written back.
+
+## 1021. A conditional format may judge the top of a range
+
+A conditional format may be about the range as a whole: the cells whose
+number is among the **highest** of it.
+
+### What was built
+
+- A new command `grid.conditional.top10`: the **top** of a range is the
+  count highest numbers of it, or the count **lowest**, and the cells
+  whose number is at the threshold or above it — or below it — are the
+  cells the rule holds for. The count is a count of the numbers of the
+  range or a **percent** of them, and it is rounded **up**.
+- The **threshold** is the tree's own rule — the count-th highest
+  number — and it is the rule the **filter** of a sheet uses (§1012).
+  Here it is the rule of a range and not of a column.
+- A cell that does not hold a **number** is not one of the top: the
+  numbers of the range are the numbers of the cells that hold one.
+- The numbers of the range are **derived**: they are worked out once
+  for a read and read as often as a cell is read. A rule worked out
+  again for every cell of the range would cost the square of the
+  range.
+- A range may have **one** conditional format, as before: a second one
+  for the same range replaces the first.
+
+### What the port found
+
+- **The reference's conditional format has a rule of the top ten**, and
+  it is a rule of its own with a style of its own. Here it is a rule of
+  its own too — a command of its own — and the **threshold** is the
+  tree's own rule of the top ten, which the filter already had.
+- **The reference's rule of the top ten may be a percent**, and it
+  rounds the percent **up**, and here it does too: the tree's filter
+  (§1012) had the rule and this arc gave the conditional format the
+  same one.
+- **The reference's rule of the top ten counts the rows of the range**,
+  and the tree's counts the numbers of it — a cell that holds no
+  number is not one of them, where a row that holds no number is a row
+  all the same.
+
+### What it cost
+
+- **One new command**: `grid.conditional.top10`, and the grid battery
+  now carries **246** commands.
+- **One rule that was already there**: the tree's threshold of the top
+  ten (§1012), and the tree's refusal of a count that is not a whole
+  number.
+- **Five tests** in the grid battery (`tests/conditional.rs`): the top
+  of a range, the lowest values, the count as a percent, a cell that
+  holds no number, and the two refusals.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's conditional format still has no colour scale, no data
+  bar and no icon set**: the reference's has them, and they are not
+  here.
+- **The tree's rule of the top ten is over a range and the filter's is
+  over a column**, and the numbers of the range are read by the book
+  — a formula and all — where the filter's threshold is read from the
+  values the sheet stores.
+- **The rule of the duplicates and the rule of the above-the-average
+  are not here yet**: they are rules about a range as a whole, and the
+  machinery of this arc is what they need.
