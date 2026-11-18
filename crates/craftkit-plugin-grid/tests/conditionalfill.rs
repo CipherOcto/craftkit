@@ -168,3 +168,82 @@ fn a_rule_that_says_neither_is_refused() {
         .expect_err("the rule is refused");
     assert!(error.to_string().contains("name what the rule says"), "the refusal says so: {error}");
 }
+
+/// A **colour scale** fills the cells of a range: the fill of a cell is
+/// the mix of the two colours, in the proportion its number is between
+/// the lowest and the highest of the range.
+#[test]
+fn a_colour_scale_fills_the_cells_of_a_range() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 0.0);
+    a_number(&mut session, sheet, "A2", 5.0);
+    a_number(&mut session, sheet, "A3", 10.0);
+    session
+        .execute(
+            "grid.conditional.colour.scale",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A3",
+                "colours": ["#000000", "#ffffff"],
+            }),
+        )
+        .expect("the scale is set");
+    assert_eq!(
+        cell(&mut session, sheet, "A1")["fill"].as_str(),
+        Some("#000000"),
+        "the lowest is the low colour"
+    );
+    assert_eq!(
+        cell(&mut session, sheet, "A3")["fill"].as_str(),
+        Some("#ffffff"),
+        "the highest is the high colour"
+    );
+    assert_eq!(cell(&mut session, sheet, "A2")["fill"].as_str(), Some("#808080"), "the middle is the mix");
+}
+
+/// A range whose numbers are all the same has no **span**, and it is
+/// filled with nothing.
+#[test]
+fn a_range_without_a_span_is_filled_with_nothing() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 5.0);
+    a_number(&mut session, sheet, "A2", 5.0);
+    session
+        .execute(
+            "grid.conditional.colour.scale",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "colours": ["#000000", "#ffffff"],
+            }),
+        )
+        .expect("the scale is set");
+    assert!(cell(&mut session, sheet, "A1")["fill"].is_null(), "the cell is not filled");
+}
+
+/// A scale has **two** colours, and the tree refuses any other number
+/// of them.
+#[test]
+fn a_scale_has_two_colours() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    let failure = session
+        .execute(
+            "grid.conditional.colour.scale",
+            &json!({ "sheet": sheet, "range": "A1:A2", "colours": ["#000000"] }),
+        )
+        .expect_err("the scale is refused");
+    let message = failure.to_string();
+    assert!(message.contains("the colours of a colour scale are two"), "the refusal says why: {message}");
+    let failure = session
+        .execute(
+            "grid.conditional.colour.scale",
+            &json!({ "sheet": sheet, "range": "A1:A2", "colours": ["#000000", "purple"] }),
+        )
+        .expect_err("the scale is refused");
+    let message = failure.to_string();
+    assert!(message.contains("is not a colour"), "the refusal says why: {message}");
+}

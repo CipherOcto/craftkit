@@ -817,18 +817,28 @@ fn top10_threshold(cells: &Cells, column: u32, bottom: bool, percent: bool, coun
 /// is rounded **up**. A count that is over the number of the numbers is
 /// the number of them.
 pub fn top10_threshold_of(numbers: &[f64], bottom: bool, percent: bool, count: u32) -> Option<f64> {
-    if numbers.is_empty() {
+    let mut sorted = numbers.to_vec();
+    sorted.sort_by(|one, other| other.partial_cmp(one).unwrap_or(std::cmp::Ordering::Equal));
+    top10_threshold_of_sorted(&sorted, bottom, percent, count)
+}
+
+/// The **threshold** of a top-ten rule over numbers that are **already
+/// in order**, the highest first.
+///
+/// It is the rule of [`top10_threshold_of`], and it is written apart so
+/// that a rule which is worked out for a whole range does not sort the
+/// numbers again for every cell of it.
+pub fn top10_threshold_of_sorted(sorted: &[f64], bottom: bool, percent: bool, count: u32) -> Option<f64> {
+    if sorted.is_empty() {
         return None;
     }
-    let mut numbers = numbers.to_vec();
-    numbers.sort_by(|one, other| {
-        if bottom { one.partial_cmp(other) } else { other.partial_cmp(one) }
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
     let wanted =
-        if percent { (numbers.len() as f64 * count as f64 / 100.0).ceil() as usize } else { count as usize };
-    let wanted = wanted.clamp(1, numbers.len());
-    numbers.get(wanted - 1).copied()
+        if percent { (sorted.len() as f64 * count as f64 / 100.0).ceil() as usize } else { count as usize };
+    let wanted = wanted.clamp(1, sorted.len());
+    // The count-th highest is the wanted-th from the top, and the
+    // count-th lowest is the wanted-th from the bottom.
+    let index = if bottom { sorted.len() - wanted } else { wanted - 1 };
+    sorted.get(index).copied()
 }
 
 impl Criterion {

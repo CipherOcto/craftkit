@@ -39,6 +39,41 @@ pub(crate) fn colour_of(given: &str) -> Option<Option<String>> {
     Some(Some(format!("#{}", hex.to_ascii_lowercase())))
 }
 
+/// The **channels** of a colour: the red, the green and the blue, each
+/// of them from 0 to 255.
+///
+/// A colour that is not `#rrggbb` has no channels.
+pub(crate) fn channels_of(given: &str) -> Option<(u8, u8, u8)> {
+    let text = given.trim();
+    let hex = text.strip_prefix('#')?;
+    if hex.len() != 6 || !hex.chars().all(|character| character.is_ascii_hexdigit()) {
+        return None;
+    }
+    let red = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let green = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let blue = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((red, green, blue))
+}
+
+/// The **mix** of two colours: the colour that lies between them, in
+/// the proportion given.
+///
+/// The proportion is from zero to one, and each channel of the mix is
+/// the channel of the first colour plus that part of the way to the
+/// channel of the second.
+pub(crate) fn mix_of(first: (u8, u8, u8), second: (u8, u8, u8), part: f64) -> String {
+    let channel = |one: u8, other: u8| -> u8 {
+        let value = f64::from(one) + (f64::from(other) - f64::from(one)) * part;
+        value.round().clamp(0.0, 255.0) as u8
+    };
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        channel(first.0, second.0),
+        channel(first.1, second.1),
+        channel(first.2, second.2)
+    )
+}
+
 commands! {
     /// **Colour** the text of a cell.
     ///

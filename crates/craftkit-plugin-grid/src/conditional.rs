@@ -28,10 +28,15 @@
 //! the count highest numbers of it, or the count lowest — is a rule of
 //! its own (`grid.conditional.top10`), and so is the **duplicate** of a
 //! value in it (`grid.conditional.duplicate`) and the **average** of it
-//! (`grid.conditional.average`). Such a rule needs the **numbers** or
-//! the **counts** of the range, and they are worked out **once** for a
-//! read and read as often as a cell is read: a rule worked out again
-//! for every cell of the range would cost the square of the range.
+//! (`grid.conditional.average`). And a rule may be a **colour scale**:
+//! the fill of a cell is the mix of the two colours, in the proportion
+//! its number is between the lowest and the highest of the range
+//! (`grid.conditional.colour.scale`).
+//!
+//! Such a rule needs the **numbers** or the **counts** of the range,
+//! and they are worked out **once** for a read and read as often as a
+//! cell is read: a rule worked out again for every cell of the range
+//! would cost the square of the range.
 //!
 //! # What the port found
 //!
@@ -53,8 +58,9 @@
 //!   (`grid.conditional.top10`), and §1022 says otherwise: the
 //!   **duplicate** is here (`grid.conditional.duplicate`), and §1023
 //!   says otherwise: the **above-the-average** is here
-//!   (`grid.conditional.average`), and the colour scale, the data bar
-//!   and the icon set are not.
+//!   (`grid.conditional.average`), and §1024 says otherwise: the
+//!   **colour scale** is here (`grid.conditional.colour.scale`), and the
+//!   data bar and the icon set are not.
 //! - **The tree's rules are ordered and the first that matches wins.**
 //!   The tree's rules are in a list and it walks them in **priority** —
 //!   the rule that names the lower number is seen first. Here they are
@@ -109,6 +115,16 @@ pub struct Average {
     pub above: bool,
 }
 
+/// The **colour scale** of a range: two colours, the one of the lowest
+/// number of the range and the one of the highest.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColourScale {
+    /// The colour of the **lowest** number of the range.
+    pub low: String,
+    /// The colour of the **highest** number of the range.
+    pub high: String,
+}
+
 /// A **conditional format** of a sheet.
 pub struct Conditional {
     /// The range of cells it is about.
@@ -128,6 +144,11 @@ pub struct Conditional {
     /// has one: the cells whose number is above the average are the
     /// cells that match.
     pub average: Option<Average>,
+    /// The **colour scale** of the range the rule is about, when the
+    /// rule has one: the fill of a cell is the mix of the two colours,
+    /// in the proportion its number is between the lowest and the
+    /// highest of the range.
+    pub colour_scale: Option<ColourScale>,
     /// The **formula** a cell is judged by, when the rule has one: the
     /// cells whose formula is **true** are the cells that match.
     ///
@@ -190,7 +211,20 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             let above = average.get("above").and_then(|above| above.as_bool()).unwrap_or(true);
             Some(Average { above })
         });
-        let criterion = if formula.is_some() || top.is_some() || duplicate.is_some() || average.is_some() {
+        let colour_scale = entry.get("colour_scale").and_then(|scale| {
+            if !scale.is_object() {
+                return None;
+            }
+            let low = scale.get("low").and_then(|low| low.as_str())?.to_string();
+            let high = scale.get("high").and_then(|high| high.as_str())?.to_string();
+            Some(ColourScale { low, high })
+        });
+        let criterion = if formula.is_some()
+            || top.is_some()
+            || duplicate.is_some()
+            || average.is_some()
+            || colour_scale.is_some()
+        {
             None
         } else {
             Some(Criterion { op, value })
@@ -208,6 +242,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             top,
             duplicate,
             average,
+            colour_scale,
             formula,
             format,
             fill,
@@ -273,11 +308,18 @@ impl Facts {
     pub fn of(book: &crate::formula::Book, node: &craftkit_sdk::Node) -> Facts {
         let mut facts = Facts::default();
         for conditional in conditionals_of(node) {
-            if conditional.top.is_none() && conditional.duplicate.is_none() && conditional.average.is_none() {
+            if conditional.top.is_none()
+                && conditional.duplicate.is_none()
+                && conditional.average.is_none()
+                && conditional.colour_scale.is_none()
+            {
                 continue;
             }
             let Some(area) = area_of(&conditional.range) else { continue };
-            if conditional.top.is_some() || conditional.average.is_some() {
+            if conditional.top.is_some()
+                || conditional.average.is_some()
+                || conditional.colour_scale.is_some()
+            {
                 let numbers = numbers_of(book, &node.name, &area, node);
                 facts.numbers.push((conditional.range.clone(), numbers));
             }
@@ -314,6 +356,9 @@ fn numbers_of(book: &crate::formula::Book, sheet: &str, area: &Area, node: &craf
         let Some(number) = value.as_number() else { continue };
         numbers.push(number);
     }
+    // The numbers are kept **in order**, the highest first: a rule that
+    // is about the range reads the order and does not sort them again.
+    numbers.sort_by(|one, other| other.partial_cmp(one).unwrap_or(std::cmp::Ordering::Equal));
     numbers
 }
 
@@ -374,6 +419,35 @@ fn duplicate_matches(
     if duplicate.unique { count == 1 } else { count > 1 }
 }
 
+/// The **fill** a cell of a colour scale is written with: the mix of
+/// the two colours, in the proportion its number is between the lowest
+/// and the highest of the range.
+///
+/// A cell that does not hold a number has no fill, and a range whose
+/// numbers are all the same has no **span** and writes nothing: a
+/// proportion between nothing and nothing is not a number.
+fn scale_fill(
+    facts: &Facts,
+    range: &str,
+    scale: &ColourScale,
+    value: &crate::formula::Value,
+) -> Option<String> {
+    let numbers = facts.numbers_of(range)?;
+    let highest = numbers.first().copied()?;
+    let lowest = numbers.last().copied()?;
+    if highest == lowest {
+        return None;
+    }
+    let number = value.as_number()?;
+    if number < lowest || number > highest {
+        return None;
+    }
+    let part = (number - lowest) / (highest - lowest);
+    let first = crate::colours::channels_of(&scale.low)?;
+    let second = crate::colours::channels_of(&scale.high)?;
+    Some(crate::colours::mix_of(first, second, part))
+}
+
 /// Whether a cell's **number** is above the average of the range — or,
 /// when the rule is about the numbers **below** it, below it.
 fn average_matches(facts: &Facts, range: &str, average: &Average, value: &crate::formula::Value) -> bool {
@@ -391,7 +465,8 @@ fn average_matches(facts: &Facts, range: &str, average: &Average, value: &crate:
 /// match.
 fn top_matches(facts: &Facts, range: &str, top: &Top, value: &crate::formula::Value) -> bool {
     let Some(numbers) = facts.numbers_of(range) else { return false };
-    let Some(threshold) = crate::formula::top10_threshold_of(numbers, top.bottom, top.percent, top.count)
+    let Some(threshold) =
+        crate::formula::top10_threshold_of_sorted(numbers, top.bottom, top.percent, top.count)
     else {
         return false;
     };
@@ -431,6 +506,20 @@ pub fn looks_for(
     for conditional in ordered_conditionals(node) {
         let Some(area) = area_of(&conditional.range) else { continue };
         if !area.covers(cell) {
+            continue;
+        }
+        // A rule of a **colour scale** writes the fill of every cell of
+        // the range: the colour is **derived** from the cell's number,
+        // and it is not a match and not a not-match.
+        if let Some(scale) = &conditional.colour_scale {
+            if let Some(fill) = scale_fill(facts, &conditional.range, scale, value) {
+                if looks.fill.is_none() {
+                    looks.fill = Some(fill);
+                }
+                if conditional.stop.unwrap_or(false) {
+                    break;
+                }
+            }
             continue;
         }
         // A rule has a **criterion**, a **formula** or a **top**, and
@@ -565,6 +654,10 @@ fn entry_of(conditional: &Conditional) -> Json {
         })),
         "average": conditional.average.as_ref().map(|average| json!({
             "above": average.above,
+        })),
+        "colour_scale": conditional.colour_scale.as_ref().map(|scale| json!({
+            "low": scale.low,
+            "high": scale.high,
         })),
         "format": conditional.format,
         "fill": conditional.fill,
@@ -1209,6 +1302,136 @@ commands! {
                     "above": above,
                     "format": format,
                     "fill": fill,
+                    "stop": stop,
+                }),
+            ))
+        }
+    }
+
+    /// Put a **conditional format** on a range of cells, and fill the
+    /// cells by a **colour scale**.
+    ///
+    /// The scale has **two** colours: the one of the lowest number of
+    /// the range and the one of the highest, and the fill of a cell is
+    /// the **mix** of the two, in the proportion its number is between
+    /// them.
+    ///
+    /// A cell that does not hold a **number** has no fill, and a range
+    /// whose numbers are all the same has no span and is filled with
+    /// nothing: a proportion between nothing and nothing is not a
+    /// number.
+    grid.conditional.colour.scale {
+        area: "grid",
+        layer: "grid",
+        icon: "brush",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is on.
+            sheet: NodeRef,
+            /// The range it is about: `A1:A10`.
+            range: Text,
+            /// The **colours** of the scale: the one of the lowest number
+            /// of the range and the one of the highest, as `#rrggbb`.
+            colours: craftkit_sdk::serde_json::Value,
+            /// The tree's **stop if true**: the walk ends at this rule when it
+            /// matched, and the rules after it are not tried.
+            stop: Option<Bool>,
+            /// The **priority** of the rule: the lower the number, the earlier
+            /// the rule is tried.
+            priority: Option<Number>,
+        },
+        run: {
+            let id = "grid.conditional.colour.scale".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            // The **colours**: two of them, and the tree refuses any
+            // other number of them.
+            let Some(colours) = self.colours.as_array() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the colours of a colour scale are a list of two".to_string(),
+                });
+            };
+            if colours.len() != 2 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the colours of a colour scale are two, and this scale has {}",
+                        colours.len()
+                    ),
+                });
+            }
+            let mut parsed: Vec<String> = Vec::new();
+            for colour in colours {
+                let Some(given) = colour.as_str() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the colours of a colour scale are colours".to_string(),
+                    });
+                };
+                let Some(colour) = crate::colours::colour_of(given) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("`{given}` is not a colour: a colour is `#rrggbb`"),
+                    });
+                };
+                let Some(colour) = colour else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a colour scale has two colours, and `none` is not one".to_string(),
+                    });
+                };
+                parsed.push(colour);
+            }
+            let low = parsed[0].clone();
+            let high = parsed[1].clone();
+            let stop = self.stop.map(|stop| stop.0);
+            let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+            let priority = priority_of(self.priority.as_ref(), &id)?;
+            let mut list = conditionals_of(node)
+                .into_iter()
+                .map(|conditional| entry_of(&conditional))
+                .collect::<Vec<_>>();
+            // A range may have **one** conditional format: a second one for
+            // the same range replaces the first.
+            list.retain(|entry| entry["range"].as_str() != Some(range.as_str()));
+            list.push(json!({
+                "range": range,
+                "colour_scale": {
+                    "low": low,
+                    "high": high,
+                },
+                "stop": stop,
+                "priority": priority,
+            }));
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["conditionals"] = json!(list);
+            }
+            Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
+                json!({
+                    "sheet": sheet,
+                    "range": range,
+                    "low": low,
+                    "high": high,
                     "stop": stop,
                 }),
             ))
