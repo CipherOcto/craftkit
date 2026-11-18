@@ -4474,6 +4474,7 @@ so.
 | a **conditional format may draw a bar behind the cells of a range** | **built.** The bar is as long as the cell's number is between the lowest and the highest of the range (§1027) | §1027 |
 | a **workbook's rules of the top ten, of the average, of the duplicates and of the bar are read** | **built.** The kinds of rule the tree has are read, and the ones it has not are counted (§1028) | §1028 |
 | a **conditional format may put an icon in the cells of a range** | **built.** The three icons stand for the percentiles of the numbers of the range, and they are drawn in code (§1029) | §1029 |
+| a **workbook's icon sets are read into the document** | **built.** The two percents are read, and the cells of the range carry an icon (§1030) | §1030 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -66635,7 +66636,10 @@ A workbook may hold a **colour scale**, and the reader reads it.
   is not read**: the tree's scale has one middle and it is the median.
 - **The tree's reader still does not read the data bar, the icon set,
   the duplicates, the top ten, the above-the-average or the time
-  period** of a file.
+  period** of a file — and §1028 says otherwise for the bar, the
+  duplicates, the top ten and the above-the-average, and §1030 says
+  otherwise for the icon set: the rule of the time period is the one
+  that is left.
 - **The tree has no writer of workbooks**: the scales it reads are not
   written back.
 
@@ -66693,7 +66697,9 @@ A conditional format may draw a **bar** behind the cells of a range.
   reference's starts at zero.
 - **The tree's conditional format still has no icon set**: the
   reference's has it, and it is not here — an icon is a thing the
-  front end draws, and the tree has no icons in a cell.
+  front end draws, and the tree has no icons in a cell — and §1029
+  says otherwise: the tree has an icon set, and the three icons of it
+  are drawn in code.
 - **The rule of the time period is not here**: it is a rule about the
   dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
 
@@ -66747,8 +66753,9 @@ reader reads the ones the tree has.
 
 ### What it does not settle
 
-- **The tree's reader still does not read the icon set** of a file,
-  and the tree has no icon in a cell to read it into.
+- **The tree's reader still does not read the icon set** of a file —
+  and §1030 says otherwise: the thresholds of a set of three are read,
+  and the tree has an icon in a cell to read them into (§1029).
 - **The tree's reader still does not read the rule of the time period**
   of a file: it is about the dates of a range, and the tree refuses
   `TODAY` and `NOW` (§347).
@@ -66806,6 +66813,64 @@ A conditional format may put an **icon** in the cells of a range.
 
 - **The tree has one icon set and the reference's has many**: the
   tree's icons are the tree's own, and a file's set of arrows is not
-  read (§1030).
+  read — and §1030 says otherwise for the set of three: its
+  thresholds are read, and its pictures are not.
 - **The rule of the time period is not here**: it is a rule about the
   dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
+
+## 1030. A workbook's icon sets are read into the document
+
+A workbook may hold an **icon set**, and the **two percents** that tell
+which of the three icons a cell has are read into the document.
+
+### What was built
+
+- The **reader** reads a file's **icon set**: the set of three icons and
+  the two stops that tell which one a cell has. The stops of a file are
+  **percents** of the numbers of the range, and they are the tree's own
+  percentiles — the sixty-seventh and the thirty-third for the three
+  traffic lights.
+- An icon set the tree does not have is **counted and said**: one that
+  is **reversed**, one that **hides the value** of the cell, one of
+  another **count** of icons, and one whose stops are not percents.
+- The **import** maps the set into the document, and the cells of the
+  range carry an icon: the cell read says which icon the cell has.
+- The **icons** are the tree's own (§1029): a file's pictures are not
+  read, and the three the tree draws in code stand for the file's
+  three.
+
+### What the port found
+
+- **The reference's reader reads every icon set**: the name of the set,
+  its thresholds, whether it is reversed and whether the value is shown.
+- **The reference's icon sets are many** — the traffic lights, the
+  arrows, the flags and more — and each of them is a set of pictures.
+  The tree has **one** set of its own, and it reads the thresholds of a
+  set of three whose stops are percents: the thresholds are the same
+  numbers the tree uses itself.
+- **A file's percent is the tree's percentile**: the number that so many
+  percent of them are below, and the part of the way to the next one
+  when the percent falls between two.
+
+### What it cost
+
+- **No new command**: an icon set is a rule of the tree's conditional
+  format, and the battery still carries **251** commands.
+- **One new struct** in the reader (`IconSet`) and one field on the
+  rule.
+- **Three tests**: two in the reader
+  (`crates/craftkit-xlsx/tests/workbook.rs`) — the icon set is read, and
+  the ones the tree does not have are counted — and one in the grid
+  battery (`tests/xlsximport.rs`): the set is in the document and the
+  cells of the range carry an icon.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The pictures of a file's icons are not read**: the tree draws its
+  own three, and a file's set of arrows or flags is counted and not
+  read.
+- **The rule of the time period is not here**: it is a rule about the
+  dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
+- **The tree has no writer of workbooks**: the icon sets it reads are
+  not written back.
