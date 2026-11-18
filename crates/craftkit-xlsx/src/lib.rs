@@ -52,9 +52,9 @@
 //!   a file that holds no theme has no themed colour to read.
 //! - It reads the **conditional formats** it has: a comparison, a
 //!   formula, the words of a cell, the empty cells, the errors, the
-//!   colour scale, the top ten, the average, the duplicates and the
-//!   data bar. The kinds it does not have — the icon set, the rule of
-//!   the time period — are counted, and it says how many it left out.
+//!   colour scale, the top ten, the average, the duplicates, the data
+//!   bar and the icon set. The kind it does not have — the rule of the
+//!   time period — is counted, and it says how many it left out.
 
 #![deny(
     clippy::unwrap_used,
@@ -912,6 +912,20 @@ pub struct DataBar {
     pub colour: String,
 }
 
+/// The **icon set** of a range: the three icons of it, and the two
+/// percents that tell which one a cell has.
+///
+/// The percents are the **percentiles** of the numbers of the range: the
+/// high icon for the numbers at or above the high percentile, the middle
+/// one for the numbers at or above the low percentile.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IconSet {
+    /// The percent of the numbers that carry the high icon.
+    pub high: f64,
+    /// The percent of the numbers that carry the middle icon.
+    pub low: f64,
+}
+
 /// A **colour scale** of a sheet: the colours of the scale, in order.
 ///
 /// The colours are two — of the lowest number of the range and of the
@@ -927,9 +941,10 @@ pub struct ColourScale {
 ///
 /// The rule is a **comparison** — the operation, the value and the
 /// **look** of the cells that match — or a **formula** the cells are
-/// judged by. The kinds of rule this tree does not have — a colour
-/// scale, a data bar, an icon set, the duplicates, the top ten — are
-/// not here, and the reader says how many it left out.
+/// judged by, or a kind of rule that is about the range as a whole: the
+/// top ten, the above-the-average, the duplicates, the colour scale, the
+/// data bar and the icon set. The kinds of rule this tree does not have
+/// are not here, and the reader says how many it left out.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Conditional {
     /// The range of cells the rule is about.
@@ -964,6 +979,9 @@ pub struct Conditional {
     /// The **data bar** of the range the rule is about, when the rule
     /// has one.
     pub data_bar: Option<DataBar>,
+    /// The **icon set** of the range the rule is about, when the rule
+    /// has one.
+    pub icon_set: Option<IconSet>,
     /// The **number format** the matching cells are written with, when
     /// the rule names one.
     pub format: Option<String>,
@@ -1976,10 +1994,12 @@ fn read_view(root: &craftkit_xml::El) -> Option<SheetView> {
 /// here, with the same criterion and the same look.
 ///
 /// The kinds of rule this tree has are read: a **comparison**, a
-/// **formula**, the four that look for the **words** of a cell, and the
-/// four that name a cell by **what it holds**. The kinds it does not
-/// have — a colour scale, a data bar, an icon set, the duplicates, the
-/// top ten — are counted, and the reader says how many it left out.
+/// **formula**, the four that look for the **words** of a cell, the
+/// four that name a cell by **what it holds**, and the kinds that are
+/// about the range as a whole — the top ten, the above-the-average, the
+/// duplicates, the colour scale, the data bar and the icon set. The
+/// kind it does not have — the rule of the time period — is counted,
+/// and the reader says how many it left out.
 fn read_conditionals(
     root: &craftkit_xml::El,
     styles: &Styles,
@@ -2000,6 +2020,20 @@ fn read_conditionals(
         }
         for rule in block.kids("cfRule") {
             let kind = rule.attr("type").unwrap_or("cellIs");
+            // The **icon set** of the rule: the tree has three icons,
+            // and the two percents that tell which one a cell has. An
+            // icon set that is not one the tree has is counted, and
+            // not read.
+            let mut icon_set: Option<IconSet> = None;
+            if kind == "iconSet" {
+                match read_icon_set(rule) {
+                    Some(set) => icon_set = Some(set),
+                    None => {
+                        unread += 1;
+                        continue;
+                    }
+                }
+            }
             // The **criterion** of the rule: the operation and the
             // value, or the formula the cells are judged by, or the
             // colours of a scale.
@@ -2227,6 +2261,7 @@ fn read_conditionals(
                         None,
                     )
                 }
+                "iconSet" => (String::new(), String::new(), None, None, None, None, None, None),
                 _ => {
                     unread += 1;
                     continue;
@@ -2248,6 +2283,7 @@ fn read_conditionals(
                     average: average.clone(),
                     duplicate: duplicate.clone(),
                     data_bar: data_bar.clone(),
+                    icon_set: icon_set.clone(),
                     format: format.clone(),
                     fill: fill.clone(),
                     stop,
@@ -2259,7 +2295,7 @@ fn read_conditionals(
     if unread > 0 {
         warnings.push(format!(
             "{unread} conditional format(s) of a kind this tree does not have were not read: \
-             a data bar, an icon set, the duplicates, the top ten and more"
+             a rule of the time period and more"
         ));
     }
     if unread_scales > 0 {
@@ -2269,6 +2305,48 @@ fn read_conditionals(
         ));
     }
     formats
+}
+
+/// Read the **icon set** of a rule, when the tree has it.
+///
+/// The tree's icon set has **three** icons, and the two stops that tell
+/// which one a cell has are **percents** of the numbers of the range:
+/// the high icon for the numbers at or above the high percentile, the
+/// middle one for the numbers at or above the low percentile.
+///
+/// A set that is **reversed**, or that hides the value of the cell, or
+/// that has another count of icons, or whose stops are not percents, is
+/// one this tree does not have.
+fn read_icon_set(rule: &craftkit_xml::El) -> Option<IconSet> {
+    let set = rule.child("iconSet")?;
+    if set.attr("reverse") == Some("1") || set.attr("showValue") == Some("0") {
+        return None;
+    }
+    if let Some(name) = set.attr("iconSet")
+        && !name.starts_with('3')
+    {
+        return None;
+    }
+    let stops: Vec<Option<f64>> = set
+        .kids("cfvo")
+        .map(|stop| {
+            if stop.attr("type") != Some("percent") {
+                return None;
+            }
+            stop.attr("val").and_then(|val| val.trim().parse::<f64>().ok())
+        })
+        .collect();
+    // Three stops: the bottom of the range, the middle icon and the
+    // high one.
+    if stops.len() != 3 || stops[0] != Some(0.0) {
+        return None;
+    }
+    let low = stops[1]?;
+    let high = stops[2]?;
+    if !(0.0..=100.0).contains(&low) || !(0.0..=100.0).contains(&high) || high <= low {
+        return None;
+    }
+    Some(IconSet { high, low })
 }
 
 /// The **operation** a rule compares with, as this tree's own.

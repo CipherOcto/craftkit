@@ -891,7 +891,8 @@ commands! {
                         || rule.top.is_some()
                         || rule.average.is_some()
                         || rule.duplicate.is_some()
-                        || rule.data_bar.is_some();
+                        || rule.data_bar.is_some()
+                        || rule.icon_set.is_some();
                     let criterion = match (&rule.formula, about_the_range) {
                         (Some(formula), _) => {
                             // A formula that does not parse is not a
@@ -954,6 +955,12 @@ commands! {
                     }
                     if let Some(bar) = &rule.data_bar {
                         entry.insert("data_bar".to_string(), json!({ "colour": bar.colour.clone() }));
+                    }
+                    if let Some(icons) = &rule.icon_set {
+                        entry.insert(
+                            "icon_set".to_string(),
+                            json!({ "high": icons.high, "low": icons.low }),
+                        );
                     }
                     if let Some(format) = format {
                         entry.insert("format".to_string(), json!(format));

@@ -54,7 +54,8 @@
 //!   cell's own thing (the tree's format is a style too, and this
 //!   tree's format is the cell's own), and the fill is a cell's own
 //!   thing too (§821). The tree's font colour and its icon set are
-//!   still not here.
+//!   still not here — and §1029 says otherwise for the icon set: it is
+//!   here (`grid.conditional.icon.set`), and the font colour is not.
 //! - **The tree's criteria are many and this one's is one.** The
 //!   tree's rule may be a comparison, a colour scale, a data bar, an
 //!   icon set or an expression. Here a rule is a **comparison** — the

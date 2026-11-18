@@ -2212,7 +2212,7 @@ fn the_kinds_of_conditional_format_are_read() {
         ),
         (
             "xl/worksheets/sheet1.xml",
-            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="beginsWith" text="b" priority="2"><formula>LEFT(B1,1)="b"</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="containsBlanks" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="notContainsErrors" priority="4"/></conditionalFormatting><conditionalFormatting sqref="E1:E5"><cfRule type="expression" priority="5"><formula>E1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F5"><cfRule type="iconSet" priority="6"><iconSet iconSet="3TrafficLights1"><cfvo type="percent" val="67"/><cfvo type="percent" val="33"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="beginsWith" text="b" priority="2"><formula>LEFT(B1,1)="b"</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="containsBlanks" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="notContainsErrors" priority="4"/></conditionalFormatting><conditionalFormatting sqref="E1:E5"><cfRule type="expression" priority="5"><formula>E1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F5"><cfRule type="timePeriod" priority="6" timePeriod="today"/></conditionalFormatting></worksheet>"#,
         ),
     ]);
     let workbook = read(&bytes).expect("the workbook is read");
@@ -2377,6 +2377,70 @@ fn an_above_the_average_with_a_standard_deviation_is_counted() {
     let said = workbook.warnings.join(" ");
     assert!(
         said.contains("1 conditional format(s) of a kind this tree does not have"),
+        "it says how many: {said}"
+    );
+}
+
+/// A workbook's **icon set** is read: the two percents that tell which
+/// of the three icons a cell has.
+#[test]
+fn an_icon_set_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="iconSet" priority="1"><iconSet iconSet="3TrafficLights1"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let rules = &workbook.sheets[0].conditionals;
+    assert_eq!(rules.len(), 1, "the icon set is read");
+    let icons = rules[0].icon_set.as_ref().expect("the rule is an icon set");
+    assert_eq!(icons.high, 67.0, "the high icon is the 67th percentile");
+    assert_eq!(icons.low, 33.0, "and the middle icon is the 33rd");
+    assert!(workbook.warnings.is_empty(), "and nothing is left out: {:?}", workbook.warnings);
+}
+
+/// An icon set that the tree does not have — one that is **reversed**,
+/// and one of **four** icons — is **counted**.
+#[test]
+fn an_icon_set_that_the_tree_cannot_read_is_counted() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="iconSet" priority="1"><iconSet iconSet="3TrafficLights1" reverse="1"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="iconSet" priority="2"><iconSet iconSet="4Rating"><cfvo type="percent" val="0"/><cfvo type="percent" val="25"/><cfvo type="percent" val="50"/><cfvo type="percent" val="75"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.sheets[0].conditionals.is_empty(), "neither icon set is read");
+    let said = workbook.warnings.join(" ");
+    assert!(
+        said.contains("2 conditional format(s) of a kind this tree does not have"),
         "it says how many: {said}"
     );
 }

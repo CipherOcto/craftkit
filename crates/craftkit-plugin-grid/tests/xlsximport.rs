@@ -2116,7 +2116,7 @@ fn the_kinds_of_conditional_format_are_imported() {
         ),
         (
             "xl/worksheets/sheet1.xml",
-            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>ann</t></is></c></row></sheetData><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="containsBlanks" priority="2"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="expression" priority="3"><formula>C1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="iconSet" priority="4"><iconSet iconSet="3TrafficLights1"><cfvo type="percent" val="67"/><cfvo type="percent" val="33"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>ann</t></is></c></row></sheetData><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="containsBlanks" priority="2"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="expression" priority="3"><formula>C1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="timePeriod" priority="4" timePeriod="today"/></conditionalFormatting></worksheet>"#,
         ),
     ]);
     let path = a_file(bytes);
@@ -2236,4 +2236,47 @@ fn the_kinds_of_rule_about_a_range_are_imported() {
     assert_eq!(rules[1]["average"]["above"].as_bool(), Some(true), "and the average");
     assert_eq!(rules[2]["duplicate"]["unique"].as_bool(), Some(false), "and the duplicates");
     assert_eq!(rules[3]["data_bar"]["colour"].as_str(), Some("#638ec6"), "and the bar");
+}
+
+/// A workbook's **icon set** is imported: the two percents are in the
+/// document, and the cells of the range carry an icon.
+#[test]
+fn an_icon_set_of_a_workbook_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="A2"><v>5</v></c><c r="A3"><v>9</v></c></row></sheetData><conditionalFormatting sqref="A1:A3"><cfRule type="iconSet" priority="1"><iconSet iconSet="3TrafficLights1"><cfvo type="percent" val="0"/><cfvo type="percent" val="33"/><cfvo type="percent" val="67"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["conditionals"].as_u64(), Some(1), "the icon set is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let rules = &node.data["conditionals"];
+    assert_eq!(rules[0]["icon_set"]["high"].as_f64(), Some(67.0), "the high percent is in the document");
+    assert_eq!(rules[0]["icon_set"]["low"].as_f64(), Some(33.0), "and the low one");
+    // The **icons**: the cell that holds the highest number carries the
+    // high icon, and the lowest carries the low one.
+    let read = |session: &mut Session, cell: &str| {
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": cell })).expect("the cell is read")
+    };
+    assert_eq!(read(&mut session, "A3").data["icon"].as_u64(), Some(2), "the highest has the high icon");
+    assert_eq!(read(&mut session, "A1").data["icon"].as_u64(), Some(0), "and the lowest the low one");
 }
