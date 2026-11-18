@@ -971,6 +971,21 @@ commands! {
                     if let Some(colour) = &rule.colour {
                         entry.insert("colour".to_string(), json!(colour));
                     }
+                    // The **borders** the rule draws: the lines on the
+                    // edges of the cells.
+                    if !rule.borders.edges.is_empty() {
+                        let mut borders = craftkit_sdk::serde_json::Map::new();
+                        for border in &rule.borders.edges {
+                            let mut line = craftkit_sdk::serde_json::Map::new();
+                            line.insert("style".to_string(), json!(border.style));
+                            line.insert(
+                                "colour".to_string(),
+                                json!(border.colour.clone().unwrap_or_else(|| "#000000".to_string())),
+                            );
+                            borders.insert(border.edge.clone(), Json::Object(line));
+                        }
+                        entry.insert("border".to_string(), Json::Object(borders));
+                    }
                     if let Some(stop) = rule.stop {
                         entry.insert("stop".to_string(), json!(stop));
                     }

@@ -2556,7 +2556,7 @@ fn the_colour_of_the_text_of_a_rule_is_read() {
         ),
         (
             "xl/styles.xml",
-            r##"<styleSheet><dxfs count="1"><dxf><font><color rgb="FF9C0006"/></font><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>"##,
+            r##"<styleSheet><dxfs count="1"><dxf><font><color rgb="FF9C0006"/></font><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill><border><top style="thin"><color rgb="FF00B050"/></top></border></dxf></dxfs></styleSheet>"##,
         ),
         (
             "xl/worksheets/sheet1.xml",
@@ -2568,4 +2568,9 @@ fn the_colour_of_the_text_of_a_rule_is_read() {
     assert_eq!(rules.len(), 1, "the rule is read");
     assert_eq!(rules[0].colour.as_deref(), Some("#9c0006"), "the colour of the text is read");
     assert_eq!(rules[0].fill.as_deref(), Some("#ffc7ce"), "and the fill behind the cells");
+    assert_eq!(rules[0].borders.edges.len(), 1, "and the border of the cells is read");
+    let border = &rules[0].borders.edges[0];
+    assert_eq!(border.edge, "top", "the edge the line is on");
+    assert_eq!(border.style, "thin", "the style of the line");
+    assert_eq!(border.colour.as_deref(), Some("#00b050"), "and the colour of it");
 }
