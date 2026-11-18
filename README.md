@@ -4471,6 +4471,7 @@ so.
 | a **conditional format may fill the cells of a range by a colour scale** | **built.** The fill of a cell is the mix of the two colours, and it is derived (§1024) | §1024 |
 | a **colour scale may have three colours** | **built.** The middle colour stands for the median of the numbers, and the fill is the mix of the two that hold the cell (§1025) | §1025 |
 | a **workbook's colour scales are read into the document** | **built.** The colours of the scale are read, and the stops the tree has are the ones it reads (§1026) | §1026 |
+| a **conditional format may draw a bar behind the cells of a range** | **built.** The bar is as long as the cell's number is between the lowest and the highest of the range (§1027) | §1027 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56029,7 +56030,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 249 |
+| grid | 250 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -66635,3 +66636,61 @@ A workbook may hold a **colour scale**, and the reader reads it.
   period** of a file.
 - **The tree has no writer of workbooks**: the scales it reads are not
   written back.
+
+## 1027. A conditional format may draw a bar behind the cells of a range
+
+A conditional format may draw a **bar** behind the cells of a range.
+
+### What was built
+
+- A new command `grid.conditional.data.bar`: the bar is as long as the
+  cell's number is between the **lowest** and the **highest** of the
+  range — the cell with the lowest number has no bar, and the cell
+  with the highest has one that fills the cell.
+- The **part** of the cell the bar fills is **derived**, and the cell
+  read says what it is: the front end draws the bar, as it draws the
+  fill.
+- The **PDF** of a sheet draws the bar: from the left of the cell, and
+  as long as the part the rule says.
+- A cell that does not hold a **number** has no bar, and a range whose
+  numbers are all the same has no **span** and no bars — the same
+  rule the colour scale has (§1024).
+- A bar has a **colour**, and the tree refuses one that is not a
+  colour.
+
+### What the port found
+
+- **The reference's conditional format has a data bar**, and the
+  **part** of the cell the bar fills is the tree's: the proportion of
+  the way the number is between the lowest and the highest, and the
+  tree's bar is drawn from the left of the cell, as the reference's
+  is.
+- **The reference's bar starts at zero** when the lowest number of the
+  range is above zero: the bar is the proportion of the way the number
+  is between **zero** and the highest. Here the bar starts at the
+  **lowest number of the range**, so the lowest cell has no bar and
+  the highest fills the cell.
+- **The reference's bar may be a gradient**, and it may say whether
+  the **value** of the cell is shown beside it. The tree's bar is one
+  colour, and the value of the cell is where it always is.
+
+### What it cost
+
+- **One new command**: `grid.conditional.data.bar`, and the grid
+  battery now carries **250** commands.
+- **One rule that was already there**: the **facts** of the ranges a
+  rule is about (§1021) and the numbers of them in order.
+- **Three tests** in the grid battery (`tests/conditionalfill.rs`): the
+  bar of the lowest, the middle and the highest, the cell that holds no
+  number, and the colour that is not one.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's bar starts at the lowest number of the range** and the
+  reference's starts at zero.
+- **The tree's conditional format still has no icon set**: the
+  reference's has it, and it is not here — an icon is a thing the
+  front end draws, and the tree has no icons in a cell.
+- **The rule of the time period is not here**: it is a rule about the
+  dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
