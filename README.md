@@ -4478,6 +4478,7 @@ so.
 | a **workbook's pictures are read** | **built.** The cell, the name, the alt text and the bytes are read, and the picture in no cell is counted (§1031) | §1031 |
 | a **workbook's pictures are imported into the document** | **built.** The picture is in the cell, and the bytes that came with it are in the document (§1032) | §1032 |
 | a **conditional format may colour the text of the cells it matches** | **built.** The rule carries the colour, the cell read says it and the page writes the text in it (§1033) | §1033 |
+| a **workbook's rules carry the colour of the text** | **built.** The font of the differential format is read, and the colour is in the rule of the document (§1034) | §1034 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67042,3 +67043,46 @@ cells it matches is written in.
   tree gives.
 - **The tree's rule is not a style**: the reference's rule is a style
   shared between cells, and the tree's rule is a look of its own.
+
+## 1034. A workbook's rules carry the colour of the text
+
+A workbook's rule may say **what colour the text** of the cells it
+matches is written in, and the reader reads it.
+
+### What was built
+
+- The **reader** reads the **font** of a differential format, and the
+  colour in it: the colour the text of the matching cells is written in,
+  as `#rrggbb`. A colour of the theme is read against the theme the file
+  holds, as every colour of a file is.
+- The **import** maps the colour into the rule of the document, beside
+  the fill and the format, and the cells of the range are written in it.
+
+### What the port found
+
+- **The reference's differential format holds a whole style**: a number
+  format, a fill, a font and a border. The tree reads the format, the
+  fill and now the colour of the text — and the **border** of a rule is
+  still not read.
+- **The reference's rule draws a border around the cells it matches**,
+  and the tree's rule does not: the tree's rule is a look of the cell,
+  and a border is a thing around it.
+
+### What it cost
+
+- **No new command**: the colour is part of the look of a rule, and the
+  rule already carries it (§1033).
+- **One field** on the differential format of the reader, and one on the
+  rule.
+- **One test** in the reader (`crates/craftkit-xlsx/tests/workbook.rs`)
+  and one assertion in the import's test.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The border of a rule is not read**: a file's rule may draw a border
+  around the cells it matches, and the tree counts nothing here — the
+  border is simply not there.
+- **The tree's colours are `#rrggbb`**: a colour of the theme is read
+  and resolved by the reader, and a rule that names one keeps the
+  colour, not the name.
