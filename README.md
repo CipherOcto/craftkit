@@ -4467,6 +4467,7 @@ so.
 | a **workbook's conditional formats are read, and not only the comparisons** | **built.** The kinds of rule the tree has are read, and the ones it has not are counted and said (§1020) | §1020 |
 | a **conditional format may judge the top of a range** | **built.** The count highest numbers of the range, or the count lowest, and the threshold is the tree's own rule (§1021) | §1021 |
 | a **conditional format may judge the values repeated in a range** | **built.** The values held more than once, or held once and only once, and the counts are derived (§1022) | §1022 |
+| a **conditional format may judge the numbers above the average of a range** | **built.** The average of the numbers of the range, and the threshold is the tree's own rule (§1023) | §1023 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56025,7 +56026,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 247 |
+| grid | 248 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -66392,3 +66393,61 @@ repeated in the range.
   and not over the rows of it**: a row of a sheet may hold a value that
   another row holds, and the tree's rule does not reach across the
   rows of a sheet.
+
+## 1023. A conditional format may judge the numbers above the average of a range
+
+A conditional format may judge a cell by whether its number is **above**
+the average of the range.
+
+### What was built
+
+- A new command `grid.conditional.average`: the **average** is the
+  average of the numbers of the range, and the cells whose number is
+  **above** it are the cells the rule holds for — and the cells whose
+  number is below it are the cells it holds for, when the rule is about
+  the numbers below it.
+- The **average** is the tree's own rule — the average of the numbers
+  of a column — and it is the rule the **filter** of a sheet uses
+  (§1013). Here it is the rule of a range and not of a column.
+- A cell that does not hold a **number** is not one of them: the
+  numbers of the range are the numbers of the cells that hold one.
+- The numbers of the range are **derived**: they are worked out once
+  for a read and read as often as a cell is read, as the counts of the
+  duplicates are (§1022).
+
+### What the port found
+
+- **The reference's conditional format has a rule of the
+  above-the-average**, and it is a rule of its own with a style of its
+  own. Here it is a rule of its own too — a command of its own — and
+  the **average** is the tree's own rule of the average, which the
+  filter already had.
+- **The reference's rule of the above-the-average has a standard
+  deviation**, and the threshold is the average plus so many of them.
+  The tree's rule has no standard deviation: the threshold is the
+  average and nothing else.
+- **The reference's rule may count the numbers that are equal to the
+  average** as well; the tree's rule is **above** the average, and the
+  numbers below it when the rule says so.
+
+### What it cost
+
+- **One new command**: `grid.conditional.average`, and the grid battery
+  now carries **248** commands.
+- **One rule that was already there**: the **average** of a column
+  (§1013), and the **facts** of the ranges a rule is about (§1021).
+- **Three tests** in the grid battery (`tests/conditional.rs`): the
+  numbers above the average, the numbers below it, and the cell that
+  holds no number.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's conditional format still has no colour scale, no data
+  bar and no icon set**: the reference's has them, and they are not
+  here.
+- **The tree's rule of the above-the-average has no standard
+  deviation**: the reference's has one, and the tree's threshold is the
+  average and nothing else.
+- **The rule of the time period is not here**: it is a rule about the
+  dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
