@@ -4483,6 +4483,7 @@ so.
 | a **workbook's rules carry the borders they draw** | **built.** The border of the differential format is read, and the lines are in the rule of the document (§1036) | §1036 |
 | a **chart's series may have a colour** | **built.** The list of the tree's colours is kept, and the read says the colour of each series (§1037) | §1037 |
 | a **workbook's charts carry the colours of their series** | **built.** The colour of each series is read, and it is in the chart of the document (§1038) | §1038 |
+| a **formula may name a column of a table** | **built.** The column of a table may be named in a formula, and the formula reads the cells of that column (§1039) | §1039 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67258,3 +67259,66 @@ it.
   colours are for the front end that draws it.
 - **The tree's colours are `#rrggbb`**: a colour of the theme is read
   as the colour it is, and the tree keeps the colour and not the slot.
+
+## 1039. A formula may name a column of a table
+
+A formula may name a **column of a table**, and the tree reads the cells
+of that column.
+
+### What was built
+
+- A formula may hold a **structured reference**: `Orders[amount]` names
+  the column `amount` of the table `Orders`, and `[@amount]` names the
+  column of the table the cell is in. The tree's own forms are
+  `Table[Column]`, `Table[[First]:[Last]]`, `Table[[#Data],[Column]]`,
+  `Table[[#All]]`, `Table[[#This Row],[Column]]` and `[@Column]`.
+- The reference is **derived**: it is worked out into the range of cells
+  it names every time the formula is worked out, and so it is always
+  the table as it is now. A row put under the table, a column put
+  beside it — the reference names the table, and the table is what is
+  there.
+- The name of a column is the text of its **header cell**, and it is
+  read **without case**.
+- A formula that names a **table that is not there**, or a **column
+  that is not there**, is an error that says which of the two is not
+  there. A reference to the **row of the cell** is refused where the
+  row of the cell is not known, and the refusal says so.
+- The formula is **written back as it was written**: `=[@amount] * 2`
+  stays `=[@amount] * 2`.
+- A structured reference **does not move with the cell**: it names a
+  column of a table, and the table is where it is.
+
+### What the port found
+
+- **The reference's structured reference is a text in the formula**,
+  and the reference **rewrites that text** when the table or the column
+  is renamed. The tree's reference is **derived** — it is worked out
+  into a range of cells every time the formula is worked out — and so
+  it always reads the table as it is. But a rename does not rewrite the
+  text of a formula here, and that is not here yet.
+- **The reference's tables carry a style** — a banded row and a colour
+  — and the tree's table does not (the tree's deliberate refusal).
+- **A table of the tree may not look like a cell**, so the reference's
+  `Table1` is refused by the tree's own rule, and the tests of this
+  arc use names like `Orders`.
+
+### What it cost
+
+- **No new command**: the reference is part of a formula, and the
+  formula is what a formula does. The battery still carries **251**
+  commands.
+- **One arm** on the expression of a formula, and one **item** with
+  five cases.
+- **Four tests** in the grid battery (`tests/tables.rs`): the column is
+  summed, the name is read without case, the two refusals, and the row
+  of the cell.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A rename does not follow into the formulas**: the reference
+  rewrites the formulas that name the old name, and the tree does not
+  do that yet.
+- **The row of the cell is not known everywhere**: `[@amount]` needs
+  the cell the formula is in, and where there is no cell — the formula
+  read on its own — it is refused and says so.
