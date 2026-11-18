@@ -44,9 +44,12 @@
 //!   from the master, and the battery that owns the spreadsheet model
 //!   moves the text — the reader knows the file's words, and the
 //!   moving is the model's.
-//! - It does not read the **drawings** of a sheet: a picture that a
-//!   file holds is not a picture here, and the battery that owns the
-//!   spreadsheet model says how many it left out.
+//! - It reads the **drawings** of a sheet: the charts among them, and
+//!   the **pictures** — the cell a picture is drawn in, the name the
+//!   file gives it and its bytes. A picture that is in no cell is
+//!   counted, and the reader says how many it left out.
+//! - It does not read the **shapes** of a sheet: a shape is a drawing
+//!   that is not a picture, and the tree has none.
 //! - It does not read a **theme** of its own: a file that names a
 //!   colour by the theme is read against the theme the file holds, and
 //!   a file that holds no theme has no themed colour to read.
@@ -403,6 +406,30 @@ pub struct Parts {
     pub tables: Vec<Table>,
     /// The **charts** of the sheet.
     pub charts: Vec<Chart>,
+    /// The **pictures** of the sheet.
+    pub pictures: Vec<Picture>,
+}
+
+/// A **picture** of a sheet: an image the sheet shows, and the cell it
+/// is drawn in.
+///
+/// The picture is in the file as **bytes**, and the bytes are given
+/// back as they are: what they are is the business of the tree that
+/// reads the file.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Picture {
+    /// The cell the picture is drawn in: `B3`.
+    pub cell: String,
+    /// The **name** the file gives the picture.
+    pub name: String,
+    /// The **alt text** of the picture: what is said when it cannot be
+    /// shown.
+    pub alt: String,
+    /// The **format** of the bytes: the word the name of the file gives
+    /// them — `png` or `jpeg`.
+    pub format: String,
+    /// The **bytes** of the picture.
+    pub bytes: Vec<u8>,
 }
 
 /// A **chart** of a sheet: a drawing of some cells of it.
@@ -437,30 +464,29 @@ pub struct Chart {
 /// Read the **charts** of a sheet.
 ///
 /// A sheet names a **drawing** part, and the drawing holds the objects
-/// the sheet shows: the charts among them. A chart is in a part of its
-/// own, and the drawing names it.
-fn read_charts(
+/// the sheet shows: the charts among them, and the pictures. A chart is
+/// in a part of its own, and the drawing names it; a picture is in the
+/// drawing itself, and the drawing names its bytes.
+fn read_drawings(
     package: &mut craftkit_zip::Package<'_>,
     root: &craftkit_xml::El,
     sheet_rels: &[Rel],
     warnings: &mut Vec<String>,
-) -> Vec<Chart> {
+) -> (Vec<Chart>, Vec<Picture>) {
     let mut out = Vec::new();
-    let Some(drawing) = root.child("drawing") else { return out };
-    let Some(id) = drawing.attr("id") else { return out };
-    let Some(relation) = sheet_rels.iter().find(|relation| relation.id == id) else { return out };
-    let Some(part) = read_xml(package, &relation.target).ok().flatten() else { return out };
-    let drawing_rels = rels_of(package, &relation.target).unwrap_or_default();
-    // The **objects** of the drawing: the frames that hold a chart and
-    // the pictures that hold an image.
-    let mut frames = Vec::new();
     let mut pictures = Vec::new();
+    let Some(drawing) = root.child("drawing") else { return (out, pictures) };
+    let Some(id) = drawing.attr("id") else { return (out, pictures) };
+    let Some(relation) = sheet_rels.iter().find(|relation| relation.id == id) else {
+        return (out, pictures);
+    };
+    let Some(part) = read_xml(package, &relation.target).ok().flatten() else {
+        return (out, pictures);
+    };
+    let drawing_rels = rels_of(package, &relation.target).unwrap_or_default();
+    // The **objects** of the drawing: the frames that hold a chart.
+    let mut frames = Vec::new();
     collect(&part, "graphicFrame", &mut frames);
-    collect(&part, "pic", &mut pictures);
-    let pictures = pictures.len() as u64;
-    if pictures > 0 {
-        warnings.push(format!("{pictures} picture(s) of the sheet were not read: this tree has no images"));
-    }
     for frame in frames {
         let Some(id) = frame
             .child("graphic")
@@ -475,7 +501,122 @@ fn read_charts(
         let Some(chart) = read_chart(&root) else { continue };
         out.push(chart);
     }
-    out
+    // The **pictures** of the drawing.
+    let (read, unread) = read_pictures(package, &part, &drawing_rels);
+    if unread > 0 {
+        warnings.push(format!(
+            "{unread} picture(s) of the sheet were not read: they are not in a cell, or they are too big"
+        ));
+    }
+    pictures.extend(read);
+    (out, pictures)
+}
+
+/// The **most** bytes of a picture that are read.
+const MAX_PICTURE_BYTES: u64 = 40 * 1024 * 1024;
+
+/// The **most** pictures a sheet may have.
+const MAX_PICTURES: usize = 1_000;
+
+/// Read the **pictures** of a drawing, and how many were not read.
+///
+/// A picture is in an **anchor**: the place on the sheet it is drawn in.
+/// The anchor says the cell the picture starts at, and the picture names
+/// the bytes it shows by a **relationship** of the drawing.
+///
+/// A picture that is in no anchor, or in one that does not say which cell
+/// it is in, is not in a cell — and the tree's picture is the picture of
+/// a cell. Such a picture is counted, and not read.
+fn read_pictures(
+    package: &mut craftkit_zip::Package<'_>,
+    drawing: &craftkit_xml::El,
+    drawing_rels: &[Rel],
+) -> (Vec<Picture>, u64) {
+    // The **pictures** of the drawing, and the **anchors** they are in.
+    let mut all = Vec::new();
+    collect(drawing, "pic", &mut all);
+    let mut anchors = Vec::new();
+    collect(drawing, "twoCellAnchor", &mut anchors);
+    collect(drawing, "oneCellAnchor", &mut anchors);
+    let mut out = Vec::new();
+    for anchor in anchors {
+        let Some(cell) = cell_of_anchor(anchor) else { continue };
+        let mut framed = Vec::new();
+        collect(anchor, "pic", &mut framed);
+        for pic in framed {
+            if out.len() >= MAX_PICTURES {
+                break;
+            }
+            let Some(picture) = picture_of(package, pic, drawing_rels, &cell) else { continue };
+            out.push(picture);
+        }
+    }
+    let unread = (all.len() as u64).saturating_sub(out.len() as u64);
+    (out, unread)
+}
+
+/// The **cell** an anchor draws its object in: the cell the object
+/// starts at.
+///
+/// The anchor counts from zero, and the cell of the tree counts from
+/// one.
+fn cell_of_anchor(anchor: &craftkit_xml::El) -> Option<String> {
+    let from = anchor.child("from")?;
+    let column = from.child("col")?.text.trim().parse::<u32>().ok()?;
+    let row = from.child("row")?.text.trim().parse::<u32>().ok()?;
+    if column > 16_383 || row > 1_048_575 {
+        return None;
+    }
+    Some(format!("{}{}", column_text(column), row + 1))
+}
+
+/// Read **one** picture of a drawing, when the tree can have it.
+fn picture_of(
+    package: &mut craftkit_zip::Package<'_>,
+    pic: &craftkit_xml::El,
+    drawing_rels: &[Rel],
+    cell: &str,
+) -> Option<Picture> {
+    let properties = pic.child("nvPicPr").and_then(|nv| nv.child("cNvPr"));
+    let name = properties.and_then(|property| property.attr("name")).unwrap_or("").to_string();
+    let alt = properties.and_then(|property| property.attr("descr")).unwrap_or("").to_string();
+    let id = pic.child("blipFill").and_then(|fill| fill.child("blip")).and_then(|blip| blip.attr("embed"))?;
+    let relation = drawing_rels.iter().find(|relation| relation.id == id)?;
+    let bytes = package.read_limited(&relation.target, MAX_PICTURE_BYTES).ok().flatten()?;
+    Some(Picture { cell: cell.to_string(), name, alt, format: format_of_picture(&relation.target), bytes })
+}
+
+/// The **format** of a picture: the word the name of the file gives its
+/// bytes.
+fn format_of_picture(part: &str) -> String {
+    let name = part.rsplit('/').next().unwrap_or_default().to_ascii_lowercase();
+    let extension = name.rsplit('.').next().unwrap_or_default();
+    match extension {
+        "png" => "png",
+        "jpg" | "jpeg" => "jpeg",
+        "gif" => "gif",
+        "bmp" => "bmp",
+        "tif" | "tiff" => "tiff",
+        "emf" => "emf",
+        "wmf" => "wmf",
+        "svg" => "svg",
+        _ => "",
+    }
+    .to_string()
+}
+
+/// The column a name of letters says, counted from zero, as letters.
+fn column_text(column: u32) -> String {
+    let mut name = String::new();
+    let mut column = column;
+    loop {
+        name.insert(0, (b'A' + (column % 26) as u8) as char);
+        if column < 26 {
+            break;
+        }
+        column = column / 26 - 1;
+    }
+    name
 }
 
 /// The **elements** of a part with a name, wherever they are.
@@ -1289,6 +1430,8 @@ pub struct Workbook {
     pub tables: Vec<(String, Vec<Table>)>,
     /// The **charts** of each sheet, by the name of the sheet.
     pub charts: Vec<(String, Vec<Chart>)>,
+    /// The **pictures** of each sheet, by the name of the sheet.
+    pub pictures: Vec<(String, Vec<Picture>)>,
     /// The date system the numbers of the cells are counted in.
     pub system: DateSystem,
     /// The **properties** of the workbook: what the file says about
@@ -1499,6 +1642,9 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
         if !parts.charts.is_empty() {
             workbook.charts.push((sheet.name.clone(), parts.charts));
         }
+        if !parts.pictures.is_empty() {
+            workbook.pictures.push((sheet.name.clone(), parts.pictures));
+        }
         workbook.sheets.push(sheet);
         let _ = index;
     }
@@ -1700,7 +1846,7 @@ fn read_sheet(
     let tables = read_tables(package, &root, &sheet_rels);
     // The **charts** of the sheet: they are in parts of their own,
     // named by the drawing of the sheet.
-    let charts = read_charts(package, &root, &sheet_rels, warnings);
+    let (charts, pictures) = read_drawings(package, &root, &sheet_rels, warnings);
     // The **pivot tables** of the sheet: they are in parts of their
     // own, and each of them names a cache of its own.
     let pivots = read_pivots(package, &sheet_rels, warnings);
@@ -1776,7 +1922,7 @@ fn read_sheet(
     let mut rows: Vec<Row> = Vec::new();
     let Some(data) = root.child("sheetData") else {
         sheet.pivots = pivots;
-        return (sheet, Parts { filter, links, comments, tables, charts });
+        return (sheet, Parts { filter, links, comments, tables, charts, pictures });
     };
 
     // The row the reader is on: a row that does not say which row it is
@@ -1949,7 +2095,7 @@ fn read_sheet(
     }
     sheet.rows = rows;
     sheet.pivots = pivots;
-    (sheet, Parts { filter, links, comments, tables, charts })
+    (sheet, Parts { filter, links, comments, tables, charts, pictures })
 }
 
 /// Read the **view** of a sheet: what is drawn of it, and what is not.

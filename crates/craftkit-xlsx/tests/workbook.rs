@@ -8,11 +8,17 @@ use craftkit_xlsx::{DateSystem, FormulaKind, Value, read};
 /// else — and here that somebody is this file: the parts are laid out
 /// as the format says.
 fn a_package(parts: &[(&str, &str)]) -> Vec<u8> {
+    let parts: Vec<(&str, &[u8])> = parts.iter().map(|(name, text)| (*name, text.as_bytes())).collect();
+    a_package_of(&parts)
+}
+
+/// A **package** of parts, written by hand, where a part may be **bytes**
+/// and not text.
+fn a_package_of(parts: &[(&str, &[u8])]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let mut directory: Vec<u8> = Vec::new();
-    for (name, text) in parts {
+    for (name, data) in parts {
         let name = name.as_bytes();
-        let data = text.as_bytes();
         let checksum = craftkit_zip::crc32(data);
         let offset = out.len() as u32;
         // The **local header**.
@@ -2443,4 +2449,90 @@ fn an_icon_set_that_the_tree_cannot_read_is_counted() {
         said.contains("2 conditional format(s) of a kind this tree does not have"),
         "it says how many: {said}"
     );
+}
+
+/// The **pictures** of a sheet are read: the cell they are drawn in, the
+/// name the file gives them and their bytes.
+#[test]
+fn the_pictures_of_a_sheet_are_read() {
+    // A **picture**: the bytes of a small PNG file.
+    let picture: &[u8] = &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01];
+    let bytes = a_package_of(&[
+        (
+            "_rels/.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            br#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", br#"<worksheet><sheetData/><drawing r:id="rId2"/></worksheet>"#),
+        (
+            "xl/drawings/drawing1.xml",
+            br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Picture 1" descr="the logo"/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill></xdr:pic><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#,
+        ),
+        ("xl/media/image1.png", picture),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.pictures.len(), 1, "one sheet has pictures");
+    let (sheet, pictures) = &workbook.pictures[0];
+    assert_eq!(sheet, "One", "the sheet of them");
+    assert_eq!(pictures.len(), 1, "one picture");
+    assert_eq!(pictures[0].cell, "B3", "the cell it is drawn in");
+    assert_eq!(pictures[0].name, "Picture 1", "the name the file gives it");
+    assert_eq!(pictures[0].alt, "the logo", "and its alt text");
+    assert_eq!(pictures[0].format, "png", "and the format of its bytes");
+    assert_eq!(pictures[0].bytes, picture, "and the bytes themselves");
+    assert!(workbook.warnings.is_empty(), "and nothing is left out: {:?}", workbook.warnings);
+}
+
+/// A picture that is in no cell — one that is in no **anchor** — is
+/// counted.
+#[test]
+fn a_picture_that_is_in_no_cell_is_counted() {
+    let picture: &[u8] = &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01];
+    let bytes = a_package_of(&[
+        (
+            "_rels/.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            br#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", br#"<worksheet><sheetData/><drawing r:id="rId2"/></worksheet>"#),
+        (
+            "xl/drawings/drawing1.xml",
+            br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Picture 1"/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill></xdr:pic></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#,
+        ),
+        ("xl/media/image1.png", picture),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.pictures.is_empty(), "the picture is not read");
+    let said = workbook.warnings.join(" ");
+    assert!(said.contains("1 picture(s) of the sheet were not read"), "it says how many: {said}");
 }
