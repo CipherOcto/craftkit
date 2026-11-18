@@ -4462,6 +4462,7 @@ so.
 | a **filter may look for the words a cell holds** | **built.** The criterion has the four operations on the text of a cell, and the filter and the conditional format share it (§1015) | §1015 |
 | a **filter may judge the colour of the cells** | **built.** The fill behind the text and the colour of the text are filters of their own (§1016) | §1016 |
 | a **conditional format may judge the cells by a formula** | **built.** The formula is written in the top-left cell of the range and moved with the cell (§1017) | §1017 |
+| a **sort may put the columns of a range in order, by a row** | **built.** The orientation of the sort says which way it runs, and a key names the row it sorts by (§1018) | §1018 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -26105,7 +26106,8 @@ the values of one of its columns.
 - **The tree's sort may sort by columns.** The tree's sort has an
   *orientation*, and the columns of a range may be sorted instead of
   its rows; here the rows of a range are sorted, and a column that is
-  not in the range is refused.
+  not in the range is refused — and §1018 says otherwise: the columns
+  of a range may be sorted as well, by a row of the range.
 
 ### What it cost
 
@@ -65308,7 +65310,9 @@ the value of the key are in whatever order they were in.
   tree's order is.
 - **The reference's sort may sort by rows instead of by columns**, and
   it asks for a dialog when it has no keys at all. Here the sort is by
-  the rows of the range, and a sort with no key is refused.
+  the rows of the range, and a sort with no key is refused — and §1018
+  says otherwise: the columns of a range may be sorted as well, by a
+  row of the range, and a sort with no key is still refused.
 
 ### What it cost
 
@@ -65330,7 +65334,8 @@ the value of the key are in whatever order they were in.
   are for the words of a cell, and not for the order of a sort — and
   §1005 says otherwise: a key may order the words by one of them.
 - **The tree does not sort the columns of a range**: the rows are the
-  rows.
+  rows — and §1018 says otherwise: the columns of a range may be sorted
+  too, by a row of the range.
 ## 1005. A sort may order the words by one of the workbook's lists
 
 The order of the days and the order of the months are orders that no
@@ -66048,3 +66053,78 @@ A conditional format may ask not for a value but for a **formula**.
 - **The tree's formula must be true**: a formula that answers a number
   is not true and does not match, where the reference's may answer a
   number and mean it.
+
+## 1018. A sort may put the columns of a range in order, by a row
+
+A range may be sorted the other way about: its **columns** may be put
+in order by a **row** of it, and the columns are then the lines that
+move.
+
+### What was built
+
+- `grid.sort` gains an **orientation**: the **rows** of the range, which
+  is what it sorted before, or its **columns**. The word is `rows` or
+  `columns`, and without it the rows are sorted. Any other word is
+  refused.
+- A sort of the columns is **by a row**: a key names the **row** it
+  sorts by — `{"row": 3}` — counted from **one**, and the columns are
+  the lines that move.
+- The **header** follows the orientation: the first **row** stays where
+  it is in a sort of the rows, and the first **column** stays in a sort
+  of the columns. The tree's guess of a header is the guess of the
+  other turned on its side.
+- A column takes its **format**, its **formula** and its **note** with
+  it, as a row does: the relative references of a formula move with the
+  column, and its anchored references stay where they are.
+- A key that names the **wrong kind of line** — a column in a sort of
+  the columns, a row in a sort of the rows — is **refused**: the tree
+  does not guess which way a sort was meant to run. So is the
+  **column** given to a sort of the columns, and so is a row that is
+  not in the range.
+
+### What the port found
+
+- **The reference's sort has an orientation** — `orientation:
+  "columns"` — and a sort of the columns is by a **row of the
+  worksheet**, counted from one. The tree's row is counted from one
+  too, and it is the row of the **worksheet** and not of the range.
+- **The reference's key may name a column in a sort of the columns**,
+  and it reads it as a row. The tree **refuses** it: a name that could
+  be either is a name the tree will not guess at.
+- **The reference's guess of a header is made once**, whatever the
+  orientation, and it is the guess of the first **row**. The tree's
+  follows the orientation, and the first column of a sort of the
+  columns is the header of that sort.
+- **The reference moves the row heights, the cell pictures and the
+  floating objects with the lines it moves.** The tree's sheet has no
+  such facts: a cell holds a value, a formula, a style, a note, a link
+  and a comment, and those travel with the line.
+- **The reference's sort may order by the colour of a cell** and by a
+  **list of words given in the call**. The tree orders the words by
+  the lists of the workbook (§1005), and it has no colour key.
+
+### What it cost
+
+- **No new command**: `grid.sort` grew a parameter, and the grid
+  battery still carries **245** commands.
+- **One rule that was already there**: the tree's shift of a formula,
+  the tree's order of the values and the tree's guess of a header.
+- **Eight tests** in the grid battery (`tests/sorting.rs`): the columns
+  put in order by a row, the first column staying where it is, a
+  formula moving with its column, a note travelling with its column, a
+  key naming the wrong kind of line, a sort of the columns given a
+  column, an orientation that is neither, and a row that is not in the
+  range.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not sort by a colour**: the fill and the font are
+  facts of a cell, and the order of them is not the tree's.
+- **The tree's sheet has no row heights, no cell pictures and no
+  floating objects**, so there is nothing of them to move with a line.
+- **The tree refuses a key that names a column in a sort of the
+  columns**, where the reference reads it as a row.
+- **The tree's sort of the columns reads its key row as a row of the
+  worksheet** — and says so in the answer, where the reference's key
+  may be either and is not said at all.
