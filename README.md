@@ -4470,6 +4470,7 @@ so.
 | a **conditional format may judge the numbers above the average of a range** | **built.** The average of the numbers of the range, and the threshold is the tree's own rule (§1023) | §1023 |
 | a **conditional format may fill the cells of a range by a colour scale** | **built.** The fill of a cell is the mix of the two colours, and it is derived (§1024) | §1024 |
 | a **colour scale may have three colours** | **built.** The middle colour stands for the median of the numbers, and the fill is the mix of the two that hold the cell (§1025) | §1025 |
+| a **workbook's colour scales are read into the document** | **built.** The colours of the scale are read, and the stops the tree has are the ones it reads (§1026) | §1026 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -66261,7 +66262,8 @@ used to read the comparisons and to say nothing about the rest.
 
 - **The kinds of rule the tree does not have are still not read**: a
   colour scale, a data bar, an icon set, the duplicates, the top ten,
-  the above-the-average and the time period.
+  the above-the-average and the time period — and §1026 says
+  otherwise: the **colour scale** is read now, and the rest are not.
 - **A rule over two ranges is two rules here**: the file names the
   ranges of a rule in one list, and the tree's rule is about one
   range.
@@ -66580,3 +66582,56 @@ at the ends.
   set**: the reference's has them, and they are not here.
 - **The rule of the time period is not here**: it is a rule about the
   dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
+
+## 1026. A workbook's colour scales are read into the document
+
+A workbook may hold a **colour scale**, and the reader reads it.
+
+### What was built
+
+- The **reader** reads the colour scale of a file: the **colours** of
+  the scale, in order.
+- The **stops** of the scale are the ones the tree has: the lowest and
+  the highest of the range, and with three of them the middle one at
+  the **fiftieth percentile** — the median of the numbers (§1025).
+- A scale whose stops are not those is **counted**, and the reader says
+  how many it left out: a rule that is quietly dropped is a rule the
+  user believes in.
+- The file writes a colour as `arrggbb` and the tree's colour is
+  `#rrggbb`: the reader reads the colour the tree can hold.
+- The battery **imports** the scale into the document, and the cells of
+  the range are filled by it — the fill is derived from the numbers of
+  the range, as it is in a scale the tree writes itself (§1024).
+
+### What the port found
+
+- **The reference's reader reads the colour scale of a file** with its
+  stops and its colours, and the tree's reader reads the scale whose
+  stops are the tree's own.
+- **The reference's scale may have a stop at any percentile**, and the
+  tree's reader reads only the one at the **fiftieth** — the others are
+  counted and said. The fiftieth percentile is the median, and the
+  median is the tree's middle (§1025).
+- **The reference's reader reads a scale of two colours as well as of
+  three**, and so does the tree's: the stops and the colours must be
+  as many, and a scale of one colour is not a scale.
+
+### What it cost
+
+- **No new command**: the reader is a library, and the grid battery
+  still carries **249** commands.
+- **One rule that was already there**: the tree's colour scale (§1024)
+  and its middle (§1025).
+- **Three tests**: the reader's scale, the scale the tree cannot read,
+  and the battery's import of it.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A scale of a file whose middle stop is not the fiftieth percentile
+  is not read**: the tree's scale has one middle and it is the median.
+- **The tree's reader still does not read the data bar, the icon set,
+  the duplicates, the top ten, the above-the-average or the time
+  period** of a file.
+- **The tree has no writer of workbooks**: the scales it reads are not
+  written back.
