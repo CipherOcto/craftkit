@@ -55,7 +55,9 @@
 //!   tree's format is the cell's own), and the fill is a cell's own
 //!   thing too (§821). The tree's font colour and its icon set are
 //!   still not here — and §1029 says otherwise for the icon set: it is
-//!   here (`grid.conditional.icon.set`), and the font colour is not.
+//!   here (`grid.conditional.icon.set`), and §1033 for the font
+//!   colour: it is here too, and the rule carries it as its own
+//!   `colour`.
 //! - **The tree's criteria are many and this one's is one.** The
 //!   tree's rule may be a comparison, a colour scale, a data bar, an
 //!   icon set or an expression. Here a rule is a **comparison** — the
@@ -199,6 +201,9 @@ pub struct Conditional {
     /// The **fill** the matching cells are filled with, when the rule
     /// names one.
     pub fill: Option<String>,
+    /// The **colour** the text of the matching cells is written in,
+    /// when the rule names one.
+    pub colour: Option<String>,
     /// The **stop**: the tree's *stop if true*. A rule that matched
     /// and says stop ends the walk, and the rules after it are not
     /// tried.
@@ -289,6 +294,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
         };
         let format = entry.get("format").and_then(|format| format.as_str()).map(|format| format.to_string());
         let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
+        let colour = entry.get("colour").and_then(|colour| colour.as_str()).map(|colour| colour.to_string());
         let stop = entry.get("stop").and_then(|stop| stop.as_bool());
         let priority = entry
             .get("priority")
@@ -306,6 +312,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             formula,
             format,
             fill,
+            colour,
             stop,
             priority,
         });
@@ -630,6 +637,8 @@ pub struct Looks {
     pub format: Option<String>,
     /// The **fill** the cell is filled with.
     pub fill: Option<String>,
+    /// The **colour** the text of the cell is written in.
+    pub colour: Option<String>,
     /// The **bar** behind the cell: the part of the cell's width it
     /// fills and the colour of it.
     pub bar: Option<Bar>,
@@ -737,6 +746,9 @@ pub fn looks_for(
         if looks.fill.is_none() {
             looks.fill = conditional.fill.clone();
         }
+        if looks.colour.is_none() {
+            looks.colour = conditional.colour.clone();
+        }
         if conditional.stop.unwrap_or(false) {
             break;
         }
@@ -814,6 +826,27 @@ fn fill_of_rule(given: Option<&Text>, id: &str) -> Result<Option<String>, Engine
     }
 }
 
+/// The **colour** the text of the matching cells is written in.
+///
+/// A rule's colour is a colour: `none` is not one, because a rule that
+/// says the text is in the colour it is in says nothing.
+fn colour_of_rule(given: Option<&Text>, id: &str) -> Result<Option<String>, EngineError> {
+    let Some(given) = given else { return Ok(None) };
+    let Some(colour) = crate::colours::colour_of(&given.0) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("`{}` is not a colour: a colour is `#rrggbb`", given.0.trim()),
+        });
+    };
+    match colour {
+        Some(colour) => Ok(Some(colour)),
+        None => Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "a rule's colour is a colour, and `none` is not one".to_string(),
+        }),
+    }
+}
+
 /// The **priority** of a rule: a whole number, and not a negative one.
 fn priority_of(given: Option<&Number>, id: &str) -> Result<Option<u32>, EngineError> {
     let Some(given) = given else { return Ok(None) };
@@ -857,6 +890,7 @@ fn entry_of(conditional: &Conditional) -> Json {
         })),
         "format": conditional.format,
         "fill": conditional.fill,
+        "colour": conditional.colour,
         "stop": conditional.stop,
         "priority": conditional.priority,
     })
@@ -894,6 +928,10 @@ commands! {
             /// The fill the matching cells are filled with: `#rrggbb`. A rule
             /// may carry the fill and no format.
             fill: Option<Text>,
+            /// The **colour** the text of the matching cells is written
+            /// in: `#rrggbb`. A rule may carry the colour and neither
+            /// the format nor the fill.
+            colour: Option<Text>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -950,10 +988,13 @@ commands! {
             }
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() {
+            let colour = colour_of_rule(self.colour.as_ref(), &id)?;
+            if format.is_none() && fill.is_none() && colour.is_none() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                    message: "name what the rule says: the format, the fill, the colour, or any two of \
+                              them"
+                        .to_string(),
                 });
             }
             let stop = self.stop.map(|stop| stop.0);
@@ -972,6 +1013,7 @@ commands! {
                 "value": value,
                 "format": format,
                 "fill": fill,
+                "colour": colour,
                 "stop": stop,
                 "priority": priority,
             }));
@@ -986,6 +1028,7 @@ commands! {
                     "value": value,
                     "format": format,
                     "fill": fill,
+                    "colour": colour,
                     "stop": stop,
                 }),
             ))
@@ -1021,6 +1064,10 @@ commands! {
             /// The fill the matching cells are filled with: `#rrggbb`. A rule
             /// may carry the fill and no format.
             fill: Option<Text>,
+            /// The **colour** the text of the matching cells is written
+            /// in: `#rrggbb`. A rule may carry the colour and neither
+            /// the format nor the fill.
+            colour: Option<Text>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -1067,10 +1114,13 @@ commands! {
             }
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() {
+            let colour = colour_of_rule(self.colour.as_ref(), &id)?;
+            if format.is_none() && fill.is_none() && colour.is_none() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                    message: "name what the rule says: the format, the fill, the colour, or any two of \
+                              them"
+                        .to_string(),
                 });
             }
             let stop = self.stop.map(|stop| stop.0);
@@ -1088,6 +1138,7 @@ commands! {
                 "formula": formula,
                 "format": format,
                 "fill": fill,
+                "colour": colour,
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1101,6 +1152,7 @@ commands! {
                     "formula": formula,
                     "format": format,
                     "fill": fill,
+                    "colour": colour,
                     "stop": stop,
                 }),
             ))
@@ -1200,6 +1252,10 @@ commands! {
             /// The fill the matching cells are filled with: `#rrggbb`. A rule
             /// may carry the fill and no format.
             fill: Option<Text>,
+            /// The **colour** the text of the matching cells is written
+            /// in: `#rrggbb`. A rule may carry the colour and neither
+            /// the format nor the fill.
+            colour: Option<Text>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -1250,10 +1306,13 @@ commands! {
             let bottom = self.bottom.map(|bottom| bottom.0).unwrap_or(false);
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() {
+            let colour = colour_of_rule(self.colour.as_ref(), &id)?;
+            if format.is_none() && fill.is_none() && colour.is_none() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                    message: "name what the rule says: the format, the fill, the colour, or any two of \
+                              them"
+                        .to_string(),
                 });
             }
             let stop = self.stop.map(|stop| stop.0);
@@ -1275,6 +1334,7 @@ commands! {
                 },
                 "format": format,
                 "fill": fill,
+                "colour": colour,
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1290,6 +1350,7 @@ commands! {
                     "bottom": bottom,
                     "format": format,
                     "fill": fill,
+                    "colour": colour,
                     "stop": stop,
                 }),
             ))
@@ -1327,6 +1388,10 @@ commands! {
             /// The fill the matching cells are filled with: `#rrggbb`. A rule
             /// may carry the fill and no format.
             fill: Option<Text>,
+            /// The **colour** the text of the matching cells is written
+            /// in: `#rrggbb`. A rule may carry the colour and neither
+            /// the format nor the fill.
+            colour: Option<Text>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -1359,10 +1424,13 @@ commands! {
             let unique = self.unique.map(|unique| unique.0).unwrap_or(false);
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() {
+            let colour = colour_of_rule(self.colour.as_ref(), &id)?;
+            if format.is_none() && fill.is_none() && colour.is_none() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                    message: "name what the rule says: the format, the fill, the colour, or any two of \
+                              them"
+                        .to_string(),
                 });
             }
             let stop = self.stop.map(|stop| stop.0);
@@ -1382,6 +1450,7 @@ commands! {
                 },
                 "format": format,
                 "fill": fill,
+                "colour": colour,
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1395,6 +1464,7 @@ commands! {
                     "unique": unique,
                     "format": format,
                     "fill": fill,
+                    "colour": colour,
                     "stop": stop,
                 }),
             ))
@@ -1430,6 +1500,10 @@ commands! {
             /// The fill the matching cells are filled with: `#rrggbb`. A rule
             /// may carry the fill and no format.
             fill: Option<Text>,
+            /// The **colour** the text of the matching cells is written
+            /// in: `#rrggbb`. A rule may carry the colour and neither
+            /// the format nor the fill.
+            colour: Option<Text>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -1462,10 +1536,13 @@ commands! {
             let above = self.above.map(|above| above.0).unwrap_or(true);
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() {
+            let colour = colour_of_rule(self.colour.as_ref(), &id)?;
+            if format.is_none() && fill.is_none() && colour.is_none() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                    message: "name what the rule says: the format, the fill, the colour, or any two of \
+                              them"
+                        .to_string(),
                 });
             }
             let stop = self.stop.map(|stop| stop.0);
@@ -1485,6 +1562,7 @@ commands! {
                 },
                 "format": format,
                 "fill": fill,
+                "colour": colour,
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1498,6 +1576,7 @@ commands! {
                     "above": above,
                     "format": format,
                     "fill": fill,
+                    "colour": colour,
                     "stop": stop,
                 }),
             ))

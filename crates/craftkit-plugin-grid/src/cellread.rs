@@ -173,6 +173,13 @@ commands! {
                     Some(fill) => json!(fill),
                     None => Json::Null,
                 },
+                // The **colour** the text is written in: the rule's
+                // colour is on top of the font's own, as the rule is on
+                // top of the cell.
+                "colour": match looks.colour.clone() {
+                    Some(colour) => json!(colour),
+                    None => Json::Null,
+                },
                 // The **bar** behind the cell: the part of the cell's
                 // width it fills and the colour of it.
                 "bar": match &looks.bar {

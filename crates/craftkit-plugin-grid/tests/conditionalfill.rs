@@ -400,3 +400,60 @@ fn the_percents_of_an_icon_set_are_two() {
     let message = failure.to_string();
     assert!(message.contains("a hundred at most"), "the refusal says why: {message}");
 }
+
+/// A rule may carry the **colour** of the text: the tree's rule that
+/// says "this text is red".
+#[test]
+fn a_rule_may_carry_the_colour_of_the_text() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 5.0);
+    a_number(&mut session, sheet, "A2", 1.0);
+    session
+        .execute(
+            "grid.conditional.set",
+            &json!({ "sheet": sheet, "range": "A1:A2", "op": ">", "value": "3", "colour": "#9C0006" }),
+        )
+        .expect("the rule is set");
+    assert_eq!(cell(&mut session, sheet, "A1")["colour"].as_str(), Some("#9c0006"), "the text is red");
+    assert!(cell(&mut session, sheet, "A2")["colour"].is_null(), "and the other cell is not");
+}
+
+/// The colour of a rule is a **colour**, and `none` is not one.
+#[test]
+fn the_colour_of_a_rule_is_a_colour() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    let failure = session
+        .execute(
+            "grid.conditional.set",
+            &json!({ "sheet": sheet, "range": "A1:A2", "op": ">", "value": "3", "colour": "red" }),
+        )
+        .expect_err("the colour is refused");
+    let message = failure.to_string();
+    assert!(message.contains("is not a colour"), "the refusal says why: {message}");
+    let failure = session
+        .execute(
+            "grid.conditional.set",
+            &json!({ "sheet": sheet, "range": "A1:A2", "op": ">", "value": "3", "colour": "none" }),
+        )
+        .expect_err("the colour is refused");
+    let message = failure.to_string();
+    assert!(message.contains("`none` is not one"), "the refusal says why: {message}");
+}
+
+/// A rule that says **nothing** about the look of the cells is refused:
+/// it must name the format, the fill, the colour, or any two of them.
+#[test]
+fn a_rule_that_says_nothing_about_the_look_is_refused() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    let failure = session
+        .execute(
+            "grid.conditional.set",
+            &json!({ "sheet": sheet, "range": "A1:A2", "op": ">", "value": "3" }),
+        )
+        .expect_err("the rule is refused");
+    let message = failure.to_string();
+    assert!(message.contains("name what the rule says"), "the refusal says why: {message}");
+}

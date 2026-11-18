@@ -224,6 +224,9 @@ struct Look {
     font: Option<Font>,
     align: Option<Align>,
     fill: Option<String>,
+    /// The **colour** the text of the cell is written in: the colour a
+    /// **conditional rule** names, and it is on top of the font's own.
+    colour: Option<String>,
     /// The **bar** behind the cell: the part of the cell's width it
     /// fills and the colour of it.
     bar: Option<crate::conditional::Bar>,
@@ -260,6 +263,7 @@ fn look_of(
         font: own.and_then(|entry| entry.font.clone()).or_else(|| style.and_then(|style| style.font.clone())),
         align: own.and_then(|entry| entry.align).or_else(|| style.and_then(|style| style.align)),
         fill: looks.fill.clone().or_else(|| own.and_then(|entry| entry.fill.clone())),
+        colour: looks.colour.clone(),
         bar: looks.bar.clone(),
         icon: looks.icon,
     }
@@ -893,11 +897,14 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             let text: String = text.chars().take(MAX_CHARS).collect();
             let face = face_of(look.font.as_ref());
             let size = size_of(look.font.as_ref(), scale);
+            // The **colour** of the text: the colour a conditional
+            // rule names is on top of the font's own, as the rule is on
+            // top of the cell.
             let colour = look
-                .font
-                .as_ref()
-                .and_then(|font| font.colour.as_deref())
+                .colour
+                .as_deref()
                 .and_then(rgb_of)
+                .or_else(|| look.font.as_ref().and_then(|font| font.colour.as_deref()).and_then(rgb_of))
                 .unwrap_or([0, 0, 0]);
             let align = look.align.unwrap_or_else(Align::plain);
             let is_number = matches!(value, Value::Number(_));
