@@ -258,3 +258,22 @@ fn the_conditional_format_is_saved() {
     assert_eq!(list[0]["range"].as_str(), Some("A1:A2"), "the range is there");
     assert_eq!(list[0]["format"].as_str(), Some("0.00"), "and the format");
 }
+
+/// A conditional format may judge the cells by a **formula**, and the
+/// formula is written as it is in the top-left cell of the range.
+#[test]
+fn a_conditional_format_may_judge_the_cells_by_a_formula() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 9.0);
+    session
+        .execute(
+            "grid.conditional.formula",
+            &json!({ "sheet": sheet, "range": "A1:A2", "formula": "A1>5", "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(text_of(&mut session, sheet, "A2"), "9.00", "the cell that matches is written");
+    assert_eq!(text_of(&mut session, sheet, "A1"), "1", "and the one that does not is not");
+    assert_eq!(matching(&mut session, sheet, "A1:A2"), vec!["A2".to_string()], "the cell matches");
+}

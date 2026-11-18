@@ -33,7 +33,9 @@
 //!   tree's rule may be a comparison, a colour scale, a data bar, an
 //!   icon set or an expression. Here a rule is a **comparison** — the
 //!   same criterion the filter of a sheet uses (§347) — and the other
-//!   kinds are commands of their own when they come.
+//!   kinds are commands of their own when they come — and §1017 says
+//!   otherwise: the **expression** is here (`grid.conditional.formula`),
+//!   and the colour scale, the data bar and the icon set are not.
 //! - **The tree's rules are ordered and the first that matches wins.**
 //!   The tree's rules are in a list and it walks them in **priority** —
 //!   the rule that names the lower number is seen first. Here they are
@@ -60,8 +62,15 @@ use crate::formula::{Area, CellRef, Criterion, FILTER_OPS};
 pub struct Conditional {
     /// The range of cells it is about.
     pub range: String,
-    /// The criterion a cell's value is judged by.
-    pub criterion: Criterion,
+    /// The criterion a cell's value is judged by, when the rule has
+    /// one.
+    pub criterion: Option<Criterion>,
+    /// The **formula** a cell is judged by, when the rule has one: the
+    /// cells whose formula is **true** are the cells that match.
+    ///
+    /// The formula is written as it is in the **top-left cell** of the
+    /// range, and it is moved with the cell it is judged for.
+    pub formula: Option<String>,
     /// The **format code** the matching cells are written with, when
     /// the rule names one.
     pub format: Option<String>,
@@ -87,6 +96,10 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
         let Some(range) = entry.get("range").and_then(|range| range.as_str()) else { continue };
         let op = entry.get("op").and_then(|op| op.as_str()).unwrap_or("=").to_string();
         let value = entry.get("value").and_then(|value| value.as_str()).unwrap_or("").to_string();
+        // A rule has a **criterion** or a **formula**: the cells whose
+        // formula is true are the cells that match.
+        let formula = entry.get("formula").and_then(|formula| formula.as_str()).map(|f| f.to_string());
+        let criterion = if formula.is_some() { None } else { Some(Criterion { op, value }) };
         let format = entry.get("format").and_then(|format| format.as_str()).map(|format| format.to_string());
         let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
         let stop = entry.get("stop").and_then(|stop| stop.as_bool());
@@ -96,7 +109,8 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             .and_then(|priority| u32::try_from(priority).ok());
         formats.push(Conditional {
             range: range.to_string(),
-            criterion: Criterion { op, value },
+            criterion,
+            formula,
             format,
             fill,
             stop,
@@ -157,6 +171,7 @@ pub struct Looks {
 /// And the tree's **stop if true**: a rule that matched and says stop
 /// ends the walk, and the rules after it are not tried.
 pub fn looks_for(
+    book: &crate::formula::Book,
     node: &craftkit_sdk::Node,
     cell: CellRef,
     value: &crate::formula::Value,
@@ -168,7 +183,13 @@ pub fn looks_for(
         if !area.covers(cell) {
             continue;
         }
-        if !conditional.criterion.matches(value, system) {
+        // A rule has a **criterion** or a **formula**, and the cells
+        // that match it are the cells the rule writes.
+        let matched = match &conditional.formula {
+            Some(formula) => formula_matches(book, &node.name, formula, &area, cell),
+            None => conditional.criterion.as_ref().is_some_and(|criterion| criterion.matches(value, system)),
+        };
+        if !matched {
             continue;
         }
         if looks.format.is_none() {
@@ -189,12 +210,28 @@ pub fn looks_for(
 /// The first one that matches wins, and the rules are tried in
 /// priority.
 pub fn format_for(
+    book: &crate::formula::Book,
     node: &craftkit_sdk::Node,
     cell: CellRef,
     value: &crate::formula::Value,
     system: crate::dates::System,
 ) -> Option<String> {
-    looks_for(node, cell, value, system).format
+    looks_for(book, node, cell, value, system).format
+}
+
+/// Whether the **formula** of a rule is **true** for a cell.
+///
+/// The formula is written as it is in the **top-left cell** of the
+/// range, and it is moved with the cell it is judged for: the rule of
+/// `A1:A10` and the formula `A1>0` is the rule *the cell is above
+/// zero* for every cell of the range.
+fn formula_matches(book: &crate::formula::Book, sheet: &str, text: &str, area: &Area, cell: CellRef) -> bool {
+    let row = i64::from(cell.row) - i64::from(area.start.row);
+    let column = i64::from(cell.col) - i64::from(area.start.col);
+    let Some(shifted) = crate::formula::shift_in_formula(text, row, column) else { return false };
+    let Ok(expression) = crate::formula::parse(&shifted) else { return false };
+    let mut being = Vec::new();
+    matches!(book.evaluate(sheet, &expression, &mut being), crate::formula::Value::Bool(true))
 }
 
 commands! {
@@ -265,7 +302,12 @@ commands! {
                 });
             }
             let value = self.value.0.clone();
-            if (op == "<" || op == "<=" || op == ">" || op == ">=") && value.trim().parse::<f64>().is_err() {
+            // The **number** the operation compares with is read by the
+            // tree's own rule of numbers — the rule `VALUE` reads a text
+            // by — so a currency sign, thousands separators and a date
+            // are numbers.
+            let number = crate::textvalue::number_of(&value, crate::system_of(session, sheet));
+            if (op == "<" || op == "<=" || op == ">" || op == ">=") && number.is_none() {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!("the operation `{op}` compares numbers, and `{value}` is not one"),
@@ -346,8 +388,9 @@ commands! {
                 .map(|conditional| {
                     json!({
                         "range": conditional.range,
-                        "op": conditional.criterion.op,
-                        "value": conditional.criterion.value,
+                        "op": conditional.criterion.as_ref().map(|criterion| criterion.op.clone()),
+                        "value": conditional.criterion.as_ref().map(|criterion| criterion.value.clone()),
+                        "formula": conditional.formula,
                         "format": conditional.format,
                         "fill": conditional.fill,
                         "stop": conditional.stop,
@@ -376,6 +419,189 @@ commands! {
                     "range": range,
                     "op": op,
                     "value": value,
+                    "format": format,
+                    "fill": fill,
+                    "stop": stop,
+                }),
+            ))
+
+        }
+    }
+
+    /// Put a **conditional format** on a range of cells, and judge the
+    /// cells by a **formula**.
+    ///
+    /// The formula is written as it is in the **top-left cell** of the
+    /// range, and it is moved with the cell it is judged for: the rule
+    /// of `A1:A10` and the formula `A1>0` is the rule *the cell is
+    /// above zero* for every cell of the range.
+    ///
+    /// The cells whose formula is **true** are written with the look.
+    grid.conditional.formula {
+        area: "grid",
+        layer: "grid",
+        icon: "brush",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is on.
+            sheet: NodeRef,
+            /// The range it is about: `A1:A10`.
+            range: Text,
+            /// The **formula** the cells are judged by.
+            formula: Text,
+            /// The format the matching cells are written with. A rule may
+            /// carry the format, the fill, or both.
+            format: Option<Text>,
+            /// The fill the matching cells are filled with: `#rrggbb`. A rule
+            /// may carry the fill and no format.
+            fill: Option<Text>,
+            /// The tree's **stop if true**: the walk ends at this rule when it
+            /// matched, and the rules after it are not tried.
+            stop: Option<Bool>,
+            /// The **priority** of the rule: the lower the number, the earlier
+            /// the rule is tried.
+            priority: Option<Number>,
+        },
+        run: {
+            let id = "grid.conditional.formula".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            // The **formula**: it is read, and a formula that cannot be
+            // read is refused.
+            let formula = self.formula.0.trim().to_string();
+            if formula.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a rule's formula is a formula".to_string(),
+                });
+            }
+            if crate::formula::parse(&formula).is_err() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{formula}` is not a formula"),
+                });
+            }
+            // The **format**: the tree's rule says the format of the
+            // cells, and a rule may say the fill and no format.
+            let format = match &self.format {
+                Some(given) => {
+                    let given = given.0.trim().to_string();
+                    if given.chars().count() > crate::format::MAX_FORMAT_CHARS {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "a format is at most {} characters long",
+                                crate::format::MAX_FORMAT_CHARS
+                            ),
+                        });
+                    }
+                    match crate::formatnames::resolve(&given) {
+                        Ok(code) => Some(code),
+                        Err(refusal) => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: crate::formatnames::message(&given, &refusal),
+                            });
+                        }
+                    }
+                }
+                None => None,
+            };
+            // The **fill**: a colour, and nothing else.
+            let fill = match &self.fill {
+                Some(given) => {
+                    let Some(colour) = crate::colours::colour_of(&given.0) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{}` is not a colour: a colour is `#rrggbb`", given.0.trim()),
+                        });
+                    };
+                    match colour {
+                        Some(colour) => Some(colour),
+                        None => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: "a rule's fill is a colour, and `none` is not one".to_string(),
+                            });
+                        }
+                    }
+                }
+                None => None,
+            };
+            if format.is_none() && fill.is_none() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                });
+            }
+            let stop = self.stop.map(|stop| stop.0);
+            let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+            let priority = match self.priority {
+                Some(priority) => {
+                    let number = priority.0;
+                    if !number.is_finite() || number.fract() != 0.0 || number < 0.0 || number > u32::MAX as f64 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the priority of a rule is a whole number, and {number} is not one"),
+                        });
+                    }
+                    Some(number as u32)
+                }
+                None => None,
+            };
+            let mut list = conditionals_of(node)
+                .into_iter()
+                .map(|conditional| {
+                    json!({
+                        "range": conditional.range,
+                        "op": conditional.criterion.as_ref().map(|criterion| criterion.op.clone()),
+                        "value": conditional.criterion.as_ref().map(|criterion| criterion.value.clone()),
+                        "formula": conditional.formula,
+                        "format": conditional.format,
+                        "fill": conditional.fill,
+                        "stop": conditional.stop,
+                        "priority": conditional.priority,
+                    })
+                })
+                .collect::<Vec<_>>();
+            // A range may have **one** conditional format: a second one for
+            // the same range replaces the first.
+            list.retain(|entry| entry["range"].as_str() != Some(range.as_str()));
+            list.push(json!({
+                "range": range,
+                "formula": formula,
+                "format": format,
+                "fill": fill,
+                "stop": stop,
+                "priority": priority,
+            }));
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["conditionals"] = json!(list);
+            }
+            Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
+                json!({
+                    "sheet": sheet,
+                    "range": range,
+                    "formula": formula,
                     "format": format,
                     "fill": fill,
                     "stop": stop,
@@ -434,8 +660,9 @@ commands! {
                 .map(|conditional| {
                     json!({
                         "range": conditional.range,
-                        "op": conditional.criterion.op,
-                        "value": conditional.criterion.value,
+                        "op": conditional.criterion.as_ref().map(|criterion| criterion.op.clone()),
+                        "value": conditional.criterion.as_ref().map(|criterion| criterion.value.clone()),
+                        "formula": conditional.formula,
                         "format": conditional.format,
                         "fill": conditional.fill,
                         "stop": conditional.stop,
@@ -497,8 +724,17 @@ commands! {
                     let cell = CellRef { col, row };
                     let value = book.value_of(&name, cell);
                     let matched = conditionals.iter().find(|conditional| {
-                        area_of(&conditional.range).is_some_and(|area| area.covers(cell))
-                            && conditional.criterion.matches(&value, book.system())
+                        let Some(area) = area_of(&conditional.range) else { return false };
+                        if !area.covers(cell) {
+                            return false;
+                        }
+                        match &conditional.formula {
+                            Some(formula) => formula_matches(&book, &name, formula, &area, cell),
+                            None => conditional
+                                .criterion
+                                .as_ref()
+                                .is_some_and(|criterion| criterion.matches(&value, book.system())),
+                        }
                     });
                     if let Some(matched) = matched {
                         cells.push(json!({

@@ -1492,6 +1492,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/filters.rs",
         section: "§1016",
     },
+    Port {
+        rule: "a conditional format may judge the cells by a formula",
+        from: "gridcraft/crates/engine/src/cmd/insert/cond_format.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/conditional.rs",
+        command: "grid.conditional.formula",
+        test: "crates/craftkit-plugin-grid/tests/conditional.rs",
+        section: "§1017",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

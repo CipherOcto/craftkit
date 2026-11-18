@@ -138,7 +138,13 @@ commands! {
                         // with the format of the cell — the conditional
                         // format that matches it first, and the format
                         // of the style it names otherwise.
-                        let looks = crate::conditional::looks_for(node, cell, &value, crate::system_of(session, sheet));
+                        let looks = crate::conditional::looks_for(
+                                &crate::book_of(session.document()),
+                                node,
+                                cell,
+                                &value,
+                                crate::system_of(session, sheet),
+                            );
                         let format = match &looks.format {
                             Some(code) => crate::format::Format::parse(code).unwrap_or(crate::format::Format::General),
                             None => crate::format_of(session, sheet, &cells, cell),
