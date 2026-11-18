@@ -4485,6 +4485,7 @@ so.
 | a **workbook's charts carry the colours of their series** | **built.** The colour of each series is read, and it is in the chart of the document (§1038) | §1038 |
 | a **formula may name a column of a table** | **built.** The column of a table may be named in a formula, and the formula reads the cells of that column (§1039) | §1039 |
 | a **rename follows the formulas that name it** | **built.** The table's name and the column's name are written back into the formulas that name them (§1040) | §1040 |
+| a **file's spelling of a structured reference is read** | **built.** The row of the cell and the whole table are read as a file spells them (§1041) | §1041 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67380,3 +67381,54 @@ A **rename** follows into the **formulas** that name what is renamed.
 - **A table that is taken away** leaves the formulas that named it
   saying a name that is not there — and those formulas are an error
   that says so.
+
+## 1041. A file's spelling of a structured reference is read
+
+A **file** spells a structured reference its own way, and the tree reads
+that way too.
+
+### What was built
+
+- The tree reads the **file's** spelling of the **row of the cell**:
+  `Orders[[#This Row],[amount]]` — which is what `[@amount]` says — and
+  the **whole row** of the cell: `Orders[[#This Row]]`.
+- The tree reads the **whole table** as a file spells it: `Orders[]`.
+- The tree writes the row of the cell **with the table's name in it** —
+  `Orders[[#This Row],[amount]]` — and the shorthand `[@amount]` when
+  the table is not named; so a formula that is rewritten keeps saying
+  the same thing.
+- A file's formula that names the row of the cell is **read**: the
+  import counts it among the formulas it read and not among the ones it
+  could not.
+
+### What the port found
+
+- **The reference writes `[@Col]` for the display and
+  `[[#This Row],[Col]]` for the file**: the shorthand is the display,
+  and a file holds the long form. The tree read only the display, and
+  so a workbook whose formula used the file's spelling was **not read**
+  — the import counted it among the formulas it could not read.
+- **The reference writes the whole table as `Table[]`**, with nothing
+  in the brackets.
+- **The reference has two printers** — one for the display and one for
+  the file. The tree has **one** printer, and it writes the long form
+  when the table is named and the short form when it is not.
+
+### What it cost
+
+- **No new command**: a formula is a formula. The battery still carries
+  **251** commands.
+- **Three forms** in the parser, and the printer's own spelling of the
+  row of the cell.
+- **Three tests**: two in the grid battery (`tests/tables.rs`) and one
+  in the import's test (`tests/xlsximport.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's printer is one printer**: a formula the tree rewrites is
+  written in the tree's spelling, and a file's formula keeps the
+  file's text until something rewrites it.
+- **A file's table keeps the name the file gives it** — even a name the
+  tree would refuse to make, such as `Table1`, which looks like a cell
+  (the tree's own rule).
