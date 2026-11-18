@@ -4481,6 +4481,7 @@ so.
 | a **workbook's rules carry the colour of the text** | **built.** The font of the differential format is read, and the colour is in the rule of the document (§1034) | §1034 |
 | a **rule may draw a border on the cells it matches** | **built.** The rule carries the line of each edge, and the page draws it (§1035) | §1035 |
 | a **workbook's rules carry the borders they draw** | **built.** The border of the differential format is read, and the lines are in the rule of the document (§1036) | §1036 |
+| a **chart's series may have a colour** | **built.** The list of the tree's colours is kept, and the read says the colour of each series (§1037) | §1037 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67175,3 +67176,46 @@ matches, and the reader reads it.
 - **The tree's rule draws one kind of line**: a file's rule may draw a
   line that is not one of the tree's thirteen styles, and such a line
   is no line.
+
+## 1037. A chart's series may have a colour
+
+A chart's **series** may have a **colour**, and the tree keeps the list
+of them.
+
+### What was built
+
+- The **chart** carries the **colours** of its series: a list of the
+  tree's own colours, `#rrggbb`.
+- The **chart set** takes the list, and the **chart read** says it — and
+  says the **colour of each series**, which is the list taken in turn:
+  a chart with fewer colours than series takes the colours again, from
+  the first.
+- A colour that is not a colour, and a list that is not a list, are
+  refused.
+
+### What the port found
+
+- **The reference's chart gives every series a colour**, and its
+  **change colours** command takes either the colours themselves or the
+  name of a **palette**: `monochrome`, `accent1` to `accent6` and the
+  colours of the theme. The tree's colours are `#rrggbb` and a list of
+  them, and a palette is not a thing the tree has.
+- **The reference's colours are of the theme**: the tree's colours are
+  the tree's own, and a colour of the theme is read as the colour it is
+  (§1038).
+
+### What it cost
+
+- **No new command**: the colours are part of the look of a chart, and
+  the chart set takes them. The battery still carries **251** commands.
+- **One field** on the chart, and two on the answer of the chart read.
+- **Two tests** in the grid battery (`tests/charts.rs`): the colours of
+  the series, and the two refusals.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree has no palette**: the reference's chart may take the name
+  of a palette, and the tree's chart takes the colours.
+- **The tree does not draw its charts**: a chart has no place (§ the
+  house rule), and the colours are for the front end that draws it.
