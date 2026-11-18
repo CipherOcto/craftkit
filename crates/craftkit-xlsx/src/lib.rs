@@ -459,6 +459,12 @@ pub struct Chart {
     pub categories: Option<String>,
     /// The **series**: the ranges the chart names its series by.
     pub series: Vec<String>,
+    /// The **colours** of the series, as `#rrggbb`, in the order of the
+    /// series.
+    ///
+    /// A series with no colour of its own has no colour here, and the
+    /// list is shorter than the series.
+    pub colours: Vec<String>,
 }
 
 /// Read the **charts** of a sheet.
@@ -471,6 +477,7 @@ fn read_drawings(
     package: &mut craftkit_zip::Package<'_>,
     root: &craftkit_xml::El,
     sheet_rels: &[Rel],
+    theme: &Theme,
     warnings: &mut Vec<String>,
 ) -> (Vec<Chart>, Vec<Picture>) {
     let mut out = Vec::new();
@@ -498,7 +505,7 @@ fn read_drawings(
         };
         let Some(relation) = drawing_rels.iter().find(|relation| relation.id == id) else { continue };
         let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
-        let Some(chart) = read_chart(&root) else { continue };
+        let Some(chart) = read_chart(&root, theme) else { continue };
         out.push(chart);
     }
     // The **pictures** of the drawing.
@@ -703,7 +710,7 @@ fn read_pivots(
 ///
 /// The chart is a **group** of series — a bar chart, a line chart, a
 /// pie chart — and the group says of itself what kind of drawing it is.
-fn read_chart(root: &craftkit_xml::El) -> Option<Chart> {
+fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
     let chart = root.child("chart")?;
     let plot = chart.child("plotArea")?;
     // The **group**: the kind of drawing and its series.
@@ -746,6 +753,8 @@ fn read_chart(root: &craftkit_xml::El) -> Option<Chart> {
     // values.
     let mut categories: Option<String> = None;
     let mut series: Vec<String> = Vec::new();
+    // The **colours** of the series: the colour each one is drawn in.
+    let mut colours: Vec<String> = Vec::new();
     for serie in element.kids("ser") {
         if categories.is_none() {
             categories = data_ref(serie.child("cat")).or_else(|| data_ref(serie.child("xVal")));
@@ -753,6 +762,9 @@ fn read_chart(root: &craftkit_xml::El) -> Option<Chart> {
         let values = data_ref(serie.child("val")).or_else(|| data_ref(serie.child("yVal")));
         if let Some(values) = values {
             series.push(values);
+        }
+        if let Some(colour) = colour_of_series(serie, theme) {
+            colours.push(colour);
         }
     }
     // The **title**: the text of it, wherever it is written.
@@ -794,7 +806,23 @@ fn read_chart(root: &craftkit_xml::El) -> Option<Chart> {
         y_title,
         categories,
         series,
+        colours,
     })
+}
+
+/// The **colour** a series is drawn in, when the file names one.
+///
+/// The colour is in the series' own shape: a **solid fill** of a
+/// colour of the file — `srgbClr` — or a colour of the **theme**,
+/// which the theme says what it is.
+fn colour_of_series(serie: &craftkit_xml::El, theme: &Theme) -> Option<String> {
+    let fill = serie.child("spPr").and_then(|shape| shape.child("solidFill"))?;
+    if let Some(hex) = fill.child("srgbClr").and_then(|colour| colour.attr("val")) {
+        return crate::styles::colour_of_hex(hex);
+    }
+    let scheme = fill.child("schemeClr").and_then(|colour| colour.attr("val"))?;
+    let index = SLOTS.iter().position(|slot| *slot == scheme)?;
+    theme.colour(index as u64).map(|colour| colour.to_string())
 }
 
 /// The **range** an element names, when it names one.
@@ -1852,7 +1880,7 @@ fn read_sheet(
     let tables = read_tables(package, &root, &sheet_rels);
     // The **charts** of the sheet: they are in parts of their own,
     // named by the drawing of the sheet.
-    let (charts, pictures) = read_drawings(package, &root, &sheet_rels, warnings);
+    let (charts, pictures) = read_drawings(package, &root, &sheet_rels, theme, warnings);
     // The **pivot tables** of the sheet: they are in parts of their
     // own, and each of them names a cache of its own.
     let pivots = read_pivots(package, &sheet_rels, warnings);

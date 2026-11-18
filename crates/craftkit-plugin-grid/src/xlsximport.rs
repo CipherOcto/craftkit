@@ -1122,6 +1122,7 @@ commands! {
                         "xTitle": chart.x_title,
                         "yTitle": chart.y_title,
                         "smooth": false,
+                        "colours": chart.colours.clone(),
                     });
                     session.document_mut()?.add_node_with_under(Some(sheet_id), name, "grid.chart", None, node);
                     imported_charts += 1;

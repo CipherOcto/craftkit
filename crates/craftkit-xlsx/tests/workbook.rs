@@ -1365,6 +1365,52 @@ fn the_charts_of_a_sheet_are_read() {
     assert!(!charts[0].data_labels, "and that its data labels are not");
     assert_eq!(charts[0].categories.as_deref(), Some("One!$A$2:$A$10"), "the cells of its categories");
     assert_eq!(charts[0].series, vec!["One!$B$2:$B$10".to_string()], "and the cells of its series");
+    assert!(charts[0].colours.is_empty(), "and the series have no colour of their own");
+}
+
+/// The **colours** of the series of a chart are read: the colour a
+/// series is drawn in.
+#[test]
+fn the_colours_of_the_series_of_a_chart_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/><drawing r:id="rId2"/></worksheet>"#),
+        (
+            "xl/drawings/drawing1.xml",
+            r#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/charts/chart1.xml",
+            r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:ser><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val><c:spPr><a:solidFill><a:srgbClr val="FF4472C4"/></a:solidFill></c:spPr></c:ser><c:ser><c:val><c:numRef><c:f>One!$C$2:$C$10</c:f></c:numRef></c:val><c:spPr><a:solidFill><a:srgbClr val="FFFF0000"/></a:solidFill></c:spPr></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, charts) = &workbook.charts[0];
+    assert_eq!(charts.len(), 1, "one chart");
+    assert_eq!(
+        charts[0].colours,
+        vec!["#4472c4".to_string(), "#ff0000".to_string()],
+        "the colours of the series"
+    );
 }
 
 /// A cell that holds a **date** in the file's own words is read: the

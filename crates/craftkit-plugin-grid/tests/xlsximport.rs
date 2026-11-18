@@ -1590,7 +1590,7 @@ fn the_charts_of_a_sheet_are_imported() {
         ),
         (
             "xl/charts/chart1.xml",
-            r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:title><c:tx><c:rich><a:p><a:r><a:t>The Sales</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:catAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Months</a:t></a:r></a:p></c:rich></c:tx></c:title></c:catAx><c:valAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Money</a:t></a:r></a:p></c:rich></c:tx></c:title><c:majorGridlines/></c:valAx><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea><c:legend><c:legendPos val="b"/></c:legend></c:chart></c:chartSpace>"#,
+            r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:title><c:tx><c:rich><a:p><a:r><a:t>The Sales</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:catAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Months</a:t></a:r></a:p></c:rich></c:tx></c:title></c:catAx><c:valAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Money</a:t></a:r></a:p></c:rich></c:tx></c:title><c:majorGridlines/></c:valAx><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val><c:spPr><a:solidFill><a:srgbClr val="FF4472C4"/></a:solidFill></c:spPr></c:ser></c:barChart></c:plotArea><c:legend><c:legendPos val="b"/></c:legend></c:chart></c:chartSpace>"#,
         ),
     ]);
     let path = a_file(bytes);
@@ -1610,6 +1610,7 @@ fn the_charts_of_a_sheet_are_imported() {
     assert_eq!(chart.data["xTitle"].as_str(), Some("Months"), "the title of its axis of the categories");
     assert_eq!(chart.data["yTitle"].as_str(), Some("Money"), "and the title of the axis of the values");
     assert_eq!(chart.data["gridlines"].as_bool(), Some(true), "and that its gridlines are shown");
+    assert_eq!(chart.data["colours"][0].as_str(), Some("#4472c4"), "and the colour of its series");
 }
 
 /// A cell that holds a **date** in the file's own words is imported:
