@@ -1699,6 +1699,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/tables.rs",
         section: "§1039",
     },
+    Port {
+        rule: "a rename follows the formulas that name it",
+        from: "gridcraft/crates/engine/src/tables.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.table.rename",
+        test: "crates/craftkit-plugin-grid/tests/tables.rs",
+        section: "§1040",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

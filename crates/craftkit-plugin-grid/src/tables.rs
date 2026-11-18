@@ -30,6 +30,11 @@
 //! of its header cell, so it is **derived** as the fields are, and it is
 //! read without case.
 //!
+//! And a **rename follows** the formulas that name it: the name of a
+//! table and the name of a column are written back into the formulas
+//! that name them, so a formula that names a table keeps naming it
+//! after the table is renamed.
+//!
 //! # What the port found
 //!
 //! - **The tree's table is an object with a name, a range, a header
@@ -187,6 +192,61 @@ pub(crate) fn fields_of(table: &Table, cells: &Cells) -> Result<Vec<(CellRef, St
         fields.push((cell, header_text(cells, cell)?));
     }
     Ok(fields)
+}
+
+/// The **table** a cell is the header of, and the **name** of the column
+/// it names.
+///
+/// The header of a table is its first row, and the text of a header
+/// cell names the column under it. A cell that is not a header names no
+/// column, and a header that holds no text names no column either.
+pub(crate) fn header_name(tables: &[Table], cells: &Cells, cell: CellRef) -> Option<(String, String)> {
+    for table in tables {
+        if cell.row != table.range.start.row || !table.range.covers(cell) {
+            continue;
+        }
+        let Ok(name) = header_text(cells, cell) else { continue };
+        return Some((table.name.clone(), name));
+    }
+    None
+}
+
+/// The formulas of every sheet of the workbook, with the renames in
+/// them.
+///
+/// A rename **follows** into the formulas that name it: the formulas
+/// are the text of the cells, and the text is parsed, the renames are
+/// applied and the text is printed again.
+///
+/// The `inside` says whether the cell of a formula is in the table of
+/// the column that is renamed — the reference to the **row of the cell**
+/// names a column of the table the cell is in, and it follows the
+/// rename only when the cell is in it.
+///
+/// The answer is how many formulas were rewritten.
+pub(crate) fn follow_rename(
+    session: &mut Session,
+    rename: &crate::formula::Rename,
+    inside: &dyn Fn(&str, CellRef) -> bool,
+) -> usize {
+    let sheets: Vec<(u64, String)> = session
+        .document()
+        .walk()
+        .filter(|node| node.kind == "grid.sheet")
+        .map(|node| (node.id, node.name.clone()))
+        .collect();
+    let mut renamed = 0usize;
+    for (id, name) in sheets {
+        let Ok(document) = session.document_mut() else { continue };
+        let Some(node) = document.node_mut(id) else { continue };
+        let mut cells = crate::cells_of(node);
+        let count = cells.rename_structured(rename, &|cell| inside(&name, cell));
+        if count > 0 {
+            node.data["cells"] = crate::cells_into(&cells);
+        }
+        renamed += count;
+    }
+    renamed
 }
 
 /// The **totals** of the columns of a table: the sum of the numbers
@@ -718,10 +778,18 @@ commands! {
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 node.data["tables"] = tables_json(&tables);
             }
+            // A **rename follows** the formulas that name the table.
+            let rename = crate::formula::Rename {
+                table: Some((name.clone(), to.clone())),
+                column: None,
+                in_table: false,
+            };
+            let followed = follow_rename(session, &rename, &|_, _| false);
             Ok(Outcome::changed(format!("the table `{name}` is called `{to}` now")).with_data(json!({
                 "sheet": sheet,
                 "name": to,
                 "was": name,
+                "followed": followed,
             })))
 
         }

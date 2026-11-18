@@ -329,3 +329,91 @@ fn a_formula_in_a_cell_of_a_table_may_name_its_own_column() {
     assert_eq!(outcome.data["value"].as_f64(), Some(8.0), "the next row's own amount is doubled");
     assert_eq!(outcome.data["formula"].as_str(), Some("=[@amount] * 2"), "and the formula is as it was");
 }
+
+/// A **rename follows** the formulas that name it.
+#[test]
+fn a_rename_follows_the_formulas_that_name_it() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B2" }))
+        .expect("the table is made");
+    session
+        .execute(
+            "grid.formula.set",
+            &json!({ "sheet": sheet, "cell": "C1", "formula": "=SUM(Orders[amount])" }),
+        )
+        .expect("the formula is set");
+    let outcome = session
+        .execute("grid.table.rename", &json!({ "sheet": sheet, "name": "Orders", "to": "Ledger" }))
+        .expect("the table is renamed");
+    assert_eq!(outcome.data["followed"].as_u64(), Some(1), "the formula follows the rename");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "C1" })).expect("the cell is read");
+    assert_eq!(
+        outcome.data["formula"].as_str(),
+        Some("=SUM(Ledger[amount])"),
+        "and it names the table by its new name"
+    );
+    assert_eq!(outcome.data["value"].as_f64(), Some(3.0), "and it still reads the column");
+}
+
+/// A **column** of a table is renamed by its **header**, and the rename
+/// follows the formulas that name the column.
+#[test]
+fn a_column_renamed_follows_the_formulas_that_name_it() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "C1", "twice");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    a_text(&mut session, sheet, "A3", "bob");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B3", "value": 4 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:C3" }))
+        .expect("the table is made");
+    // The **column of the row the cell is in**.
+    session
+        .execute("grid.formula.set", &json!({ "sheet": sheet, "cell": "C2", "formula": "=[@amount]*2" }))
+        .expect("the formula is set");
+    // The **column of the table**, named from outside it.
+    session
+        .execute(
+            "grid.formula.set",
+            &json!({ "sheet": sheet, "cell": "E1", "formula": "=SUM(Orders[amount])" }),
+        )
+        .expect("the formula is set");
+    // The **header** of the column is edited: the column is renamed.
+    let outcome = session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B1", "value": "sum" }))
+        .expect("the header is set");
+    assert_eq!(outcome.data["followed"].as_u64(), Some(2), "both formulas follow the rename");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "C2" })).expect("the cell is read");
+    assert_eq!(
+        outcome.data["formula"].as_str(),
+        Some("=[@sum] * 2"),
+        "and the row of the cell names the column by its new name"
+    );
+    assert_eq!(outcome.data["value"].as_f64(), Some(6.0), "and it still reads the column");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "E1" })).expect("the cell is read");
+    assert_eq!(
+        outcome.data["formula"].as_str(),
+        Some("=SUM(Orders[sum])"),
+        "and the table names the column by its new name"
+    );
+    assert_eq!(outcome.data["value"].as_f64(), Some(7.0), "and it still reads the column");
+}

@@ -2422,6 +2422,32 @@ impl Cells {
         renamed
     }
 
+    /// **Rename** the tables and the columns in every formula that names
+    /// them.
+    ///
+    /// A formula is **text**, so the text is parsed, the renames are
+    /// applied and the expression is printed. A formula that does not
+    /// name what was renamed is left exactly as the caller wrote it.
+    ///
+    /// The `in_table` says whether the cell the formula is in is in the
+    /// table of the column that is renamed: the reference to the **row
+    /// of the cell** — `[@amount]` — names a column of that table, and
+    /// it follows the rename only when the cell is in it.
+    ///
+    /// The answer is how many formulas were rewritten.
+    pub fn rename_structured(&mut self, rename: &Rename, in_table: &dyn Fn(CellRef) -> bool) -> usize {
+        let mut renamed = 0usize;
+        for (cell, entry) in self.cells.iter_mut() {
+            let Some(text) = &entry.formula else { continue };
+            let mut rename = rename.clone();
+            rename.in_table = in_table(*cell);
+            let Some(rewritten) = rename_in_structured(text, &rename) else { continue };
+            entry.formula = Some(rewritten);
+            renamed += 1;
+        }
+        renamed
+    }
+
     /// **Insert or delete** the cells of a range in every formula that
     /// names the sheet.
     ///
@@ -4694,6 +4720,123 @@ impl Expr {
     /// formula is written down twice.
     pub fn to_text(&self) -> String {
         expression_text(self, 0)
+    }
+}
+
+/// The **column** of a table that is renamed.
+#[derive(Debug, Clone)]
+pub struct ColumnRename {
+    /// The table the column is of.
+    pub table: String,
+    /// The name the column has now.
+    pub old: String,
+    /// The name the column is given.
+    pub new: String,
+}
+
+/// A **rename** that follows into the formulas that name it.
+///
+/// The tree's rule: a name is a name, and a formula that names it
+/// names it still — so a rename is not a change of the world, it is a
+/// change of the **word** the world is named by, and the formulas
+/// follow it.
+#[derive(Debug, Clone, Default)]
+pub struct Rename {
+    /// The **table** that is renamed: the name it has now, and the name
+    /// it is given.
+    pub table: Option<(String, String)>,
+    /// The **column** that is renamed.
+    pub column: Option<ColumnRename>,
+    /// Whether the formula is in a cell of the table of the column: the
+    /// reference to the **row of the cell** — `[@amount]` — names a
+    /// column of the table the cell is in, and it follows the rename
+    /// when the cell is in that table.
+    pub in_table: bool,
+}
+
+impl Rename {
+    /// The expression with the **structured references** in it renamed.
+    ///
+    /// A reference to a table that is renamed names the table by its new
+    /// name; a reference to a column that is renamed names the column by
+    /// its new name — and the name of a column is the name of the table
+    /// it is of, so `Orders[amount]` follows a rename of the column
+    /// `amount` of the table `Orders` and nothing else.
+    pub fn applied(&self, expression: &Expr) -> Expr {
+        match expression {
+            Expr::Number(_)
+            | Expr::Text(_)
+            | Expr::Bool(_)
+            | Expr::Error(_)
+            | Expr::Name(_)
+            | Expr::Cell { .. }
+            | Expr::Range { .. } => expression.clone(),
+            Expr::Struct { table, first, last, item } => {
+                // The name the table has **now**, before the rename.
+                let was = table.clone();
+                let mut table = table.clone();
+                let mut first = first.clone();
+                let mut last = last.clone();
+                if let Some((old, new)) = &self.table
+                    && !was.is_empty()
+                    && was.eq_ignore_ascii_case(old)
+                {
+                    table = new.clone();
+                }
+                if let Some(column) = &self.column {
+                    // The reference names the column when it names the
+                    // table the column is of — or when it names the row
+                    // of the cell and the cell is in that table.
+                    let names_it =
+                        if was.is_empty() { self.in_table } else { was.eq_ignore_ascii_case(&column.table) };
+                    if names_it {
+                        if let Some(first) = first.as_mut()
+                            && first.eq_ignore_ascii_case(&column.old)
+                        {
+                            *first = column.new.clone();
+                        }
+                        if let Some(last) = last.as_mut()
+                            && last.eq_ignore_ascii_case(&column.old)
+                        {
+                            *last = column.new.clone();
+                        }
+                    }
+                }
+                Expr::Struct { table, first, last, item: *item }
+            }
+            Expr::Call(name, arguments) => {
+                Expr::Call(name.clone(), arguments.iter().map(|argument| self.applied(argument)).collect())
+            }
+            Expr::Negate(inner) => Expr::Negate(Box::new(self.applied(inner))),
+            Expr::Binary(operator, left, right) => {
+                Expr::Binary(operator.clone(), Box::new(self.applied(left)), Box::new(self.applied(right)))
+            }
+        }
+    }
+}
+
+/// A formula's **text** with the renames in it, if it names what was
+/// renamed.
+///
+/// The text is parsed, the renames are applied and the expression is
+/// printed. A formula that does not parse is `None`, and a formula
+/// that says the same thing after the renames is `None` too: it does
+/// not name what was renamed.
+///
+/// The printed text is **read back** and compared with the expression it
+/// came from: a rewrite that says something else is not a rewrite, and
+/// the formula is left as it was.
+pub fn rename_in_structured(text: &str, rename: &Rename) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let renamed = rename.applied(&expression);
+    if renamed == expression {
+        return None;
+    }
+    let printed = renamed.to_text();
+    let text = if text.trim_start().starts_with('=') { format!("={printed}") } else { printed };
+    match parse(&text) {
+        Ok(back) if back == renamed => Some(text),
+        _ => None,
     }
 }
 
