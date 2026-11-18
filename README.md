@@ -4460,6 +4460,7 @@ so.
 | a **filter may keep the rows above the average** | **built.** The above-the-average is a filter of its own, and the average is the average of the column (§1013) | §1013 |
 | a **filter's criterion is read by the tree's own rule of numbers** | **built.** A currency, a fraction and a date are numbers in a criterion, read by the rule `VALUE` reads a text by (§1014) | §1014 |
 | a **filter may look for the words a cell holds** | **built.** The criterion has the four operations on the text of a cell, and the filter and the conditional format share it (§1015) | §1015 |
+| a **filter may judge the colour of the cells** | **built.** The fill behind the text and the colour of the text are filters of their own (§1016) | §1016 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56015,7 +56016,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 243 |
+| grid | 244 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -65952,3 +65953,47 @@ A filter may ask not for a number but for the **words** of a cell.
   and more, and they are not here.
 - **The tree's words are not wildcards**: the criterion of a `contains`
   is the words themselves, and the tree's `*` is not a wildcard there.
+
+## 1016. A filter may judge the colour of the cells
+
+A filter may ask not for a value but for the **look** of a cell.
+
+### What was built
+
+- A new **command**, `grid.filter.colour`, filters a sheet by the
+  **colour** of its cells: the **fill** behind their text, or — with
+  `font` — the **colour of their text**.
+- The colour is the cell's **own**: the fill it carries, or the colour
+  of its font. A cell that carries no such colour is not kept.
+- A colour is a colour of this tree: `#rrggbb` ✓ — and a name that is
+  not one is refused ✓.
+
+### What the port found
+
+- **The reference's filter may judge the colour of a cell**, and this
+  tree's filter did not. So a filter of *red* was not possible here
+  and was possible there. Here it is a filter of its own.
+- **The reference judges the fill of the *style* of the cell**, and
+  this tree judges the fill of the **cell**. The tree's fill is the
+  cell's own — as its format, its alignment and its font are (§816,
+  §819) — and the style's fill is not the cell's own.
+- **The reference's colour may be a theme colour with a tint**, and
+  this tree has no theme: a colour is six digits of hex or it is
+  refused — and the reference's colours are resolved against the theme
+  of the workbook before they are compared.
+
+### What it cost
+
+- **One new command**: the grid battery carries **244** commands.
+- **One rule that was already there**: a colour of this tree is
+  `#rrggbb`, and the cell's fill is the cell's own.
+- **One test** in the grid battery (`tests/filters.rs`): the filter
+  judging the colour of the cells.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's filter does not judge the icon of an outline**: the
+  reference's last criterion, and it is not here.
+- **The tree's filter does not judge the fill of the style of a cell**:
+  it judges the fill of the cell.
