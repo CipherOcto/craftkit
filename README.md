@@ -4480,6 +4480,7 @@ so.
 | a **conditional format may colour the text of the cells it matches** | **built.** The rule carries the colour, the cell read says it and the page writes the text in it (§1033) | §1033 |
 | a **workbook's rules carry the colour of the text** | **built.** The font of the differential format is read, and the colour is in the rule of the document (§1034) | §1034 |
 | a **rule may draw a border on the cells it matches** | **built.** The rule carries the line of each edge, and the page draws it (§1035) | §1035 |
+| a **workbook's rules carry the borders they draw** | **built.** The border of the differential format is read, and the lines are in the rule of the document (§1036) | §1036 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67083,7 +67084,7 @@ matches is written in, and the reader reads it.
 
 - **The border of a rule is not read**: a file's rule may draw a border
   around the cells it matches, and the tree counts nothing here — the
-  border is simply not there.
+  border is simply not there — and §1036 says otherwise: it is read.
 - **The tree's colours are `#rrggbb`**: a colour of the theme is read
   and resolved by the reader, and a rule that names one keeps the
   colour, not the name.
@@ -67134,3 +67135,43 @@ the cells it matches.
 - **The tree's rule draws one kind of line**: the reference's rule may
   draw a line that is not one of the tree's thirteen styles, and such a
   line is refused.
+
+## 1036. A workbook's rules carry the borders they draw
+
+A workbook's rule may say **what line** is drawn around the cells it
+matches, and the reader reads it.
+
+### What was built
+
+- The **reader** reads the **border** of a differential format: the
+  lines on the edges of the cells, the style of each line and its
+  colour. A line with a style this tree does not have is no line.
+- The **import** maps the lines into the rule of the document, beside
+  the fill, the colour and the format, and the cells of the range are
+  drawn with them.
+
+### What the port found
+
+- **The reference's differential format holds a border** and the tree's
+  now reads it: the edges, the style of each line and its colour.
+- **A colour of a line may be of the theme**: it is read against the
+  theme the file holds, as every colour of a file is, and the rule keeps
+  the colour and not the name.
+
+### What it cost
+
+- **No new command**: the borders are part of the look of a rule, and
+  the rule already carries them (§1035).
+- **One field** on the differential format of the reader, and one on the
+  rule.
+- **One test** in the reader (`crates/craftkit-xlsx/tests/workbook.rs`)
+  and one assertion in the import's test.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The border of a rule is on every cell that matches**: the
+  reference's is on the outside of the range, and the tree's is not.
+- **The tree's rule draws one kind of line**: a file's rule may draw a
+  line that is not one of the tree's thirteen styles, and such a line
+  is no line.
