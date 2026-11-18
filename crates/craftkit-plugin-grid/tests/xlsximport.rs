@@ -2116,7 +2116,7 @@ fn the_kinds_of_conditional_format_are_imported() {
         ),
         (
             "xl/worksheets/sheet1.xml",
-            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>ann</t></is></c></row></sheetData><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="containsBlanks" priority="2"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="expression" priority="3"><formula>C1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting></worksheet>"#,
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>ann</t></is></c></row></sheetData><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="containsBlanks" priority="2"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="expression" priority="3"><formula>C1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></dataBar></cfRule></conditionalFormatting></worksheet>"#,
         ),
     ]);
     let path = a_file(bytes);
@@ -2149,5 +2149,52 @@ fn the_kinds_of_conditional_format_are_imported() {
         said.as_deref()
             .is_some_and(|said| said.contains("1 conditional format(s) of a kind this tree does not have")),
         "it says how many: {said:?}"
+    );
+}
+
+/// A workbook's **colour scale** is imported: the colours of the scale
+/// are in the document, and the cells of the range are filled by it.
+#[test]
+fn a_colour_scale_of_a_workbook_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1"><v>0</v></c><c r="A2"><v>10</v></c></row></sheetData><conditionalFormatting sqref="A1:A2"><cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="FFF8696B"/><color rgb="FFFFEB84"/><color rgb="FF63BE7B"/></colorScale></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["conditionals"].as_u64(), Some(1), "the scale is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let colours = node.data["conditionals"][0]["colour_scale"]["colours"]
+        .as_array()
+        .map(|colours| {
+            colours
+                .iter()
+                .map(|colour| colour.as_str().unwrap_or_default().to_string())
+                .collect::<Vec<String>>()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        colours,
+        vec!["#f8696b".to_string(), "#ffeb84".to_string(), "#63be7b".to_string()],
+        "the colours of the scale are in the document"
     );
 }

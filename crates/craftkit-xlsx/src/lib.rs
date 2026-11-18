@@ -871,6 +871,17 @@ pub struct Validation {
     pub show_error: bool,
 }
 
+/// A **colour scale** of a sheet: the colours of the scale, in order.
+///
+/// The colours are two — of the lowest number of the range and of the
+/// highest — or three, and then the middle one stands for the middle
+/// of the numbers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColourScale {
+    /// The colours of the scale, in order.
+    pub colours: Vec<String>,
+}
+
 /// A **conditional format** of a sheet: a rule about a range of cells.
 ///
 /// The rule is a **comparison** — the operation, the value and the
@@ -897,6 +908,9 @@ pub struct Conditional {
     /// The formula is written as it is in the **top-left cell** of the
     /// range, and it is moved with the cell it is judged for.
     pub formula: Option<String>,
+    /// The **colour scale** of the rule, when the rule is one: the
+    /// colours of the scale, in order.
+    pub colour_scale: Option<ColourScale>,
     /// The **number format** the matching cells are written with, when
     /// the rule names one.
     pub format: Option<String>,
@@ -1922,6 +1936,9 @@ fn read_conditionals(
     // The rules of the kinds this tree does not have: they are counted,
     // and the reader says how many there were.
     let mut unread = 0u64;
+    // The **colour scales** this tree cannot read: the stops of them
+    // are not the ones it has, and they are counted too.
+    let mut unread_scales = 0u64;
     for block in root.kids("conditionalFormatting") {
         let Some(sqref) = block.attr("sqref") else { continue };
         let ranges: Vec<&str> = sqref.split_whitespace().collect();
@@ -1931,8 +1948,9 @@ fn read_conditionals(
         for rule in block.kids("cfRule") {
             let kind = rule.attr("type").unwrap_or("cellIs");
             // The **criterion** of the rule: the operation and the
-            // value, or the formula the cells are judged by.
-            let (op, value, formula) = match kind {
+            // value, or the formula the cells are judged by, or the
+            // colours of a scale.
+            let (op, value, formula, colour_scale) = match kind {
                 "cellIs" => {
                     let Some(op) = rule.attr("operator").and_then(conditional_op) else {
                         unread += 1;
@@ -1944,7 +1962,7 @@ fn read_conditionals(
                         unread += 1;
                         continue;
                     };
-                    (op.to_string(), value, None)
+                    (op.to_string(), value, None, None)
                 }
                 "expression" => {
                     let Some(formula) =
@@ -1955,18 +1973,64 @@ fn read_conditionals(
                     };
                     // The formula is written without the `=` the file
                     // does not write.
-                    (String::new(), String::new(), Some(formula.trim_start_matches('=').to_string()))
+                    (String::new(), String::new(), Some(formula.trim_start_matches('=').to_string()), None)
                 }
-                "containsText" => ("contains".to_string(), rule.attr("text").unwrap_or("").to_string(), None),
+                "containsText" => {
+                    ("contains".to_string(), rule.attr("text").unwrap_or("").to_string(), None, None)
+                }
                 "notContainsText" => {
-                    ("notContains".to_string(), rule.attr("text").unwrap_or("").to_string(), None)
+                    ("notContains".to_string(), rule.attr("text").unwrap_or("").to_string(), None, None)
                 }
-                "beginsWith" => ("beginsWith".to_string(), rule.attr("text").unwrap_or("").to_string(), None),
-                "endsWith" => ("endsWith".to_string(), rule.attr("text").unwrap_or("").to_string(), None),
-                "containsBlanks" => ("isEmpty".to_string(), String::new(), None),
-                "notContainsBlanks" => ("isNotEmpty".to_string(), String::new(), None),
-                "containsErrors" => ("isError".to_string(), String::new(), None),
-                "notContainsErrors" => ("isNotError".to_string(), String::new(), None),
+                "beginsWith" => {
+                    ("beginsWith".to_string(), rule.attr("text").unwrap_or("").to_string(), None, None)
+                }
+                "endsWith" => {
+                    ("endsWith".to_string(), rule.attr("text").unwrap_or("").to_string(), None, None)
+                }
+                "containsBlanks" => ("isEmpty".to_string(), String::new(), None, None),
+                "notContainsBlanks" => ("isNotEmpty".to_string(), String::new(), None, None),
+                "containsErrors" => ("isError".to_string(), String::new(), None, None),
+                "notContainsErrors" => ("isNotError".to_string(), String::new(), None, None),
+                "colorScale" => {
+                    // A **scale**: the stops of it are the lowest and
+                    // the highest of the range, and with three stops
+                    // the middle one is the fiftieth percentile — the
+                    // middle of the numbers.
+                    let Some(scale) = rule.kids("colorScale").next() else {
+                        unread += 1;
+                        continue;
+                    };
+                    let stops: Vec<(&str, Option<&str>)> = scale
+                        .kids("cfvo")
+                        .map(|stop| (stop.attr("type").unwrap_or(""), stop.attr("val")))
+                        .collect();
+                    let two_stops = stops.len() == 2 && stops[0].0 == "min" && stops[1].0 == "max";
+                    let middle_is_the_median = stops.len() == 3
+                        && stops[0].0 == "min"
+                        && stops[1].0 == "percentile"
+                        && stops[1].1 == Some("50")
+                        && stops[2].0 == "max";
+                    if !two_stops && !middle_is_the_median {
+                        unread_scales += 1;
+                        continue;
+                    }
+                    let colours: Vec<String> = scale
+                        .kids("color")
+                        .filter_map(|colour| colour.attr("rgb"))
+                        .map(|rgb| {
+                            // The file writes the colour as `arrggbb`,
+                            // and the tree's colour is `#rrggbb`.
+                            let hex = rgb.trim();
+                            let hex = hex.get(hex.len().saturating_sub(6)..).unwrap_or(hex);
+                            format!("#{}", hex.to_ascii_lowercase())
+                        })
+                        .collect();
+                    if colours.len() != stops.len() {
+                        unread_scales += 1;
+                        continue;
+                    }
+                    (String::new(), String::new(), None, Some(ColourScale { colours }))
+                }
                 _ => {
                     unread += 1;
                     continue;
@@ -1983,6 +2047,7 @@ fn read_conditionals(
                     op: op.clone(),
                     value: value.clone(),
                     formula: formula.clone(),
+                    colour_scale: colour_scale.clone(),
                     format: format.clone(),
                     fill: fill.clone(),
                     stop,
@@ -1994,7 +2059,13 @@ fn read_conditionals(
     if unread > 0 {
         warnings.push(format!(
             "{unread} conditional format(s) of a kind this tree does not have were not read: \
-             a colour scale, a data bar, an icon set, the duplicates, the top ten and more"
+             a data bar, an icon set, the duplicates, the top ten and more"
+        ));
+    }
+    if unread_scales > 0 {
+        warnings.push(format!(
+            "{unread_scales} colour scale(s) were not read: the stops of them are not the lowest, \
+             the middle and the highest"
         ));
     }
     formats

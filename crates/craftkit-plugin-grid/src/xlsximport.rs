@@ -882,11 +882,12 @@ commands! {
                 // that are about a range of cells.
                 let mut conditionals: Vec<Json> = Vec::new();
                 for rule in &sheet.conditionals {
-                    // A rule is a **criterion** or a **formula**: the
-                    // cells whose formula is true are the cells that
-                    // match.
-                    let criterion = match &rule.formula {
-                        Some(formula) => {
+                    // A rule is a **criterion**, a **formula** or a
+                    // **colour scale**: the cells whose formula is true
+                    // are the cells that match, and the cells of a scale
+                    // are filled by it.
+                    let criterion = match (&rule.formula, &rule.colour_scale) {
+                        (Some(formula), _) => {
                             // A formula that does not parse is not a
                             // rule this tree can judge.
                             if crate::formula::parse(formula).is_err() {
@@ -895,7 +896,8 @@ commands! {
                             }
                             None
                         }
-                        None => {
+                        (None, Some(_)) => None,
+                        (None, None) => {
                             if !crate::formula::Criterion::op_is_known(&rule.op) {
                                 unread_conditionals += 1;
                                 continue;
@@ -915,12 +917,18 @@ commands! {
                     };
                     let mut entry = craftkit_sdk::serde_json::Map::new();
                     entry.insert("range".to_string(), json!(rule.range));
-                    match criterion {
-                        Some((op, value)) => {
+                    match (&criterion, &rule.colour_scale) {
+                        (Some((op, value)), _) => {
                             entry.insert("op".to_string(), json!(op));
                             entry.insert("value".to_string(), json!(value));
                         }
-                        None => {
+                        (None, Some(scale)) => {
+                            entry.insert(
+                                "colour_scale".to_string(),
+                                json!({ "colours": scale.colours.clone() }),
+                            );
+                        }
+                        (None, None) => {
                             entry.insert("formula".to_string(), json!(rule.formula));
                         }
                     }

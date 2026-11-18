@@ -2212,7 +2212,7 @@ fn the_kinds_of_conditional_format_are_read() {
         ),
         (
             "xl/worksheets/sheet1.xml",
-            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="beginsWith" text="b" priority="2"><formula>LEFT(B1,1)="b"</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="containsBlanks" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="notContainsErrors" priority="4"/></conditionalFormatting><conditionalFormatting sqref="E1:E5"><cfRule type="expression" priority="5"><formula>E1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F5"><cfRule type="colorScale"><colorScale><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></colorScale></cfRule></conditionalFormatting></worksheet>"#,
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="beginsWith" text="b" priority="2"><formula>LEFT(B1,1)="b"</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="containsBlanks" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="notContainsErrors" priority="4"/></conditionalFormatting><conditionalFormatting sqref="E1:E5"><cfRule type="expression" priority="5"><formula>E1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F5"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></dataBar></cfRule></conditionalFormatting></worksheet>"#,
         ),
     ]);
     let workbook = read(&bytes).expect("the workbook is read");
@@ -2239,4 +2239,67 @@ fn the_kinds_of_conditional_format_are_read() {
         said.contains("1 conditional format(s) of a kind this tree does not have"),
         "it says how many: {said}"
     );
+}
+
+/// A workbook's **colour scale** is read: the colours of the scale, and
+/// the stops of it that the tree has.
+#[test]
+fn a_colour_scale_of_a_sheet_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="50"/><cfvo type="max"/><color rgb="FFF8696B"/><color rgb="FFFFEB84"/><color rgb="FF63BE7B"/></colorScale></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let rules = &workbook.sheets[0].conditionals;
+    assert_eq!(rules.len(), 1, "the scale is read");
+    let scale = rules[0].colour_scale.as_ref().expect("the rule is a scale");
+    assert_eq!(
+        scale.colours,
+        vec!["#f8696b".to_string(), "#ffeb84".to_string(), "#63be7b".to_string()],
+        "the colours of the scale are read"
+    );
+    assert!(workbook.warnings.is_empty(), "and nothing is left out: {:?}", workbook.warnings);
+}
+
+/// A scale whose stops are not the ones the tree has is **counted**.
+#[test]
+fn a_scale_that_the_tree_cannot_read_is_counted() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="colorScale" priority="1"><colorScale><cfvo type="min"/><cfvo type="percentile" val="30"/><cfvo type="max"/><color rgb="FFF8696B"/><color rgb="FFFFEB84"/><color rgb="FF63BE7B"/></colorScale></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.sheets[0].conditionals.is_empty(), "the scale is not read");
+    let said = workbook.warnings.join(" ");
+    assert!(said.contains("1 colour scale(s) were not read"), "it says how many: {said}");
 }
