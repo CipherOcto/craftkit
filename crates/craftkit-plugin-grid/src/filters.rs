@@ -26,6 +26,10 @@
 //! and `notContains`. The words are the words there, and not
 //! wildcards.
 //!
+//! And a filter may judge the **colour** of a cell: the fill behind
+//! its text, or the colour of its text. That is a filter of its own
+//! (`grid.filter.colour`), because a colour is not a value.
+//!
 //! And the number a comparison operation is compared with is read by
 //! the tree's **own rule of numbers** — the rule `VALUE` reads a text
 //! by — so a currency sign, thousands separators and a date are
@@ -292,6 +296,74 @@ commands! {
             }
             Ok(Outcome::changed(format!("the sheet `{sheet}` is filtered by the column {column}"))
                 .with_data(json!({ "sheet": sheet, "column": column, "above": above })))
+
+        }
+    }
+
+    /// **Filter** a sheet by the **colour** of its cells.
+    ///
+    /// The colour is the cell's **own**: the fill behind its text, or
+    /// the colour of its text. A cell that carries no such colour is
+    /// not kept.
+    grid.filter.colour {
+        area: "grid",
+        layer: "grid",
+        icon: "filter",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+            sheet: NodeRef,
+            /// Which column it filters: `A`, `B`, `AA`.
+            column: Text,
+            /// The colour: `#rrggbb`.
+            colour: Text,
+            /// Whether the **colour of the text** is judged, and not the
+            /// fill behind it.
+            font: Option<Bool>,
+        },
+        run: {
+            let id = "grid.filter.colour".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            crate::protection::refuse_filter(node, &id)?;
+            let column = self.column.0.trim().to_uppercase();
+            if CellRef::column_index(&column).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
+                });
+            };
+            let Some(Some(colour)) = crate::colours::colour_of(&self.colour.0) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{}` is not a colour: a colour is `#rrggbb`",
+                        self.colour.0.trim()
+                    ),
+                });
+            };
+            let font = self.font.map(|font| font.0).unwrap_or(false);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["filter"] = json!({
+                    "column": column,
+                    "colour": colour,
+                    "font": font,
+                });
+            }
+            Ok(Outcome::changed(format!("the sheet `{sheet}` is filtered by the column {column}"))
+                .with_data(json!({ "sheet": sheet, "column": column, "colour": colour, "font": font })))
 
         }
     }

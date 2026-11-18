@@ -776,6 +776,18 @@ pub(crate) fn book_of(document: &Document) -> Book {
                 if let Some(column) = column {
                     book.set_filter(&node.name, formula::Filter::Average { column, above });
                 }
+            } else if let Some(colour) = filter.get("colour").and_then(|colour| colour.as_str()) {
+                // The tree's own **colour** filter: a column, and the
+                // colour the cells of it carry.
+                let column =
+                    filter.get("column").and_then(|column| column.as_str()).and_then(CellRef::column_index);
+                let font = filter.get("font").and_then(|font| font.as_bool()).unwrap_or(false);
+                if let Some(column) = column {
+                    book.set_filter(
+                        &node.name,
+                        formula::Filter::Colour { column, font, colour: colour.to_string() },
+                    );
+                }
             } else if let Some(values) = filter.get("values").and_then(|values| values.as_array()) {
                 // The tree's own **list** filter: a column and the
                 // values that are kept.

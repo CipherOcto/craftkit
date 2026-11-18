@@ -346,3 +346,31 @@ fn a_filter_may_look_for_the_words_a_cell_holds() {
         .expect("the sheet is filtered");
     assert_eq!(hidden_rows(&mut session, sheet), vec![1], "and the row that does not hold it");
 }
+
+/// A filter may judge the **colour** of the cells: the fill behind
+/// their text, or the colour of their text.
+#[test]
+fn a_filter_may_judge_the_colour_of_the_cells() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": 1 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A2", "value": 2 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.cell.fill", &json!({ "sheet": sheet, "cell": "A1", "colour": "#ff0000" }))
+        .expect("the cell is filled");
+    session
+        .execute("grid.filter.colour", &json!({ "sheet": sheet, "column": "A", "colour": "#ff0000" }))
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![2], "the row that is not red is hidden");
+    session
+        .execute(
+            "grid.filter.colour",
+            &json!({ "sheet": sheet, "column": "A", "colour": "#ff0000", "font": true }),
+        )
+        .expect("the sheet is filtered");
+    assert_eq!(hidden_rows(&mut session, sheet), vec![1, 2], "and no cell has a red text");
+}

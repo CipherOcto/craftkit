@@ -716,6 +716,21 @@ pub enum Filter {
         /// below it are kept when they are not.
         above: bool,
     },
+    /// The cells of a column whose **colour** is the colour: the fill
+    /// behind the text, or the colour of the text.
+    ///
+    /// The colour is the cell's **own**: the fill it carries, or the
+    /// colour of its font. A cell that carries no such colour is not
+    /// kept.
+    Colour {
+        /// The column it filters, counted from zero.
+        column: u32,
+        /// Whether the **colour of the text** is judged, and not the
+        /// fill behind it.
+        font: bool,
+        /// The colour: `#rrggbb`.
+        colour: String,
+    },
     /// Groups of criteria: the columns of a group are judged together.
     Groups(Vec<Vec<(u32, Criterion)>>),
     /// The tree's own **advanced filter**: a **list** of rows under a row
@@ -2291,6 +2306,17 @@ impl Book {
                         }
                         _ => true,
                     }
+                }
+                Filter::Colour { column, font, colour } => {
+                    // The **colour** of the cell: its own fill, or the
+                    // colour of its own font.
+                    let entry = cells.get(CellRef { col: *column, row: cell.row });
+                    let own = if *font {
+                        entry.and_then(|entry| entry.font.as_ref()).and_then(|font| font.colour.clone())
+                    } else {
+                        entry.and_then(|entry| entry.fill.clone())
+                    };
+                    !own.is_some_and(|own| own.eq_ignore_ascii_case(colour))
                 }
                 Filter::Groups(groups) => !groups.iter().any(|group| {
                     group.iter().all(|(column, criterion)| {
