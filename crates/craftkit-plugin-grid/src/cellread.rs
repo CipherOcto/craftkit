@@ -173,6 +173,12 @@ commands! {
                     Some(fill) => json!(fill),
                     None => Json::Null,
                 },
+                // The **bar** behind the cell: the part of the cell's
+                // width it fills and the colour of it.
+                "bar": match &looks.bar {
+                    Some(bar) => json!({ "part": bar.part, "colour": bar.colour }),
+                    None => Json::Null,
+                },
                 "locked": locked,
             })))
 

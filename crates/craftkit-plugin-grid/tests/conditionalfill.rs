@@ -303,3 +303,58 @@ fn a_scale_with_four_colours_is_refused() {
     let message = failure.to_string();
     assert!(message.contains("two or three"), "the refusal says why: {message}");
 }
+
+/// A **data bar** is drawn behind the cells of a range: the bar is as
+/// long as the cell's number is between the lowest and the highest of
+/// the range.
+#[test]
+fn a_data_bar_is_drawn_behind_the_cells_of_a_range() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 0.0);
+    a_number(&mut session, sheet, "A2", 5.0);
+    a_number(&mut session, sheet, "A3", 10.0);
+    session
+        .execute(
+            "grid.conditional.data.bar",
+            &json!({ "sheet": sheet, "range": "A1:A3", "colour": "#638ec6" }),
+        )
+        .expect("the bar is set");
+    let lowest = cell(&mut session, sheet, "A1");
+    assert_eq!(lowest["bar"]["part"].as_f64(), Some(0.0), "the lowest has no bar");
+    assert_eq!(lowest["bar"]["colour"].as_str(), Some("#638ec6"), "and the bar has the colour");
+    let middle = cell(&mut session, sheet, "A2");
+    assert_eq!(middle["bar"]["part"].as_f64(), Some(0.5), "the middle is half the cell");
+    let highest = cell(&mut session, sheet, "A3");
+    assert_eq!(highest["bar"]["part"].as_f64(), Some(1.0), "the highest fills the cell");
+}
+
+/// A cell that does not hold a number has no bar.
+#[test]
+fn a_cell_that_does_not_hold_a_number_has_no_bar() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 9.0);
+    session
+        .execute(
+            "grid.conditional.data.bar",
+            &json!({ "sheet": sheet, "range": "A1:A3", "colour": "#638ec6" }),
+        )
+        .expect("the bar is set");
+    assert!(cell(&mut session, sheet, "A3")["bar"].is_null(), "the cell has no bar");
+}
+
+/// A bar has a **colour**, and the tree refuses one that is not a
+/// colour.
+#[test]
+fn a_bar_has_a_colour() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    let failure = session
+        .execute("grid.conditional.data.bar", &json!({ "sheet": sheet, "range": "A1:A2", "colour": "blue" }))
+        .expect_err("the bar is refused");
+    let message = failure.to_string();
+    assert!(message.contains("is not a colour"), "the refusal says why: {message}");
+}

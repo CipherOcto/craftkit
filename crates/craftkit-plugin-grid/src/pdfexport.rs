@@ -219,6 +219,9 @@ struct Look {
     font: Option<Font>,
     align: Option<Align>,
     fill: Option<String>,
+    /// The **bar** behind the cell: the part of the cell's width it
+    /// fills and the colour of it.
+    bar: Option<crate::conditional::Bar>,
 }
 
 /// The look of a cell, as the tree's own rule says it.
@@ -249,6 +252,7 @@ fn look_of(
         font: own.and_then(|entry| entry.font.clone()).or_else(|| style.and_then(|style| style.font.clone())),
         align: own.and_then(|entry| entry.align).or_else(|| style.and_then(|style| style.align)),
         fill: looks.fill.clone().or_else(|| own.and_then(|entry| entry.fill.clone())),
+        bar: looks.bar.clone(),
     }
 }
 
@@ -830,6 +834,15 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             // The **fill** of the cell.
             if let Some(fill) = look.fill.as_deref().and_then(rgb_of) {
                 page.fill_rect(left as f32, top as f32, width as f32, height as f32, fill);
+            }
+            // The **bar** behind the cell: it is drawn from the left of
+            // the cell, and it is as long as the part of the cell's
+            // width the rule says.
+            if let Some(bar) = &look.bar
+                && let Some(colour) = rgb_of(&bar.colour)
+            {
+                let part = bar.part.clamp(0.0, 1.0);
+                page.fill_rect(left as f32, top as f32, width as f32 * part as f32, height as f32, colour);
             }
             // The **borders** of the cell: each edge of the cell is
             // drawn with the line of its own border.

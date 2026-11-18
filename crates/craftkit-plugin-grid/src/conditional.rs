@@ -35,6 +35,11 @@
 //! lowest and of the highest number of the range — or three, and then
 //! the middle one stands for the **median** of the numbers.
 //!
+//! And a rule may be a **data bar**: the bar behind a cell is as long
+//! as its number is between the lowest and the highest of the range
+//! (`grid.conditional.data.bar`). The bar is **derived**, and the front
+//! end draws it.
+//!
 //! Such a rule needs the **numbers** or the **counts** of the range,
 //! and they are worked out **once** for a read and read as often as a
 //! cell is read: a rule worked out again for every cell of the range
@@ -61,8 +66,9 @@
 //!   **duplicate** is here (`grid.conditional.duplicate`), and §1023
 //!   says otherwise: the **above-the-average** is here
 //!   (`grid.conditional.average`), and §1024 says otherwise: the
-//!   **colour scale** is here (`grid.conditional.colour.scale`), and the
-//!   data bar and the icon set are not.
+//!   **colour scale** is here (`grid.conditional.colour.scale`), and
+//!   §1027 says otherwise: the **data bar** is here
+//!   (`grid.conditional.data.bar`), and the icon set is not.
 //! - **The tree's rules are ordered and the first that matches wins.**
 //!   The tree's rules are in a list and it walks them in **priority** —
 //!   the rule that names the lower number is seen first. Here they are
@@ -127,6 +133,14 @@ pub struct ColourScale {
     pub colours: Vec<String>,
 }
 
+/// The **data bar** of a range: the bar behind a cell, and the colour
+/// of it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataBar {
+    /// The colour of the bar.
+    pub colour: String,
+}
+
 /// A **conditional format** of a sheet.
 pub struct Conditional {
     /// The range of cells it is about.
@@ -151,6 +165,10 @@ pub struct Conditional {
     /// in the proportion its number is between the lowest and the
     /// highest of the range.
     pub colour_scale: Option<ColourScale>,
+    /// The **data bar** of the range the rule is about, when the rule
+    /// has one: the bar behind a cell is as long as its number is
+    /// between the lowest and the highest of the range.
+    pub data_bar: Option<DataBar>,
     /// The **formula** a cell is judged by, when the rule has one: the
     /// cells whose formula is **true** are the cells that match.
     ///
@@ -224,11 +242,19 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
                 .collect::<Option<Vec<String>>>()?;
             Some(ColourScale { colours })
         });
+        let data_bar = entry.get("data_bar").and_then(|bar| {
+            if !bar.is_object() {
+                return None;
+            }
+            let colour = bar.get("colour").and_then(|colour| colour.as_str())?.to_string();
+            Some(DataBar { colour })
+        });
         let criterion = if formula.is_some()
             || top.is_some()
             || duplicate.is_some()
             || average.is_some()
             || colour_scale.is_some()
+            || data_bar.is_some()
         {
             None
         } else {
@@ -248,6 +274,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             duplicate,
             average,
             colour_scale,
+            data_bar,
             formula,
             format,
             fill,
@@ -317,6 +344,7 @@ impl Facts {
                 && conditional.duplicate.is_none()
                 && conditional.average.is_none()
                 && conditional.colour_scale.is_none()
+                && conditional.data_bar.is_none()
             {
                 continue;
             }
@@ -324,6 +352,7 @@ impl Facts {
             if conditional.top.is_some()
                 || conditional.average.is_some()
                 || conditional.colour_scale.is_some()
+                || conditional.data_bar.is_some()
             {
                 let numbers = numbers_of(book, &node.name, &area, node);
                 facts.numbers.push((conditional.range.clone(), numbers));
@@ -495,6 +524,26 @@ fn scale_fill(
     None
 }
 
+/// The **part** of a cell's width that its bar fills: the proportion of
+/// the way its number is between the lowest and the highest of the
+/// range.
+///
+/// A cell that does not hold a number has no bar, and a range whose
+/// numbers are all the same has no span and no bars.
+fn bar_part(facts: &Facts, range: &str, value: &crate::formula::Value) -> Option<f64> {
+    let numbers = facts.numbers_of(range)?;
+    let highest = numbers.first().copied()?;
+    let lowest = numbers.last().copied()?;
+    if highest == lowest {
+        return None;
+    }
+    let number = value.as_number()?;
+    if number < lowest || number > highest {
+        return None;
+    }
+    Some((number - lowest) / (highest - lowest))
+}
+
 /// Whether a cell's **number** is above the average of the range — or,
 /// when the rule is about the numbers **below** it, below it.
 fn average_matches(facts: &Facts, range: &str, average: &Average, value: &crate::formula::Value) -> bool {
@@ -530,6 +579,18 @@ pub struct Looks {
     pub format: Option<String>,
     /// The **fill** the cell is filled with.
     pub fill: Option<String>,
+    /// The **bar** behind the cell: the part of the cell's width it
+    /// fills and the colour of it.
+    pub bar: Option<Bar>,
+}
+
+/// The **bar** behind a cell.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Bar {
+    /// The part of the cell's width the bar fills, from zero to one.
+    pub part: f64,
+    /// The colour of the bar.
+    pub colour: String,
 }
 
 /// The **look** the conditional formats of a sheet give a cell.
@@ -553,6 +614,20 @@ pub fn looks_for(
     for conditional in ordered_conditionals(node) {
         let Some(area) = area_of(&conditional.range) else { continue };
         if !area.covers(cell) {
+            continue;
+        }
+        // A rule of a **data bar** writes the bar behind every cell of
+        // the range: the length of it is **derived** from the cell's
+        // number, and it is not a match and not a not-match.
+        if let Some(bar) = &conditional.data_bar {
+            if let Some(part) = bar_part(facts, &conditional.range, value) {
+                if looks.bar.is_none() {
+                    looks.bar = Some(Bar { part, colour: bar.colour.clone() });
+                }
+                if conditional.stop.unwrap_or(false) {
+                    break;
+                }
+            }
             continue;
         }
         // A rule of a **colour scale** writes the fill of every cell of
@@ -704,6 +779,9 @@ fn entry_of(conditional: &Conditional) -> Json {
         })),
         "colour_scale": conditional.colour_scale.as_ref().map(|scale| json!({
             "colours": scale.colours,
+        })),
+        "data_bar": conditional.data_bar.as_ref().map(|bar| json!({
+            "colour": bar.colour,
         })),
         "format": conditional.format,
         "fill": conditional.fill,
@@ -1475,6 +1553,104 @@ commands! {
                     "sheet": sheet,
                     "range": range,
                     "colours": parsed,
+                    "stop": stop,
+                }),
+            ))
+        }
+    }
+
+    /// Put a **conditional format** on a range of cells, and draw a
+    /// **bar** behind the cells of it.
+    ///
+    /// The bar is as long as the cell's number is between the lowest
+    /// and the highest of the range: the cell with the lowest number
+    /// has no bar, and the cell with the highest has one that fills the
+    /// cell.
+    ///
+    /// A cell that does not hold a **number** has no bar, and a range
+    /// whose numbers are all the same has no span and no bars.
+    grid.conditional.data.bar {
+        area: "grid",
+        layer: "grid",
+        icon: "brush",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is on.
+            sheet: NodeRef,
+            /// The range it is about: `A1:A10`.
+            range: Text,
+            /// The colour of the bar: `#rrggbb`.
+            colour: Text,
+            /// The tree's **stop if true**: the walk ends at this rule when it
+            /// matched, and the rules after it are not tried.
+            stop: Option<Bool>,
+            /// The **priority** of the rule: the lower the number, the earlier
+            /// the rule is tried.
+            priority: Option<Number>,
+        },
+        run: {
+            let id = "grid.conditional.data.bar".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            // The **colour** of the bar: a colour, and nothing else.
+            let given = self.colour.0.trim().to_string();
+            let Some(colour) = crate::colours::colour_of(&given) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{given}` is not a colour: a colour is `#rrggbb`"),
+                });
+            };
+            let Some(colour) = colour else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a bar has a colour, and `none` is not one".to_string(),
+                });
+            };
+            let stop = self.stop.map(|stop| stop.0);
+            let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+            let priority = priority_of(self.priority.as_ref(), &id)?;
+            let mut list = conditionals_of(node)
+                .into_iter()
+                .map(|conditional| entry_of(&conditional))
+                .collect::<Vec<_>>();
+            // A range may have **one** conditional format: a second one for
+            // the same range replaces the first.
+            list.retain(|entry| entry["range"].as_str() != Some(range.as_str()));
+            list.push(json!({
+                "range": range,
+                "data_bar": {
+                    "colour": colour,
+                },
+                "stop": stop,
+                "priority": priority,
+            }));
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["conditionals"] = json!(list);
+            }
+            Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
+                json!({
+                    "sheet": sheet,
+                    "range": range,
+                    "colour": colour,
                     "stop": stop,
                 }),
             ))
