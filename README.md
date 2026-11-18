@@ -4469,6 +4469,7 @@ so.
 | a **conditional format may judge the values repeated in a range** | **built.** The values held more than once, or held once and only once, and the counts are derived (§1022) | §1022 |
 | a **conditional format may judge the numbers above the average of a range** | **built.** The average of the numbers of the range, and the threshold is the tree's own rule (§1023) | §1023 |
 | a **conditional format may fill the cells of a range by a colour scale** | **built.** The fill of a cell is the mix of the two colours, and it is derived (§1024) | §1024 |
+| a **colour scale may have three colours** | **built.** The middle colour stands for the median of the numbers, and the fill is the mix of the two that hold the cell (§1025) | §1025 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -66512,9 +66513,70 @@ A conditional format may not judge a cell and write it — it may fill
 
 - **The tree's scale has two colours and the reference's has three by
   default**: the middle colour of the reference's scale is at the
-  fiftieth percentile, and the tree's scale does not have one.
+  fiftieth percentile, and the tree's scale does not have one — and
+  §1025 says otherwise: the tree's scale may have three as well, and
+  its middle colour stands for the median.
 - **The tree's conditional format still has no data bar and no icon
   set**: the reference's has them, and they are not here — they are
   things the front end draws and not a colour of a cell.
+- **The rule of the time period is not here**: it is a rule about the
+  dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
+
+## 1025. A colour scale may have three colours
+
+A colour scale may have a colour in the **middle** as well as the two
+at the ends.
+
+### What was built
+
+- A scale may have **three** colours: the one of the lowest number of
+  the range, the one of the highest, and a **middle** one that stands
+  for the **middle of the numbers**.
+- The **middle** is the **median**: the middle number of the ordered
+  numbers, and the half between the two middle ones when there is an
+  even number of them.
+- The fill of a cell is the mix of the **two colours that hold it**:
+  the numbers below the middle are mixed between the low and the
+  middle colour, and the numbers above it between the middle and the
+  high colour.
+- The tree refuses a scale with **four** colours, and one with a
+  single colour — the scale has two or three, and nothing else.
+
+### What the port found
+
+- **The reference's scale has three colours by default**, and the
+  middle one stands for the **fiftieth percentile** of the numbers.
+  And the fiftieth percentile of a list of numbers is the **median**:
+  the reference's rule takes the middle of the ordered numbers and the
+  half between the two middle ones when there is an even number of
+  them. The tree's middle is the median, and the two rules are the
+  same rule.
+- **The reference's stops may be a minimum, a maximum or a
+  percentile**, and there may be any number of them. Here there are
+  two or three, and the stops are the lowest, the middle and the
+  highest — the tree does not guess where a colour should stand.
+- **The reference's mix is the tree's mix**: each channel is the first
+  plus so much of the way to the second, rounded.
+
+### What it cost
+
+- **No new command**: `grid.conditional.colour.scale` takes two or
+  three colours now, and the grid battery still carries **249**
+  commands.
+- **One rule that was already there**: the **facts** of the ranges a
+  rule is about (§1021) — the numbers are kept in order, and the
+  middle of them is read from the order.
+- **Two tests** in the grid battery (`tests/conditionalfill.rs`): the
+  three colours of a scale, and the scale of four colours that is
+  refused.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's scale has two or three colours and the reference's may
+  have any number of them**: the tree does not take a percentile for a
+  stop, and it refuses a fourth colour.
+- **The tree's conditional format still has no data bar and no icon
+  set**: the reference's has them, and they are not here.
 - **The rule of the time period is not here**: it is a rule about the
   dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
