@@ -1129,6 +1129,9 @@ pub struct Conditional {
     /// The **colour** behind the matching cells, as `#rrggbb`, when the
     /// rule names one.
     pub fill: Option<String>,
+    /// The **colour** the text of the matching cells is written in, as
+    /// `#rrggbb`, when the rule names one.
+    pub colour: Option<String>,
     /// Whether the rule **stops** the walk when it matched.
     pub stop: Option<bool>,
     /// The **priority** of the rule, when it names one: the lower the
@@ -2416,6 +2419,7 @@ fn read_conditionals(
             let dxf = styles.dxf(rule.attr_u32("dxfId"));
             let format = dxf.and_then(|dxf| dxf.format.clone());
             let fill = dxf.and_then(|dxf| dxf.fill.clone());
+            let colour = dxf.and_then(|dxf| dxf.colour.clone());
             let stop = rule.attr("stopIfTrue").map(|stop| stop != "0");
             let priority = rule.attr_u32("priority");
             for range in &ranges {
@@ -2432,6 +2436,7 @@ fn read_conditionals(
                     icon_set: icon_set.clone(),
                     format: format.clone(),
                     fill: fill.clone(),
+                    colour: colour.clone(),
                     stop,
                     priority,
                 });

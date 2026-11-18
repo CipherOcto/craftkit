@@ -2536,3 +2536,36 @@ fn a_picture_that_is_in_no_cell_is_counted() {
     let said = workbook.warnings.join(" ");
     assert!(said.contains("1 picture(s) of the sheet were not read"), "it says how many: {said}");
 }
+
+/// A rule's **colour of the text** is read: the font of the
+/// differential format names it.
+#[test]
+fn the_colour_of_the_text_of_a_rule_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r##"<styleSheet><dxfs count="1"><dxf><font><color rgb="FF9C0006"/></font><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>"##,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="cellIs" operator="greaterThan" priority="1" dxfId="0"><formula>10</formula></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let rules = &workbook.sheets[0].conditionals;
+    assert_eq!(rules.len(), 1, "the rule is read");
+    assert_eq!(rules[0].colour.as_deref(), Some("#9c0006"), "the colour of the text is read");
+    assert_eq!(rules[0].fill.as_deref(), Some("#ffc7ce"), "and the fill behind the cells");
+}

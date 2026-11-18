@@ -753,7 +753,7 @@ fn the_conditional_formats_of_a_sheet_are_imported() {
         ),
         (
             "xl/styles.xml",
-            r##"<styleSheet><dxfs count="1"><dxf><numFmt numFmtId="0" formatCode="#,##0.00"/><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>"##,
+            r##"<styleSheet><dxfs count="1"><dxf><numFmt numFmtId="0" formatCode="#,##0.00"/><font><color rgb="FF9C0006"/></font><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf></dxfs></styleSheet>"##,
         ),
         (
             "xl/worksheets/sheet1.xml",
@@ -772,6 +772,7 @@ fn the_conditional_formats_of_a_sheet_are_imported() {
     assert_eq!(rule["op"].as_str(), Some(">"), "the operation");
     assert_eq!(rule["value"].as_str(), Some("10"), "the value");
     assert_eq!(rule["fill"].as_str(), Some("#ffc7ce"), "the colour behind the cells");
+    assert_eq!(rule["colour"].as_str(), Some("#9c0006"), "and the colour of their text");
     assert_eq!(rule["format"].as_str(), Some("#,##0.00"), "and the format they are written with");
     assert_eq!(rule["stop"].as_bool(), Some(true), "and it stops the walk");
     assert_eq!(rule["priority"].as_u64(), Some(1), "and it is tried first");

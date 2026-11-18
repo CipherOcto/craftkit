@@ -968,6 +968,9 @@ commands! {
                     if let Some(fill) = &rule.fill {
                         entry.insert("fill".to_string(), json!(fill));
                     }
+                    if let Some(colour) = &rule.colour {
+                        entry.insert("colour".to_string(), json!(colour));
+                    }
                     if let Some(stop) = rule.stop {
                         entry.insert("stop".to_string(), json!(stop));
                     }

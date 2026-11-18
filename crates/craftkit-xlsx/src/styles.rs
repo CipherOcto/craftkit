@@ -231,6 +231,9 @@ pub struct Dxf {
     /// The **colour** behind the cells, as `#rrggbb`, when the
     /// differential format names one.
     pub fill: Option<String>,
+    /// The **colour** the text of the cells is written in, as
+    /// `#rrggbb`, when the differential format names one.
+    pub colour: Option<String>,
 }
 
 /// The **styles** of a workbook: the format of each cell, by the
@@ -531,7 +534,13 @@ fn read_dxf(element: &El, theme: &Theme, palette: &[u32]) -> Dxf {
             .and_then(|colour| read_colour(colour, theme, palette))
             .or_else(|| pattern.child("fgColor").and_then(|colour| read_colour(colour, theme, palette)))
     });
-    Dxf { format, fill }
+    // The **colour** of the text: the font of the differential format
+    // names it.
+    let colour = element
+        .child("font")
+        .and_then(|font| font.child("color"))
+        .and_then(|colour| read_colour(colour, theme, palette));
+    Dxf { format, fill, colour }
 }
 
 /// Read the **protection** of a cell format.
