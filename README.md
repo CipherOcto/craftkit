@@ -4482,6 +4482,7 @@ so.
 | a **rule may draw a border on the cells it matches** | **built.** The rule carries the line of each edge, and the page draws it (§1035) | §1035 |
 | a **workbook's rules carry the borders they draw** | **built.** The border of the differential format is read, and the lines are in the rule of the document (§1036) | §1036 |
 | a **chart's series may have a colour** | **built.** The list of the tree's colours is kept, and the read says the colour of each series (§1037) | §1037 |
+| a **workbook's charts carry the colours of their series** | **built.** The colour of each series is read, and it is in the chart of the document (§1038) | §1038 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67219,3 +67220,41 @@ of them.
   of a palette, and the tree's chart takes the colours.
 - **The tree does not draw its charts**: a chart has no place (§ the
   house rule), and the colours are for the front end that draws it.
+
+## 1038. A workbook's charts carry the colours of their series
+
+A workbook's chart gives every series a **colour**, and the reader reads
+it.
+
+### What was built
+
+- The **reader** reads the **colour of each series**: the colour of the
+  file — `srgbClr` — or a colour of the **theme**, which the theme says
+  what it is.
+- The **import** maps the colours into the chart of the document, and
+  the chart read says the colour of each series (§1037).
+
+### What the port found
+
+- **The reference's reader reads the colour of every series**, and the
+  colour may be of the theme. The tree's reader reads it and gives back
+  the colour, not the name of the slot.
+- **A series with no colour of its own has no colour here**: the list
+  the reader gives back is shorter than the series, and the tree's
+  chart takes the colours again, from the first.
+
+### What it cost
+
+- **No new command**: the colours are part of the look of a chart, and
+  the chart set takes them (§1037).
+- **One field** on the chart of the reader.
+- **One test** in the reader (`crates/craftkit-xlsx/tests/workbook.rs`)
+  and one assertion in the import's test.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not draw its charts**: a chart has no place, and the
+  colours are for the front end that draws it.
+- **The tree's colours are `#rrggbb`**: a colour of the theme is read
+  as the colour it is, and the tree keeps the colour and not the slot.
