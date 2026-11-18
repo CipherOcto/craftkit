@@ -4468,6 +4468,7 @@ so.
 | a **conditional format may judge the top of a range** | **built.** The count highest numbers of the range, or the count lowest, and the threshold is the tree's own rule (§1021) | §1021 |
 | a **conditional format may judge the values repeated in a range** | **built.** The values held more than once, or held once and only once, and the counts are derived (§1022) | §1022 |
 | a **conditional format may judge the numbers above the average of a range** | **built.** The average of the numbers of the range, and the threshold is the tree's own rule (§1023) | §1023 |
+| a **conditional format may fill the cells of a range by a colour scale** | **built.** The fill of a cell is the mix of the two colours, and it is derived (§1024) | §1024 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56026,7 +56027,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 248 |
+| grid | 249 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -66449,5 +66450,71 @@ the average of the range.
 - **The tree's rule of the above-the-average has no standard
   deviation**: the reference's has one, and the tree's threshold is the
   average and nothing else.
+- **The rule of the time period is not here**: it is a rule about the
+  dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
+
+## 1024. A conditional format may fill the cells of a range by a colour scale
+
+A conditional format may not judge a cell and write it — it may fill
+**every** cell of a range with a colour of its own.
+
+### What was built
+
+- A new command `grid.conditional.colour.scale`: the scale has **two**
+  colours, the one of the **lowest** number of the range and the one of
+  the **highest**, and the fill of a cell is the **mix** of the two, in
+  the proportion its number is between them.
+- The **mix** is the tree's own rule: each channel of the fill is the
+  channel of the first colour plus that part of the way to the channel
+  of the second, and the part is rounded to the nearest whole.
+- The fill is **derived**: it is worked out from the cell's number and
+  the numbers of the range, and it is not written into the cell. The
+  front end draws the fill the battery gives it.
+- A cell that does not hold a **number** has no fill, and a range
+  whose numbers are all the same has no **span** and is filled with
+  nothing: a proportion between nothing and nothing is not a number.
+- A scale has **two** colours, and the tree refuses any other number of
+  them — and a colour that is not a colour.
+
+### What the port found
+
+- **The reference's conditional format has a colour scale**, and its
+  **mix** is the rule the tree's is: each channel is the first plus so
+  much of the way to the second, rounded. The two stops of the
+  reference's scale are the lowest and the highest of the range, as
+  the tree's two are.
+- **The reference's scale has three colours by default**, and the
+  middle one is at the **fiftieth percentile** of the numbers. The
+  tree's scale has **two**, and the tree refuses a third: the tree
+  does not guess where a colour should stand.
+- **The reference's scale is a rule that may be given any number of
+  stops**, and each of them may be a minimum, a maximum or a
+  percentile. Here the two stops are the lowest and the highest of the
+  range, and nothing else.
+- **The reference's scale writes the fill of every cell of the range**,
+  and so does the tree's — the fill is not a match and not a
+  not-match, and a cell that does not hold a number is filled with
+  nothing.
+
+### What it cost
+
+- **One new command**: `grid.conditional.colour.scale`, and the grid
+  battery now carries **249** commands.
+- **One rule that was already there**: the **facts** of the ranges a
+  rule is about (§1021), which now keep the numbers **in order** — a
+  rule that reads the order does not sort them again for every cell.
+- **Three tests** in the grid battery (`tests/conditionalfill.rs`): the
+  fill of the lowest, the highest and the middle of a range, the range
+  without a span, and the two refusals.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's scale has two colours and the reference's has three by
+  default**: the middle colour of the reference's scale is at the
+  fiftieth percentile, and the tree's scale does not have one.
+- **The tree's conditional format still has no data bar and no icon
+  set**: the reference's has them, and they are not here — they are
+  things the front end draws and not a colour of a cell.
 - **The rule of the time period is not here**: it is a rule about the
   dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
