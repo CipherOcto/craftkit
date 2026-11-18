@@ -17,7 +17,7 @@
 //!
 //! The **elements** of a chart are the tree's own: the **title**, the
 //! **legend**, the **data labels**, the **gridlines**, the **titles of
-//! the axes** and the **smooth** line. They are in the payload of the
+//! the axes**, the **smooth** line and the **colours** of the series. They are in the payload of the
 //! chart, and the tree's own rules say what they are when a chart is
 //! made:
 //!
@@ -26,7 +26,9 @@
 //! - the **data labels** are **off**;
 //! - the **gridlines** are **on**, and **off** for a **pie**;
 //! - the **titles of the axes** are **none**;
-//! - the line is **not smooth**.
+//! - the line is **not smooth**;
+//! - the **colours** of the series are **none**: a chart with no
+//!   colours is a chart whose colours are the front end's business.
 //!
 //! The rules:
 //!
@@ -101,6 +103,36 @@ pub fn area_of(chart: &Node) -> Option<Area> {
 /// The **kind** of a chart.
 pub fn kind_of_chart(chart: &Node) -> String {
     chart.data.get("kind").and_then(|kind| kind.as_str()).unwrap_or("column").to_string()
+}
+
+/// The **count** of the series of a chart, from the data the tree read.
+fn series_count(data: &Json) -> usize {
+    data.get("series").and_then(|series| series.as_array()).map(|series| series.len()).unwrap_or(0)
+}
+
+/// The **colours** of a chart: the list the tree keeps, in order.
+///
+/// The colours are the tree's own: `#rrggbb`.
+pub fn colours_of(chart: &Node) -> Vec<String> {
+    let Some(list) = chart.data.get("colours").and_then(|colours| colours.as_array()) else {
+        return Vec::new();
+    };
+    list.iter().filter_map(|colour| colour.as_str().map(|colour| colour.to_string())).collect()
+}
+
+/// The **colour** of each **series** of a chart: the list of the
+/// chart's colours, taken in turn.
+///
+/// A chart with fewer colours than series takes the colours again, from
+/// the first: the colours are a list and the series are more of them.
+pub fn series_colours(chart: &Node, series: usize) -> Vec<Json> {
+    let colours = colours_of(chart);
+    (0..series)
+        .map(|index| match colours.is_empty() {
+            true => Json::Null,
+            false => json!(colours[index % colours.len()]),
+        })
+        .collect()
 }
 
 /// The **title** of a chart, if it has one.
@@ -403,6 +435,8 @@ commands! {
                 "xTitle": node.data.get("xTitle").cloned().unwrap_or(Json::Null),
                 "yTitle": node.data.get("yTitle").cloned().unwrap_or(Json::Null),
                 "smooth": element_on(&node, "smooth"),
+                "colours": colours_of(&node),
+                "seriesColours": series_colours(&node, series_count(&data)),
                 "data": data,
             })))
 
@@ -441,6 +475,10 @@ commands! {
             /// row holds the categories and the rows after it are the
             /// series.
             switch_row_column: Option<Bool>,
+            /// The **colours** of the series, as `#rrggbb`. A chart with
+            /// fewer colours than series takes the colours again, from
+            /// the first.
+            colours: Option<Json>,
         },
         run: {
             let id = "grid.chart.set".to_string();
@@ -490,6 +528,43 @@ commands! {
                 let text = text.0.trim().to_string();
                 title = if text.is_empty() { Json::Null } else { json!(text) };
             }
+            // The **colours** of the series: a list of the tree's own
+            // colours.
+            let mut colours = colours_of(&node);
+            if let Some(list) = &self.colours {
+                let Some(list) = list.as_array() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the colours of a chart are a list of them".to_string(),
+                    });
+                };
+                let mut read = Vec::new();
+                for colour in list {
+                    let Some(text) = colour.as_str() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the colours of a chart are a list of them".to_string(),
+                        });
+                    };
+                    let Some(colour) = crate::colours::colour_of(text) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{}` is not a colour: a colour is `#rrggbb`", text.trim()),
+                        });
+                    };
+                    match colour {
+                        Some(colour) => read.push(colour),
+                        None => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: "the colour of a series is a colour, and `none` is not one"
+                                    .to_string(),
+                            });
+                        }
+                    }
+                }
+                colours = read;
+            }
             // The **legend**.
             let mut legend = legend_of_chart(&node, &kind);
             if let Some(text) = &self.legend {
@@ -513,6 +588,7 @@ commands! {
                 node.data["kind"] = json!(kind.clone());
                 node.data["title"] = title.clone();
                 node.data["legend"] = json!(legend.clone());
+                node.data["colours"] = json!(colours.clone());
                 if let Some(on) = self.data_labels {
                     node.data["dataLabels"] = json!(on.0);
                 }

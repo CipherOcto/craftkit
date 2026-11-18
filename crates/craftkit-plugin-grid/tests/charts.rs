@@ -237,3 +237,56 @@ fn the_way_a_chart_reads_its_range_may_be_changed() {
     let read = chart_of(&mut session, chart);
     assert_eq!(read["data"]["categories"], json!(["ann"]));
 }
+
+/// A chart's **series may have a colour**: the list is the tree's own,
+/// and a chart with fewer colours than series takes them again.
+#[test]
+fn the_series_of_a_chart_may_have_a_colour() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_text(&mut session, sheet, "A1", "name");
+    a_text(&mut session, sheet, "B1", "one");
+    a_text(&mut session, sheet, "C1", "two");
+    a_text(&mut session, sheet, "A2", "ann");
+    a_number(&mut session, sheet, "B2", 1.0);
+    a_number(&mut session, sheet, "C2", 2.0);
+    let chart = a_chart(&mut session, sheet, "A1:C2");
+    session
+        .execute("grid.chart.set", &json!({ "chart": chart, "colours": ["#ff0000", "#00ff00"] }))
+        .expect("the colours are set");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["colours"][0].as_str(), Some("#ff0000"), "the first colour is kept");
+    assert_eq!(read["seriesColours"][0].as_str(), Some("#ff0000"), "the first series has it");
+    assert_eq!(read["seriesColours"][1].as_str(), Some("#00ff00"), "and the second the other");
+    // A chart with **one** colour and two series: the colour is taken
+    // again.
+    session
+        .execute("grid.chart.set", &json!({ "chart": chart, "colours": ["#0000ff"] }))
+        .expect("the colours are set");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["seriesColours"][0].as_str(), Some("#0000ff"), "the first series has it");
+    assert_eq!(read["seriesColours"][1].as_str(), Some("#0000ff"), "and the second the same");
+}
+
+/// The colours of a chart are **colours**: a colour that is not one is
+/// refused.
+#[test]
+fn the_colours_of_a_chart_are_colours() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_text(&mut session, sheet, "A1", "name");
+    a_text(&mut session, sheet, "B1", "one");
+    a_text(&mut session, sheet, "A2", "ann");
+    a_number(&mut session, sheet, "B2", 1.0);
+    let chart = a_chart(&mut session, sheet, "A1:B2");
+    let failure = session
+        .execute("grid.chart.set", &json!({ "chart": chart, "colours": ["red"] }))
+        .expect_err("the colour is refused");
+    let message = failure.to_string();
+    assert!(message.contains("is not a colour"), "the refusal says why: {message}");
+    let failure = session
+        .execute("grid.chart.set", &json!({ "chart": chart, "colours": "red" }))
+        .expect_err("the colours are refused");
+    let message = failure.to_string();
+    assert!(message.contains("a list of them"), "the refusal says why: {message}");
+}

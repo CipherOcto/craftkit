@@ -1672,6 +1672,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§1036",
     },
+    Port {
+        rule: "a chart's series may have a colour",
+        from: "gridcraft/crates/engine/src/cmd/extra/chart.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/charts.rs",
+        command: "grid.chart.set",
+        test: "crates/craftkit-plugin-grid/tests/charts.rs",
+        section: "§1037",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
