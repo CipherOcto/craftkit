@@ -382,3 +382,204 @@ fn the_values_of_different_kinds_are_ordered_by_their_kind() {
     assert_eq!(values[2][0], json!("banana"), "then the other text");
     assert_eq!(values[3][0], json!(true), "and the boolean is last");
 }
+
+// The **orientation** of a sort: the rows of the range, or its columns.
+
+/// The **columns** are put in order, by a **row** of the range.
+#[test]
+fn the_columns_are_put_in_order_by_a_row() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("b"));
+    value(&mut session, sheet, "B1", json!("a"));
+    value(&mut session, sheet, "C1", json!("c"));
+    value(&mut session, sheet, "A2", json!(2));
+    value(&mut session, sheet, "B2", json!(3));
+    value(&mut session, sheet, "C2", json!(4));
+    let outcome = session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:C2",
+                "orientation": "columns",
+                "keys": [{ "row": 1 }],
+            }),
+        )
+        .expect("the range is sorted");
+    assert_eq!(outcome.data["orientation"], Json::String("columns".to_string()), "it says which way");
+    assert_eq!(outcome.data["row"], json!(1), "and by which row");
+    let values = values_of(&mut session, sheet, "A1:C2");
+    assert_eq!(values[0][0], json!("a"), "the a is first");
+    assert_eq!(values[0][1], json!("b"), "then the b");
+    assert_eq!(values[1][0], json!(3.0), "and the column took its row with it");
+    assert_eq!(values[1][1], json!(2.0), "the whole of it");
+}
+
+/// The **first column** is the **header** of a sort of the columns, and
+/// it stays where it is.
+#[test]
+fn the_first_column_is_the_header_of_a_sort_of_the_columns() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!("name"));
+    value(&mut session, sheet, "B1", json!("x"));
+    value(&mut session, sheet, "C1", json!("y"));
+    value(&mut session, sheet, "A2", json!("ann"));
+    value(&mut session, sheet, "B2", json!(2));
+    value(&mut session, sheet, "C2", json!(1));
+    let outcome = session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:C2",
+                "orientation": "columns",
+                "keys": [{ "row": 2 }],
+            }),
+        )
+        .expect("the range is sorted");
+    assert_eq!(outcome.data["header"], Json::Bool(true), "the first column is a header");
+    let values = values_of(&mut session, sheet, "A1:C2");
+    assert_eq!(values[1][0], json!("ann"), "the header stays where it is");
+    assert_eq!(values[1][1], json!(1.0), "and the columns are in order");
+    assert_eq!(values[1][2], json!(2.0), "the whole of them");
+}
+
+/// A **formula** moves with its column, and its relative references move
+/// with it.
+#[test]
+fn a_formula_moves_with_its_column() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(2));
+    value(&mut session, sheet, "B1", json!(1));
+    value(&mut session, sheet, "C1", json!(5));
+    formula(&mut session, sheet, "B2", "=C1*2");
+    session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:B2",
+                "orientation": "columns",
+                "keys": [{ "row": 1 }],
+            }),
+        )
+        .expect("the range is sorted");
+    let values = values_of(&mut session, sheet, "A1:B2");
+    assert_eq!(values[0][0], json!(1.0), "the one is first");
+    assert_eq!(values[1][0], json!(4.0), "and the formula still reads the column it is on");
+}
+
+/// The **note** travels with the column.
+#[test]
+fn the_note_travels_with_the_column() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(2));
+    value(&mut session, sheet, "B1", json!(1));
+    session
+        .execute("grid.cell.note.set", &json!({ "sheet": sheet, "cell": "B1", "text": "about the one" }))
+        .expect("the note is written");
+    session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:B1",
+                "orientation": "columns",
+                "keys": [{ "row": 1 }],
+            }),
+        )
+        .expect("the range is sorted");
+    let outcome = session
+        .execute("grid.cell.note.get", &json!({ "sheet": sheet, "cell": "A1" }))
+        .expect("the note is read");
+    assert_eq!(outcome.data["note"]["text"], Json::String("about the one".to_string()), "the note moved");
+}
+
+/// A key that names the **wrong kind of line** is refused: the tree does
+/// not guess which way a sort was meant to run.
+#[test]
+fn a_key_that_names_the_wrong_kind_of_line_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(2));
+    let failure = session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "orientation": "columns",
+                "keys": [{ "column": "A" }],
+            }),
+        )
+        .expect_err("the sort is refused");
+    let message = failure.to_string();
+    assert!(message.contains("by a row"), "the refusal says why: {message}");
+    let failure = session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "keys": [{ "row": 1 }],
+            }),
+        )
+        .expect_err("the sort is refused");
+    let message = failure.to_string();
+    assert!(message.contains("by a column"), "the refusal says why: {message}");
+}
+
+/// A sort of the columns may not be given a **column**: it is by a row.
+#[test]
+fn a_sort_of_the_columns_is_not_given_a_column() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(2));
+    let failure = session
+        .execute(
+            "grid.sort",
+            &json!({ "sheet": sheet, "range": "A1:A2", "orientation": "columns", "column": "A" }),
+        )
+        .expect_err("the sort is refused");
+    let message = failure.to_string();
+    assert!(message.contains("by a row"), "the refusal says why: {message}");
+}
+
+/// An **orientation** that is neither the rows nor the columns is
+/// refused.
+#[test]
+fn an_orientation_that_is_neither_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(2));
+    let failure = session
+        .execute("grid.sort", &json!({ "sheet": sheet, "range": "A1:A2", "orientation": "sideways" }))
+        .expect_err("the sort is refused");
+    let message = failure.to_string();
+    assert!(message.contains("the rows or of the columns"), "the refusal says why: {message}");
+}
+
+/// A row that is **not in the range** is refused.
+#[test]
+fn a_row_that_is_not_in_the_range_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", json!(2));
+    let failure = session
+        .execute(
+            "grid.sort",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:B2",
+                "orientation": "columns",
+                "keys": [{ "row": 5 }],
+            }),
+        )
+        .expect_err("the sort is refused");
+    let message = failure.to_string();
+    assert!(message.contains("not in the range"), "the refusal says why: {message}");
+}

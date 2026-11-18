@@ -1501,6 +1501,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/conditional.rs",
         section: "§1017",
     },
+    Port {
+        rule: "a sort may put the columns of a range in order, by a row",
+        from: "gridcraft/crates/engine/src/cmd/data/sort.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/sorting.rs",
+        command: "grid.sort",
+        test: "crates/craftkit-plugin-grid/tests/sorting.rs",
+        section: "§1018",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
