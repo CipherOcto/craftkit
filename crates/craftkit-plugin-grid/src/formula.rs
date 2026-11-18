@@ -775,6 +775,27 @@ pub const FILTER_OPS: [&str; 14] = [
     "isNotError",
 ];
 
+/// The **percentile** of a list of numbers in order, the highest first:
+/// the number that so many percent of them are below.
+///
+/// The rank is the percent of the way up the numbers, counted from the
+/// lowest, and the number is the one at the rank — and the part of the
+/// way to the next one when the rank is between two.
+pub fn percentile_of(sorted: &[f64], percent: f64) -> Option<f64> {
+    if sorted.is_empty() {
+        return None;
+    }
+    let percent = percent.clamp(0.0, 100.0);
+    let rank = (percent / 100.0) * (sorted.len() as f64 - 1.0);
+    let low = rank.floor();
+    let high = rank.ceil();
+    // The list is the highest first, so the rank from the lowest is
+    // the rank from the top, counted back.
+    let low_number = sorted.get(sorted.len() - 1 - low as usize).copied()?;
+    let high_number = sorted.get(sorted.len() - 1 - high as usize).copied()?;
+    Some(low_number + (high_number - low_number) * (rank - low))
+}
+
 /// The **average** of a list of numbers, and nothing when the list is
 /// empty.
 pub fn average_of(numbers: &[f64]) -> Option<f64> {

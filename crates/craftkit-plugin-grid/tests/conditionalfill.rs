@@ -358,3 +358,45 @@ fn a_bar_has_a_colour() {
     let message = failure.to_string();
     assert!(message.contains("is not a colour"), "the refusal says why: {message}");
 }
+
+/// An **icon set** puts an icon in the cells of a range: the high one,
+/// the middle one and the low one, and the percentiles of the numbers
+/// of the range say which is which.
+#[test]
+fn an_icon_set_puts_an_icon_in_the_cells_of_a_range() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 5.0);
+    a_number(&mut session, sheet, "A3", 9.0);
+    session
+        .execute("grid.conditional.icon.set", &json!({ "sheet": sheet, "range": "A1:A3" }))
+        .expect("the icons are set");
+    // The **percentiles**: the 67th and the 33rd of the numbers
+    // 1, 5 and 9 are 6.33 and 3.67.
+    assert_eq!(cell(&mut session, sheet, "A1")["icon"].as_u64(), Some(0), "the lowest has the low icon");
+    assert_eq!(cell(&mut session, sheet, "A2")["icon"].as_u64(), Some(1), "the middle has the middle icon");
+    assert_eq!(cell(&mut session, sheet, "A3")["icon"].as_u64(), Some(2), "the highest has the high icon");
+}
+
+/// The **percents** of an icon set are two of them, and the high one is
+/// above the low one.
+#[test]
+fn the_percents_of_an_icon_set_are_two() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    let failure = session
+        .execute(
+            "grid.conditional.icon.set",
+            &json!({ "sheet": sheet, "range": "A1:A2", "high": 20.0, "low": 40.0 }),
+        )
+        .expect_err("the icons are refused");
+    let message = failure.to_string();
+    assert!(message.contains("above the low one"), "the refusal says why: {message}");
+    let failure = session
+        .execute("grid.conditional.icon.set", &json!({ "sheet": sheet, "range": "A1:A2", "high": 120.0 }))
+        .expect_err("the icons are refused");
+    let message = failure.to_string();
+    assert!(message.contains("a hundred at most"), "the refusal says why: {message}");
+}

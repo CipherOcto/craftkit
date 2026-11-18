@@ -179,6 +179,12 @@ commands! {
                     Some(bar) => json!({ "part": bar.part, "colour": bar.colour }),
                     None => Json::Null,
                 },
+                // The **icon** in the cell: two is the high icon, one
+                // the middle one and zero the low one.
+                "icon": match looks.icon {
+                    Some(icon) => json!(icon),
+                    None => Json::Null,
+                },
                 "locked": locked,
             })))
 

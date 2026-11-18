@@ -222,6 +222,9 @@ struct Look {
     /// The **bar** behind the cell: the part of the cell's width it
     /// fills and the colour of it.
     bar: Option<crate::conditional::Bar>,
+    /// The **icon** in the cell: two is the high icon, one the middle
+    /// one and zero the low one.
+    icon: Option<u8>,
 }
 
 /// The look of a cell, as the tree's own rule says it.
@@ -253,6 +256,7 @@ fn look_of(
         align: own.and_then(|entry| entry.align).or_else(|| style.and_then(|style| style.align)),
         fill: looks.fill.clone().or_else(|| own.and_then(|entry| entry.fill.clone())),
         bar: looks.bar.clone(),
+        icon: looks.icon,
     }
 }
 
@@ -834,6 +838,29 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             // The **fill** of the cell.
             if let Some(fill) = look.fill.as_deref().and_then(rgb_of) {
                 page.fill_rect(left as f32, top as f32, width as f32, height as f32, fill);
+            }
+            // The **icon** in the cell: it is drawn at the left of the
+            // cell, and it is the tree's own — a triangle pointing up,
+            // a square, and a triangle pointing down.
+            if let Some(icon) = look.icon {
+                let size = (height * 0.6) as f32;
+                let x = (left + 2.0 * scale) as f32;
+                let y = (top + height / 2.0) as f32 - size / 2.0;
+                let black = [0, 0, 0];
+                match icon {
+                    // The **high** icon: a triangle pointing up.
+                    2 => page.polygon(
+                        &[[x + size / 2.0, y], [x + size, y + size], [x, y + size]],
+                        Some(black),
+                        None,
+                    ),
+                    // The **middle** icon: a square.
+                    1 => page.fill_rect(x, y, size, size, black),
+                    // The **low** icon: a triangle pointing down.
+                    _ => {
+                        page.polygon(&[[x, y], [x + size, y], [x + size / 2.0, y + size]], Some(black), None)
+                    }
+                }
             }
             // The **bar** behind the cell: it is drawn from the left of
             // the cell, and it is as long as the part of the cell's

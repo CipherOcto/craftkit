@@ -68,7 +68,9 @@
 //!   (`grid.conditional.average`), and §1024 says otherwise: the
 //!   **colour scale** is here (`grid.conditional.colour.scale`), and
 //!   §1027 says otherwise: the **data bar** is here
-//!   (`grid.conditional.data.bar`), and the icon set is not.
+//!   (`grid.conditional.data.bar`), and §1029 says otherwise: the
+//!   **icon set** is here (`grid.conditional.icon.set`), and the rule
+//!   of the time period is not.
 //! - **The tree's rules are ordered and the first that matches wins.**
 //!   The tree's rules are in a list and it walks them in **priority** —
 //!   the rule that names the lower number is seen first. Here they are
@@ -141,6 +143,18 @@ pub struct DataBar {
     pub colour: String,
 }
 
+/// The **icon set** of a range: the three icons of it, and the two
+/// numbers that tell which icon a cell has.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IconSet {
+    /// The **percent** of the numbers that carry the high icon: the
+    /// 67th by default.
+    pub high: f64,
+    /// The **percent** of the numbers that carry the middle icon: the
+    /// 33rd by default.
+    pub low: f64,
+}
+
 /// A **conditional format** of a sheet.
 pub struct Conditional {
     /// The range of cells it is about.
@@ -169,6 +183,9 @@ pub struct Conditional {
     /// has one: the bar behind a cell is as long as its number is
     /// between the lowest and the highest of the range.
     pub data_bar: Option<DataBar>,
+    /// The **icon set** of the range the rule is about, when the rule
+    /// has one: the icon of a cell is the one its number falls under.
+    pub icon_set: Option<IconSet>,
     /// The **formula** a cell is judged by, when the rule has one: the
     /// cells whose formula is **true** are the cells that match.
     ///
@@ -249,12 +266,21 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             let colour = bar.get("colour").and_then(|colour| colour.as_str())?.to_string();
             Some(DataBar { colour })
         });
+        let icon_set = entry.get("icon_set").and_then(|icons| {
+            if !icons.is_object() {
+                return None;
+            }
+            let high = icons.get("high").and_then(|high| high.as_f64()).unwrap_or(67.0);
+            let low = icons.get("low").and_then(|low| low.as_f64()).unwrap_or(33.0);
+            Some(IconSet { high, low })
+        });
         let criterion = if formula.is_some()
             || top.is_some()
             || duplicate.is_some()
             || average.is_some()
             || colour_scale.is_some()
             || data_bar.is_some()
+            || icon_set.is_some()
         {
             None
         } else {
@@ -275,6 +301,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             average,
             colour_scale,
             data_bar,
+            icon_set,
             formula,
             format,
             fill,
@@ -345,6 +372,7 @@ impl Facts {
                 && conditional.average.is_none()
                 && conditional.colour_scale.is_none()
                 && conditional.data_bar.is_none()
+                && conditional.icon_set.is_none()
             {
                 continue;
             }
@@ -353,6 +381,7 @@ impl Facts {
                 || conditional.average.is_some()
                 || conditional.colour_scale.is_some()
                 || conditional.data_bar.is_some()
+                || conditional.icon_set.is_some()
             {
                 let numbers = numbers_of(book, &node.name, &area, node);
                 facts.numbers.push((conditional.range.clone(), numbers));
@@ -544,6 +573,27 @@ fn bar_part(facts: &Facts, range: &str, value: &crate::formula::Value) -> Option
     Some((number - lowest) / (highest - lowest))
 }
 
+/// The **icon** of a cell: the high one, the middle one or the low
+/// one, as the tree's own numbers — two, one and zero.
+///
+/// The icons stand for the **percentiles** of the numbers of the range:
+/// the high icon for the numbers at or above the high percentile, the
+/// middle icon for the numbers at or above the low percentile, and the
+/// low icon for the rest.
+fn icon_of(facts: &Facts, range: &str, icons: &IconSet, value: &crate::formula::Value) -> Option<u8> {
+    let numbers = facts.numbers_of(range)?;
+    let high = crate::formula::percentile_of(numbers, icons.high)?;
+    let low = crate::formula::percentile_of(numbers, icons.low)?;
+    let number = value.as_number()?;
+    if number >= high {
+        Some(2)
+    } else if number >= low {
+        Some(1)
+    } else {
+        Some(0)
+    }
+}
+
 /// Whether a cell's **number** is above the average of the range — or,
 /// when the rule is about the numbers **below** it, below it.
 fn average_matches(facts: &Facts, range: &str, average: &Average, value: &crate::formula::Value) -> bool {
@@ -582,6 +632,9 @@ pub struct Looks {
     /// The **bar** behind the cell: the part of the cell's width it
     /// fills and the colour of it.
     pub bar: Option<Bar>,
+    /// The **icon** in the cell: the tree's own numbers, and two is
+    /// the high icon, one the middle one and zero the low one.
+    pub icon: Option<u8>,
 }
 
 /// The **bar** behind a cell.
@@ -614,6 +667,20 @@ pub fn looks_for(
     for conditional in ordered_conditionals(node) {
         let Some(area) = area_of(&conditional.range) else { continue };
         if !area.covers(cell) {
+            continue;
+        }
+        // A rule of an **icon set** writes the icon of every cell of the
+        // range: the icon is **derived** from the cell's number, and it
+        // is not a match and not a not-match.
+        if let Some(icons) = &conditional.icon_set {
+            if let Some(icon) = icon_of(facts, &conditional.range, icons, value) {
+                if looks.icon.is_none() {
+                    looks.icon = Some(icon);
+                }
+                if conditional.stop.unwrap_or(false) {
+                    break;
+                }
+            }
             continue;
         }
         // A rule of a **data bar** writes the bar behind every cell of
@@ -782,6 +849,10 @@ fn entry_of(conditional: &Conditional) -> Json {
         })),
         "data_bar": conditional.data_bar.as_ref().map(|bar| json!({
             "colour": bar.colour,
+        })),
+        "icon_set": conditional.icon_set.as_ref().map(|icons| json!({
+            "high": icons.high,
+            "low": icons.low,
         })),
         "format": conditional.format,
         "fill": conditional.fill,
@@ -1651,6 +1722,115 @@ commands! {
                     "sheet": sheet,
                     "range": range,
                     "colour": colour,
+                    "stop": stop,
+                }),
+            ))
+        }
+    }
+
+    /// Put a **conditional format** on a range of cells, and put an
+    /// **icon** in the cells of it.
+    ///
+    /// The set has **three** icons: the high one, the middle one and
+    /// the low one. The icons stand for the **percentiles** of the
+    /// numbers of the range: the numbers at or above the high
+    /// percentile carry the high icon, the numbers at or above the low
+    /// percentile carry the middle one, and the rest carry the low one.
+    ///
+    /// The icons are the tree's own and they are drawn in code: a
+    /// triangle pointing up, a square and a triangle pointing down.
+    grid.conditional.icon.set {
+        area: "grid",
+        layer: "grid",
+        icon: "brush",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is on.
+            sheet: NodeRef,
+            /// The range it is about: `A1:A10`.
+            range: Text,
+            /// The **percent** of the numbers that carry the high icon:
+            /// sixty-seven of them by default.
+            high: Option<Number>,
+            /// The **percent** of the numbers that carry the middle icon:
+            /// thirty-three of them by default.
+            low: Option<Number>,
+            /// The tree's **stop if true**: the walk ends at this rule when it
+            /// matched, and the rules after it are not tried.
+            stop: Option<Bool>,
+            /// The **priority** of the rule: the lower the number, the earlier
+            /// the rule is tried.
+            priority: Option<Number>,
+        },
+        run: {
+            let id = "grid.conditional.icon.set".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            // The **percents**: two of them, and the high one above the
+            // low one.
+            let high = self.high.map(|high| high.0).unwrap_or(67.0);
+            let low = self.low.map(|low| low.0).unwrap_or(33.0);
+            for (name, percent) in [("high", high), ("low", low)] {
+                if !percent.is_finite() || percent < 0.0 || percent > 100.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the {name} percent of an icon set is a hundred at most, and this one is {percent}"),
+                    });
+                }
+            }
+            if high <= low {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the high percent of an icon set is above the low one, and {high} is not above {low}"),
+                });
+            }
+            let stop = self.stop.map(|stop| stop.0);
+            let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+            let priority = priority_of(self.priority.as_ref(), &id)?;
+            let mut list = conditionals_of(node)
+                .into_iter()
+                .map(|conditional| entry_of(&conditional))
+                .collect::<Vec<_>>();
+            // A range may have **one** conditional format: a second one for
+            // the same range replaces the first.
+            list.retain(|entry| entry["range"].as_str() != Some(range.as_str()));
+            list.push(json!({
+                "range": range,
+                "icon_set": {
+                    "high": high,
+                    "low": low,
+                },
+                "stop": stop,
+                "priority": priority,
+            }));
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["conditionals"] = json!(list);
+            }
+            Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
+                json!({
+                    "sheet": sheet,
+                    "range": range,
+                    "high": high,
+                    "low": low,
                     "stop": stop,
                 }),
             ))
