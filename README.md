@@ -4475,6 +4475,7 @@ so.
 | a **workbook's rules of the top ten, of the average, of the duplicates and of the bar are read** | **built.** The kinds of rule the tree has are read, and the ones it has not are counted (§1028) | §1028 |
 | a **conditional format may put an icon in the cells of a range** | **built.** The three icons stand for the percentiles of the numbers of the range, and they are drawn in code (§1029) | §1029 |
 | a **workbook's icon sets are read into the document** | **built.** The two percents are read, and the cells of the range carry an icon (§1030) | §1030 |
+| a **workbook's pictures are read** | **built.** The cell, the name, the alt text and the bytes are read, and the picture in no cell is counted (§1031) | §1031 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -61273,7 +61274,9 @@ A sheet may show a drawing of some of its cells: a chart.
   tree's chart reads the cells of the sheet it is in — so such a
   chart is left out rather than read wrongly.
 - **The pictures of a drawing are not read**: this tree has no
-  images, and the reader says that it left them out.
+  images, and the reader says that it left them out — and §1031 says
+  otherwise: they are read, and a picture that is in no cell is
+  counted.
 - **The tree's reader reads more of a chart than this tree has words
   for**: the colours of the series, the trendlines, the second axis
   and the style of the chart are not read.
@@ -61292,7 +61295,9 @@ A sheet may show a drawing of some of its cells: a chart.
 
 ### What it does not settle
 
-- **The pictures of a sheet are not read**: this tree has no images.
+- **The pictures of a sheet are not read**: this tree has no images —
+  and §1031 says otherwise: they are read, and §1032 says otherwise
+  again: they are in the document.
 - **The look of a chart is mostly not read**: the colours of the
   series, the trendlines, the second axis, the style and the shape of
   the points are not read.
@@ -62343,7 +62348,9 @@ How much is in a workbook, and what a reader may not be able to read.
   with issues is not refused, and a workbook without them is not
   praised.
 - **The pictures are counted and not measured**: the tree's picture is
-  a file and a place, and the statistics say how many there are.
+  a file and a place, and the statistics say how many there are — and
+  §1032 says otherwise for the picture that came from a workbook: its
+  bytes are in the document.
 
 ## 951. The structure of a protected workbook
 
@@ -66874,3 +66881,56 @@ which of the three icons a cell has are read into the document.
   dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
 - **The tree has no writer of workbooks**: the icon sets it reads are
   not written back.
+
+## 1031. A workbook's pictures are read
+
+A workbook may hold **pictures**, and the reader reads them: the cell
+each one is drawn in, the name the file gives it, its alt text, the
+format of its bytes and the bytes themselves.
+
+### What was built
+
+- The **reader** reads the **drawings** of a sheet — the part the sheet
+  names — and the **pictures** among them. A picture is in an
+  **anchor**: the place on the sheet it is drawn in, and the anchor says
+  the cell it starts at. The picture names its bytes by a
+  **relationship** of the drawing, and the bytes are given back as they
+  are.
+- A picture that is **in no cell** — one that is in no anchor, or in one
+  that does not say which cell it is in — is **counted**, and the reader
+  says how many it left out. The tree's picture is the picture of a
+  cell.
+- The reader has **bounds**: a picture of more than forty megabytes is
+  not read, and a sheet holds at most a thousand pictures.
+
+### What the port found
+
+- **The reference's reader reads the drawings of a sheet** and the
+  pictures among them: the anchor they are in, the name, the alt text
+  and the bytes. The tree's reader reads the same, and gives the bytes
+  back as they are — what they are is the business of the tree that
+  reads the file.
+- **The reference's picture holds its bytes in the document** — in the
+  model, as base64 in the JSON — and the tree's reader does not decide
+  where the bytes live. §1032 says what the tree does with them.
+
+### What it cost
+
+- **No new command**: the reader is a library, and a picture of a
+  workbook is a thing the battery reads.
+- **One new struct** in the reader (`Picture`), and one field on the
+  workbook.
+- **Two tests** in the reader (`crates/craftkit-xlsx/tests/workbook.rs`):
+  the picture of a sheet is read, and the picture that is in no cell is
+  counted.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree draws a PNG and a JPEG**: a picture of another format is
+  read by the reader and is not drawn by the tree (§1032).
+- **The shapes of a drawing are not read**: a shape is a drawing that
+  is not a picture, and the tree has none.
+- **The workbook is still not written back**: the pictures it reads are
+  not written out.
+
