@@ -4486,6 +4486,7 @@ so.
 | a **formula may name a column of a table** | **built.** The column of a table may be named in a formula, and the formula reads the cells of that column (§1039) | §1039 |
 | a **rename follows the formulas that name it** | **built.** The table's name and the column's name are written back into the formulas that name them (§1040) | §1040 |
 | a **file's spelling of a structured reference is read** | **built.** The row of the cell and the whole table are read as a file spells them (§1041) | §1041 |
+| a **name that two columns share names neither of them** | **built.** A formula that names a column two columns share is an error, and the fields say the name is shared (§1042) | §1042 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67432,3 +67433,55 @@ that way too.
 - **A file's table keeps the name the file gives it** — even a name the
   tree would refuse to make, such as `Table1`, which looks like a cell
   (the tree's own rule).
+
+## 1042. A name that two columns share names neither of them
+
+A name that **two columns share** says **neither** of them.
+
+### What was built
+
+- A **formula** that names a column two columns share is an **error**
+  that says so: *the table `Orders` has 2 columns called `amount`, and
+  a name that is two columns does not say which one*. Before this, the
+  formula read the **first** of the two columns, and the first was a
+  guess.
+- The **fields** of a table say the names two of them share: the read
+  has a `repeated` list, and each entry names the name and how many
+  fields share it.
+- The tree's rule is **written once**: the way of a column already
+  refused a name that two columns share, and now the formula refuses it
+  too.
+
+### What the port found
+
+- **The reference makes the names unique**: an empty header is given
+  the name `Column1`, a repeated one is numbered, and the name is
+  **written back into the cell**. So in the reference a name that two
+  columns share never happens.
+- **The tree does not rename**: the fields of a table are **derived**
+  from the header cells, and the tree does not write a name into a cell
+  that the user did not write. So a table — a table of a file, say —
+  may hold two fields of the same name, and every use of that name is
+  refused.
+- **The reference never has to choose**: its names are unique by
+  construction, and so a structured reference that names a column
+  always names one column.
+
+### What it cost
+
+- **No new command**: a name is a name. The battery still carries
+  **251** commands.
+- **One reading of a column** — none, one or many — and one list in the
+  read of the fields.
+- **One test** in the grid battery (`tests/tables.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not make the names unique**, and it does not refuse
+  the making of a table that holds two fields of the same name: the
+  name is refused where it is **used**, and the read of the fields says
+  that it is shared.
+- **A file's table may hold two fields of the same name**, and the
+  import does not count them: the tree says it where the fields are
+  read.
