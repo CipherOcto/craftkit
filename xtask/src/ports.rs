@@ -1708,6 +1708,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/tables.rs",
         section: "§1040",
     },
+    Port {
+        rule: "a file's spelling of a structured reference is read",
+        from: "gridcraft/crates/formula/src/printer.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/tables.rs",
+        section: "§1041",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

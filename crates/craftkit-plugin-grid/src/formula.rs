@@ -1584,6 +1584,13 @@ impl Parser {
     /// - `Table1[[#Data],[Sales]]` — the column of the data of it;
     /// - `Table1[[#All]]` — the whole table;
     /// - `[@Sales]` — the column of the table the cell is in.
+    ///
+    /// And the **file's** forms, which a workbook holds:
+    ///
+    /// - `Table1[[#This Row],[Sales]]` — the column of the row the cell
+    ///   is in, which is what `[@Sales]` says;
+    /// - `Table1[[#This Row]]` — the whole row the cell is in;
+    /// - `Table1[]` — the whole table.
     fn structured(&mut self, table: String) -> Result<Expr, FormulaError> {
         // The "[" is here.
         self.at += 1;
@@ -1617,15 +1624,19 @@ impl Parser {
                         }
                     };
                 }
-                // The **row of the cell**: `[@Sales]`.
+                // The **row of the cell**: `[@Sales]`, or `[@]` for the
+                // whole row of it.
                 Some('@') => {
                     self.at += 1;
                     let name = self.take_until(&[']', ',']).trim().to_string();
-                    if name.is_empty() {
-                        return Err(self.error("the row of the cell names no column"));
-                    }
                     item = StructItem::ThisRow;
-                    first = Some(name);
+                    first = if name.is_empty() { None } else { Some(name) };
+                }
+                // The **whole table**: `Table1[]`.
+                Some(']') => {
+                    item = StructItem::All;
+                    first = None;
+                    last = None;
                 }
                 // A **column** in brackets: `[Sales]`, or two of them
                 // `[Sales]:[Cost]`.
@@ -1636,18 +1647,23 @@ impl Parser {
                         return Err(self.error("the bracket is not closed"));
                     }
                     if word.starts_with('#') {
-                        // An item in brackets: `[#Data]`.
+                        // An item in brackets: `[#Data]`, and the file's
+                        // `[#This Row]`.
                         let Some(name) = word.strip_prefix('#') else { continue };
                         item = match name {
                             "All" => StructItem::All,
                             "Data" => StructItem::Data,
                             "Headers" => StructItem::Headers,
                             "Totals" => StructItem::Totals,
+                            "This Row" => StructItem::ThisRow,
                             _ => {
                                 return Err(self.error(&format!("`#{name}` is not an item of a table")));
                             }
                         };
                     } else {
+                        if word.trim().is_empty() {
+                            return Err(self.error("the bracket names no column"));
+                        }
                         first = Some(word.trim().to_string());
                         // The **second column** of a range of them.
                         if self.peek() == Some(':') {
@@ -2823,9 +2839,9 @@ impl Book {
         };
         let start = CellRef { col: *columns.start(), row: *rows.start() };
         let end = CellRef { col: *columns.end(), row: *rows.end() };
-        // The **row of the cell** is one cell, and it is the cell the
-        // formula is in.
-        if matches!(item, StructItem::ThisRow) {
+        // The **row of the cell** is one cell when it names a column, and
+        // it is the whole row of the table when it names none.
+        if matches!(item, StructItem::ThisRow) && first.is_some() {
             return Expr::Cell {
                 sheet: Some(sheet_of),
                 anchor: Anchor { cell: start, row_abs: false, col_abs: false },
@@ -5024,23 +5040,26 @@ fn expression_text(expression: &Expr, min_precedence: u8) -> String {
 /// The tree's own spelling: the name of the table, the columns it names
 /// and the item of the table it names.
 fn struct_text(table: &str, first: &Option<String>, last: &Option<String>, item: StructItem) -> String {
-    let item_text = match item {
-        StructItem::ThisRow => String::new(),
-        item => format!("[{}]", item.name()),
-    };
+    // The **row of the cell**: `[@Sales]` when the table is not named,
+    // and `Orders[[#This Row],[Sales]]` when it is.
+    if item == StructItem::ThisRow {
+        return match (table.is_empty(), first, last) {
+            (true, Some(column), _) => format!("[@{column}]"),
+            (true, None, _) => "[@]".to_string(),
+            (false, Some(first), Some(last)) => {
+                format!("{table}[[#This Row],[{first}]:[{last}]]")
+            }
+            (false, Some(first), None) => format!("{table}[[#This Row],[{first}]]"),
+            (false, None, _) => format!("{table}[[#This Row]]"),
+        };
+    }
+    let item_text = format!("[{}]", item.name());
     let columns = match (first, last) {
         (Some(first), Some(last)) => format!("[[{first}]:[{last}]]"),
         (Some(first), None) => format!("[{first}]"),
         (None, _) => item_text,
     };
-    match (table.is_empty(), item) {
-        // The row of the cell the formula is in: `[@Sales]`.
-        (true, StructItem::ThisRow) => {
-            let column = first.clone().unwrap_or_default();
-            format!("[@{column}]")
-        }
-        _ => format!("{table}{columns}"),
-    }
+    format!("{table}{columns}")
 }
 
 /// A number, as a formula writes it.

@@ -30,6 +30,9 @@
 //! of its header cell, so it is **derived** as the fields are, and it is
 //! read without case.
 //!
+//! A **file** spells the row of the cell its own way — `Orders[[#This
+//! Row],[amount]]` — and the tree reads that way too.
+//!
 //! And a **rename follows** the formulas that name it: the name of a
 //! table and the name of a column are written back into the formulas
 //! that name them, so a formula that names a table keeps naming it

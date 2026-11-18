@@ -2410,3 +2410,94 @@ fn an_imported_picture_is_drawn_on_the_page() {
         "the picture is in the file"
     );
 }
+
+/// A workbook's **formula** may name a **column of a table** of the
+/// workbook, and the import keeps the two together.
+#[test]
+fn a_formula_of_a_workbook_may_name_a_column_of_a_table() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="str"><v>who</v></c><c r="B1" t="str"><v>amount</v></c></row><row r="2"><c r="A2" t="str"><v>ann</v></c><c r="B2"><v>3</v></c></row><row r="3"><c r="A3" t="str"><v>bob</v></c><c r="B3"><v>4</v></c></row><row r="1"><c r="D1"><f>SUM(Orders[amount])</f></c></row></sheetData><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Orders" displayName="Orders" ref="A1:B3"><tableColumns count="2"><tableColumn id="1" name="who"/><tableColumn id="2" name="amount"/></tableColumns></table>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["formulas"].as_u64(), Some(1), "one formula");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    assert_eq!(
+        formula_of(&mut session, sheet, "D1"),
+        Some("SUM(Orders[amount])".to_string()),
+        "the formula is imported"
+    );
+    assert_eq!(value_of(&mut session, sheet, "D1"), Some(json!(7.0)), "and it reads the column");
+}
+
+/// A workbook's formula may spell the **row of the cell** the way a
+/// file spells it, and the import reads it.
+#[test]
+fn a_formula_of_a_workbook_may_name_the_row_of_the_cell() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="str"><v>who</v></c><c r="B1" t="str"><v>amount</v></c></row><row r="2"><c r="A2" t="str"><v>ann</v></c><c r="B2"><v>3</v></c></row><row r="3"><c r="A3" t="str"><v>bob</v></c><c r="B3"><v>4</v></c></row><row r="2"><c r="C2"><f>Orders[[#This Row],[amount]]</f></c></row></sheetData><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Orders" displayName="Orders" ref="A1:B3"><tableColumns count="2"><tableColumn id="1" name="who"/><tableColumn id="2" name="amount"/></tableColumns></table>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["formulas"].as_u64(), Some(1), "one formula");
+    assert_eq!(outcome.data["unread_formulas"].as_u64(), Some(0), "and it was read");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    assert_eq!(
+        formula_of(&mut session, sheet, "C2"),
+        Some("Orders[[#This Row],[amount]]".to_string()),
+        "the formula is imported"
+    );
+    assert_eq!(value_of(&mut session, sheet, "C2"), Some(json!(3.0)), "and it reads the row of the cell");
+}
