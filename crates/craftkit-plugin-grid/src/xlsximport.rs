@@ -883,10 +883,16 @@ commands! {
                 let mut conditionals: Vec<Json> = Vec::new();
                 for rule in &sheet.conditionals {
                     // A rule is a **criterion**, a **formula** or a
-                    // **colour scale**: the cells whose formula is true
-                    // are the cells that match, and the cells of a scale
-                    // are filled by it.
-                    let criterion = match (&rule.formula, &rule.colour_scale) {
+                    // kind of rule that is about the range as a whole:
+                    // the cells whose formula is true are the cells
+                    // that match, and the cells of a scale or of a bar
+                    // are filled or drawn by it.
+                    let about_the_range = rule.colour_scale.is_some()
+                        || rule.top.is_some()
+                        || rule.average.is_some()
+                        || rule.duplicate.is_some()
+                        || rule.data_bar.is_some();
+                    let criterion = match (&rule.formula, about_the_range) {
                         (Some(formula), _) => {
                             // A formula that does not parse is not a
                             // rule this tree can judge.
@@ -896,8 +902,8 @@ commands! {
                             }
                             None
                         }
-                        (None, Some(_)) => None,
-                        (None, None) => {
+                        (None, true) => None,
+                        (None, false) => {
                             if !crate::formula::Criterion::op_is_known(&rule.op) {
                                 unread_conditionals += 1;
                                 continue;
@@ -931,6 +937,23 @@ commands! {
                         (None, None) => {
                             entry.insert("formula".to_string(), json!(rule.formula));
                         }
+                    }
+                    // The **kinds of rule** that are about the range as
+                    // a whole.
+                    if let Some(top) = &rule.top {
+                        entry.insert(
+                            "top".to_string(),
+                            json!({ "count": top.count, "bottom": top.bottom, "percent": top.percent }),
+                        );
+                    }
+                    if let Some(average) = &rule.average {
+                        entry.insert("average".to_string(), json!({ "above": average.above }));
+                    }
+                    if let Some(duplicate) = &rule.duplicate {
+                        entry.insert("duplicate".to_string(), json!({ "unique": duplicate.unique }));
+                    }
+                    if let Some(bar) = &rule.data_bar {
+                        entry.insert("data_bar".to_string(), json!({ "colour": bar.colour.clone() }));
                     }
                     if let Some(format) = format {
                         entry.insert("format".to_string(), json!(format));

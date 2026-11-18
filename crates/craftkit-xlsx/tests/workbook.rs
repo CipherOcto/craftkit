@@ -2212,7 +2212,7 @@ fn the_kinds_of_conditional_format_are_read() {
         ),
         (
             "xl/worksheets/sheet1.xml",
-            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="beginsWith" text="b" priority="2"><formula>LEFT(B1,1)="b"</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="containsBlanks" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="notContainsErrors" priority="4"/></conditionalFormatting><conditionalFormatting sqref="E1:E5"><cfRule type="expression" priority="5"><formula>E1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F5"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></dataBar></cfRule></conditionalFormatting></worksheet>"#,
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="beginsWith" text="b" priority="2"><formula>LEFT(B1,1)="b"</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="containsBlanks" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="notContainsErrors" priority="4"/></conditionalFormatting><conditionalFormatting sqref="E1:E5"><cfRule type="expression" priority="5"><formula>E1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="F1:F5"><cfRule type="iconSet" priority="6"><iconSet iconSet="3TrafficLights1"><cfvo type="percent" val="67"/><cfvo type="percent" val="33"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
         ),
     ]);
     let workbook = read(&bytes).expect("the workbook is read");
@@ -2302,4 +2302,81 @@ fn a_scale_that_the_tree_cannot_read_is_counted() {
     assert!(workbook.sheets[0].conditionals.is_empty(), "the scale is not read");
     let said = workbook.warnings.join(" ");
     assert!(said.contains("1 colour scale(s) were not read"), "it says how many: {said}");
+}
+
+/// The **kinds of rule** that are about a range as a whole are read: the
+/// top ten, the above-the-average, the duplicates and the data bar.
+#[test]
+fn the_kinds_of_rule_about_a_range_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="top10" priority="1" rank="3"><cfvo type="num" val="3"/></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="top10" priority="2" bottom="1"><cfvo type="percent" val="25"/></cfRule></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="aboveAverage" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="duplicateValues" priority="4"/></conditionalFormatting><conditionalFormatting sqref="E1:E5"><cfRule type="uniqueValues" priority="5"/></conditionalFormatting><conditionalFormatting sqref="F1:F5"><cfRule type="dataBar" priority="6"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let rules = &workbook.sheets[0].conditionals;
+    assert_eq!(rules.len(), 6, "the six rules are read");
+    let top = rules[0].top.as_ref().expect("the first is a top ten");
+    assert_eq!(top.count, 3, "the count of the top ten is read");
+    assert!(!top.bottom, "and it is the highest");
+    assert!(!top.percent, "and it is a count and not a percent");
+    let lowest = rules[1].top.as_ref().expect("the second is a top ten");
+    assert_eq!(lowest.count, 25, "the count of the percent is read");
+    assert!(lowest.bottom, "and it is the lowest");
+    assert!(lowest.percent, "and it is a percent");
+    let average = rules[2].average.as_ref().expect("the third is the average");
+    assert!(average.above, "and it is the numbers above it");
+    let duplicate = rules[3].duplicate.as_ref().expect("the fourth is the duplicate");
+    assert!(!duplicate.unique, "and it is the repeated values");
+    let unique = rules[4].duplicate.as_ref().expect("the fifth is the duplicate");
+    assert!(unique.unique, "and it is the values held once");
+    let bar = rules[5].data_bar.as_ref().expect("the sixth is a bar");
+    assert_eq!(bar.colour, "#638ec6", "and the colour of the bar is read");
+    assert!(workbook.warnings.is_empty(), "and nothing is left out: {:?}", workbook.warnings);
+}
+
+/// An above-the-average with a **standard deviation** is a kind the tree
+/// does not have, and it is counted.
+#[test]
+fn an_above_the_average_with_a_standard_deviation_is_counted() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="C1:C5"><cfRule type="aboveAverage" priority="3" stdDev="2"/></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.sheets[0].conditionals.is_empty(), "the rule is not read");
+    let said = workbook.warnings.join(" ");
+    assert!(
+        said.contains("1 conditional format(s) of a kind this tree does not have"),
+        "it says how many: {said}"
+    );
 }

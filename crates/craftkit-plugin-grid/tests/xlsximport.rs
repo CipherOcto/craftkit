@@ -2116,7 +2116,7 @@ fn the_kinds_of_conditional_format_are_imported() {
         ),
         (
             "xl/worksheets/sheet1.xml",
-            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>ann</t></is></c></row></sheetData><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="containsBlanks" priority="2"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="expression" priority="3"><formula>C1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="dataBar"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF00FF00"/></dataBar></cfRule></conditionalFormatting></worksheet>"#,
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>ann</t></is></c></row></sheetData><conditionalFormatting sqref="A1:A5"><cfRule type="containsText" text="ann" priority="1" dxfId="0"><formula>NOT(ISERROR(SEARCH("ann",A1)))</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="containsBlanks" priority="2"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="expression" priority="3"><formula>C1&gt;0</formula></cfRule></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="iconSet" priority="4"><iconSet iconSet="3TrafficLights1"><cfvo type="percent" val="67"/><cfvo type="percent" val="33"/></iconSet></cfRule></conditionalFormatting></worksheet>"#,
         ),
     ]);
     let path = a_file(bytes);
@@ -2197,4 +2197,43 @@ fn a_colour_scale_of_a_workbook_is_imported() {
         vec!["#f8696b".to_string(), "#ffeb84".to_string(), "#63be7b".to_string()],
         "the colours of the scale are in the document"
     );
+}
+
+/// The **kinds of rule** that are about a range as a whole are
+/// imported: the top ten, the above-the-average, the duplicates and the
+/// data bar.
+#[test]
+fn the_kinds_of_rule_about_a_range_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="top10" priority="1" rank="3"><cfvo type="num" val="3"/></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="aboveAverage" priority="2"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="duplicateValues" priority="3"/></conditionalFormatting><conditionalFormatting sqref="D1:D5"><cfRule type="dataBar" priority="4"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF638EC6"/></dataBar></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["conditionals"].as_u64(), Some(4), "the four rules are imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let rules = &node.data["conditionals"];
+    assert_eq!(rules[0]["top"]["count"].as_u64(), Some(3), "the top ten is in the document");
+    assert_eq!(rules[1]["average"]["above"].as_bool(), Some(true), "and the average");
+    assert_eq!(rules[2]["duplicate"]["unique"].as_bool(), Some(false), "and the duplicates");
+    assert_eq!(rules[3]["data_bar"]["colour"].as_str(), Some("#638ec6"), "and the bar");
 }

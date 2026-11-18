@@ -50,6 +50,11 @@
 //! - It does not read a **theme** of its own: a file that names a
 //!   colour by the theme is read against the theme the file holds, and
 //!   a file that holds no theme has no themed colour to read.
+//! - It reads the **conditional formats** it has: a comparison, a
+//!   formula, the words of a cell, the empty cells, the errors, the
+//!   colour scale, the top ten, the average, the duplicates and the
+//!   data bar. The kinds it does not have — the icon set, the rule of
+//!   the time period — are counted, and it says how many it left out.
 
 #![deny(
     clippy::unwrap_used,
@@ -871,6 +876,42 @@ pub struct Validation {
     pub show_error: bool,
 }
 
+/// The **top** of a range: the count highest values of it, or the count
+/// lowest.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Top {
+    /// How many of the values.
+    pub count: u32,
+    /// Whether the **lowest** values are the ones and not the highest.
+    pub bottom: bool,
+    /// Whether the count is a **percent** of the numbers of the range.
+    pub percent: bool,
+}
+
+/// The **average** of a range: the cells whose number is above it, or
+/// the cells whose number is below it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Average {
+    /// Whether the numbers **above** the average are the ones.
+    pub above: bool,
+}
+
+/// The **duplicate** of a range: the cells whose value is repeated in
+/// it, or the cells whose value is not.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Duplicate {
+    /// Whether the rule is about the values that are **not** repeated.
+    pub unique: bool,
+}
+
+/// The **data bar** of a range: the bar behind a cell, and the colour
+/// of it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataBar {
+    /// The colour of the bar.
+    pub colour: String,
+}
+
 /// A **colour scale** of a sheet: the colours of the scale, in order.
 ///
 /// The colours are two — of the lowest number of the range and of the
@@ -911,6 +952,18 @@ pub struct Conditional {
     /// The **colour scale** of the rule, when the rule is one: the
     /// colours of the scale, in order.
     pub colour_scale: Option<ColourScale>,
+    /// The **top** of the range the rule is about, when the rule has
+    /// one.
+    pub top: Option<Top>,
+    /// The **average** of the range the rule is about, when the rule has
+    /// one.
+    pub average: Option<Average>,
+    /// The **duplicate** of the range the rule is about, when the rule
+    /// has one.
+    pub duplicate: Option<Duplicate>,
+    /// The **data bar** of the range the rule is about, when the rule
+    /// has one.
+    pub data_bar: Option<DataBar>,
     /// The **number format** the matching cells are written with, when
     /// the rule names one.
     pub format: Option<String>,
@@ -1950,7 +2003,7 @@ fn read_conditionals(
             // The **criterion** of the rule: the operation and the
             // value, or the formula the cells are judged by, or the
             // colours of a scale.
-            let (op, value, formula, colour_scale) = match kind {
+            let (op, value, formula, colour_scale, top, average, duplicate, data_bar) = match kind {
                 "cellIs" => {
                     let Some(op) = rule.attr("operator").and_then(conditional_op) else {
                         unread += 1;
@@ -1962,7 +2015,7 @@ fn read_conditionals(
                         unread += 1;
                         continue;
                     };
-                    (op.to_string(), value, None, None)
+                    (op.to_string(), value, None, None, None, None, None, None)
                 }
                 "expression" => {
                     let Some(formula) =
@@ -1973,24 +2026,158 @@ fn read_conditionals(
                     };
                     // The formula is written without the `=` the file
                     // does not write.
-                    (String::new(), String::new(), Some(formula.trim_start_matches('=').to_string()), None)
+                    (
+                        String::new(),
+                        String::new(),
+                        Some(formula.trim_start_matches('=').to_string()),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
                 }
-                "containsText" => {
-                    ("contains".to_string(), rule.attr("text").unwrap_or("").to_string(), None, None)
+                "containsText" => (
+                    "contains".to_string(),
+                    rule.attr("text").unwrap_or("").to_string(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                "notContainsText" => (
+                    "notContains".to_string(),
+                    rule.attr("text").unwrap_or("").to_string(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                "beginsWith" => (
+                    "beginsWith".to_string(),
+                    rule.attr("text").unwrap_or("").to_string(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                "endsWith" => (
+                    "endsWith".to_string(),
+                    rule.attr("text").unwrap_or("").to_string(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ),
+                "containsBlanks" => {
+                    ("isEmpty".to_string(), String::new(), None, None, None, None, None, None)
                 }
-                "notContainsText" => {
-                    ("notContains".to_string(), rule.attr("text").unwrap_or("").to_string(), None, None)
+                "notContainsBlanks" => {
+                    ("isNotEmpty".to_string(), String::new(), None, None, None, None, None, None)
                 }
-                "beginsWith" => {
-                    ("beginsWith".to_string(), rule.attr("text").unwrap_or("").to_string(), None, None)
+                "containsErrors" => {
+                    ("isError".to_string(), String::new(), None, None, None, None, None, None)
                 }
-                "endsWith" => {
-                    ("endsWith".to_string(), rule.attr("text").unwrap_or("").to_string(), None, None)
+                "notContainsErrors" => {
+                    ("isNotError".to_string(), String::new(), None, None, None, None, None, None)
                 }
-                "containsBlanks" => ("isEmpty".to_string(), String::new(), None, None),
-                "notContainsBlanks" => ("isNotEmpty".to_string(), String::new(), None, None),
-                "containsErrors" => ("isError".to_string(), String::new(), None, None),
-                "notContainsErrors" => ("isNotError".to_string(), String::new(), None, None),
+                "top10" => {
+                    // The **top ten**: the count of it is the value of
+                    // the stop of the rule, and a stop that is a
+                    // **percent** of the numbers is a percent.
+                    let stop = rule.kids("cfvo").next();
+                    let percent = stop
+                        .and_then(|stop| stop.attr("type"))
+                        .map(|kind| kind == "percent")
+                        .unwrap_or_else(|| rule.attr("percent") == Some("1"));
+                    let count = stop
+                        .and_then(|stop| stop.attr("val"))
+                        .and_then(|val| val.parse::<u32>().ok())
+                        .or_else(|| rule.attr("rank").and_then(|rank| rank.parse::<u32>().ok()))
+                        .unwrap_or(10);
+                    let bottom = rule.attr("bottom") == Some("1");
+                    (
+                        String::new(),
+                        String::new(),
+                        None,
+                        None,
+                        Some(Top { count, bottom, percent }),
+                        None,
+                        None,
+                        None,
+                    )
+                }
+                "aboveAverage" => {
+                    // The **above-the-average**: the tree's rule has no
+                    // standard deviation and it does not count the
+                    // numbers that are equal to the average.
+                    let standard = rule.attr("stdDev").and_then(|dev| dev.parse::<f64>().ok()).unwrap_or(0.0);
+                    let equal = rule.attr("equalAverage") == Some("1");
+                    if standard != 0.0 || equal {
+                        unread += 1;
+                        continue;
+                    }
+                    let above = rule.attr("aboveAverage") != Some("0");
+                    (String::new(), String::new(), None, None, None, Some(Average { above }), None, None)
+                }
+                "duplicateValues" => (
+                    String::new(),
+                    String::new(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(Duplicate { unique: false }),
+                    None,
+                ),
+                "uniqueValues" => (
+                    String::new(),
+                    String::new(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(Duplicate { unique: true }),
+                    None,
+                ),
+                "dataBar" => {
+                    // The **data bar**: the stops of it are the lowest
+                    // and the highest of the range, and it has a
+                    // colour.
+                    let Some(bar) = rule.kids("dataBar").next() else {
+                        unread += 1;
+                        continue;
+                    };
+                    let stops: Vec<&str> = bar.kids("cfvo").filter_map(|stop| stop.attr("type")).collect();
+                    if stops.len() != 2 || stops[0] != "min" || stops[1] != "max" {
+                        unread += 1;
+                        continue;
+                    }
+                    let Some(rgb) = bar.kids("color").next().and_then(|colour| colour.attr("rgb")) else {
+                        unread += 1;
+                        continue;
+                    };
+                    let hex = rgb.trim();
+                    let hex = hex.get(hex.len().saturating_sub(6)..).unwrap_or(hex);
+                    (
+                        String::new(),
+                        String::new(),
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(DataBar { colour: format!("#{}", hex.to_ascii_lowercase()) }),
+                    )
+                }
                 "colorScale" => {
                     // A **scale**: the stops of it are the lowest and
                     // the highest of the range, and with three stops
@@ -2029,7 +2216,16 @@ fn read_conditionals(
                         unread_scales += 1;
                         continue;
                     }
-                    (String::new(), String::new(), None, Some(ColourScale { colours }))
+                    (
+                        String::new(),
+                        String::new(),
+                        None,
+                        Some(ColourScale { colours }),
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
                 }
                 _ => {
                     unread += 1;
@@ -2048,6 +2244,10 @@ fn read_conditionals(
                     value: value.clone(),
                     formula: formula.clone(),
                     colour_scale: colour_scale.clone(),
+                    top: top.clone(),
+                    average: average.clone(),
+                    duplicate: duplicate.clone(),
+                    data_bar: data_bar.clone(),
                     format: format.clone(),
                     fill: fill.clone(),
                     stop,
