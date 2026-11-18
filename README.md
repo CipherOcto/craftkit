@@ -4476,6 +4476,7 @@ so.
 | a **conditional format may put an icon in the cells of a range** | **built.** The three icons stand for the percentiles of the numbers of the range, and they are drawn in code (§1029) | §1029 |
 | a **workbook's icon sets are read into the document** | **built.** The two percents are read, and the cells of the range carry an icon (§1030) | §1030 |
 | a **workbook's pictures are read** | **built.** The cell, the name, the alt text and the bytes are read, and the picture in no cell is counted (§1031) | §1031 |
+| a **workbook's pictures are imported into the document** | **built.** The picture is in the cell, and the bytes that came with it are in the document (§1032) | §1032 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -66934,3 +66935,55 @@ format of its bytes and the bytes themselves.
 - **The workbook is still not written back**: the pictures it reads are
   not written out.
 
+## 1032. A workbook's pictures are imported into the document
+
+A workbook's **pictures** go into the document: the cell each one is
+drawn in, its size, its alt text and its **bytes**.
+
+### What was built
+
+- The **import** puts the picture in the sheet: the cell, the width and
+  the height — measured from the bytes — the format and the alt text.
+- The **bytes** of a picture that came from a workbook are **in the
+  document**, as base64. The workbook is a file and the document is not
+  beside it, and a picture the document cannot show is a picture that
+  is lost.
+- The **picture read** says where the bytes are: in a file beside the
+  document, or in the document itself. The two kinds are told apart by
+  it, and the answer does not carry the bytes themselves.
+- The **PDF** of a sheet draws a picture whose bytes are in the
+  document, as it draws one whose bytes are in a file.
+
+### What the port found
+
+- **The reference's picture holds its bytes in the document**, as
+  base64 in the JSON of the model.
+- **The tree's picture is a file beside the document** (§25): the bytes
+  are never in the document, and the document says where they are — and
+  this arc says otherwise for the picture that came from a workbook. The
+  rule is not changed: a picture the tree is given is a file, and a
+  picture the tree is given by a workbook holds its bytes, because there
+  is no file beside the document to point at.
+
+### What it cost
+
+- **No new command**: a picture is a thing of a cell, and the import
+  fills the cells of the sheet it reads.
+- **A second kind of source** for a picture: the bytes are in a file,
+  or in the document.
+- **Three tests**: one in the import's test file — the picture is in
+  the document, and the read says where its bytes are — and one that
+  draws it on the page.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The bytes in the document are a third bigger**: base64 is base64,
+  and the tree's streams (§25) are the answer for the bytes that belong
+  to a **node**.
+- **The tree draws a PNG and a JPEG**: a picture of another format is
+  read and is not imported, and the import says how many.
+- **A cell holds one picture**: a second picture in a cell that has one
+  is counted and not imported.
+- **The workbook is still not written back**: the pictures it holds are
+  not written out.
