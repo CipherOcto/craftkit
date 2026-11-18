@@ -1109,6 +1109,59 @@ commands! {
                     imported_charts += 1;
                 }
             }
+            // The **pictures** of the sheets: the images they show.
+            //
+            // The bytes of a picture that came from a workbook are **in
+            // the document**: the workbook is a file and the document
+            // is not beside it, and a picture the document cannot show
+            // is a picture that is lost.
+            //
+            // The tree draws a **PNG** and a **JPEG**, and a cell holds
+            // **one** picture: another format, and a second picture in
+            // a cell that has one, are counted and not imported.
+            let mut imported_pictures = 0u64;
+            let mut unread_pictures = 0u64;
+            for (sheet_name, pictures) in &workbook.pictures {
+                let Some(sheet_id) = session
+                    .document()
+                    .walk()
+                    .find(|node| node.kind == "grid.sheet" && node.name == *sheet_name)
+                    .map(|node| node.id)
+                else {
+                    continue;
+                };
+                for picture in pictures {
+                    if !craftkit_image::is_png(&picture.bytes) && !craftkit_image::is_jpeg(&picture.bytes) {
+                        unread_pictures += 1;
+                        continue;
+                    }
+                    let Ok(size) = craftkit_image::size(&picture.bytes) else {
+                        unread_pictures += 1;
+                        continue;
+                    };
+                    let address = picture.cell.clone();
+                    let entry = json!({
+                        "bytes": craftkit_sdk::bytes::encode(&picture.bytes),
+                        "length": picture.bytes.len(),
+                        "width": size.width,
+                        "height": size.height,
+                        "format": picture.format,
+                        "alt": picture.alt,
+                    });
+                    let Some(node) = session.document_mut()?.node_mut(sheet_id) else { continue };
+                    if !node.data["pictures"].is_object() {
+                        node.data["pictures"] = json!({});
+                    }
+                    let Some(map) = node.data["pictures"].as_object_mut() else { continue };
+                    if map.contains_key(&address) {
+                        // A cell holds one picture in this tree.
+                        unread_pictures += 1;
+                        continue;
+                    }
+                    map.insert(address, entry);
+                    imported_pictures += 1;
+                }
+            }
             // The **names** of the workbook: the words its formulas use.
             //
             // A name here stands for a **range**, and so a name whose
@@ -1396,6 +1449,11 @@ commands! {
                     "; {unread_range_names} range name(s) could not be kept: the tree's edit ranges have none"
                 ));
             }
+            if unread_pictures > 0 {
+                summary.push_str(&format!(
+                    "; {unread_pictures} picture(s) could not be drawn by the tree and were not imported"
+                ));
+            }
             if unread_passwords > 0 {
                 summary.push_str(&format!(
                     "; {unread_passwords} password(s) could not be kept: the tree's protection has none"
@@ -1462,6 +1520,8 @@ commands! {
                 "unread_pivots": unread_pivots,
                 "charts": imported_charts,
                 "unread_charts": unread_charts,
+                "pictures": imported_pictures,
+                "unread_pictures": unread_pictures,
                 "system": system.name(),
                 "warnings": workbook.warnings,
             })))

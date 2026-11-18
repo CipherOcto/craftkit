@@ -1,9 +1,16 @@
 //! The **picture** of a cell.
 //!
 //! A cell may hold a **picture**: a small image drawn in the cell.
+//!
 //! The picture is a **file beside the document** and a **size** inside
 //! it (§25): the bytes are never in the document, and the document
 //! says where they are.
+//!
+//! — and §1032 says otherwise for the picture that came from a
+//! **workbook**: its bytes are **in the document**, because the
+//! workbook is a file and the document is not beside it, and a picture
+//! the document cannot show is a picture that is lost. The picture read
+//! says where the bytes are, and the two kinds are told apart by it.
 //!
 //! The size is **measured** from the head of the file and never from
 //! the pixels: a picture of forty megabytes is measured by reading a
@@ -168,9 +175,27 @@ commands! {
                 let width = picture.get("width").and_then(|width| width.as_u64()).unwrap_or(0);
                 let height = picture.get("height").and_then(|height| height.as_u64()).unwrap_or(0);
                 let aspect = if height == 0 { None } else { Some(width as f64 / height as f64) };
+                // The **bytes** of the picture: they are in a file beside
+                // the document, or in the document itself when the
+                // picture came from a workbook.
+                let (source, bytes) = match picture.get("bytes") {
+                    Some(_) => ("the document".to_string(), picture.get("length").cloned()),
+                    None => (
+                        picture.get("path").and_then(|path| path.as_str()).unwrap_or_default().to_string(),
+                        Some(Json::Null),
+                    ),
+                };
+                // The picture itself, without the bytes: they are many,
+                // and the answer says where they are.
+                let mut shown = picture.clone();
+                if let Some(map) = shown.as_object_mut() {
+                    map.remove("bytes");
+                }
                 json!({
                     "cell": address,
-                    "picture": picture,
+                    "picture": shown,
+                    "source": source,
+                    "bytes": bytes,
                     "pixels": width * height,
                     "aspect": match aspect {
                         Some(aspect) => json!(aspect),

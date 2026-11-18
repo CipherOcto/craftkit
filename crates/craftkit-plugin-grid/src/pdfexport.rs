@@ -92,8 +92,13 @@ const PIXEL: f64 = 0.75;
 /// colours a PDF does not carry: the CMYK of a JPEG is one of them.
 fn pixels_of(path: &str) -> Option<(u32, u32, Vec<u8>)> {
     let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(path), MAX_PICTURE_BYTES).ok()?;
-    if craftkit_image::is_png(&bytes) {
-        let picture = craftkit_png::read(&bytes, &craftkit_png::Limits::default()).ok()?;
+    pixels_of_bytes(&bytes)
+}
+
+/// The **pixels** of a picture's bytes, as **RGBA**.
+fn pixels_of_bytes(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    if craftkit_image::is_png(bytes) {
+        let picture = craftkit_png::read(bytes, &craftkit_png::Limits::default()).ok()?;
         let pixels = u64::from(picture.width) * u64::from(picture.height);
         if pixels == 0 || pixels > MAX_PICTURE_PIXELS {
             return None;
@@ -126,8 +131,8 @@ fn pixels_of(path: &str) -> Option<(u32, u32, Vec<u8>)> {
         }
         return Some((picture.width, picture.height, rgba));
     }
-    if craftkit_image::is_jpeg(&bytes) {
-        let decoded = craftkit_jpeg::decode(&bytes, &craftkit_jpeg::Limits::default(), None).ok()?;
+    if craftkit_image::is_jpeg(bytes) {
+        let decoded = craftkit_jpeg::decode(bytes, &craftkit_jpeg::Limits::default(), None).ok()?;
         let pixels = u64::from(decoded.width) * u64::from(decoded.height);
         if pixels == 0 || pixels > MAX_PICTURE_PIXELS || decoded.components != 3 {
             return None;
@@ -1047,8 +1052,16 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
         let Some(column_index) = columns.iter().position(|column| *column == cell.col) else {
             continue;
         };
-        let Some(path) = picture.get("path").and_then(|path| path.as_str()) else { continue };
-        let Some((width, height, rgba)) = pixels_of(path) else { continue };
+        // The **bytes** of the picture: they are in a file beside the
+        // document, or in the document itself when the picture came
+        // from a workbook.
+        let pixels = match picture.get("bytes").and_then(|bytes| bytes.as_str()) {
+            Some(encoded) => {
+                craftkit_sdk::bytes::decode(encoded).ok().and_then(|bytes| pixels_of_bytes(&bytes))
+            }
+            None => picture.get("path").and_then(|path| path.as_str()).and_then(pixels_of),
+        };
+        let Some((width, height, rgba)) = pixels else { continue };
         let x = xs.get(column_index).copied().unwrap_or(origin_x);
         let y = ys.get(row_index).copied().unwrap_or(origin_y);
         let wide = f64::from(width) * PIXEL * scale;

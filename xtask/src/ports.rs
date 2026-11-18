@@ -1627,6 +1627,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§1031",
     },
+    Port {
+        rule: "a workbook's pictures are imported into the document",
+        from: "gridcraft/crates/model/src/features.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/xlsximport.rs",
+        command: "craftkit-plugin-grid::grid.import.xlsx",
+        test: "crates/craftkit-plugin-grid/tests/xlsximport.rs",
+        section: "§1032",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -27,11 +27,17 @@ fn session() -> Session {
 
 /// A **package** of parts, written by hand.
 fn a_package(parts: &[(&str, &str)]) -> Vec<u8> {
+    let parts: Vec<(&str, &[u8])> = parts.iter().map(|(name, text)| (*name, text.as_bytes())).collect();
+    a_package_of(&parts)
+}
+
+/// A **package** of parts, written by hand, where a part may be **bytes**
+/// and not text.
+fn a_package_of(parts: &[(&str, &[u8])]) -> Vec<u8> {
     let mut out: Vec<u8> = Vec::new();
     let mut directory: Vec<u8> = Vec::new();
-    for (name, text) in parts {
+    for (name, data) in parts {
         let name = name.as_bytes();
-        let data = text.as_bytes();
         let checksum = craftkit_zip::crc32(data);
         let offset = out.len() as u32;
         out.extend_from_slice(&[0x50, 0x4b, 0x03, 0x04]);
@@ -2279,4 +2285,124 @@ fn an_icon_set_of_a_workbook_is_imported() {
     };
     assert_eq!(read(&mut session, "A3").data["icon"].as_u64(), Some(2), "the highest has the high icon");
     assert_eq!(read(&mut session, "A1").data["icon"].as_u64(), Some(0), "and the lowest the low one");
+}
+
+/// A workbook's **pictures** are imported: the cell they are drawn in,
+/// their size, and their bytes in the document.
+#[test]
+fn the_pictures_of_a_workbook_are_imported() {
+    let mut session = session();
+    // A **picture**: the head of a PNG file that is two pixels wide and
+    // three high.
+    let picture: &[u8] =
+        &[137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, b'I', b'H', b'D', b'R', 0, 0, 0, 2, 0, 0, 0, 3];
+    let bytes = a_package_of(&[
+        (
+            "_rels/.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            br#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", br#"<worksheet><sheetData/><drawing r:id="rId2"/></worksheet>"#),
+        (
+            "xl/drawings/drawing1.xml",
+            br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Picture 1" descr="the logo"/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill></xdr:pic><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#,
+        ),
+        ("xl/media/image1.png", picture),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["pictures"].as_u64(), Some(1), "the picture is imported");
+    assert_eq!(outcome.data["unread_pictures"].as_u64(), Some(0), "and nothing is left out");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let pictures = &node.data["pictures"];
+    let entry = pictures.get("B3").expect("the picture is in the cell it is drawn in");
+    assert_eq!(entry["width"].as_u64(), Some(2), "the width of the picture is read");
+    assert_eq!(entry["height"].as_u64(), Some(3), "and the height of it");
+    assert_eq!(entry["format"].as_str(), Some("png"), "and the format of it");
+    assert_eq!(entry["alt"].as_str(), Some("the logo"), "and its alt text");
+    // The **picture read**: the bytes are in the document, and the
+    // answer says so.
+    let read = session
+        .execute("grid.picture.read", &json!({ "sheet": sheet, "cell": "B3" }))
+        .expect("the picture is read");
+    assert_eq!(read.data["source"].as_str(), Some("the document"), "the bytes are in the document");
+    assert_eq!(read.data["bytes"].as_u64(), Some(24), "and how many they are");
+    assert_eq!(read.data["pixels"].as_u64(), Some(6), "and the pixels of the picture");
+}
+
+/// A picture that came from a workbook is **drawn**: the bytes are in
+/// the document, and the page of the sheet carries the image.
+#[test]
+fn an_imported_picture_is_drawn_on_the_page() {
+    let mut session = session();
+    // A **picture**: a PNG of two pixels across and three down, written
+    // by the tree's own writer.
+    let mut image = craftkit_raster::Image::new(2, 3, craftkit_sdk::document::Colour::WHITE);
+    image.blend(0, 0, craftkit_sdk::document::Colour::BLACK, craftkit_sdk::BlendMode::Normal);
+    let picture = image.to_png();
+    let bytes = a_package_of(&[
+        (
+            "_rels/.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            br#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            br#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><drawing r:id="rId2"/></worksheet>"#,
+        ),
+        (
+            "xl/drawings/drawing1.xml",
+            br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Picture 1"/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId1"/></xdr:blipFill></xdr:pic><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>"#,
+        ),
+        ("xl/media/image1.png", &picture),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    // The **page**: the sheet is written as a PDF file, and the picture
+    // is on it.
+    let out = craftkit_scratch::file("craftkit-v2-grid-import.pdf").expect("the scratch gives a path");
+    session
+        .execute("grid.export.pdf", &json!({ "sheet": sheet, "path": out.to_string_lossy() }))
+        .expect("the sheet is exported");
+    let page = std::fs::read(&out).expect("the file is there");
+    assert!(
+        page.windows(b"/Subtype /Image".len()).any(|window| window == b"/Subtype /Image"),
+        "the picture is in the file"
+    );
 }
