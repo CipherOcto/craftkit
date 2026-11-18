@@ -4479,6 +4479,7 @@ so.
 | a **workbook's pictures are imported into the document** | **built.** The picture is in the cell, and the bytes that came with it are in the document (§1032) | §1032 |
 | a **conditional format may colour the text of the cells it matches** | **built.** The rule carries the colour, the cell read says it and the page writes the text in it (§1033) | §1033 |
 | a **workbook's rules carry the colour of the text** | **built.** The font of the differential format is read, and the colour is in the rule of the document (§1034) | §1034 |
+| a **rule may draw a border on the cells it matches** | **built.** The rule carries the line of each edge, and the page draws it (§1035) | §1035 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67086,3 +67087,50 @@ matches is written in, and the reader reads it.
 - **The tree's colours are `#rrggbb`**: a colour of the theme is read
   and resolved by the reader, and a rule that names one keeps the
   colour, not the name.
+
+## 1035. A rule may draw a border on the cells it matches
+
+A rule of a conditional format may say **what line** is drawn around
+the cells it matches.
+
+### What was built
+
+- The **rule** carries the **borders** it draws, by the edge they are
+  on: `{"top": {"style": "thin", "colour": "#ff0000"}}`. The colour is
+  optional, and without it the line is the tree's own black.
+- The **five rules that have a look** take the borders as a parameter,
+  and a rule that carries **only** the borders is a rule.
+- The **cell read** says the borders of the rule, and the **PDF** draws
+  them on top of the cell's own borders: the rule is on top of the
+  cell.
+- A border that is not a border this tree has — an **edge** it does not
+  have, a **style** it does not have, a **colour** that is not a colour
+  — is refused.
+
+### What the port found
+
+- **The reference's rule carries a border**: the edges it draws, the
+  style of each line and its colour. The tree's rule now carries it
+  too.
+- **The reference's border of a rule is on the outside of the range**,
+  and the tree's is on every cell that matches: the tree's rule is
+  judged cell by cell, and the line it draws is on the cell.
+
+### What it cost
+
+- **No new command**: the borders are part of the look of a rule, and
+  the five rules that have a look take them. The battery still carries
+  **251** commands.
+- **One field** on the rule, one on the look, one on the answer of the
+  cell read.
+- **Two tests** in the grid battery (`tests/conditionalfill.rs`): the
+  borders of the rule, and the three refusals.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The border of a rule is on every cell that matches**: the
+  reference's is on the outside of the range, and the tree's is not.
+- **The tree's rule draws one kind of line**: the reference's rule may
+  draw a line that is not one of the tree's thirteen styles, and such a
+  line is refused.
