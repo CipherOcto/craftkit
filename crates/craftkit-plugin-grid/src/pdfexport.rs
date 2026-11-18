@@ -229,6 +229,7 @@ fn look_of(
     cells: &crate::formula::Cells,
     cell: CellRef,
     value: &Value,
+    facts: &crate::conditional::Facts,
 ) -> Look {
     let styles = crate::styles_of(session, sheet);
     let style = cells
@@ -242,6 +243,7 @@ fn look_of(
         cell,
         value,
         crate::system_of(session, sheet),
+        facts,
     );
     Look {
         font: own.and_then(|entry| entry.font.clone()).or_else(|| style.and_then(|style| style.font.clone())),
@@ -672,6 +674,9 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
     let scale = pages.scale;
     let name = node.name.clone();
     let margins = setup.margins;
+    // The **facts** the conditional formats of the sheet are about: the
+    // numbers of the ranges they judge, worked out once for the page.
+    let facts = crate::conditional::Facts::of(&crate::book_of(session.document()), node);
     // The **rows** and the **columns** of the page: the titles first,
     // and then the band of the page.
     let (band_rows, band_columns) = band;
@@ -821,7 +826,7 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
                 continue;
             }
             let value = value_of(session, &name, cells, cell);
-            let look = look_of(session, sheet, node, cells, cell, &value);
+            let look = look_of(session, sheet, node, cells, cell, &value, &facts);
             // The **fill** of the cell.
             if let Some(fill) = look.fill.as_deref().and_then(rgb_of) {
                 page.fill_rect(left as f32, top as f32, width as f32, height as f32, fill);

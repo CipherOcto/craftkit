@@ -1528,6 +1528,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§1020",
     },
+    Port {
+        rule: "a conditional format may judge the top of a range",
+        from: "gridcraft/crates/engine/src/cmd/insert/cond_format.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/conditional.rs",
+        command: "grid.conditional.top10",
+        test: "crates/craftkit-plugin-grid/tests/conditional.rs",
+        section: "§1021",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

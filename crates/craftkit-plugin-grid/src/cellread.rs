@@ -84,12 +84,15 @@ commands! {
             // The **look** the conditional formats of the sheet give the
             // cell: the format and the fill, each of them from the rule
             // that is seen first and says something about it.
+            let book = crate::book_of(session.document());
+            let facts = crate::conditional::Facts::of(&book, node);
             let looks = crate::conditional::looks_for(
-                &crate::book_of(session.document()),
+                &book,
                 node,
                 cell,
                 &value,
                 crate::system_of(session, sheet),
+                &facts,
             );
             // The **text** the cell shows: the value written with the
             // format of the cell — the conditional format that matches it

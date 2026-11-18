@@ -325,3 +325,101 @@ fn a_value_with_an_operation_that_compares_with_nothing_is_refused() {
     let message = failure.to_string();
     assert!(message.contains("compares with nothing"), "the refusal says why: {message}");
 }
+
+/// A conditional format may judge the **top** of a range: the cells
+/// whose number is among the highest of it.
+#[test]
+fn a_conditional_format_may_judge_the_top_of_a_range() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 2.0);
+    a_number(&mut session, sheet, "A3", 3.0);
+    session
+        .execute(
+            "grid.conditional.top10",
+            &json!({ "sheet": sheet, "range": "A1:A3", "count": 1, "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A3"), vec!["A3".to_string()], "the highest matches");
+}
+
+/// The **lowest** values of a range may be the ones the rule holds for.
+#[test]
+fn the_lowest_values_of_a_range_may_be_the_ones() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 2.0);
+    a_number(&mut session, sheet, "A3", 3.0);
+    session
+        .execute(
+            "grid.conditional.top10",
+            &json!({ "sheet": sheet, "range": "A1:A3", "count": 1, "bottom": true, "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A3"), vec!["A1".to_string()], "the lowest matches");
+}
+
+/// The count may be a **percent** of the numbers of the range, and it is
+/// rounded **up**.
+#[test]
+fn the_count_may_be_a_percent_of_the_numbers_of_the_range() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 2.0);
+    a_number(&mut session, sheet, "A3", 3.0);
+    a_number(&mut session, sheet, "A4", 4.0);
+    session
+        .execute(
+            "grid.conditional.top10",
+            &json!({ "sheet": sheet, "range": "A1:A4", "count": 50, "percent": true, "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(
+        matching(&mut session, sheet, "A1:A4"),
+        vec!["A3".to_string(), "A4".to_string()],
+        "the highest half matches"
+    );
+}
+
+/// A cell that does not hold a number is not one of the top.
+#[test]
+fn a_cell_that_does_not_hold_a_number_is_not_one_of_the_top() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 2.0);
+    session
+        .execute(
+            "grid.conditional.top10",
+            &json!({ "sheet": sheet, "range": "A1:A3", "count": 1, "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A3"), vec!["A2".to_string()], "the highest matches");
+}
+
+/// A count that is not a whole number of values is refused, and so is a
+/// percent over a hundred.
+#[test]
+fn a_count_that_is_not_a_whole_number_is_refused() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    let failure = session
+        .execute(
+            "grid.conditional.top10",
+            &json!({ "sheet": sheet, "range": "A1:A3", "count": 1.5, "format": "0.00" }),
+        )
+        .expect_err("the conditional format is refused");
+    let message = failure.to_string();
+    assert!(message.contains("whole number"), "the refusal says why: {message}");
+    let failure = session
+        .execute(
+            "grid.conditional.top10",
+            &json!({ "sheet": sheet, "range": "A1:A3", "count": 150, "percent": true, "format": "0.00" }),
+        )
+        .expect_err("the conditional format is refused");
+    let message = failure.to_string();
+    assert!(message.contains("a hundred at most"), "the refusal says why: {message}");
+}

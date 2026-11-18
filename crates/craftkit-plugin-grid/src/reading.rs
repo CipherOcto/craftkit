@@ -105,6 +105,10 @@ commands! {
             };
             // The **values** are derived: the book computes them.
             let book = crate::book_of(session.document());
+            // The **facts** the conditional formats of the sheet are
+            // about: the numbers of the ranges they judge, worked out
+            // once for the whole read.
+            let facts = crate::conditional::Facts::of(&book, node);
             let formulas = self.formulas.map(|formulas| formulas.0).unwrap_or(false);
             let formatted = self.formatted.map(|formatted| formatted.0).unwrap_or(false);
             if formulas && formatted {
@@ -139,11 +143,12 @@ commands! {
                         // format that matches it first, and the format
                         // of the style it names otherwise.
                         let looks = crate::conditional::looks_for(
-                                &crate::book_of(session.document()),
+                                &book,
                                 node,
                                 cell,
                                 &value,
                                 crate::system_of(session, sheet),
+                                &facts,
                             );
                         let format = match &looks.format {
                             Some(code) => crate::format::Format::parse(code).unwrap_or(crate::format::Format::General),

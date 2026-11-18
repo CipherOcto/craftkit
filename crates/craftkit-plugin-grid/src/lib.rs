@@ -1696,12 +1696,15 @@ commands! {
             // format that matches it, if there is one — a rule is on top
             // of a fact — and otherwise the format of the style it names,
             // if it names one, and its own otherwise.
+            let book = crate::book_of(session.document());
+            let facts = conditional::Facts::of(&book, node);
             let format = match conditional::format_for(
-                &crate::book_of(session.document()),
+                &book,
                 node,
                 cell,
                 &value,
                 crate::system_of(session, sheet),
+                &facts,
             ) {
                 Some(code) => Format::parse(&code).unwrap_or(Format::General),
                 None => format_of(session, sheet, &cells, cell),

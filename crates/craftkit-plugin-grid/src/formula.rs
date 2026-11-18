@@ -796,14 +796,25 @@ fn column_average(cells: &Cells, column: u32) -> Option<f64> {
 /// column, and it is rounded **up**. A count that is over the number of
 /// the numbers is the number of them.
 fn top10_threshold(cells: &Cells, column: u32, bottom: bool, percent: bool, count: u32) -> Option<f64> {
-    let mut numbers: Vec<f64> = cells
+    let numbers: Vec<f64> = cells
         .iter()
         .filter(|(cell, _)| cell.col == column)
         .filter_map(|(_, cell)| cell.value.as_ref().and_then(|value| value.as_number()))
         .collect();
+    top10_threshold_of(&numbers, bottom, percent, count)
+}
+
+/// The **threshold** of a top-ten rule: the count-th highest number of
+/// a list of numbers, or the count-th lowest.
+///
+/// The count is a count of the numbers, or a **percent** of them, and it
+/// is rounded **up**. A count that is over the number of the numbers is
+/// the number of them.
+pub fn top10_threshold_of(numbers: &[f64], bottom: bool, percent: bool, count: u32) -> Option<f64> {
     if numbers.is_empty() {
         return None;
     }
+    let mut numbers = numbers.to_vec();
     numbers.sort_by(|one, other| {
         if bottom { one.partial_cmp(other) } else { other.partial_cmp(one) }
             .unwrap_or(std::cmp::Ordering::Equal)
