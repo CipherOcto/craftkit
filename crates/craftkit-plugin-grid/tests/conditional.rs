@@ -47,6 +47,13 @@ fn a_number(session: &mut Session, sheet: u64, cell: &str, value: f64) {
         .expect("the cell is set");
 }
 
+/// A **text** in a cell.
+fn a_text(session: &mut Session, sheet: u64, cell: &str, value: &str) {
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": cell, "value": value }))
+        .expect("the cell is set");
+}
+
 /// The **text** a cell shows.
 fn text_of(session: &mut Session, sheet: u64, cell: &str) -> String {
     let outcome = session
@@ -422,4 +429,71 @@ fn a_count_that_is_not_a_whole_number_is_refused() {
         .expect_err("the conditional format is refused");
     let message = failure.to_string();
     assert!(message.contains("a hundred at most"), "the refusal says why: {message}");
+}
+
+/// A conditional format may judge the values that are **repeated** in a
+/// range.
+#[test]
+fn a_conditional_format_may_judge_the_values_that_are_repeated() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 2.0);
+    a_number(&mut session, sheet, "A3", 1.0);
+    session
+        .execute("grid.conditional.duplicate", &json!({ "sheet": sheet, "range": "A1:A3", "format": "0.00" }))
+        .expect("the conditional format is set");
+    assert_eq!(
+        matching(&mut session, sheet, "A1:A3"),
+        vec!["A1".to_string(), "A3".to_string()],
+        "the repeated values match"
+    );
+}
+
+/// A conditional format may judge the values that are **not** repeated.
+#[test]
+fn a_conditional_format_may_judge_the_values_that_are_not_repeated() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 2.0);
+    a_number(&mut session, sheet, "A3", 1.0);
+    session
+        .execute(
+            "grid.conditional.duplicate",
+            &json!({ "sheet": sheet, "range": "A1:A3", "unique": true, "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A3"), vec!["A2".to_string()], "the value held once matches");
+}
+
+/// The **text** of a value is the text without case, and a number and
+/// the text of it are two values and not one.
+#[test]
+fn the_text_of_a_value_is_the_text_without_case() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "Ann");
+    a_text(&mut session, sheet, "A2", "ann");
+    a_text(&mut session, sheet, "A3", "Bob");
+    session
+        .execute("grid.conditional.duplicate", &json!({ "sheet": sheet, "range": "A1:A3", "format": "0.00" }))
+        .expect("the conditional format is set");
+    assert_eq!(
+        matching(&mut session, sheet, "A1:A3"),
+        vec!["A1".to_string(), "A2".to_string()],
+        "the two spellings of the word match"
+    );
+}
+
+/// A cell that holds **nothing** is not a value and is not counted.
+#[test]
+fn a_cell_that_holds_nothing_is_not_counted() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    session
+        .execute("grid.conditional.duplicate", &json!({ "sheet": sheet, "range": "A1:A3", "format": "0.00" }))
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A3"), Vec::<String>::new(), "nothing matches");
 }

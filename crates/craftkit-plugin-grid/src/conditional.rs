@@ -26,10 +26,12 @@
 //!
 //! And a rule may be about the range as a whole: the **top** of it —
 //! the count highest numbers of it, or the count lowest — is a rule of
-//! its own (`grid.conditional.top10`). Such a rule needs the **numbers**
-//! of the range, and they are worked out **once** for a read and read
-//! as often as a cell is read: a rule worked out again for every cell
-//! of the range would cost the square of the range.
+//! its own (`grid.conditional.top10`), and so is the **duplicate** of a
+//! value in it (`grid.conditional.duplicate`). Such a rule needs the
+//! **numbers** or the **counts** of the range, and they are worked out
+//! **once** for a read and read as often as a cell is read: a rule
+//! worked out again for every cell of the range would cost the square
+//! of the range.
 //!
 //! # What the port found
 //!
@@ -48,8 +50,9 @@
 //!   kinds are commands of their own when they come — and §1017 says
 //!   otherwise: the **expression** is here (`grid.conditional.formula`),
 //!   and §1021 says otherwise: the **top ten** is here
-//!   (`grid.conditional.top10`), and the colour scale, the data bar and
-//!   the icon set are not.
+//!   (`grid.conditional.top10`), and §1022 says otherwise: the
+//!   **duplicate** is here (`grid.conditional.duplicate`), and the
+//!   colour scale, the data bar and the icon set are not.
 //! - **The tree's rules are ordered and the first that matches wins.**
 //!   The tree's rules are in a list and it walks them in **priority** —
 //!   the rule that names the lower number is seen first. Here they are
@@ -87,6 +90,14 @@ pub struct Top {
     pub percent: bool,
 }
 
+/// The **duplicate** of a range: the cells whose value is **repeated**
+/// in it, or the cells whose value is **not**.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Duplicate {
+    /// Whether the rule is about the values that are **not** repeated.
+    pub unique: bool,
+}
+
 /// A **conditional format** of a sheet.
 pub struct Conditional {
     /// The range of cells it is about.
@@ -98,6 +109,10 @@ pub struct Conditional {
     /// one: the cells whose number is among the highest of the range
     /// are the cells that match.
     pub top: Option<Top>,
+    /// The **duplicate** of the range the rule is about, when the rule
+    /// has one: the cells whose value is repeated in the range are the
+    /// cells that match.
+    pub duplicate: Option<Duplicate>,
     /// The **formula** a cell is judged by, when the rule has one: the
     /// cells whose formula is **true** are the cells that match.
     ///
@@ -135,6 +150,9 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
         // cells that match a top.
         let formula = entry.get("formula").and_then(|formula| formula.as_str()).map(|f| f.to_string());
         let top = entry.get("top").and_then(|top| {
+            if !top.is_object() {
+                return None;
+            }
             let count = top.get("count").and_then(|count| count.as_u64())?;
             let count = u32::try_from(count).ok()?;
             Some(Top {
@@ -143,7 +161,18 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
                 percent: top.get("percent").and_then(|percent| percent.as_bool()).unwrap_or(false),
             })
         });
-        let criterion = if formula.is_some() || top.is_some() { None } else { Some(Criterion { op, value }) };
+        let duplicate = entry.get("duplicate").and_then(|duplicate| {
+            if !duplicate.is_object() {
+                return None;
+            }
+            let unique = duplicate.get("unique").and_then(|unique| unique.as_bool()).unwrap_or(false);
+            Some(Duplicate { unique })
+        });
+        let criterion = if formula.is_some() || top.is_some() || duplicate.is_some() {
+            None
+        } else {
+            Some(Criterion { op, value })
+        };
         let format = entry.get("format").and_then(|format| format.as_str()).map(|format| format.to_string());
         let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
         let stop = entry.get("stop").and_then(|stop| stop.as_bool());
@@ -155,6 +184,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             range: range.to_string(),
             criterion,
             top,
+            duplicate,
             formula,
             format,
             fill,
@@ -209,20 +239,29 @@ pub fn ordered_conditionals(node: &craftkit_sdk::Node) -> Vec<Conditional> {
 pub struct Facts {
     /// The numbers of each range a rule needs, by the range's own text.
     numbers: Vec<(String, Vec<f64>)>,
+    /// How many times each value of a range is held in it, by the
+    /// range's own text.
+    counts: Vec<(String, std::collections::BTreeMap<String, u64>)>,
 }
 
 impl Facts {
-    /// The facts of a sheet: the numbers of the ranges its rules are
-    /// about, and nothing when no rule needs any.
+    /// The facts of a sheet: the numbers and the counts of the ranges
+    /// its rules are about, and nothing when no rule needs any.
     pub fn of(book: &crate::formula::Book, node: &craftkit_sdk::Node) -> Facts {
         let mut facts = Facts::default();
         for conditional in conditionals_of(node) {
-            if conditional.top.is_none() {
+            if conditional.top.is_none() && conditional.duplicate.is_none() {
                 continue;
             }
             let Some(area) = area_of(&conditional.range) else { continue };
-            let numbers = numbers_of(book, &node.name, &area, node);
-            facts.numbers.push((conditional.range.clone(), numbers));
+            if conditional.top.is_some() {
+                let numbers = numbers_of(book, &node.name, &area, node);
+                facts.numbers.push((conditional.range.clone(), numbers));
+            }
+            if conditional.duplicate.is_some() {
+                let counts = counts_of(book, &node.name, &area, node);
+                facts.counts.push((conditional.range.clone(), counts));
+            }
         }
         facts
     }
@@ -230,6 +269,11 @@ impl Facts {
     /// The **numbers** of a range, when they are known.
     pub fn numbers_of(&self, range: &str) -> Option<&[f64]> {
         self.numbers.iter().find(|(name, _)| name == range).map(|(_, numbers)| numbers.as_slice())
+    }
+
+    /// The **counts** of the values of a range, when they are known.
+    pub fn counts_of(&self, range: &str) -> Option<&std::collections::BTreeMap<String, u64>> {
+        self.counts.iter().find(|(name, _)| name == range).map(|(_, counts)| counts)
     }
 }
 
@@ -248,6 +292,63 @@ fn numbers_of(book: &crate::formula::Book, sheet: &str, area: &Area, node: &craf
         numbers.push(number);
     }
     numbers
+}
+
+/// The **key** of a value, for the count of the values of a range.
+///
+/// The **number** is the number, the **text** is the text without case,
+/// and the kinds are kept apart: a number and the text of it are two
+/// values and not one.
+fn key_of(value: &crate::formula::Value) -> String {
+    use crate::formula::Value;
+    match value {
+        Value::Number(number) => format!("n:{number}"),
+        Value::Text(text) => format!("t:{}", text.to_lowercase()),
+        Value::Bool(flag) => format!("b:{flag}"),
+        Value::Error(message) => format!("e:{}", message.to_lowercase()),
+        Value::Empty => "empty".to_string(),
+    }
+}
+
+/// How many times each **value** of an area is held in it.
+///
+/// A cell that holds **nothing** is not a value and is not counted: a
+/// blank cell is not a duplicate of another blank cell.
+fn counts_of(
+    book: &crate::formula::Book,
+    sheet: &str,
+    area: &Area,
+    node: &craftkit_sdk::Node,
+) -> std::collections::BTreeMap<String, u64> {
+    let mut counts = std::collections::BTreeMap::new();
+    for (cell, _) in crate::cells_of(node).iter() {
+        if !area.covers(cell) {
+            continue;
+        }
+        let value = book.value_of(sheet, cell);
+        if matches!(value, crate::formula::Value::Empty) {
+            continue;
+        }
+        *counts.entry(key_of(&value)).or_insert(0) += 1;
+    }
+    counts
+}
+
+/// Whether a cell's **value** is repeated in the range — or, when the
+/// rule is about the values that are **not** repeated, whether it is
+/// held once and only once.
+fn duplicate_matches(
+    facts: &Facts,
+    range: &str,
+    duplicate: &Duplicate,
+    value: &crate::formula::Value,
+) -> bool {
+    if matches!(value, crate::formula::Value::Empty) {
+        return false;
+    }
+    let Some(counts) = facts.counts_of(range) else { return false };
+    let count = counts.get(&key_of(value)).copied().unwrap_or(0);
+    if duplicate.unique { count == 1 } else { count > 1 }
 }
 
 /// Whether a cell's **number** is among the top of the range.
@@ -302,10 +403,11 @@ pub fn looks_for(
         }
         // A rule has a **criterion**, a **formula** or a **top**, and
         // the cells that match it are the cells the rule writes.
-        let matched = match (&conditional.formula, &conditional.top) {
-            (Some(formula), _) => formula_matches(book, &node.name, formula, &area, cell),
-            (None, Some(top)) => top_matches(facts, &conditional.range, top, value),
-            (None, None) => {
+        let matched = match (&conditional.formula, &conditional.top, &conditional.duplicate) {
+            (Some(formula), _, _) => formula_matches(book, &node.name, formula, &area, cell),
+            (None, Some(top), _) => top_matches(facts, &conditional.range, top, value),
+            (None, None, Some(duplicate)) => duplicate_matches(facts, &conditional.range, duplicate, value),
+            (None, None, None) => {
                 conditional.criterion.as_ref().is_some_and(|criterion| criterion.matches(value, system))
             }
         };
@@ -419,6 +521,9 @@ fn entry_of(conditional: &Conditional) -> Json {
             "count": top.count,
             "bottom": top.bottom,
             "percent": top.percent,
+        })),
+        "duplicate": conditional.duplicate.as_ref().map(|duplicate| json!({
+            "unique": duplicate.unique,
         })),
         "format": conditional.format,
         "fill": conditional.fill,
@@ -861,6 +966,111 @@ commands! {
         }
     }
 
+    /// Put a **conditional format** on a range of cells, and judge the
+    /// cells by the **duplicate** of their value.
+    ///
+    /// The cells whose value is **repeated** in the range are the cells
+    /// the rule holds for — and the cells whose value is held once and
+    /// only once are the cells it holds for, when the rule is about the
+    /// values that are **not** repeated.
+    ///
+    /// The **text** of a value is the text without case, and a number
+    /// and the text of it are two values and not one. A cell that holds
+    /// **nothing** is not a value and is not counted.
+    grid.conditional.duplicate {
+        area: "grid",
+        layer: "grid",
+        icon: "brush",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is on.
+            sheet: NodeRef,
+            /// The range it is about: `A1:A10`.
+            range: Text,
+            /// Whether the rule is about the values that are **not**
+            /// repeated — the ones held once and only once.
+            unique: Option<Bool>,
+            /// The format the matching cells are written with. A rule may
+            /// carry the format, the fill, or both.
+            format: Option<Text>,
+            /// The fill the matching cells are filled with: `#rrggbb`. A rule
+            /// may carry the fill and no format.
+            fill: Option<Text>,
+            /// The tree's **stop if true**: the walk ends at this rule when it
+            /// matched, and the rules after it are not tried.
+            stop: Option<Bool>,
+            /// The **priority** of the rule: the lower the number, the earlier
+            /// the rule is tried.
+            priority: Option<Number>,
+        },
+        run: {
+            let id = "grid.conditional.duplicate".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            let unique = self.unique.map(|unique| unique.0).unwrap_or(false);
+            let format = format_of_rule(self.format.as_ref(), &id)?;
+            let fill = fill_of_rule(self.fill.as_ref(), &id)?;
+            if format.is_none() && fill.is_none() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                });
+            }
+            let stop = self.stop.map(|stop| stop.0);
+            let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+            let priority = priority_of(self.priority.as_ref(), &id)?;
+            let mut list = conditionals_of(node)
+                .into_iter()
+                .map(|conditional| entry_of(&conditional))
+                .collect::<Vec<_>>();
+            // A range may have **one** conditional format: a second one for
+            // the same range replaces the first.
+            list.retain(|entry| entry["range"].as_str() != Some(range.as_str()));
+            list.push(json!({
+                "range": range,
+                "duplicate": {
+                    "unique": unique,
+                },
+                "format": format,
+                "fill": fill,
+                "stop": stop,
+                "priority": priority,
+            }));
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["conditionals"] = json!(list);
+            }
+            Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
+                json!({
+                    "sheet": sheet,
+                    "range": range,
+                    "unique": unique,
+                    "format": format,
+                    "fill": fill,
+                    "stop": stop,
+                }),
+            ))
+        }
+    }
+
     /// The **cells** of a range that a conditional format holds for.
     ///
     /// The cells are **derived**: they are worked out from the cells each
@@ -911,10 +1121,13 @@ commands! {
                         if !area.covers(cell) {
                             return false;
                         }
-                        match (&conditional.formula, &conditional.top) {
-                            (Some(formula), _) => formula_matches(&book, &name, formula, &area, cell),
-                            (None, Some(top)) => top_matches(&facts, &conditional.range, top, &value),
-                            (None, None) => conditional
+                        match (&conditional.formula, &conditional.top, &conditional.duplicate) {
+                            (Some(formula), _, _) => formula_matches(&book, &name, formula, &area, cell),
+                            (None, Some(top), _) => top_matches(&facts, &conditional.range, top, &value),
+                            (None, None, Some(duplicate)) => {
+                                duplicate_matches(&facts, &conditional.range, duplicate, &value)
+                            }
+                            (None, None, None) => conditional
                                 .criterion
                                 .as_ref()
                                 .is_some_and(|criterion| criterion.matches(&value, book.system())),
