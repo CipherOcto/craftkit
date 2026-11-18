@@ -4477,6 +4477,7 @@ so.
 | a **workbook's icon sets are read into the document** | **built.** The two percents are read, and the cells of the range carry an icon (§1030) | §1030 |
 | a **workbook's pictures are read** | **built.** The cell, the name, the alt text and the bytes are read, and the picture in no cell is counted (§1031) | §1031 |
 | a **workbook's pictures are imported into the document** | **built.** The picture is in the cell, and the bytes that came with it are in the document (§1032) | §1032 |
+| a **conditional format may colour the text of the cells it matches** | **built.** The rule carries the colour, the cell read says it and the page writes the text in it (§1033) | §1033 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -66987,3 +66988,57 @@ drawn in, its size, its alt text and its **bytes**.
   is counted and not imported.
 - **The workbook is still not written back**: the pictures it holds are
   not written out.
+
+## 1033. A conditional format may colour the text of the cells it matches
+
+A rule of a conditional format may say **what colour the text** of the
+cells it matches is written in.
+
+### What was built
+
+- The **rule** carries a **colour** beside its format and its fill: the
+  colour the matching cells are written in, as `#rrggbb`.
+- The **five rules that have a look** — the comparison, the formula, the
+  top ten, the duplicates and the above-the-average — take the colour as
+  a parameter. The colour scale, the data bar and the icon set do not:
+  they draw the cell themselves, and a rule that draws the cell has no
+  text to colour.
+- The **cell read** says the colour the text is written in, and the
+  **PDF** writes the text in it: the rule's colour is on top of the
+  font's own, as the rule is on top of the cell.
+- A rule that says **nothing** about the look of the cells is refused
+  still: it must name the format, the fill, the colour, or any two of
+  them.
+
+### What the port found
+
+- **The reference's rule carries a whole style**: a fill, a font colour,
+  a border, a number format. The tree's rule carries a **format** and a
+  **fill**, and now a **colour** — and the border of a rule is still not
+  here.
+- **The reference's colour is a colour of the theme or of the file**:
+  it is written as a colour with its channels, and a colour of the theme
+  is read against the theme the file holds. The tree's colour is
+  `#rrggbb` and only that: the tree's fill is the same, and the tree's
+  rules about a colour are one rule for the whole tree.
+
+### What it cost
+
+- **No new command**: the colour is part of the look of a rule, and the
+  five rules that have a look take it. The battery still carries **251**
+  commands.
+- **One field** on the rule, one on the look, one on the answer of the
+  cell read.
+- **Three tests** in the grid battery (`tests/conditionalfill.rs`): the
+  colour of the text, and the two refusals.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The border of a rule is not here**: the reference's rule may draw a
+  border around the cells it matches, and the tree's rule does not.
+- **The colour of a rule is `#rrggbb` and nothing else**: a colour of
+  the theme, and a colour of the file's own palette, are not names the
+  tree gives.
+- **The tree's rule is not a style**: the reference's rule is a style
+  shared between cells, and the tree's rule is a look of its own.
