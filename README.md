@@ -4461,6 +4461,7 @@ so.
 | a **filter's criterion is read by the tree's own rule of numbers** | **built.** A currency, a fraction and a date are numbers in a criterion, read by the rule `VALUE` reads a text by (§1014) | §1014 |
 | a **filter may look for the words a cell holds** | **built.** The criterion has the four operations on the text of a cell, and the filter and the conditional format share it (§1015) | §1015 |
 | a **filter may judge the colour of the cells** | **built.** The fill behind the text and the colour of the text are filters of their own (§1016) | §1016 |
+| a **conditional format may judge the cells by a formula** | **built.** The formula is written in the top-left cell of the range and moved with the cell (§1017) | §1017 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56016,7 +56017,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 244 |
+| grid | 245 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -65997,3 +65998,53 @@ A filter may ask not for a value but for the **look** of a cell.
   reference's last criterion, and it is not here.
 - **The tree's filter does not judge the fill of the style of a cell**:
   it judges the fill of the cell.
+
+## 1017. A conditional format may judge the cells by a formula
+
+A conditional format may ask not for a value but for a **formula**.
+
+### What was built
+
+- A new **command**, `grid.conditional.formula`, puts a conditional
+  format on a range of cells and judges the cells by a **formula**.
+- The formula is written as it is in the **top-left cell** of the
+  range, and it is moved with the cell it is judged for: the rule of
+  `A1:A10` and the formula `A1>0` is the rule *the cell is above
+  zero* for every cell of the range.
+- The cells whose formula is **true** are written with the look — the
+  format and the fill — and the others are not.
+- The **number** a comparison criterion is compared with is read by the
+  tree's own rule of numbers, as it is in a filter (§1014): a currency
+  sign, thousands separators and a date are numbers.
+
+### What the port found
+
+- **The reference's conditional format may be an expression**, and this
+  tree's was a comparison only. So a rule of *the cell is above zero*
+  was not possible here and was possible there. Here it is a command
+  of its own.
+- **The reference's expression is written in the top-left cell of the
+  range too**, and it is moved with the cell — the tree's rule is the
+  same, and the tree's shift of a formula is the one the sort uses.
+- **The reference's conditional format has many kinds of rule** — a
+  comparison, an expression, a colour scale, a data bar, an icon set
+  and more — and this tree's has a comparison and an expression. The
+  other kinds are commands of their own when they come.
+
+### What it cost
+
+- **One new command**: the grid battery carries **245** commands.
+- **One rule that was already there**: the tree's shift of a formula,
+  and the tree's criterion.
+- **One test** in the grid battery (`tests/conditional.rs`): the
+  conditional format judging the cells by a formula.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's conditional format has two kinds of rule**: a
+  comparison and a formula. The reference's has a colour scale, a
+  data bar, an icon set and more, and they are not here.
+- **The tree's formula must be true**: a formula that answers a number
+  is not true and does not match, where the reference's may answer a
+  number and mean it.
