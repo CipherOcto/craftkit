@@ -4463,6 +4463,7 @@ so.
 | a **filter may judge the colour of the cells** | **built.** The fill behind the text and the colour of the text are filters of their own (§1016) | §1016 |
 | a **conditional format may judge the cells by a formula** | **built.** The formula is written in the top-left cell of the range and moved with the cell (§1017) | §1017 |
 | a **sort may put the columns of a range in order, by a row** | **built.** The orientation of the sort says which way it runs, and a key names the row it sorts by (§1018) | §1018 |
+| a **criterion may name the empty cells and the cells that hold an error** | **built.** The four operations compare with nothing, and their criterion has no value at all (§1019) | §1019 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -24485,7 +24486,9 @@ more than ten are the rows the filter **hides**.
 - The rows a filter hides are **derived**: they are worked out from the
   cells each time they are asked for, and they are not written down.
 - The operation is one of the tree's own — `=`, `!=`, `<`, `<=`, `>`
-  or `>=` — and a name that is not one of them is refused.
+  or `>=` — and a name that is not one of them is refused — and §1019
+  says otherwise: the criterion may also name a cell by **what it
+  holds**, and the value of such a criterion is absent.
 - The tree's `*` is a **wildcard**: `*abc*` is "contains abc" and
   `abc*` is "begins with abc".
 - The comparison operations compare **numbers**, and a value that is
@@ -65956,7 +65959,10 @@ A filter may ask not for a number but for the **words** of a cell.
 
 - **The tree's conditional format has one kind of rule**: the
   reference's has a colour scale, a data bar, an icon set, a formula
-  and more, and they are not here.
+  and more, and they are not here — and §1017 says otherwise: the
+  **formula** is here, and §1019 says otherwise: the **blanks** and
+  the **errors** are here too. The colour scale, the data bar and the
+  icon set are not.
 - **The tree's words are not wildcards**: the criterion of a `contains`
   is the words themselves, and the tree's `*` is not a wildcard there.
 
@@ -66049,7 +66055,9 @@ A conditional format may ask not for a value but for a **formula**.
 
 - **The tree's conditional format has two kinds of rule**: a
   comparison and a formula. The reference's has a colour scale, a
-  data bar, an icon set and more, and they are not here.
+  data bar, an icon set and more, and they are not here — and §1019
+  says otherwise: the **blanks** and the **errors** are here as well,
+  as four more operations of the one criterion.
 - **The tree's formula must be true**: a formula that answers a number
   is not true and does not match, where the reference's may answer a
   number and mean it.
@@ -66128,3 +66136,65 @@ move.
 - **The tree's sort of the columns reads its key row as a row of the
   worksheet** — and says so in the answer, where the reference's key
   may be either and is not said at all.
+
+## 1019. A criterion may name the empty cells and the cells that hold an error
+
+A criterion may ask not for a value but for **what a cell holds**.
+
+### What was built
+
+- The tree's **criterion** has four more operations, and they compare
+  with **nothing**:
+  - `isEmpty` — the cell holds nothing;
+  - `isNotEmpty` — and it holds something;
+  - `isError` — the cell holds an error;
+  - `isNotError` — and it holds none.
+- A criterion of such an operation has **no value**: the `value` of
+  `grid.filter.set` and of `grid.conditional.set` is optional now, and
+  the tree **refuses** a value given to an operation that compares with
+  nothing, and a comparison given no value at all. An absent value is
+  not an empty one.
+- A **filter** may use them (`grid.filter.set`), and so may a
+  **conditional format** (`grid.conditional.set`) — it is the same
+  criterion.
+- **Nothing is a zero**: an empty cell is not the number zero and not
+  the empty text either. It is nothing, and the criterion says so.
+
+### What the port found
+
+- **The reference's conditional format has rules for the blanks and for
+  the errors** — `containsBlanks`, `notContainsBlanks`,
+  `containsErrors` and `notContainsErrors` — and this tree's had none
+  of them. Here they are **operations of the one criterion**, and the
+  filter has them too.
+- **The reference's rules of the blanks are rules of a conditional
+  format and not of a filter**, and the tree's criterion is one
+  criterion: a filter here may keep the rows whose cell is empty,
+  where the reference's filter may not.
+- **The reference's rule of the blanks compares with nothing** — the
+  rule has no value of its own — and the tree's now says so in the
+  same words: the value is **absent**, and the tree refuses it when it
+  is given.
+
+### What it cost
+
+- **No new command**: the operations are parameters of
+  `grid.filter.set` and of `grid.conditional.set`, and the grid battery
+  still carries **245** commands.
+- **One rule that was already there**: the tree's criterion is one
+  criterion, shared by the filter and the conditional format (§1015).
+- **Seven tests** in the grid battery (`tests/filters.rs` and
+  `tests/conditional.rs`): a filter keeping the empty cells, a filter
+  keeping the cells that hold an error, a conditional format judging
+  the empty cells, one judging the errors, a value with an operation
+  that compares with nothing, and a comparison with no value.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's conditional format still has no colour scale, no data
+  bar and no icon set**: the reference's has them, and they are not
+  here.
+- **A file's rules of the blanks and of the errors are not read into
+  the document yet**: the reader reads the comparisons of a file, and
+  the other kinds are left out.
