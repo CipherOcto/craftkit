@@ -4473,6 +4473,7 @@ so.
 | a **workbook's colour scales are read into the document** | **built.** The colours of the scale are read, and the stops the tree has are the ones it reads (§1026) | §1026 |
 | a **conditional format may draw a bar behind the cells of a range** | **built.** The bar is as long as the cell's number is between the lowest and the highest of the range (§1027) | §1027 |
 | a **workbook's rules of the top ten, of the average, of the duplicates and of the bar are read** | **built.** The kinds of rule the tree has are read, and the ones it has not are counted (§1028) | §1028 |
+| a **conditional format may put an icon in the cells of a range** | **built.** The three icons stand for the percentiles of the numbers of the range, and they are drawn in code (§1029) | §1029 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -56031,7 +56032,7 @@ are checked now by asking the tree what it has.
 <!-- the counts of the tree: begin -->
 | battery | commands |
 |---|---|
-| grid | 250 |
+| grid | 251 |
 | prose | 110 |
 | pdf | 119 |
 | film | 113 |
@@ -66753,3 +66754,58 @@ reader reads the ones the tree has.
   `TODAY` and `NOW` (§347).
 - **The tree has no writer of workbooks**: the rules it reads are not
   written back.
+
+## 1029. A conditional format may put an icon in the cells of a range
+
+A conditional format may put an **icon** in the cells of a range.
+
+### What was built
+
+- A new command `grid.conditional.icon.set`: the set has **three**
+  icons — the high one, the middle one and the low one — and the icons
+  stand for the **percentiles** of the numbers of the range. The
+  numbers at or above the high percentile carry the high icon, the
+  numbers at or above the low percentile carry the middle one, and the
+  rest carry the low one.
+- The **percentiles** are the tree's own rule: the number that so many
+  percent of them are below, and the part of the way to the next one
+  when the percent falls between two.
+- The **percents** are two of them — sixty-seven and thirty-three by
+  default — and the tree refuses a percent over a hundred and a high
+  one that is not above the low one.
+- The icons are the tree's own and they are **drawn in code**: a
+  triangle pointing up, a square and a triangle pointing down. The
+  **PDF** of a sheet draws them at the left of the cell, and the cell
+  read says which icon the cell has.
+
+### What the port found
+
+- **The reference's conditional format has an icon set**, and the
+  thresholds of it are the **percentiles** of the numbers of the range
+  — the 67th and the 33rd for the three lights, which are the tree's
+  defaults as well.
+- **The reference's icon sets are many** — the traffic lights, the
+  arrows, the flags and more — and each of them is a set of pictures
+  the tree does not have. The tree has **one** set, its own, and the
+  three icons of it are drawn in code.
+- **The reference's percentile is the tree's percentile**: the number
+  that so many percent of them are below, and the part of the way to
+  the next one when the percent falls between two.
+
+### What it cost
+
+- **One new command**: `grid.conditional.icon.set`, and the grid
+  battery now carries **251** commands.
+- **One rule that was already there**: the **facts** of the ranges a
+  rule is about (§1021) and the numbers of them in order.
+- **Two tests** in the grid battery (`tests/conditionalfill.rs`): the
+  three icons of a range, and the two refusals.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree has one icon set and the reference's has many**: the
+  tree's icons are the tree's own, and a file's set of arrows is not
+  read (§1030).
+- **The rule of the time period is not here**: it is a rule about the
+  dates of a range, and the tree refuses `TODAY` and `NOW` (§347).
