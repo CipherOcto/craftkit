@@ -1717,6 +1717,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/tables.rs",
         section: "§1041",
     },
+    Port {
+        rule: "a name that two columns share names neither of them",
+        from: "gridcraft/crates/engine/src/tables.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/tables.rs",
+        section: "§1042",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

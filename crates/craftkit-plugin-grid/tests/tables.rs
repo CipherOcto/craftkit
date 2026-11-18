@@ -506,3 +506,44 @@ fn the_files_spelling_of_the_row_of_the_cell_survives_a_rename() {
     );
     assert_eq!(outcome.data["value"].as_f64(), Some(3.0), "and it still reads the column");
 }
+
+/// A name that **two columns share** names neither of them: the tree
+/// does not guess which one is meant.
+#[test]
+fn a_name_that_two_columns_share_names_neither_of_them() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "amount");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A3", "value": 3 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B3" }))
+        .expect("the table is made");
+    // The **fields** say the name that two of them share.
+    let outcome = session
+        .execute("grid.table.fields", &json!({ "sheet": sheet, "name": "Orders" }))
+        .expect("the fields are read");
+    let repeated = outcome.data["repeated"].as_array().expect("the repeated names are a list");
+    assert_eq!(repeated.len(), 1, "one name is shared");
+    assert_eq!(repeated[0]["name"].as_str(), Some("amount"), "and it is the name of the two columns");
+    assert_eq!(repeated[0]["count"].as_u64(), Some(2), "and two columns share it");
+    // A **formula** that names it is refused.
+    session
+        .execute(
+            "grid.formula.set",
+            &json!({ "sheet": sheet, "cell": "D1", "formula": "=SUM(Orders[amount])" }),
+        )
+        .expect("the formula is set");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "D1" })).expect("the cell is read");
+    assert_eq!(
+        outcome.data["value"]["error"].as_str(),
+        Some(
+            "the table `Orders` has 2 columns called `amount`, and a name that is two columns does not say which one"
+        ),
+        "and the name names neither of them"
+    );
+}

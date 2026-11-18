@@ -33,6 +33,10 @@
 //! A **file** spells the row of the cell its own way — `Orders[[#This
 //! Row],[amount]]` — and the tree reads that way too.
 //!
+//! And a name that **two fields share** says **neither** of them: the
+//! tree does not guess which one is meant, and every use of that name
+//! is refused.
+//!
 //! And a **rename follows** the formulas that name it: the name of a
 //! table and the name of a column are written back into the formulas
 //! that name them, so a formula that names a table keeps naming it
@@ -212,6 +216,31 @@ pub(crate) fn header_name(tables: &[Table], cells: &Cells, cell: CellRef) -> Opt
         return Some((table.name.clone(), name));
     }
     None
+}
+
+/// The **names** two fields of a table share, and how many fields share
+/// each of them.
+///
+/// A name that two fields share says **neither** of them: the tree
+/// does not guess which one is meant, and so every use of that name is
+/// refused.
+pub(crate) fn repeated_fields(fields: &[(CellRef, String)]) -> Vec<(String, usize)> {
+    let mut names: Vec<String> = Vec::new();
+    for (_, name) in fields {
+        if !names.iter().any(|held| held.eq_ignore_ascii_case(name)) {
+            names.push(name.clone());
+        }
+    }
+    names
+        .into_iter()
+        .filter_map(|name| {
+            let count = fields.iter().filter(|(_, other)| other.eq_ignore_ascii_case(&name)).count();
+            match count {
+                0 | 1 => None,
+                _ => Some((name, count)),
+            }
+        })
+        .collect()
 }
 
 /// The formulas of every sheet of the workbook, with the renames in
@@ -501,6 +530,10 @@ commands! {
     /// The fields are the text of the header cells, and a header cell that
     /// no longer holds text is a refusal, because a field with no name is
     /// not a field.
+    ///
+    /// The read says the **names two fields share**: a name that two
+    /// fields share says neither of them, and every use of that name is
+    /// refused.
     grid.table.fields {
         area: "grid",
         layer: "grid",
@@ -532,6 +565,10 @@ commands! {
                 "totals": table.totals,
                 "way": table.way.clone(),
                 "sums": totals_of(&table, &fields, &cells, &book, &sheet_name),
+                "repeated": repeated_fields(&fields)
+                    .into_iter()
+                    .map(|(name, count)| json!({ "name": name, "count": count }))
+                    .collect::<Vec<_>>(),
                 "fields": fields
                     .iter()
                     .map(|(cell, name)| json!({

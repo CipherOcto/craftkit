@@ -683,6 +683,21 @@ pub struct Name {
     pub area: Area,
 }
 
+/// A **column** a name says in a table.
+///
+/// A name is a name: it says **one** column, or it says none. A name
+/// that two columns share says **neither** of them, because the tree
+/// does not guess which one is meant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Column {
+    /// No column of that name.
+    None,
+    /// One column of that name.
+    One(u32),
+    /// More than one column of that name: how many.
+    Many(usize),
+}
+
 /// A **table** of a sheet, as the formulas see it.
 ///
 /// A table is a range of cells with a name, and its first row names
@@ -2736,16 +2751,23 @@ impl Book {
 
     /// The **column** a name says, in a table: the column of the
     /// header row that holds the name.
-    fn column_of(&self, sheet: &str, range: Area, name: &str) -> Option<u32> {
-        let cells = self.sheets.get(sheet)?;
+    fn column_of(&self, sheet: &str, range: Area, name: &str) -> Column {
+        let Some(cells) = self.sheets.get(sheet) else { return Column::None };
+        let mut found: Vec<u32> = Vec::new();
         for col in range.start.col..=range.end.col {
             let cell = CellRef { col, row: range.start.row };
             let Some(value) = cells.get(cell).and_then(|cell| cell.value.as_ref()) else { continue };
             if display_text(value).trim().eq_ignore_ascii_case(name) {
-                return Some(col);
+                found.push(col);
             }
         }
-        None
+        match found.len() {
+            0 => Column::None,
+            // A name that says two things names **none** of them: the
+            // tree does not guess which one is meant.
+            1 => Column::One(found[0]),
+            _ => Column::Many(found.len()),
+        }
     }
 
     /// The expression with the **structured references** in it worked
@@ -2823,14 +2845,30 @@ impl Book {
         let columns = match (first, last) {
             (None, _) => range.start.col..=range.end.col,
             (Some(first), last) => {
-                let Some(start) = self.column_of(&sheet_of, range, first) else {
-                    return Expr::Error(format!("the table `{name}` has no column `{first}`"));
+                let start = match self.column_of(&sheet_of, range, first) {
+                    Column::One(column) => column,
+                    Column::None => {
+                        return Expr::Error(format!("the table `{name}` has no column `{first}`"));
+                    }
+                    Column::Many(count) => {
+                        return Expr::Error(format!(
+                            "the table `{name}` has {count} columns called `{first}`, and a name that is two columns does not say which one"
+                        ));
+                    }
                 };
                 match last {
                     None => start..=start,
                     Some(last) => {
-                        let Some(end) = self.column_of(&sheet_of, range, last) else {
-                            return Expr::Error(format!("the table `{name}` has no column `{last}`"));
+                        let end = match self.column_of(&sheet_of, range, last) {
+                            Column::One(column) => column,
+                            Column::None => {
+                                return Expr::Error(format!("the table `{name}` has no column `{last}`"));
+                            }
+                            Column::Many(count) => {
+                                return Expr::Error(format!(
+                                    "the table `{name}` has {count} columns called `{last}`, and a name that is two columns does not say which one"
+                                ));
+                            }
                         };
                         start.min(end)..=start.max(end)
                     }
