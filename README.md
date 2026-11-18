@@ -4484,6 +4484,7 @@ so.
 | a **chart's series may have a colour** | **built.** The list of the tree's colours is kept, and the read says the colour of each series (§1037) | §1037 |
 | a **workbook's charts carry the colours of their series** | **built.** The colour of each series is read, and it is in the chart of the document (§1038) | §1038 |
 | a **formula may name a column of a table** | **built.** The column of a table may be named in a formula, and the formula reads the cells of that column (§1039) | §1039 |
+| a **rename follows the formulas that name it** | **built.** The table's name and the column's name are written back into the formulas that name them (§1040) | §1040 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67322,3 +67323,60 @@ of that column.
 - **The row of the cell is not known everywhere**: `[@amount]` needs
   the cell the formula is in, and where there is no cell — the formula
   read on its own — it is refused and says so.
+
+## 1040. A rename follows the formulas that name it
+
+A **rename** follows into the **formulas** that name what is renamed.
+
+### What was built
+
+- The **rename of a table** — `grid.table.rename` — rewrites the formulas
+  of every sheet of the workbook that name the table:
+  `=SUM(Orders[amount])` becomes `=SUM(Ledger[amount])`.
+- The **rename of a column** is the edit of its **header**, because the
+  tree's fields are derived from the header cells; and it rewrites the
+  formulas that name the column: `=SUM(Orders[amount])` becomes
+  `=SUM(Orders[sum])`, and the reference to the **row of the cell** —
+  `[@amount]` — becomes `[@sum]` in the cells of that table.
+- The rewrite is **read back**: the new text is parsed again and
+  compared with the expression it came from, and a rewrite that says
+  something else is not made — the formula is left as it was.
+- The commands say **how many formulas followed**.
+
+### What the port found
+
+- **The reference rewrites the text of the formulas** after a rename,
+  and the tree rewrites the text of the formulas too.
+- **The reference's table rename rewrites a bare name** as well — a
+  name that is the name of the table becomes the new name. The tree's
+  names are the workbook's names and a name is not a table, so that is
+  not here.
+- **The reference makes a header unique**: an empty header is given
+  the name `Column1` and a repeated one is numbered. The tree's fields
+  are derived from the header cells **as they are**, so a repeated name
+  is a repeated name — and the **first** column of that name is the one
+  a formula reads.
+- **The reference rewrites the formulas after any change of a header**,
+  whether the change came from an edit, a paste or a fill. Here the
+  **edit** of the header follows; the other ways of changing a header
+  do not.
+
+### What it cost
+
+- **No new command**: the rename is part of the commands that rename.
+  The battery still carries **251** commands.
+- **One struct** — the rename — and one method on the cells of a sheet.
+- **Two tests** in the grid battery (`tests/tables.rs`): the rename of
+  the table, and the rename of the column.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A header changed by a paste or a fill does not follow** yet, and a
+  **resize** of a table that changes the names of its fields does not
+  follow either.
+- **A repeated header name** is not made unique, and a formula that
+  names it reads the **first** column of that name.
+- **A table that is taken away** leaves the formulas that named it
+  saying a name that is not there — and those formulas are an error
+  that says so.
