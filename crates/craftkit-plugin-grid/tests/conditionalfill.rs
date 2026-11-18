@@ -247,3 +247,59 @@ fn a_scale_has_two_colours() {
     let message = failure.to_string();
     assert!(message.contains("is not a colour"), "the refusal says why: {message}");
 }
+
+/// A scale may have **three** colours, and the middle one stands for the
+/// middle of the numbers.
+#[test]
+fn a_scale_may_have_three_colours() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 0.0);
+    a_number(&mut session, sheet, "A2", 5.0);
+    a_number(&mut session, sheet, "A3", 10.0);
+    session
+        .execute(
+            "grid.conditional.colour.scale",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A3",
+                "colours": ["#000000", "#ff0000", "#ffffff"],
+            }),
+        )
+        .expect("the scale is set");
+    assert_eq!(
+        cell(&mut session, sheet, "A1")["fill"].as_str(),
+        Some("#000000"),
+        "the lowest is the low colour"
+    );
+    assert_eq!(
+        cell(&mut session, sheet, "A2")["fill"].as_str(),
+        Some("#ff0000"),
+        "the middle is the middle colour"
+    );
+    assert_eq!(
+        cell(&mut session, sheet, "A3")["fill"].as_str(),
+        Some("#ffffff"),
+        "the highest is the high colour"
+    );
+}
+
+/// A scale with **four** colours is refused.
+#[test]
+fn a_scale_with_four_colours_is_refused() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    let failure = session
+        .execute(
+            "grid.conditional.colour.scale",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "colours": ["#000000", "#111111", "#222222", "#333333"],
+            }),
+        )
+        .expect_err("the scale is refused");
+    let message = failure.to_string();
+    assert!(message.contains("two or three"), "the refusal says why: {message}");
+}

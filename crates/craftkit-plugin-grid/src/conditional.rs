@@ -29,9 +29,11 @@
 //! its own (`grid.conditional.top10`), and so is the **duplicate** of a
 //! value in it (`grid.conditional.duplicate`) and the **average** of it
 //! (`grid.conditional.average`). And a rule may be a **colour scale**:
-//! the fill of a cell is the mix of the two colours, in the proportion
-//! its number is between the lowest and the highest of the range
-//! (`grid.conditional.colour.scale`).
+//! the fill of a cell is the mix of the two colours that hold it, in
+//! the proportion its number is between them
+//! (`grid.conditional.colour.scale`). A scale has two colours — of the
+//! lowest and of the highest number of the range — or three, and then
+//! the middle one stands for the **median** of the numbers.
 //!
 //! Such a rule needs the **numbers** or the **counts** of the range,
 //! and they are worked out **once** for a read and read as often as a
@@ -115,14 +117,14 @@ pub struct Average {
     pub above: bool,
 }
 
-/// The **colour scale** of a range: two colours, the one of the lowest
-/// number of the range and the one of the highest.
+/// The **colour scale** of a range: two colours — the one of the lowest
+/// number of the range and the one of the highest — or three, and then
+/// the middle one stands for the **middle** of the numbers.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ColourScale {
-    /// The colour of the **lowest** number of the range.
-    pub low: String,
-    /// The colour of the **highest** number of the range.
-    pub high: String,
+    /// The colours of the scale, in order: the lowest, and the highest.
+    /// With three, the middle one stands for the middle of the numbers.
+    pub colours: Vec<String>,
 }
 
 /// A **conditional format** of a sheet.
@@ -215,9 +217,12 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             if !scale.is_object() {
                 return None;
             }
-            let low = scale.get("low").and_then(|low| low.as_str())?.to_string();
-            let high = scale.get("high").and_then(|high| high.as_str())?.to_string();
-            Some(ColourScale { low, high })
+            let colours = scale.get("colours")?.as_array()?;
+            let colours: Vec<String> = colours
+                .iter()
+                .map(|colour| colour.as_str().map(|colour| colour.to_string()))
+                .collect::<Option<Vec<String>>>()?;
+            Some(ColourScale { colours })
         });
         let criterion = if formula.is_some()
             || top.is_some()
@@ -419,9 +424,25 @@ fn duplicate_matches(
     if duplicate.unique { count == 1 } else { count > 1 }
 }
 
+/// The **median** of a list of numbers in order, the highest first: the
+/// middle number of them, and the half between the two middle ones when
+/// there are an even number of them.
+fn median_of(sorted: &[f64]) -> Option<f64> {
+    let length = sorted.len();
+    if length == 0 {
+        return None;
+    }
+    if length % 2 == 1 {
+        return sorted.get(length / 2).copied();
+    }
+    let upper = sorted.get(length / 2 - 1).copied()?;
+    let lower = sorted.get(length / 2).copied()?;
+    Some((upper + lower) / 2.0)
+}
+
 /// The **fill** a cell of a colour scale is written with: the mix of
-/// the two colours, in the proportion its number is between the lowest
-/// and the highest of the range.
+/// the colours of the scale, in the proportion its number is between
+/// the two of them that hold it.
 ///
 /// A cell that does not hold a number has no fill, and a range whose
 /// numbers are all the same has no **span** and writes nothing: a
@@ -442,10 +463,36 @@ fn scale_fill(
     if number < lowest || number > highest {
         return None;
     }
-    let part = (number - lowest) / (highest - lowest);
-    let first = crate::colours::channels_of(&scale.low)?;
-    let second = crate::colours::channels_of(&scale.high)?;
-    Some(crate::colours::mix_of(first, second, part))
+    // The **stops** of the scale: the number each colour stands for.
+    // The lowest and the highest, and the middle of the numbers when
+    // the scale has three colours.
+    let stops: Vec<(f64, (u8, u8, u8))> = match scale.colours.as_slice() {
+        [low, high] => {
+            let low = crate::colours::channels_of(low)?;
+            let high = crate::colours::channels_of(high)?;
+            vec![(lowest, low), (highest, high)]
+        }
+        [low, middle, high] => {
+            let low = crate::colours::channels_of(low)?;
+            let middle = crate::colours::channels_of(middle)?;
+            let high = crate::colours::channels_of(high)?;
+            let median = median_of(numbers)?;
+            vec![(lowest, low), (median, middle), (highest, high)]
+        }
+        _ => return None,
+    };
+    // The **pair** of stops that holds the number, and the part of the
+    // way the number is from the first of them to the second.
+    for pair in stops.windows(2) {
+        let (low, low_colour) = pair[0];
+        let (high, high_colour) = pair[1];
+        if number < low || number > high {
+            continue;
+        }
+        let part = if high > low { (number - low) / (high - low) } else { 0.0 };
+        return Some(crate::colours::mix_of(low_colour, high_colour, part));
+    }
+    None
 }
 
 /// Whether a cell's **number** is above the average of the range — or,
@@ -656,8 +703,7 @@ fn entry_of(conditional: &Conditional) -> Json {
             "above": average.above,
         })),
         "colour_scale": conditional.colour_scale.as_ref().map(|scale| json!({
-            "low": scale.low,
-            "high": scale.high,
+            "colours": scale.colours,
         })),
         "format": conditional.format,
         "fill": conditional.fill,
@@ -1311,10 +1357,11 @@ commands! {
     /// Put a **conditional format** on a range of cells, and fill the
     /// cells by a **colour scale**.
     ///
-    /// The scale has **two** colours: the one of the lowest number of
-    /// the range and the one of the highest, and the fill of a cell is
-    /// the **mix** of the two, in the proportion its number is between
-    /// them.
+    /// The scale has **two** colours — the one of the lowest number of
+    /// the range and the one of the highest — or **three**, and then the
+    /// middle one stands for the **middle** of the numbers. The fill of
+    /// a cell is the **mix** of the two colours that hold it, in the
+    /// proportion its number is between them.
     ///
     /// A cell that does not hold a **number** has no fill, and a range
     /// whose numbers are all the same has no span and is filled with
@@ -1371,11 +1418,11 @@ commands! {
                     message: "the colours of a colour scale are a list of two".to_string(),
                 });
             };
-            if colours.len() != 2 {
+            if colours.len() != 2 && colours.len() != 3 {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "the colours of a colour scale are two, and this scale has {}",
+                        "the colours of a colour scale are two or three, and this scale has {}",
                         colours.len()
                     ),
                 });
@@ -1402,8 +1449,6 @@ commands! {
                 };
                 parsed.push(colour);
             }
-            let low = parsed[0].clone();
-            let high = parsed[1].clone();
             let stop = self.stop.map(|stop| stop.0);
             let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
             let priority = priority_of(self.priority.as_ref(), &id)?;
@@ -1417,8 +1462,7 @@ commands! {
             list.push(json!({
                 "range": range,
                 "colour_scale": {
-                    "low": low,
-                    "high": high,
+                    "colours": parsed,
                 },
                 "stop": stop,
                 "priority": priority,
@@ -1430,8 +1474,7 @@ commands! {
                 json!({
                     "sheet": sheet,
                     "range": range,
-                    "low": low,
-                    "high": high,
+                    "colours": parsed,
                     "stop": stop,
                 }),
             ))

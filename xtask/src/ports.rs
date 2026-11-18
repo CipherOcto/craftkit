@@ -1564,6 +1564,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/conditionalfill.rs",
         section: "§1024",
     },
+    Port {
+        rule: "a colour scale may have three colours",
+        from: "gridcraft/crates/engine/src/cmd/insert/cond_format.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/conditional.rs",
+        command: "grid.conditional.colour.scale",
+        test: "crates/craftkit-plugin-grid/tests/conditionalfill.rs",
+        section: "§1025",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
