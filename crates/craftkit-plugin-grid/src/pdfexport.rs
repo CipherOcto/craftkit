@@ -227,6 +227,9 @@ struct Look {
     /// The **colour** the text of the cell is written in: the colour a
     /// **conditional rule** names, and it is on top of the font's own.
     colour: Option<String>,
+    /// The **borders** a **conditional rule** draws on the cell, by the
+    /// edge they are on.
+    borders: std::collections::BTreeMap<String, crate::borders::Border>,
     /// The **bar** behind the cell: the part of the cell's width it
     /// fills and the colour of it.
     bar: Option<crate::conditional::Bar>,
@@ -264,6 +267,7 @@ fn look_of(
         align: own.and_then(|entry| entry.align).or_else(|| style.and_then(|style| style.align)),
         fill: looks.fill.clone().or_else(|| own.and_then(|entry| entry.fill.clone())),
         colour: looks.colour.clone(),
+        borders: looks.borders.clone(),
         bar: looks.bar.clone(),
         icon: looks.icon,
     }
@@ -882,10 +886,18 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             }
             // The **borders** of the cell: each edge of the cell is
             // drawn with the line of its own border.
+            let box_of = Rect::new(left as f32, top as f32, width as f32, height as f32);
             for (edge, border) in crate::borders::borders_of_cell(node, &cell.to_text()) {
                 let Some(colour) = rgb_of(&border.colour) else { continue };
-                let box_of = Rect::new(left as f32, top as f32, width as f32, height as f32);
                 if draw_edge(page, &edge, box_of, &border.style, colour, scale) {
+                    counts.borders += 1;
+                }
+            }
+            // The **borders** of the rule: they are drawn on top of the
+            // cell's own, as the rule is on top of the cell.
+            for (edge, border) in &look.borders {
+                let Some(colour) = rgb_of(&border.colour) else { continue };
+                if draw_edge(page, edge, box_of, &border.style, colour, scale) {
                     counts.borders += 1;
                 }
             }

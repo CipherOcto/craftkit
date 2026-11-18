@@ -204,6 +204,9 @@ pub struct Conditional {
     /// The **colour** the text of the matching cells is written in,
     /// when the rule names one.
     pub colour: Option<String>,
+    /// The **borders** the rule draws on the matching cells, by the
+    /// edge they are on.
+    pub borders: std::collections::BTreeMap<String, crate::borders::Border>,
     /// The **stop**: the tree's *stop if true*. A rule that matched
     /// and says stop ends the walk, and the rules after it are not
     /// tried.
@@ -295,6 +298,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
         let format = entry.get("format").and_then(|format| format.as_str()).map(|format| format.to_string());
         let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
         let colour = entry.get("colour").and_then(|colour| colour.as_str()).map(|colour| colour.to_string());
+        let borders = entry.get("border").map(crate::borders::edges_from).unwrap_or_default();
         let stop = entry.get("stop").and_then(|stop| stop.as_bool());
         let priority = entry
             .get("priority")
@@ -313,6 +317,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             format,
             fill,
             colour,
+            borders,
             stop,
             priority,
         });
@@ -639,6 +644,9 @@ pub struct Looks {
     pub fill: Option<String>,
     /// The **colour** the text of the cell is written in.
     pub colour: Option<String>,
+    /// The **borders** the rule draws on the cell, by the edge they are
+    /// on.
+    pub borders: std::collections::BTreeMap<String, crate::borders::Border>,
     /// The **bar** behind the cell: the part of the cell's width it
     /// fills and the colour of it.
     pub bar: Option<Bar>,
@@ -748,6 +756,9 @@ pub fn looks_for(
         }
         if looks.colour.is_none() {
             looks.colour = conditional.colour.clone();
+        }
+        if looks.borders.is_empty() {
+            looks.borders = conditional.borders.clone();
         }
         if conditional.stop.unwrap_or(false) {
             break;
@@ -891,6 +902,7 @@ fn entry_of(conditional: &Conditional) -> Json {
         "format": conditional.format,
         "fill": conditional.fill,
         "colour": conditional.colour,
+        "border": crate::borders::edges_into(&conditional.borders),
         "stop": conditional.stop,
         "priority": conditional.priority,
     })
@@ -932,6 +944,10 @@ commands! {
             /// in: `#rrggbb`. A rule may carry the colour and neither
             /// the format nor the fill.
             colour: Option<Text>,
+            /// The **borders** the rule draws on the matching cells, by
+            /// the edge they are on: `{"top": {"style": "thin"}}`. A
+            /// rule may carry the border and nothing else.
+            border: Option<craftkit_sdk::serde_json::Value>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -989,11 +1005,15 @@ commands! {
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
             let colour = colour_of_rule(self.colour.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() && colour.is_none() {
+            let borders = match self.border.as_ref() {
+                Some(border) => crate::borders::borders_of_rule(border, &id)?,
+                None => std::collections::BTreeMap::new(),
+            };
+            if format.is_none() && fill.is_none() && colour.is_none() && borders.is_empty() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, the colour, or any two of \
-                              them"
+                    message: "name what the rule says: the format, the fill, the colour or the border — \
+                              at least one of them"
                         .to_string(),
                 });
             }
@@ -1014,6 +1034,7 @@ commands! {
                 "format": format,
                 "fill": fill,
                 "colour": colour,
+                "border": crate::borders::edges_into(&borders),
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1029,6 +1050,7 @@ commands! {
                     "format": format,
                     "fill": fill,
                     "colour": colour,
+                    "border": crate::borders::edges_into(&borders),
                     "stop": stop,
                 }),
             ))
@@ -1068,6 +1090,10 @@ commands! {
             /// in: `#rrggbb`. A rule may carry the colour and neither
             /// the format nor the fill.
             colour: Option<Text>,
+            /// The **borders** the rule draws on the matching cells, by
+            /// the edge they are on: `{"top": {"style": "thin"}}`. A
+            /// rule may carry the border and nothing else.
+            border: Option<craftkit_sdk::serde_json::Value>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -1115,11 +1141,15 @@ commands! {
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
             let colour = colour_of_rule(self.colour.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() && colour.is_none() {
+            let borders = match self.border.as_ref() {
+                Some(border) => crate::borders::borders_of_rule(border, &id)?,
+                None => std::collections::BTreeMap::new(),
+            };
+            if format.is_none() && fill.is_none() && colour.is_none() && borders.is_empty() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, the colour, or any two of \
-                              them"
+                    message: "name what the rule says: the format, the fill, the colour or the border — \
+                              at least one of them"
                         .to_string(),
                 });
             }
@@ -1139,6 +1169,7 @@ commands! {
                 "format": format,
                 "fill": fill,
                 "colour": colour,
+                "border": crate::borders::edges_into(&borders),
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1153,6 +1184,7 @@ commands! {
                     "format": format,
                     "fill": fill,
                     "colour": colour,
+                    "border": crate::borders::edges_into(&borders),
                     "stop": stop,
                 }),
             ))
@@ -1256,6 +1288,10 @@ commands! {
             /// in: `#rrggbb`. A rule may carry the colour and neither
             /// the format nor the fill.
             colour: Option<Text>,
+            /// The **borders** the rule draws on the matching cells, by
+            /// the edge they are on: `{"top": {"style": "thin"}}`. A
+            /// rule may carry the border and nothing else.
+            border: Option<craftkit_sdk::serde_json::Value>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -1307,11 +1343,15 @@ commands! {
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
             let colour = colour_of_rule(self.colour.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() && colour.is_none() {
+            let borders = match self.border.as_ref() {
+                Some(border) => crate::borders::borders_of_rule(border, &id)?,
+                None => std::collections::BTreeMap::new(),
+            };
+            if format.is_none() && fill.is_none() && colour.is_none() && borders.is_empty() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, the colour, or any two of \
-                              them"
+                    message: "name what the rule says: the format, the fill, the colour or the border — \
+                              at least one of them"
                         .to_string(),
                 });
             }
@@ -1335,6 +1375,7 @@ commands! {
                 "format": format,
                 "fill": fill,
                 "colour": colour,
+                "border": crate::borders::edges_into(&borders),
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1351,6 +1392,7 @@ commands! {
                     "format": format,
                     "fill": fill,
                     "colour": colour,
+                    "border": crate::borders::edges_into(&borders),
                     "stop": stop,
                 }),
             ))
@@ -1392,6 +1434,10 @@ commands! {
             /// in: `#rrggbb`. A rule may carry the colour and neither
             /// the format nor the fill.
             colour: Option<Text>,
+            /// The **borders** the rule draws on the matching cells, by
+            /// the edge they are on: `{"top": {"style": "thin"}}`. A
+            /// rule may carry the border and nothing else.
+            border: Option<craftkit_sdk::serde_json::Value>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -1425,11 +1471,15 @@ commands! {
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
             let colour = colour_of_rule(self.colour.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() && colour.is_none() {
+            let borders = match self.border.as_ref() {
+                Some(border) => crate::borders::borders_of_rule(border, &id)?,
+                None => std::collections::BTreeMap::new(),
+            };
+            if format.is_none() && fill.is_none() && colour.is_none() && borders.is_empty() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, the colour, or any two of \
-                              them"
+                    message: "name what the rule says: the format, the fill, the colour or the border — \
+                              at least one of them"
                         .to_string(),
                 });
             }
@@ -1451,6 +1501,7 @@ commands! {
                 "format": format,
                 "fill": fill,
                 "colour": colour,
+                "border": crate::borders::edges_into(&borders),
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1465,6 +1516,7 @@ commands! {
                     "format": format,
                     "fill": fill,
                     "colour": colour,
+                    "border": crate::borders::edges_into(&borders),
                     "stop": stop,
                 }),
             ))
@@ -1504,6 +1556,10 @@ commands! {
             /// in: `#rrggbb`. A rule may carry the colour and neither
             /// the format nor the fill.
             colour: Option<Text>,
+            /// The **borders** the rule draws on the matching cells, by
+            /// the edge they are on: `{"top": {"style": "thin"}}`. A
+            /// rule may carry the border and nothing else.
+            border: Option<craftkit_sdk::serde_json::Value>,
             /// The tree's **stop if true**: the walk ends at this rule when it
             /// matched, and the rules after it are not tried.
             stop: Option<Bool>,
@@ -1537,11 +1593,15 @@ commands! {
             let format = format_of_rule(self.format.as_ref(), &id)?;
             let fill = fill_of_rule(self.fill.as_ref(), &id)?;
             let colour = colour_of_rule(self.colour.as_ref(), &id)?;
-            if format.is_none() && fill.is_none() && colour.is_none() {
+            let borders = match self.border.as_ref() {
+                Some(border) => crate::borders::borders_of_rule(border, &id)?,
+                None => std::collections::BTreeMap::new(),
+            };
+            if format.is_none() && fill.is_none() && colour.is_none() && borders.is_empty() {
                 return Err(EngineError::Failed {
                     id,
-                    message: "name what the rule says: the format, the fill, the colour, or any two of \
-                              them"
+                    message: "name what the rule says: the format, the fill, the colour or the border — \
+                              at least one of them"
                         .to_string(),
                 });
             }
@@ -1563,6 +1623,7 @@ commands! {
                 "format": format,
                 "fill": fill,
                 "colour": colour,
+                "border": crate::borders::edges_into(&borders),
                 "stop": stop,
                 "priority": priority,
             }));
@@ -1577,6 +1638,7 @@ commands! {
                     "format": format,
                     "fill": fill,
                     "colour": colour,
+                    "border": crate::borders::edges_into(&borders),
                     "stop": stop,
                 }),
             ))

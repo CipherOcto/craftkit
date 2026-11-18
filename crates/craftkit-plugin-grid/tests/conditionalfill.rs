@@ -457,3 +457,56 @@ fn a_rule_that_says_nothing_about_the_look_is_refused() {
     let message = failure.to_string();
     assert!(message.contains("name what the rule says"), "the refusal says why: {message}");
 }
+
+/// A rule may carry the **borders** it draws on the cells it matches.
+#[test]
+fn a_rule_may_carry_the_borders_of_the_cells() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    a_number(&mut session, sheet, "A1", 5.0);
+    a_number(&mut session, sheet, "A2", 1.0);
+    session
+        .execute(
+            "grid.conditional.set",
+            &json!({
+                "sheet": sheet,
+                "range": "A1:A2",
+                "op": ">",
+                "value": "3",
+                "border": { "top": { "style": "thin", "colour": "#ff0000" }, "left": { "style": "thick" } },
+            }),
+        )
+        .expect("the rule is set");
+    let read = cell(&mut session, sheet, "A1");
+    assert_eq!(read["border"]["top"]["style"].as_str(), Some("thin"), "the top edge is drawn");
+    assert_eq!(read["border"]["top"]["colour"].as_str(), Some("#ff0000"), "and it is red");
+    assert_eq!(read["border"]["left"]["style"].as_str(), Some("thick"), "and the left edge is thick");
+    assert_eq!(read["border"]["left"]["colour"].as_str(), Some("#000000"), "and it is black");
+    assert!(
+        cell(&mut session, sheet, "A2")["border"].as_object().is_some_and(|map| map.is_empty()),
+        "the cell that does not match has no border"
+    );
+}
+
+/// The borders of a rule are **borders this tree has**: an edge it does
+/// not have, a style it does not have and a colour that is not a colour
+/// are refused.
+#[test]
+fn the_borders_of_a_rule_are_borders_this_tree_has() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    for border in [
+        json!({ "middle": { "style": "thin" } }),
+        json!({ "top": { "style": "wavy" } }),
+        json!({ "top": { "style": "thin", "colour": "red" } }),
+    ] {
+        let failure = session
+            .execute(
+                "grid.conditional.set",
+                &json!({ "sheet": sheet, "range": "A1:A2", "op": ">", "value": "3", "border": border }),
+            )
+            .expect_err("the border is refused");
+        let message = failure.to_string();
+        assert!(!message.is_empty(), "the refusal says why");
+    }
+}

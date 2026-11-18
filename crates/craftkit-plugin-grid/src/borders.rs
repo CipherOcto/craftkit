@@ -117,6 +117,91 @@ pub fn borders_into(borders: &BTreeMap<String, BTreeMap<String, Border>>) -> Jso
     Json::Object(map)
 }
 
+/// The **borders** a **rule** names, when they are borders this tree
+/// has.
+///
+/// A rule's border names the **edges** it draws and the **line** of each
+/// of them: the style of the line and, without it, the colour of the
+/// line is the tree's own black.
+///
+/// An edge this tree does not have, a style it does not have and a
+/// colour that is not a colour are refused: a rule that draws a line
+/// the tree cannot draw is a rule the tree cannot keep.
+pub fn borders_of_rule(value: &Json, id: &str) -> Result<BTreeMap<String, Border>, EngineError> {
+    let Some(map) = value.as_object() else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "a rule's border names the edges it draws: `{\"top\": {\"style\": \"thin\"}}`"
+                .to_string(),
+        });
+    };
+    let mut out = BTreeMap::new();
+    for (edge, line) in map {
+        let Some(edge) = edge_of(edge) else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!(
+                    "`{edge}` is not an edge of a cell: the edges are `top`, `right`, `bottom` and `left`"
+                ),
+            });
+        };
+        let Some(given) = line.get("style").and_then(|style| style.as_str()) else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("the border of the `{edge}` edge names no style of a line"),
+            });
+        };
+        let Some(style) = style_of(given) else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("`{given}` is not a style of a line"),
+            });
+        };
+        let colour = match line.get("colour").and_then(|colour| colour.as_str()) {
+            Some(given) => match colour_of(given) {
+                Some(colour) => colour,
+                None => {
+                    return Err(EngineError::Failed {
+                        id: id.to_string(),
+                        message: format!("`{given}` is not a colour of a line"),
+                    });
+                }
+            },
+            None => DEFAULT_COLOUR.to_string(),
+        };
+        out.insert(edge.to_string(), Border { style: style.to_string(), colour });
+    }
+    Ok(out)
+}
+
+/// The **borders** a value holds: the edges they are on, by the edge.
+///
+/// The edges this tree does not have, and the lines it cannot draw, are
+/// left out: a value that was written by something else is read as far
+/// as it can be read.
+pub fn edges_from(value: &Json) -> BTreeMap<String, Border> {
+    let mut out = BTreeMap::new();
+    let Some(map) = value.as_object() else { return out };
+    for (edge, line) in map {
+        let Some(style) = line.get("style").and_then(|style| style.as_str()) else { continue };
+        let Some(colour) = line.get("colour").and_then(|colour| colour.as_str()) else { continue };
+        out.insert(edge.to_string(), Border { style: style.to_string(), colour: colour.to_string() });
+    }
+    out
+}
+
+/// The borders of a rule, as they are kept.
+pub fn edges_into(borders: &BTreeMap<String, Border>) -> Json {
+    let mut map = craftkit_sdk::serde_json::Map::new();
+    for (edge, border) in borders {
+        let mut line = craftkit_sdk::serde_json::Map::new();
+        line.insert("style".to_string(), json!(border.style));
+        line.insert("colour".to_string(), json!(border.colour));
+        map.insert(edge.to_string(), Json::Object(line));
+    }
+    Json::Object(map)
+}
+
 /// The **borders of one cell**, if it has any.
 pub fn borders_of_cell(node: &Node, cell: &str) -> BTreeMap<String, Border> {
     borders_of(node).remove(cell).unwrap_or_default()

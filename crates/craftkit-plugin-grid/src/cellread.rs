@@ -180,6 +180,9 @@ commands! {
                     Some(colour) => json!(colour),
                     None => Json::Null,
                 },
+                // The **borders** the rule draws on the cell, by the
+                // edge they are on.
+                "border": crate::borders::edges_into(&looks.borders),
                 // The **bar** behind the cell: the part of the cell's
                 // width it fills and the colour of it.
                 "bar": match &looks.bar {
