@@ -4464,6 +4464,7 @@ so.
 | a **conditional format may judge the cells by a formula** | **built.** The formula is written in the top-left cell of the range and moved with the cell (§1017) | §1017 |
 | a **sort may put the columns of a range in order, by a row** | **built.** The orientation of the sort says which way it runs, and a key names the row it sorts by (§1018) | §1018 |
 | a **criterion may name the empty cells and the cells that hold an error** | **built.** The four operations compare with nothing, and their criterion has no value at all (§1019) | §1019 |
+| a **workbook's conditional formats are read, and not only the comparisons** | **built.** The kinds of rule the tree has are read, and the ones it has not are counted and said (§1020) | §1020 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -66197,4 +66198,65 @@ A criterion may ask not for a value but for **what a cell holds**.
   here.
 - **A file's rules of the blanks and of the errors are not read into
   the document yet**: the reader reads the comparisons of a file, and
-  the other kinds are left out.
+  the other kinds are left out — and §1020 says otherwise: they are
+  read now, and so are the words and the formula.
+
+## 1020. A workbook's conditional formats are read, and not only the comparisons
+
+A workbook may hold conditional formats of many kinds, and the reader
+used to read the comparisons and to say nothing about the rest.
+
+### What was built
+
+- The **reader** reads the kinds of rule the tree has: a
+  **comparison**, a **formula** (§1017), the four that look for the
+  **words** of a cell (§1015) and the four that name a cell by **what
+  it holds** (§1019).
+- The file's words are read as the tree's words: `containsText` is
+  `contains`, `notContainsText` is `notContains`, `beginsWith` and
+  `endsWith` are the tree's own, and `containsBlanks`,
+  `notContainsBlanks`, `containsErrors` and `notContainsErrors` are
+  `isEmpty`, `isNotEmpty`, `isError` and `isNotError`.
+- A rule of a **formula** is read as a formula: it is written as it is
+  in the top-left cell of the range and it is moved with the cell it is
+  judged for — the tree's own rule (§1017).
+- The kinds the tree does not have — a colour scale, a data bar, an
+  icon set, the duplicates, the top ten — are **counted**, and the
+  reader says how many it left out. A rule that is quietly dropped is a
+  rule the user believes in.
+
+### What the port found
+
+- **The reference's reader reads every kind of rule** — the
+  comparisons, the formula, the words, the blanks, the errors, the
+  duplicates, the top ten, the above-the-average, the colour scale, the
+  data bar and the icon set — and this tree's read the comparisons only
+  and said nothing about the rest. Now the kinds the tree has are read,
+  and the count of the ones it has not is said.
+- **The reference's rule of the blanks is a rule of its own**, and this
+  tree's is an operation of the one criterion (§1019) — the file's own
+  words are read into it.
+- **The reference's file writes the words of a text rule in two
+  places**: the `text` of the rule and a formula of `SEARCH` beside it.
+  The tree reads the words, and the formula of the file is left alone.
+
+### What it cost
+
+- **No new command**: the reader is a library and the battery reads
+  the rules, and the grid battery still carries **245** commands.
+- **Two rules that were already there**: the tree's criterion (§1015,
+  §1019) and the tree's formula of a rule (§1017).
+- **Two tests**: the reader's kinds of rule, and the battery's import
+  of them.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The kinds of rule the tree does not have are still not read**: a
+  colour scale, a data bar, an icon set, the duplicates, the top ten,
+  the above-the-average and the time period.
+- **A rule over two ranges is two rules here**: the file names the
+  ranges of a rule in one list, and the tree's rule is about one
+  range.
+- **The tree has no writer of workbooks**: the rules it reads are not
+  written back.
