@@ -497,3 +497,52 @@ fn a_cell_that_holds_nothing_is_not_counted() {
         .expect("the conditional format is set");
     assert_eq!(matching(&mut session, sheet, "A1:A3"), Vec::<String>::new(), "nothing matches");
 }
+
+/// A conditional format may judge the numbers **above** the average of
+/// a range.
+#[test]
+fn a_conditional_format_may_judge_the_numbers_above_the_average() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 2.0);
+    a_number(&mut session, sheet, "A3", 9.0);
+    session
+        .execute("grid.conditional.average", &json!({ "sheet": sheet, "range": "A1:A3", "format": "0.00" }))
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A3"), vec!["A3".to_string()], "the number above matches");
+}
+
+/// The numbers **below** the average may be the ones the rule holds for.
+#[test]
+fn the_numbers_below_the_average_may_be_the_ones() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 2.0);
+    a_number(&mut session, sheet, "A3", 9.0);
+    session
+        .execute(
+            "grid.conditional.average",
+            &json!({ "sheet": sheet, "range": "A1:A3", "above": false, "format": "0.00" }),
+        )
+        .expect("the conditional format is set");
+    assert_eq!(
+        matching(&mut session, sheet, "A1:A3"),
+        vec!["A1".to_string(), "A2".to_string()],
+        "the numbers below match"
+    );
+}
+
+/// A cell that does not hold a number is not above the average.
+#[test]
+fn a_cell_that_does_not_hold_a_number_is_not_above_the_average() {
+    let mut session = session();
+    let (_workbook, sheet) = a_workbook(&mut session);
+    a_number(&mut session, sheet, "A1", 1.0);
+    a_number(&mut session, sheet, "A2", 9.0);
+    session
+        .execute("grid.conditional.average", &json!({ "sheet": sheet, "range": "A1:A3", "format": "0.00" }))
+        .expect("the conditional format is set");
+    assert_eq!(matching(&mut session, sheet, "A1:A3"), vec!["A2".to_string()], "the number above matches");
+}

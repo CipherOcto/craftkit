@@ -775,6 +775,15 @@ pub const FILTER_OPS: [&str; 14] = [
     "isNotError",
 ];
 
+/// The **average** of a list of numbers, and nothing when the list is
+/// empty.
+pub fn average_of(numbers: &[f64]) -> Option<f64> {
+    if numbers.is_empty() {
+        return None;
+    }
+    Some(numbers.iter().sum::<f64>() / numbers.len() as f64)
+}
+
 /// The **average** of the numbers of a column, and nothing when the
 /// column holds no number.
 fn column_average(cells: &Cells, column: u32) -> Option<f64> {
@@ -783,10 +792,7 @@ fn column_average(cells: &Cells, column: u32) -> Option<f64> {
         .filter(|(cell, _)| cell.col == column)
         .filter_map(|(_, cell)| cell.value.as_ref().and_then(|value| value.as_number()))
         .collect();
-    if numbers.is_empty() {
-        return None;
-    }
-    Some(numbers.iter().sum::<f64>() / numbers.len() as f64)
+    average_of(&numbers)
 }
 
 /// The **threshold** of a top-ten filter: the count-th highest number

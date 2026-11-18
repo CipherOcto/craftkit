@@ -27,11 +27,11 @@
 //! And a rule may be about the range as a whole: the **top** of it —
 //! the count highest numbers of it, or the count lowest — is a rule of
 //! its own (`grid.conditional.top10`), and so is the **duplicate** of a
-//! value in it (`grid.conditional.duplicate`). Such a rule needs the
-//! **numbers** or the **counts** of the range, and they are worked out
-//! **once** for a read and read as often as a cell is read: a rule
-//! worked out again for every cell of the range would cost the square
-//! of the range.
+//! value in it (`grid.conditional.duplicate`) and the **average** of it
+//! (`grid.conditional.average`). Such a rule needs the **numbers** or
+//! the **counts** of the range, and they are worked out **once** for a
+//! read and read as often as a cell is read: a rule worked out again
+//! for every cell of the range would cost the square of the range.
 //!
 //! # What the port found
 //!
@@ -51,8 +51,10 @@
 //!   otherwise: the **expression** is here (`grid.conditional.formula`),
 //!   and §1021 says otherwise: the **top ten** is here
 //!   (`grid.conditional.top10`), and §1022 says otherwise: the
-//!   **duplicate** is here (`grid.conditional.duplicate`), and the
-//!   colour scale, the data bar and the icon set are not.
+//!   **duplicate** is here (`grid.conditional.duplicate`), and §1023
+//!   says otherwise: the **above-the-average** is here
+//!   (`grid.conditional.average`), and the colour scale, the data bar
+//!   and the icon set are not.
 //! - **The tree's rules are ordered and the first that matches wins.**
 //!   The tree's rules are in a list and it walks them in **priority** —
 //!   the rule that names the lower number is seen first. Here they are
@@ -98,6 +100,15 @@ pub struct Duplicate {
     pub unique: bool,
 }
 
+/// The **average** of a range: the cells whose number is **above** it,
+/// or the cells whose number is **below** it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Average {
+    /// Whether the rule is about the numbers **above** the average and
+    /// not the numbers below it.
+    pub above: bool,
+}
+
 /// A **conditional format** of a sheet.
 pub struct Conditional {
     /// The range of cells it is about.
@@ -113,6 +124,10 @@ pub struct Conditional {
     /// has one: the cells whose value is repeated in the range are the
     /// cells that match.
     pub duplicate: Option<Duplicate>,
+    /// The **average** of the range the rule is about, when the rule
+    /// has one: the cells whose number is above the average are the
+    /// cells that match.
+    pub average: Option<Average>,
     /// The **formula** a cell is judged by, when the rule has one: the
     /// cells whose formula is **true** are the cells that match.
     ///
@@ -168,7 +183,14 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             let unique = duplicate.get("unique").and_then(|unique| unique.as_bool()).unwrap_or(false);
             Some(Duplicate { unique })
         });
-        let criterion = if formula.is_some() || top.is_some() || duplicate.is_some() {
+        let average = entry.get("average").and_then(|average| {
+            if !average.is_object() {
+                return None;
+            }
+            let above = average.get("above").and_then(|above| above.as_bool()).unwrap_or(true);
+            Some(Average { above })
+        });
+        let criterion = if formula.is_some() || top.is_some() || duplicate.is_some() || average.is_some() {
             None
         } else {
             Some(Criterion { op, value })
@@ -185,6 +207,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             criterion,
             top,
             duplicate,
+            average,
             formula,
             format,
             fill,
@@ -250,11 +273,11 @@ impl Facts {
     pub fn of(book: &crate::formula::Book, node: &craftkit_sdk::Node) -> Facts {
         let mut facts = Facts::default();
         for conditional in conditionals_of(node) {
-            if conditional.top.is_none() && conditional.duplicate.is_none() {
+            if conditional.top.is_none() && conditional.duplicate.is_none() && conditional.average.is_none() {
                 continue;
             }
             let Some(area) = area_of(&conditional.range) else { continue };
-            if conditional.top.is_some() {
+            if conditional.top.is_some() || conditional.average.is_some() {
                 let numbers = numbers_of(book, &node.name, &area, node);
                 facts.numbers.push((conditional.range.clone(), numbers));
             }
@@ -351,6 +374,15 @@ fn duplicate_matches(
     if duplicate.unique { count == 1 } else { count > 1 }
 }
 
+/// Whether a cell's **number** is above the average of the range — or,
+/// when the rule is about the numbers **below** it, below it.
+fn average_matches(facts: &Facts, range: &str, average: &Average, value: &crate::formula::Value) -> bool {
+    let Some(numbers) = facts.numbers_of(range) else { return false };
+    let Some(average_of_the_range) = crate::formula::average_of(numbers) else { return false };
+    let Some(number) = value.as_number() else { return false };
+    if average.above { number > average_of_the_range } else { number < average_of_the_range }
+}
+
 /// Whether a cell's **number** is among the top of the range.
 ///
 /// The **threshold** is the count-th highest number of the range, or the
@@ -403,14 +435,20 @@ pub fn looks_for(
         }
         // A rule has a **criterion**, a **formula** or a **top**, and
         // the cells that match it are the cells the rule writes.
-        let matched = match (&conditional.formula, &conditional.top, &conditional.duplicate) {
-            (Some(formula), _, _) => formula_matches(book, &node.name, formula, &area, cell),
-            (None, Some(top), _) => top_matches(facts, &conditional.range, top, value),
-            (None, None, Some(duplicate)) => duplicate_matches(facts, &conditional.range, duplicate, value),
-            (None, None, None) => {
-                conditional.criterion.as_ref().is_some_and(|criterion| criterion.matches(value, system))
-            }
-        };
+        let matched =
+            match (&conditional.formula, &conditional.top, &conditional.duplicate, &conditional.average) {
+                (Some(formula), _, _, _) => formula_matches(book, &node.name, formula, &area, cell),
+                (None, Some(top), _, _) => top_matches(facts, &conditional.range, top, value),
+                (None, None, Some(duplicate), _) => {
+                    duplicate_matches(facts, &conditional.range, duplicate, value)
+                }
+                (None, None, None, Some(average)) => {
+                    average_matches(facts, &conditional.range, average, value)
+                }
+                (None, None, None, None) => {
+                    conditional.criterion.as_ref().is_some_and(|criterion| criterion.matches(value, system))
+                }
+            };
         if !matched {
             continue;
         }
@@ -524,6 +562,9 @@ fn entry_of(conditional: &Conditional) -> Json {
         })),
         "duplicate": conditional.duplicate.as_ref().map(|duplicate| json!({
             "unique": duplicate.unique,
+        })),
+        "average": conditional.average.as_ref().map(|average| json!({
+            "above": average.above,
         })),
         "format": conditional.format,
         "fill": conditional.fill,
@@ -1071,6 +1112,109 @@ commands! {
         }
     }
 
+    /// Put a **conditional format** on a range of cells, and judge the
+    /// cells by the **average** of the range.
+    ///
+    /// The **average** is the average of the numbers of the range, and
+    /// the cells whose number is **above** it are the cells the rule
+    /// holds for — and the cells whose number is below it are the cells
+    /// it holds for, when the rule is about the numbers below it.
+    ///
+    /// A cell that does not hold a **number** is not one of them.
+    grid.conditional.average {
+        area: "grid",
+        layer: "grid",
+        icon: "brush",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is on.
+            sheet: NodeRef,
+            /// The range it is about: `A1:A10`.
+            range: Text,
+            /// Whether the cells **above** the average are the ones; the
+            /// cells below it are the ones when they are not.
+            above: Option<Bool>,
+            /// The format the matching cells are written with. A rule may
+            /// carry the format, the fill, or both.
+            format: Option<Text>,
+            /// The fill the matching cells are filled with: `#rrggbb`. A rule
+            /// may carry the fill and no format.
+            fill: Option<Text>,
+            /// The tree's **stop if true**: the walk ends at this rule when it
+            /// matched, and the rules after it are not tried.
+            stop: Option<Bool>,
+            /// The **priority** of the rule: the lower the number, the earlier
+            /// the rule is tried.
+            priority: Option<Number>,
+        },
+        run: {
+            let id = "grid.conditional.average".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            let above = self.above.map(|above| above.0).unwrap_or(true);
+            let format = format_of_rule(self.format.as_ref(), &id)?;
+            let fill = fill_of_rule(self.fill.as_ref(), &id)?;
+            if format.is_none() && fill.is_none() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                });
+            }
+            let stop = self.stop.map(|stop| stop.0);
+            let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+            let priority = priority_of(self.priority.as_ref(), &id)?;
+            let mut list = conditionals_of(node)
+                .into_iter()
+                .map(|conditional| entry_of(&conditional))
+                .collect::<Vec<_>>();
+            // A range may have **one** conditional format: a second one for
+            // the same range replaces the first.
+            list.retain(|entry| entry["range"].as_str() != Some(range.as_str()));
+            list.push(json!({
+                "range": range,
+                "average": {
+                    "above": above,
+                },
+                "format": format,
+                "fill": fill,
+                "stop": stop,
+                "priority": priority,
+            }));
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["conditionals"] = json!(list);
+            }
+            Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
+                json!({
+                    "sheet": sheet,
+                    "range": range,
+                    "above": above,
+                    "format": format,
+                    "fill": fill,
+                    "stop": stop,
+                }),
+            ))
+        }
+    }
+
     /// The **cells** of a range that a conditional format holds for.
     ///
     /// The cells are **derived**: they are worked out from the cells each
@@ -1121,13 +1265,16 @@ commands! {
                         if !area.covers(cell) {
                             return false;
                         }
-                        match (&conditional.formula, &conditional.top, &conditional.duplicate) {
-                            (Some(formula), _, _) => formula_matches(&book, &name, formula, &area, cell),
-                            (None, Some(top), _) => top_matches(&facts, &conditional.range, top, &value),
-                            (None, None, Some(duplicate)) => {
+                        match (&conditional.formula, &conditional.top, &conditional.duplicate, &conditional.average) {
+                            (Some(formula), _, _, _) => formula_matches(&book, &name, formula, &area, cell),
+                            (None, Some(top), _, _) => top_matches(&facts, &conditional.range, top, &value),
+                            (None, None, Some(duplicate), _) => {
                                 duplicate_matches(&facts, &conditional.range, duplicate, &value)
                             }
-                            (None, None, None) => conditional
+                            (None, None, None, Some(average)) => {
+                                average_matches(&facts, &conditional.range, average, &value)
+                            }
+                            (None, None, None, None) => conditional
                                 .criterion
                                 .as_ref()
                                 .is_some_and(|criterion| criterion.matches(&value, book.system())),
