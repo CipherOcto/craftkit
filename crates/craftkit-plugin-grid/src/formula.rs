@@ -43,6 +43,10 @@
 //! And a function's name may carry the **prefix a file writes**:
 //! `_xlfn.XLOOKUP` is `XLOOKUP`, and the prefix is how the file says
 //! that the function is newer than the format.
+//!
+//! And a formula may carry the **`@`** of an implicit intersection:
+//! `@A1:A3` is the cell of the range that the cell the formula is in
+//! stands for.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -811,6 +815,12 @@ pub enum Expr {
     /// divides, and it binds tighter than the power: `2^50%` is two to
     /// the half.
     Percent(Box<Expr>),
+    /// An **implicit intersection**: the `@` of a reference.
+    ///
+    /// `@A1:A3` is the cell of the range that the cell the formula is
+    /// in stands for — and it is **derived**: it is worked out every
+    /// time the formula is.
+    At(Box<Expr>),
     /// A binary operation.
     Binary(String, Box<Expr>, Box<Expr>),
 }
@@ -1413,6 +1423,7 @@ fn collect_precedents(expression: &Expr, names: &BTreeMap<String, Name>, found: 
         }
         Expr::Negate(inner) => collect_precedents(inner, names, found),
         Expr::Percent(inner) => collect_precedents(inner, names, found),
+        Expr::At(inner) => collect_precedents(inner, names, found),
         Expr::Binary(_, left, right) => {
             collect_precedents(left, names, found);
             collect_precedents(right, names, found);
@@ -1586,7 +1597,14 @@ impl Parser {
         if self.take('+') {
             return self.unary();
         }
+        // The **implicit intersection**: `@A1:A3`. The sign stands
+        // before the reference it cuts down to the cell the formula is
+        // in.
+        let intersection = self.take('@');
         let mut expression = self.primary()?;
+        if intersection {
+            expression = Expr::At(Box::new(expression));
+        }
         // A **percent**: `50%` is a half. The sign follows the value it
         // divides, and it binds tighter than the power — so `2^50%` is
         // two to the half and not half of two to the fiftieth.
@@ -1809,7 +1827,18 @@ impl Parser {
                     return Err(self.error("the bracket is not closed"));
                 }
             }
-            return Ok(Expr::Call(function_name(&word), arguments));
+            let name = function_name(&word);
+            // `_xlfn.SINGLE(x)` is how a **file** writes the implicit
+            // intersection `@x`: the sign and the reference it cuts
+            // down to the cell the formula is in.
+            if name == "SINGLE" && arguments.len() == 1 {
+                let argument = arguments.into_iter().next();
+                let Some(argument) = argument else {
+                    return Err(self.error("the intersection names no reference"));
+                };
+                return Ok(Expr::At(Box::new(argument)));
+            }
+            return Ok(Expr::Call(name, arguments));
         }
         // A **whole column** or a **whole row**: `B:B` or `$1:3`. The
         // word names a line of the sheet and nothing else, and a colon
@@ -3191,6 +3220,7 @@ impl Book {
             | Expr::Range { .. }
             | Expr::Name(_) => expression.clone(),
             Expr::Lines { .. } => self.resolved_lines(expression, sheet),
+            Expr::At { .. } => self.resolved_at(expression, sheet, cell),
             Expr::Struct { .. } => self.resolved_struct(expression, sheet, cell),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
@@ -3228,6 +3258,50 @@ impl Book {
             }
         };
         Some((name, area))
+    }
+
+    /// One **implicit intersection**, worked out into the cell it names.
+    ///
+    /// The intersection of an area with the cell the formula is in: the
+    /// cell itself when the area is one cell, the cell of the area in
+    /// the **row** of the formula when the area is one column wide, and
+    /// the cell of the area in the **column** of the formula when the
+    /// area is one row tall. An area that is neither does not meet the
+    /// cell, and the intersection is `#VALUE!`.
+    fn resolved_at(&self, expression: &Expr, sheet: &str, cell: Option<CellRef>) -> Expr {
+        let Expr::At(inner) = expression else { return expression.clone() };
+        let inner = self.resolved(inner, sheet, cell);
+        // The **area** the sign stands before: a range, or a name that
+        // stands for one.
+        let (named, area) = match &inner {
+            Expr::Cell { sheet: named, anchor } => {
+                return Expr::Cell { sheet: named.clone(), anchor: *anchor };
+            }
+            Expr::Range { sheet: named, start, end } => (named.clone(), Area::new(start.cell, end.cell)),
+            Expr::Name(name) => match self.names.get(name) {
+                Some(name) => (Some(name.sheet.clone()), name.area),
+                None => return inner,
+            },
+            _ => return inner,
+        };
+        let Some(cell) = cell else {
+            return Expr::Error("the cell the formula is in is not known here".to_string());
+        };
+        let met = if area.start == area.end {
+            Some(area.start)
+        } else if area.start.col == area.end.col && area.start.row <= cell.row && cell.row <= area.end.row {
+            Some(CellRef { col: area.start.col, row: cell.row })
+        } else if area.start.row == area.end.row && area.start.col <= cell.col && cell.col <= area.end.col {
+            Some(CellRef { col: cell.col, row: area.start.row })
+        } else {
+            None
+        };
+        match met {
+            Some(cell) => {
+                Expr::Cell { sheet: named, anchor: Anchor { cell, row_abs: false, col_abs: false } }
+            }
+            None => Expr::Error("#VALUE!".to_string()),
+        }
     }
 
     /// One **whole line**, worked out into the range of cells it names.
@@ -3553,6 +3627,11 @@ impl Book {
                     None => Value::Error("#VALUE!".to_string()),
                 },
             },
+            // The **implicit intersection** is worked out into the cell
+            // it names before the formula is worked out, and it is never
+            // here — and when it is here, it is the value of what it
+            // stands before.
+            Expr::At(inner) => self.evaluate(sheet, inner, being),
             Expr::Binary(operator, left, right) => {
                 let left = self.evaluate(sheet, left, being);
                 let right = self.evaluate(sheet, right, being);
@@ -4919,6 +4998,7 @@ impl Expr {
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.renamed_sheet(old, new))),
             Expr::Percent(inner) => Expr::Percent(Box::new(inner.renamed_sheet(old, new))),
+            Expr::At(inner) => Expr::At(Box::new(inner.renamed_sheet(old, new))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.renamed_sheet(old, new)),
@@ -4968,6 +5048,7 @@ impl Expr {
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.shifted(row_delta, col_delta))),
             Expr::Percent(inner) => Expr::Percent(Box::new(inner.shifted(row_delta, col_delta))),
+            Expr::At(inner) => Expr::At(Box::new(inner.shifted(row_delta, col_delta))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.shifted(row_delta, col_delta)),
@@ -5026,6 +5107,7 @@ impl Expr {
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.inserted(sheet, at, count))),
             Expr::Percent(inner) => Expr::Percent(Box::new(inner.inserted(sheet, at, count))),
+            Expr::At(inner) => Expr::At(Box::new(inner.inserted(sheet, at, count))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.inserted(sheet, at, count)),
@@ -5094,6 +5176,7 @@ impl Expr {
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.deleted(sheet, at, count))),
             Expr::Percent(inner) => Expr::Percent(Box::new(inner.deleted(sheet, at, count))),
+            Expr::At(inner) => Expr::At(Box::new(inner.deleted(sheet, at, count))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.deleted(sheet, at, count)),
@@ -5152,6 +5235,7 @@ impl Expr {
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.inserted_column(sheet, at, count))),
             Expr::Percent(inner) => Expr::Percent(Box::new(inner.inserted_column(sheet, at, count))),
+            Expr::At(inner) => Expr::At(Box::new(inner.inserted_column(sheet, at, count))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.inserted_column(sheet, at, count)),
@@ -5220,6 +5304,7 @@ impl Expr {
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.deleted_column(sheet, at, count))),
             Expr::Percent(inner) => Expr::Percent(Box::new(inner.deleted_column(sheet, at, count))),
+            Expr::At(inner) => Expr::At(Box::new(inner.deleted_column(sheet, at, count))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.deleted_column(sheet, at, count)),
@@ -5319,6 +5404,7 @@ impl Expr {
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.shifted_cells(sheet, band, way, insert))),
             Expr::Percent(inner) => Expr::Percent(Box::new(inner.shifted_cells(sheet, band, way, insert))),
+            Expr::At(inner) => Expr::At(Box::new(inner.shifted_cells(sheet, band, way, insert))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.shifted_cells(sheet, band, way, insert)),
@@ -5388,6 +5474,7 @@ impl Expr {
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.moved_column(sheet, from, count, to))),
             Expr::Percent(inner) => Expr::Percent(Box::new(inner.moved_column(sheet, from, count, to))),
+            Expr::At(inner) => Expr::At(Box::new(inner.moved_column(sheet, from, count, to))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.moved_column(sheet, from, count, to)),
@@ -5495,6 +5582,7 @@ impl Rename {
             }
             Expr::Negate(inner) => Expr::Negate(Box::new(self.applied(inner))),
             Expr::Percent(inner) => Expr::Percent(Box::new(self.applied(inner))),
+            Expr::At(inner) => Expr::At(Box::new(self.applied(inner))),
             Expr::Binary(operator, left, right) => {
                 Expr::Binary(operator.clone(), Box::new(self.applied(left)), Box::new(self.applied(right)))
             }
@@ -5698,6 +5786,9 @@ fn expression_text(expression: &Expr, min_precedence: u8) -> String {
         // written whole: a power in it keeps its brackets, so that the
         // formula that is written again is the formula that was read.
         Expr::Percent(inner) => format!("{}%", expression_text(inner, UNARY + 1)),
+        // The `@` stands before the reference it cuts down to the cell
+        // the formula is in, and the reference is written whole.
+        Expr::At(inner) => format!("@{}", expression_text(inner, UNARY + 1)),
         Expr::Binary(operator, left, right) => {
             // A power binds to the right and everything else to the left.
             let (left_minimum, right_minimum) =
@@ -5812,6 +5903,7 @@ pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Expr {
         }
         Expr::Negate(inner) => Expr::Negate(Box::new(shift(inner, dr, dc))),
         Expr::Percent(inner) => Expr::Percent(Box::new(shift(inner, dr, dc))),
+        Expr::At(inner) => Expr::At(Box::new(shift(inner, dr, dc))),
         Expr::Binary(operator, left, right) => {
             Expr::Binary(operator.clone(), Box::new(shift(left, dr, dc)), Box::new(shift(right, dr, dc)))
         }

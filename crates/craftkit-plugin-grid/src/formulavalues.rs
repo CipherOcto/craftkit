@@ -256,6 +256,7 @@ fn parts_of(expression: &crate::formula::Expr, parts: &mut Vec<crate::formula::E
         }
         Expr::Negate(inner) => parts_of(inner, parts),
         Expr::Percent(inner) => parts_of(inner, parts),
+        Expr::At(inner) => parts_of(inner, parts),
         Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) | Expr::Name(_) => {}
     }
 }
