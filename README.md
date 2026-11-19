@@ -4498,6 +4498,7 @@ so.
 | **the word carries the letters of every alphabet** | **built.** A name, a sheet and a table with a letter of another alphabet in it are words (§1051) | §1051 |
 | **a number may be written with an exponent** | **built.** `1E3` is a thousand and `1.5e-3` is a small number, as the file writes it (§1052) | §1052 |
 | **a whole column or a whole row may be named** | **built.** `B:B` is the column and `1:3` is the rows, read as the cells the sheet holds (§1053) | §1053 |
+| **a number may be written with a percent sign** | **built.** `50%` is a half, and the sign follows the value it divides (§1054) | §1054 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67976,3 +67977,53 @@ A formula may name a **whole column** — `B:B` — or a **whole row** —
   cells with two corners, and `B:B` is not one.
 - **The `$` of a whole line is the `$` of its first side**: `B:$B` is
   written `$B:$B` when the formula is written again.
+
+## 1054. A number may be written with a percent sign
+
+A number in a formula may be written with a **percent sign**: `50%` is
+a half.
+
+### What was built
+
+- `=50%` is a half, `=200%` is two, and `=0%` is nothing: the percent
+  is the value in a **hundredth** of itself.
+- The percent **follows** the value it divides, and it may follow a
+  number, a **cell** (`=B1%`) or a **call** (`=SUM(B1:B1)%`).
+- The percent binds **tighter than the power**: `=2^50%` is two to the
+  half, and not half of two to the fiftieth.
+- The percent is written as it was written: `=50%` is `=50%` when the
+  formula is written again, and the cell it holds moves with the
+  formula and the percent stays.
+- A percent of a **text** is `#VALUE!`: the tree's rule of a sign is
+  the rule of the negation, and a text is not a number.
+
+### What the port found
+
+- **The reference has the percent as an operator of its own**: `UnOp::Percent`
+  in its tree of the expressions, and it is applied as a sign that
+  follows the value — `50%` is the value and the sign, and not a
+  number with a sign in it.
+- **The reference's percent binds tighter than the power**: its binding
+  power is 70 and the power's is 50, so `2^50%` is two to the half.
+- **The reference coerces a text that names a number**: `="50"%` is a
+  half there, and it is `#VALUE!` in the tree.
+- **The tree's formula language had no percent at all**: a `%` in a
+  formula was a sign the parser did not know, and so a formula of a
+  file that held one was a formula the tree could not read.
+
+### What it cost
+
+- **No new command**: a percent is a sign.
+- **One variant** in the tree of the expressions (`Expr::Percent`).
+- **Six tests** in a new file (`tests/percents.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The percent of a text is `#VALUE!`**: the tree's aggregates take
+  the tree's rule of numbers — a text that names a number *is* a
+  number — and a sign does not. The two rules are the tree's own and
+  they are not the same.
+- **The percent is not a number format**: a cell that holds `50%` as a
+  *value* is a cell whose format says percent, and that is the
+  format's business and not the formula's.
