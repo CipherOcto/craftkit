@@ -4504,6 +4504,7 @@ so.
 | **two areas may be intersected** | **built.** `A1:C3 B2:D4` is the cells the two areas share, and it is worked out every time (§1057) | §1057 |
 | **a workbook that is encrypted is said, not read** | **built.** A compound file is refused, and the refusal says whether the workbook is encrypted or of the old format (§1058) | §1058 |
 | **a spill is refused, and the refusal says what it is** | **built.** `A1#` is refused as a spill, and not as something after the formula (§1059) | §1059 |
+| **a union of ranges is refused, and the refusal says what to do** | **built.** `(A1:A3,B1:B3)` is refused, and the refusal says to give the ranges as arguments (§1060) | §1060 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68266,3 +68267,40 @@ formula this tree has, and the refusal says so.
   is refused, and the array it would have spilled is not read either.
 - **The refusal is the tree's own wording**: the tree has no error
   spelling for a spill, and it says what the thing is instead.
+
+## 1060. A union of ranges is refused, and the refusal says what to do
+
+A **union** of two ranges — `(A1:A3,B1:B3)` — is not a range of this
+tree, and the refusal says what to do instead.
+
+### What was built
+
+- `=SUM((A1:A3,B1:B3))` is refused with *a union of ranges is not a
+  range of this tree: give the ranges as arguments*.
+- Two ranges as **two arguments** are not a union: `=SUM(A1:A3,B1:B3)`
+  is read, and it is the sum of the two ranges.
+
+### What the port found
+
+- **The reference has the union as an operator of its own**:
+  `BinOp::Union`, the comma inside a bracket, and it is worked out
+  into a **list** of areas.
+- **The reference's functions read a list of areas** — a sum over a
+  union is the sum over both — and so the union is worth something
+  there.
+- **The tree's ranges are one area each**: a function of the tree
+  takes a range, and a union is not one — so the tree's way of
+  naming two ranges is two arguments.
+
+### What it cost
+
+- **No new command**: a union is not a command.
+- **One rule** in the parser.
+- **Two tests** in the file of the refusals (`tests/refusals.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not read a union as a value**: a formula that names
+  one is refused, and the tree does not take the first of the two and
+  call it the answer.
