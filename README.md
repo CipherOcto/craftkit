@@ -4493,6 +4493,7 @@ so.
 | **the tree's aggregates take the tree's rule of numbers** | **built.** A text that names a number is a number, and an error in a range is the error of the aggregate (§1046) | §1046 |
 | a **formula that reads itself through a table is refused** | **built.** The check of the cycle sees through the structured references (§1047) | §1047 |
 | a **resize of a table that changes its fields follows the formulas** | **built.** The field of a column whose name changed is renamed, and the formulas follow (§1048) | §1048 |
+| a **name is a word a formula can carry** | **built.** A name, a sheet and a table with a dot in it are words, and a table's name obeys the rule of the names (§1049) | §1049 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67748,3 +67749,52 @@ the formulas that name them.
 - **A column of a table that the resize takes away** is a field with no
   name: the formulas that named it are refused, and the refusal says
   that the table has no column of that name.
+
+## 1049. A name is a word a formula can carry
+
+A **name** — of the workbook, of a sheet or of a table — is a **word**,
+and a formula carries it.
+
+### What was built
+
+- The **word** of a formula holds the characters a **name** may hold:
+  letters, digits, an underscore, a dot, a backslash and a question
+  mark. So a name with a dot in it is one word:
+  - `=My.Sales` reads the name `My.Sales`;
+  - `=Q1.2024!A1` reads the cell of the sheet `Q1.2024`;
+  - `=SUM(Orders.Data[amount])` reads the column of the table
+    `Orders.Data`.
+- The **table's name** is a **name**: it obeys the rule the names of the
+  workbook obey — not nothing, at most 255 characters, a letter or an
+  underscore first, no space and no hyphen, and not a cell and not an
+  R1C1 reference.
+- Before this, the tree's word stopped at the dot — so a name, a sheet
+  or a table with a dot in it could be made and never used — and a
+  table's name could hold a space, and so could never be named in a
+  formula at all.
+
+### What the port found
+
+- **The reference's word holds the same characters**: letters, digits,
+  `_`, `.`, `$`, `\` and `?` — and its table names follow Microsoft's
+  rules (letters, digits, `_` and `.`, at most 255 characters), so a
+  name with a hyphen or a space is refused there too.
+- **The reference's rule for a table's name is the writer's rule**: the
+  xlsx writer would rename a table it could not write, and so the
+  reference refuses the name before the table is made.
+
+### What it cost
+
+- **No new command**: a name is a name.
+- **One lexer rule** — the characters a word holds — and the rule of
+  the names, called by the rule of the table's name ✓.
+- **Four tests** in a new file (`tests/words.rs`), and three test files
+  that used a table called `the table` call it `thetable` now — a name
+  with a space is not a name.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A name of a file is not a name of the tree**: a workbook of a file
+  keeps the names it holds, and a formula that names one of them may
+  not be read — and the reader counts the formulas it could not read.
