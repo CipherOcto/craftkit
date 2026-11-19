@@ -4488,6 +4488,7 @@ so.
 | a **file's spelling of a structured reference is read** | **built.** The row of the cell and the whole table are read as a file spells them (§1041) | §1041 |
 | a **name that two columns share names neither of them** | **built.** A formula that names a column two columns share is an error, and the fields say the name is shared (§1042) | §1042 |
 | **what a file's table carries that the tree's table has not is said** | **built.** A table with no header row is not read, and the filter and the way the tree has not are left out and said (§1043) | §1043 |
+| a **change of a header follows the formulas that name it** | **built.** The edit, the paste and the fill of a header rename the field, and the formulas follow (§1044) | §1044 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67532,3 +67533,44 @@ the reader says what it left out.
   gives its columns.
 - **The tree's tables have no look**: a file's banded rows, and its
   first and last column, are not read (the tree's deliberate refusal).
+
+## 1044. A change of a header follows the formulas that name it
+
+A **change of a header** renames the **field**, and the formulas that
+name the field follow it.
+
+### What was built
+
+- The **edit** of a header cell, the **paste** over one and the **fill**
+  of one all rename the field, and the formulas that name it follow —
+  the same rule, written once, in one place.
+- The commands say **how many formulas followed**.
+- The rule of §1040 is now the rule of **every** change: the formulas
+  are the text of the cells, and the text is parsed, the renames are
+  applied and the text is printed again.
+
+### What the port found
+
+- **The reference syncs the headers after any change**: it checks every
+  header of every table after every edit — and it renames the
+  duplicates and writes the name back into the cell. The tree renames
+  nothing and writes nothing into a cell the user did not write: it
+  follows the change instead.
+- **The reference's rename follows the structured references**, and so
+  does the tree's — and now from every place a header may change.
+
+### What it cost
+
+- **No new command**: a change of a header is a change of a field.
+- **One function** — the change of the headers — and three calls to it.
+- **Two tests** in the grid battery (`tests/tables.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **A header that is cleared** is a field with no name: the formulas
+  that named it are refused, and the refusal says that the table has no
+  column of that name.
+- **A resize of a table** that changes the names of its fields does not
+  follow yet: the fields of a table are derived from the header cells,
+  and a resize changes which row is the header.
