@@ -1683,6 +1683,14 @@ impl Parser {
             self.at += 1;
             let inner = self.expression()?;
             self.skip_spaces();
+            // A **union** of two ranges: `(A1:A3,B1:B3)`. The tree's
+            // ranges are one area each, and a union is not one — so it
+            // is refused, and the refusal says what to do instead.
+            if self.peek() == Some(',') {
+                return Err(
+                    self.error("a union of ranges is not a range of this tree: give the ranges as arguments")
+                );
+            }
             if !self.take(')') {
                 return Err(self.error("the bracket is not closed"));
             }

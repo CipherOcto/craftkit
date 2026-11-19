@@ -64,3 +64,27 @@ fn the_file_s_way_of_writing_a_spill_is_refused() {
     let refusal = refused(&mut session, sheet, "=_xlfn.ANCHORARRAY(A1)");
     assert!(refusal.contains("spill"), "the refusal says what it is: {refusal}");
 }
+
+/// A **union** of ranges is refused, and the refusal says what to do
+/// instead.
+#[test]
+fn a_union_of_ranges_is_refused_and_says_what_to_do() {
+    let mut session = session();
+    let (_, sheet) = a_sheet(&mut session);
+    let refusal = refused(&mut session, sheet, "=SUM((A1:A3,B1:B3))");
+    assert!(refusal.contains("a union of ranges is not a range"), "the refusal says what it is: {refusal}");
+    assert!(refusal.contains("as arguments"), "and what to do instead: {refusal}");
+}
+
+/// Two ranges as **two arguments** are not a union, and they are read.
+#[test]
+fn two_ranges_as_two_arguments_are_read() {
+    let mut session = session();
+    let (_, sheet) = a_sheet(&mut session);
+    session
+        .execute("grid.formula.set", &json!({ "sheet": sheet, "cell": "C1", "formula": "=SUM(A1:A3,B1:B3)" }))
+        .expect("the formula is set");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "C1" })).expect("the cell is read");
+    assert_eq!(outcome.data["formula"], json!("=SUM(A1:A3,B1:B3)"), "the formula is as it was written");
+}
