@@ -28,6 +28,9 @@
 //! written twice, so that the closing quote is told from it: the text
 //! `"say ""hi"""` is `say "hi"`, and the sheet `'Bob''s Q1'` is
 //! `Bob's Q1`.
+//!
+//! And a **number** may be written with an **exponent**: `1E3` is a
+//! thousand and `1.5e-3` is a small number.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -1508,6 +1511,23 @@ impl Parser {
         {
             self.at += 1;
         }
+        // The **exponent**: `1E3` is a thousand and `1.5e-3` is a small
+        // number. The exponent is part of the number only when digits
+        // follow it.
+        let mut at = self.at;
+        if matches!(self.characters.get(at), Some('e' | 'E')) {
+            let mut exponent = at + 1;
+            if matches!(self.characters.get(exponent), Some('+' | '-')) {
+                exponent += 1;
+            }
+            if self.characters.get(exponent).is_some_and(|character| character.is_ascii_digit()) {
+                while self.characters.get(exponent).is_some_and(|character| character.is_ascii_digit()) {
+                    exponent += 1;
+                }
+                at = exponent;
+            }
+        }
+        self.at = at;
         let text: String = self.characters[start..self.at].iter().collect();
         match text.parse::<f64>() {
             Ok(number) if number.is_finite() => Ok(Expr::Number(number)),
