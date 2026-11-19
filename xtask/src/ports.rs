@@ -1816,6 +1816,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/exponents.rs",
         section: "§1052",
     },
+    Port {
+        rule: "a whole column or a whole row may be named",
+        from: "gridcraft/crates/core/src/addr.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/lines.rs",
+        section: "§1053",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

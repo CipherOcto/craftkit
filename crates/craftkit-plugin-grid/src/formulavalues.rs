@@ -240,7 +240,9 @@ const MAX_STEPS: usize = 200;
 fn parts_of(expression: &crate::formula::Expr, parts: &mut Vec<crate::formula::Expr>) {
     use crate::formula::Expr;
     match expression {
-        Expr::Cell { .. } | Expr::Range { .. } | Expr::Struct { .. } => parts.push(expression.clone()),
+        Expr::Cell { .. } | Expr::Range { .. } | Expr::Struct { .. } | Expr::Lines { .. } => {
+            parts.push(expression.clone())
+        }
         Expr::Call(_, arguments) => {
             parts.push(expression.clone());
             for argument in arguments {

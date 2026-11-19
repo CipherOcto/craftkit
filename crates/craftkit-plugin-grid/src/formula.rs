@@ -31,6 +31,11 @@
 //!
 //! And a **number** may be written with an **exponent**: `1E3` is a
 //! thousand and `1.5e-3` is a small number.
+//!
+//! And a formula may name a **whole column** — `B:B` — or a **whole
+//! row** — `1:3`: a whole line is not a place, it is every cell of
+//! the sheet in that line, and it reaches as far as the sheet holds
+//! anything.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -452,6 +457,153 @@ impl Area {
     }
 }
 
+/// A whole **line** of a sheet: a whole column, or a whole row.
+///
+/// `B:B` is the whole of the column `B` and `1:3` is the whole of the
+/// rows `1` to `3`. A whole line is not a place — it is every cell of
+/// the sheet in that line — and it is **worked out** when the formula
+/// is worked out: it reaches as far as the sheet holds anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Lines {
+    /// Whether the lines are **rows** — `true` — or **columns**.
+    pub rows: bool,
+    /// The first line, counted from zero.
+    pub first: u32,
+    /// The last line, counted from zero.
+    pub last: u32,
+    /// Whether the lines are **anchored** — the `$` of `$B:$B`.
+    ///
+    /// An anchored line does not move when the formula is copied.
+    pub abs: bool,
+}
+
+impl Lines {
+    /// The lines, as a formula writes them: `B:B` or `1:3`.
+    pub fn to_text(self) -> String {
+        let text = match self.rows {
+            true => format!("{}:{}", self.first + 1, self.last + 1),
+            false => {
+                format!("{}:{}", CellRef::column_text(self.first), CellRef::column_text(self.last))
+            }
+        };
+        if self.abs { format!("${text}") } else { text }
+    }
+
+    /// The lines **moved** by `(dr, dc)`.
+    ///
+    /// A whole **column** moves with the columns and a whole **row**
+    /// moves with the rows, and an **anchored** line does not move at
+    /// all. A line that would leave the sheet is gone, and `None` says
+    /// so.
+    pub fn shifted(&self, row_delta: i64, col_delta: i64) -> Option<Lines> {
+        if self.abs {
+            return Some(*self);
+        }
+        let delta = if self.rows { row_delta } else { col_delta };
+        let first = self.first as i64 + delta;
+        let last = self.last as i64 + delta;
+        let limit = if self.rows { MAX_ROWS } else { MAX_COLS } as i64;
+        if first < 0 || last < 0 || last >= limit {
+            return None;
+        }
+        Some(Lines { first: first as u32, last: last as u32, ..*self })
+    }
+
+    /// The lines with the **rows inserted** at `at`.
+    ///
+    /// A line of **columns** does not move when rows are inserted: it
+    /// is a whole column, and the rows of it are all of them.
+    pub fn inserted(&self, at: u64, count: u64) -> Lines {
+        if !self.rows || self.abs {
+            return *self;
+        }
+        let moved = |line: u32| {
+            let line = line as u64 + 1;
+            if line < at { line } else { line + count }
+        };
+        Lines { first: moved(self.first) as u32, last: moved(self.last) as u32, ..*self }
+    }
+
+    /// The lines with the **rows deleted** at `at`.
+    ///
+    /// `None` says that the lines name a row that is gone.
+    pub fn deleted(&self, at: u64, count: u64) -> Option<Lines> {
+        if !self.rows || self.abs {
+            return Some(*self);
+        }
+        let moved = |line: u32| {
+            let line = line as u64 + 1;
+            if line < at {
+                line
+            } else if line >= at + count {
+                line - count
+            } else {
+                0
+            }
+        };
+        let first = moved(self.first);
+        let last = moved(self.last);
+        if first == 0 || last == 0 {
+            return None;
+        }
+        Some(Lines { first: first as u32, last: last as u32, ..*self })
+    }
+
+    /// The lines with the **columns inserted** at `at`.
+    ///
+    /// A line of **rows** does not move when columns are inserted: it
+    /// is a whole row, and the columns of it are all of them.
+    pub fn inserted_column(&self, at: u64, count: u64) -> Lines {
+        if self.rows || self.abs {
+            return *self;
+        }
+        let moved = |line: u32| {
+            let line = line as u64 + 1;
+            if line < at { line } else { line + count }
+        };
+        Lines { first: moved(self.first) as u32, last: moved(self.last) as u32, ..*self }
+    }
+
+    /// The lines with the **columns deleted** at `at`.
+    ///
+    /// `None` says that the lines name a column that is gone.
+    pub fn deleted_column(&self, at: u64, count: u64) -> Option<Lines> {
+        if self.rows || self.abs {
+            return Some(*self);
+        }
+        let moved = |line: u32| {
+            let line = line as u64 + 1;
+            if line < at {
+                line
+            } else if line >= at + count {
+                line - count
+            } else {
+                0
+            }
+        };
+        let first = moved(self.first);
+        let last = moved(self.last);
+        if first == 0 || last == 0 {
+            return None;
+        }
+        Some(Lines { first: first as u32, last: last as u32, ..*self })
+    }
+
+    /// The lines with the **columns moved**.
+    ///
+    /// A reference follows the cells it names, and a whole column names
+    /// the column it is: so a whole column follows a move of columns
+    /// the way a cell in it does.
+    pub fn moved_column(&self, from: u64, count: u64, to: u64) -> Lines {
+        if self.rows {
+            return *self;
+        }
+        let first = moved_column_number(self.first as u64 + 1, from, count, to).saturating_sub(1) as u32;
+        let last = moved_column_number(self.last as u64 + 1, from, count, to).saturating_sub(1) as u32;
+        Lines { first, last, ..*self }
+    }
+}
+
 /// Put a **formula** in a cell.
 ///
 /// The rule of the tree's formula command: a formula that does not
@@ -600,6 +752,18 @@ pub enum Expr {
         start: Anchor,
         /// The last corner, and its anchoring.
         end: Anchor,
+    },
+    /// A whole **line** of a sheet: a whole column, or a whole row.
+    ///
+    /// `B:B` is the whole of the column `B`, and `1:3` is the whole of
+    /// the rows `1` to `3`. A whole line is **not a place**: it is
+    /// every cell of the sheet in that line, and it is worked out when
+    /// the formula is worked out.
+    Lines {
+        /// The sheet the lines are in, when the formula names one.
+        sheet: Option<String>,
+        /// The lines themselves.
+        lines: Lines,
     },
     /// A **name**: a word that is not a cell and not a function, and
     /// that stands for a range of cells.
@@ -1205,6 +1369,22 @@ fn collect_precedents(expression: &Expr, names: &BTreeMap<String, Name>, found: 
             // cells it names before the cells a formula reads are
             // looked for, and it is never here.
         }
+        Expr::Lines { sheet, lines } => {
+            // A whole line is the whole of the line: a whole column
+            // reaches every row of the sheet, and a whole row reaches
+            // every column of it.
+            let area = match lines.rows {
+                true => Area::new(
+                    CellRef { col: 0, row: lines.first },
+                    CellRef { col: MAX_COLS as u32 - 1, row: lines.last },
+                ),
+                false => Area::new(
+                    CellRef { col: lines.first, row: 0 },
+                    CellRef { col: lines.last, row: MAX_ROWS as u32 - 1 },
+                ),
+            };
+            found.push(Reference { sheet: sheet.clone(), area });
+        }
         Expr::Name(name) => {
             // A name stands for a range, and the range is what the
             // formula reads.
@@ -1473,6 +1653,13 @@ impl Parser {
             return self.structured(String::new());
         }
         if character.is_ascii_digit() || (character == '.' && self.next_is_digit()) {
+            // A **whole row**: `1:3`. The row is not a number when a
+            // colon and another row follow it.
+            if character.is_ascii_digit()
+                && let Some(lines) = self.row_lines()?
+            {
+                return Ok(lines);
+            }
             return self.number();
         }
         if character.is_alphabetic() || character == '$' {
@@ -1600,6 +1787,12 @@ impl Parser {
                 }
             }
             return Ok(Expr::Call(word.to_ascii_uppercase(), arguments));
+        }
+        // A **whole column** or a **whole row**: `B:B` or `$1:3`. The
+        // word names a line of the sheet and nothing else, and a colon
+        // follows it.
+        if self.peek() == Some(':') && (column_of(&word).is_some() || row_of(&word).is_some()) {
+            return self.reference_to(word, None);
         }
         // A **name**: a word that is not a cell. The parser does not
         // know the names of the workbook — it is a parser and not a
@@ -1738,6 +1931,44 @@ impl Parser {
         Ok(Expr::Struct { table, first, last, item })
     }
 
+    /// A **whole row**: `1:3`.
+    ///
+    /// The rows are read here and not in the word, because a row is
+    /// written with digits and a digit begins a number.
+    fn row_lines(&mut self) -> Result<Option<Expr>, FormulaError> {
+        let start = self.at;
+        let mut at = self.at;
+        while at < self.characters.len() && self.characters[at].is_ascii_digit() {
+            at += 1;
+        }
+        if self.characters.get(at) != Some(&':') {
+            return Ok(None);
+        }
+        let first: String = self.characters[start..at].iter().collect();
+        // The second row: digits, and the `$` of an anchored row.
+        let mut second = at + 1;
+        let anchored_second = self.characters.get(second) == Some(&'$');
+        if anchored_second {
+            second += 1;
+        }
+        let second_start = second;
+        while second < self.characters.len() && self.characters[second].is_ascii_digit() {
+            second += 1;
+        }
+        if second == second_start {
+            return Ok(None);
+        }
+        let second_text: String = self.characters[second_start..second].iter().collect();
+        let (Some(one), Some(two)) = (row_of(&first), row_of(&second_text)) else {
+            return Ok(None);
+        };
+        self.at = second;
+        Ok(Some(Expr::Lines {
+            sheet: None,
+            lines: Lines { rows: true, first: one.min(two), last: one.max(two), abs: anchored_second },
+        }))
+    }
+
     /// A **reference**: the word that follows, in the sheet (maybe).
     fn reference(&mut self, sheet: Option<String>) -> Result<Expr, FormulaError> {
         let start = self.at;
@@ -1792,6 +2023,40 @@ impl Parser {
                     });
                 }
             }
+            // A range is either **two cells**, **two whole columns** or
+            // **two whole rows** — `A1:B4`, `B:B` or `1:3` — and a
+            // range that mixes them is not a range.
+            match (line_of(&word), line_of(&second)) {
+                (Some(Line::Cell(one)), Some(Line::Cell(two))) => {
+                    return Ok(Expr::Range { sheet, start: one, end: two });
+                }
+                (Some(Line::Column(one)), Some(Line::Column(two))) => {
+                    let lines = Lines {
+                        rows: false,
+                        first: one.min(two),
+                        last: one.max(two),
+                        abs: anchored(&word) || anchored(&second),
+                    };
+                    return Ok(Expr::Lines { sheet, lines });
+                }
+                (Some(Line::Row(one)), Some(Line::Row(two))) => {
+                    let lines = Lines {
+                        rows: true,
+                        first: one.min(two),
+                        last: one.max(two),
+                        abs: anchored(&word) || anchored(&second),
+                    };
+                    return Ok(Expr::Lines { sheet, lines });
+                }
+                (Some(Line::Cell(_)), _) | (_, Some(Line::Cell(_))) => {
+                    return Err(FormulaError {
+                        message: format!(
+                            "a range is two cells, two whole columns or two whole rows, and `{word}:{second}` is not one of them"
+                        ),
+                    });
+                }
+                _ => {}
+            }
             let first = Anchor::parse(&word)
                 .ok_or_else(|| FormulaError { message: format!("`{word}` is not a cell") })?;
             let second = Anchor::parse(&second)
@@ -1803,6 +2068,61 @@ impl Parser {
             None => Err(FormulaError { message: format!("`{word}` is not a cell or a function") }),
         }
     }
+}
+
+/// What a word of a range names: a **cell**, a whole **column** or a
+/// whole **row**.
+enum Line {
+    /// A cell, and its anchoring.
+    Cell(Anchor),
+    /// A whole column, counted from zero.
+    Column(u32),
+    /// A whole row, counted from zero.
+    Row(u32),
+}
+
+/// What a word of a range names.
+fn line_of(text: &str) -> Option<Line> {
+    if let Some(anchor) = Anchor::parse(text) {
+        return Some(Line::Cell(anchor));
+    }
+    if let Some(column) = column_of(text) {
+        return Some(Line::Column(column));
+    }
+    row_of(text).map(Line::Row)
+}
+
+/// The **column** a word names, when the word names a column and
+/// nothing else: `B` is a column and `B2` is not.
+fn column_of(text: &str) -> Option<u32> {
+    let letters = text.strip_prefix('$').unwrap_or(text);
+    if letters.is_empty() || !letters.chars().all(|character| character.is_ascii_alphabetic()) {
+        return None;
+    }
+    let column = CellRef::column_index(letters)?;
+    if column as u64 >= MAX_COLS {
+        return None;
+    }
+    Some(column)
+}
+
+/// The **row** a word names, when the word names a row and nothing
+/// else: `3` is a row and `B3` is not.
+fn row_of(text: &str) -> Option<u32> {
+    let digits = text.strip_prefix('$').unwrap_or(text);
+    if digits.is_empty() || !digits.chars().all(|character| character.is_ascii_digit()) {
+        return None;
+    }
+    let row: u32 = digits.parse().ok()?;
+    if row == 0 || row as u64 > MAX_ROWS {
+        return None;
+    }
+    Some(row - 1)
+}
+
+/// Whether a word is **anchored** — the `$` of `$B:$B`.
+fn anchored(text: &str) -> bool {
+    text.starts_with('$')
 }
 
 /// The cells of a sheet: what is in them, and what a formula reads.
@@ -2170,6 +2490,22 @@ impl Cells {
     /// The cell at that address.
     pub fn get(&self, cell: CellRef) -> Option<&Cell> {
         self.cells.get(&cell)
+    }
+
+    /// The **last row** and the **last column** that hold a cell.
+    ///
+    /// This is the **extent** of the sheet: how far the sheet reaches.
+    /// A whole column reaches to the last row, and a whole row reaches
+    /// to the last column.
+    pub fn extent(&self) -> Option<(u32, u32)> {
+        let mut last: Option<(u32, u32)> = None;
+        for at in self.cells.keys() {
+            last = Some(match last {
+                Some((row, column)) => (row.max(at.row), column.max(at.col)),
+                None => (at.row, at.col),
+            });
+        }
+        last
     }
 
     /// Put a value in a cell.
@@ -2798,6 +3134,9 @@ impl Book {
     /// A structured reference is **derived**: it is worked out every
     /// time the formula is, and so it is always the table as it is
     /// now.
+    ///
+    /// A **whole line** is worked out the same way: it is the range of
+    /// cells it names, and it names the cells the sheet holds.
     pub fn resolved(&self, expression: &Expr, sheet: &str, cell: Option<CellRef>) -> Expr {
         match expression {
             Expr::Number(_)
@@ -2807,6 +3146,7 @@ impl Book {
             | Expr::Cell { .. }
             | Expr::Range { .. }
             | Expr::Name(_) => expression.clone(),
+            Expr::Lines { .. } => self.resolved_lines(expression, sheet),
             Expr::Struct { .. } => self.resolved_struct(expression, sheet, cell),
             Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
@@ -2818,6 +3158,46 @@ impl Book {
                 Box::new(self.resolved(left, sheet, cell)),
                 Box::new(self.resolved(right, sheet, cell)),
             ),
+        }
+    }
+
+    /// The **area** a whole line names: the cells of the line that the
+    /// sheet holds.
+    ///
+    /// A whole **column** reaches from the first row to the last row
+    /// the sheet holds anything in, and a whole **row** reaches from
+    /// the first column to the last column the sheet holds anything in.
+    /// Beyond that there is nothing to read, and so the line stops
+    /// there.
+    fn line_area(&self, sheet: &str, expression: &Expr) -> Option<(String, Area)> {
+        let Expr::Lines { sheet: named, lines } = expression else { return None };
+        let name = named.clone().unwrap_or_else(|| sheet.to_string());
+        let cells = self.sheets.get(&name)?;
+        let (last_row, last_column) = cells.extent().unwrap_or((0, 0));
+        let area = match lines.rows {
+            true => {
+                Area::new(CellRef { col: 0, row: lines.first }, CellRef { col: last_column, row: lines.last })
+            }
+            false => {
+                Area::new(CellRef { col: lines.first, row: 0 }, CellRef { col: lines.last, row: last_row })
+            }
+        };
+        Some((name, area))
+    }
+
+    /// One **whole line**, worked out into the range of cells it names.
+    fn resolved_lines(&self, expression: &Expr, sheet: &str) -> Expr {
+        let Some((name, area)) = self.line_area(sheet, expression) else {
+            let Expr::Lines { sheet: named, .. } = expression else {
+                return expression.clone();
+            };
+            let name = named.clone().unwrap_or_else(|| sheet.to_string());
+            return Expr::Error(format!("there is no sheet `{name}`"));
+        };
+        Expr::Range {
+            sheet: Some(name),
+            start: Anchor { cell: area.start, row_abs: false, col_abs: false },
+            end: Anchor { cell: area.end, row_abs: false, col_abs: false },
         }
     }
 
@@ -3081,6 +3461,23 @@ impl Book {
                 // range of cells it names before the formula is
                 // worked out, and it is never here.
                 Value::Error(format!("the table `{table}` is not worked out here"))
+            }
+            Expr::Lines { .. } => {
+                // A **whole line** is worked out into the range of cells
+                // it names before the formula is worked out, and it is
+                // never here — and when it is here, it is read as the
+                // range of cells it names.
+                let Some((name, area)) = self.line_area(sheet, expression) else {
+                    return Value::Error(format!("there is no sheet `{sheet}`"));
+                };
+                let mut count = 0u64;
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        let _ = self.value_of_guarded(&name, CellRef { col, row }, being);
+                        count += 1;
+                    }
+                }
+                Value::Text(format!("{count} values"))
             }
             Expr::Name(name) => {
                 let Some(name) = self.names.get(name) else {
@@ -3578,6 +3975,11 @@ impl Book {
                     return Err(format!("there is no name `{name}`"));
                 };
                 Ok((name.sheet.clone(), name.area))
+            }
+            Expr::Lines { .. } => {
+                let (name, area) =
+                    self.line_area(sheet, argument).ok_or_else(|| format!("there is no sheet `{sheet}`"))?;
+                Ok((name, area))
             }
             _ => Err("a counting function takes a range of cells".to_string()),
         }
@@ -4446,6 +4848,12 @@ impl Expr {
                 start: *start,
                 end: *end,
             },
+            Expr::Lines { sheet, lines } => Expr::Lines {
+                sheet: sheet.as_ref().map(|sheet| {
+                    if sheet.eq_ignore_ascii_case(old) { new.to_string() } else { sheet.clone() }
+                }),
+                lines: *lines,
+            },
             Expr::Name(name) => Expr::Name(name.clone()),
             // A **structured reference** does not move with the cell:
             // it names a column of a table, and the table is where it
@@ -4490,6 +4898,10 @@ impl Expr {
                     _ => Expr::Error(REF_ERROR.to_string()),
                 }
             }
+            Expr::Lines { sheet, lines } => match lines.shifted(row_delta, col_delta) {
+                Some(lines) => Expr::Lines { sheet: sheet.clone(), lines },
+                None => Expr::Error(REF_ERROR.to_string()),
+            },
             Expr::Name(name) => Expr::Name(name.clone()),
             // A **structured reference** does not move with the cell:
             // it names a column of a table, and the table is where it
@@ -4536,6 +4948,13 @@ impl Expr {
                         start: start.inserted(at, count),
                         end: end.inserted(at, count),
                     }
+                } else {
+                    self.clone()
+                }
+            }
+            Expr::Lines { sheet: named, lines } => {
+                if names_this_sheet(named) {
+                    Expr::Lines { sheet: named.clone(), lines: lines.inserted(at, count) }
                 } else {
                     self.clone()
                 }
@@ -4598,6 +5017,15 @@ impl Expr {
                     _ => Expr::Error(REF_ERROR.to_string()),
                 }
             }
+            Expr::Lines { sheet: named, lines } => {
+                if !names_this_sheet(named) {
+                    return self.clone();
+                }
+                match lines.deleted(at, count) {
+                    Some(lines) => Expr::Lines { sheet: named.clone(), lines },
+                    None => Expr::Error(REF_ERROR.to_string()),
+                }
+            }
             Expr::Name(name) => Expr::Name(name.clone()),
             // A **structured reference** does not move with the cell:
             // it names a column of a table, and the table is where it
@@ -4644,6 +5072,13 @@ impl Expr {
                         start: start.inserted_column(at, count),
                         end: end.inserted_column(at, count),
                     }
+                } else {
+                    self.clone()
+                }
+            }
+            Expr::Lines { sheet: named, lines } => {
+                if names_this_sheet(named) {
+                    Expr::Lines { sheet: named.clone(), lines: lines.inserted_column(at, count) }
                 } else {
                     self.clone()
                 }
@@ -4704,6 +5139,15 @@ impl Expr {
                 match (start.deleted_column(at, count), end.deleted_column(at, count)) {
                     (Some(start), Some(end)) => Expr::Range { sheet: named.clone(), start, end },
                     _ => Expr::Error(REF_ERROR.to_string()),
+                }
+            }
+            Expr::Lines { sheet: named, lines } => {
+                if !names_this_sheet(named) {
+                    return self.clone();
+                }
+                match lines.deleted_column(at, count) {
+                    Some(lines) => Expr::Lines { sheet: named.clone(), lines },
+                    None => Expr::Error(REF_ERROR.to_string()),
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
@@ -4801,6 +5245,10 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **whole line** does not move with the cells of a band:
+            // it is a whole column or a whole row, and the cells of a
+            // band are not all of it.
+            Expr::Lines { .. } => self.clone(),
             // A **structured reference** does not move with the cell:
             // it names a column of a table, and the table is where it
             // is.
@@ -4861,6 +5309,14 @@ impl Expr {
                 }
             }
             Expr::Name(name) => Expr::Name(name.clone()),
+            // A **whole column** follows the move of the columns the
+            // way a cell in it does; a whole row does not move at all.
+            Expr::Lines { sheet: named, lines } => {
+                if !names_this_sheet(named) {
+                    return self.clone();
+                }
+                Expr::Lines { sheet: named.clone(), lines: lines.moved_column(from, count, to) }
+            }
             // A **structured reference** does not move with the cell:
             // it names a column of a table, and the table is where it
             // is.
@@ -4937,7 +5393,8 @@ impl Rename {
             | Expr::Error(_)
             | Expr::Name(_)
             | Expr::Cell { .. }
-            | Expr::Range { .. } => expression.clone(),
+            | Expr::Range { .. }
+            | Expr::Lines { .. } => expression.clone(),
             Expr::Struct { table, first, last, item } => {
                 // The name the table has **now**, before the rename.
                 let was = table.clone();
@@ -5165,6 +5622,9 @@ fn expression_text(expression: &Expr, min_precedence: u8) -> String {
         Expr::Range { sheet, start, end } => {
             format!("{}{}:{}", sheet_prefix(sheet), start.to_text(), end.to_text())
         }
+        Expr::Lines { sheet, lines } => {
+            format!("{}{}", sheet_prefix(sheet), lines.to_text())
+        }
         Expr::Call(name, arguments) => {
             let arguments: Vec<String> =
                 arguments.iter().map(|argument| expression_text(argument, 0)).collect();
@@ -5269,6 +5729,12 @@ pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Expr {
         Expr::Range { sheet, start, end } => match (start.moved(dr, dc), end.moved(dr, dc)) {
             (Some(start), Some(end)) => Expr::Range { sheet: sheet.clone(), start, end },
             _ => Expr::Error(REF_ERROR.to_string()),
+        },
+        // A **whole line** moves with the line it names: a whole column
+        // moves with the columns, and a whole row with the rows.
+        Expr::Lines { sheet, lines } => match lines.shifted(dr, dc) {
+            Some(lines) => Expr::Lines { sheet: sheet.clone(), lines },
+            None => Expr::Error(REF_ERROR.to_string()),
         },
         Expr::Call(name, arguments) => {
             let mut moved = Vec::new();
