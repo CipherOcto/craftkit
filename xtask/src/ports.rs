@@ -1888,6 +1888,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/refusals.rs",
         section: "§1060",
     },
+    Port {
+        rule: "a compound file is read",
+        from: "gridcraft/crates/xlsx/src/cfb.rs",
+        to: "craftkit-xlsx",
+        module: "src/cfb.rs",
+        command: "grid.import.xlsx",
+        test: "crates/craftkit-xlsx/tests/compound.rs",
+        section: "§1061",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

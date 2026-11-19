@@ -66,6 +66,8 @@
 //! - It does not read a workbook that is **encrypted**: such a file is
 //!   a compound file and not a package, and the refusal says what the
 //!   file is — an encrypted workbook, or a workbook of the old format.
+//!   The **container** is read (`cfb`), and what is inside it is for
+//!   the cipher that opens it.
 
 #![deny(
     clippy::unwrap_used,
@@ -83,6 +85,8 @@ mod phonetic;
 mod rels;
 mod styles;
 mod theme;
+
+pub mod cfb;
 
 pub use calculation::{
     Calculation, DEFAULT_CHANGE, DEFAULT_ITERATIONS, MAX_ITERATIONS, Mode as CalculationMode,
