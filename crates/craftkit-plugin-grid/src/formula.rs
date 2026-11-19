@@ -23,6 +23,11 @@
 //! was given directly and names a number **is** a number, and a text
 //! that names nothing is `#VALUE!`; and an error in a range is the
 //! error of the whole aggregate.
+//!
+//! And a **quote** in a quoted thing — a text or a sheet's name — is
+//! written twice, so that the closing quote is told from it: the text
+//! `"say ""hi"""` is `say "hi"`, and the sheet `'Bob''s Q1'` is
+//! `Bob's Q1`.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -1239,6 +1244,11 @@ impl Parser {
         self.characters.get(self.at).copied()
     }
 
+    /// The character **after** the one that is looked at.
+    fn peek_at(&self, ahead: usize) -> Option<char> {
+        self.characters.get(self.at + ahead).copied()
+    }
+
     /// Take a character if it is that one.
     fn take(&mut self, character: char) -> bool {
         if self.peek() == Some(character) {
@@ -1398,13 +1408,19 @@ impl Parser {
         }
         // A **quoted sheet name**: `'My Sheet'!A1`. The quote is the
         // sheet's, and the name inside it may hold anything but another
-        // quote.
+        // quote — and a quote **in the name** is written twice, so that
+        // the closing quote is told from it: `'Bob''s Q1'!B2`.
         if character == '\'' {
             self.at += 1;
             let mut name = String::new();
             loop {
                 match self.peek() {
                     None => return Err(self.error("the sheet's name is not closed")),
+                    Some('\'') if self.peek_at(1) == Some('\'') => {
+                        // A quote **in the name** is written twice.
+                        name.push('\'');
+                        self.at += 2;
+                    }
                     Some('\'') => {
                         self.at += 1;
                         break;
@@ -1429,6 +1445,11 @@ impl Parser {
             loop {
                 match self.peek() {
                     None => return Err(self.error("the text is not closed")),
+                    Some('"') if self.peek_at(1) == Some('"') => {
+                        // A quote **in the text** is written twice.
+                        text.push('"');
+                        self.at += 2;
+                    }
                     Some('"') => {
                         self.at += 1;
                         break;
