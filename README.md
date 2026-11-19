@@ -4503,6 +4503,7 @@ so.
 | **a formula may carry the sign of an implicit intersection** | **built.** `@A1:A3` is the cell of the range in the row of the formula, and it is worked out every time (§1056) | §1056 |
 | **two areas may be intersected** | **built.** `A1:C3 B2:D4` is the cells the two areas share, and it is worked out every time (§1057) | §1057 |
 | **a workbook that is encrypted is said, not read** | **built.** A compound file is refused, and the refusal says whether the workbook is encrypted or of the old format (§1058) | §1058 |
+| **a spill is refused, and the refusal says what it is** | **built.** `A1#` is refused as a spill, and not as something after the formula (§1059) | §1059 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68227,3 +68228,41 @@ package, and the tree says what it is.
 - **The name of the package is looked for in the bytes**: a file that
   holds the name without being an encrypted workbook is said to be
   encrypted, and the tree does not open the compound file to be sure.
+
+## 1059. A spill is refused, and the refusal says what it is
+
+A **spill** — `A1#`, the range that an array spills into — is not a
+formula this tree has, and the refusal says so.
+
+### What was built
+
+- `=A1#` is refused with *a spill is not a formula this tree has: the
+  tree has no arrays that spill* — and not with "there is something
+  after the formula", which says nothing about what it found.
+- A **file** that writes the spill as `_xlfn.ANCHORARRAY(A1)` is
+  refused the same way, and for the same reason.
+
+### What the port found
+
+- **The reference has the spill as an operator of its own**:
+  `UnOp::Spill` in its tree of the expressions, and `A1#` is the
+  operator that follows a reference.
+- **The reference reads a file's `_xlfn.ANCHORARRAY(x)` as the spill
+  `x#`** — its parser says so, and its printer writes the spill back.
+- **The reference's spill is worth something**: it is the range that
+  the array at the cell spilled into, and so it is a range of cells
+  that the formula reads.
+
+### What it cost
+
+- **No new command**: a spill is not a command.
+- **One rule** in the parser.
+- **Two tests** in the file of the refusals (`tests/refusals.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree has no arrays that spill**: a formula that names a spill
+  is refused, and the array it would have spilled is not read either.
+- **The refusal is the tree's own wording**: the tree has no error
+  spelling for a spill, and it says what the thing is instead.
