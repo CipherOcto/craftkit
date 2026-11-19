@@ -14,6 +14,10 @@
 //!   `COUNTA`; the tree's `TEXT`, which writes a value with a format
 //!   code; the tree's `SUBTOTAL`; a **choice** with `IF`; and a
 //!   **counting** with `COUNTIF` and `SUMIF`.
+//!
+//! And `COUNT` counts the **numbers** and `COUNTA` counts the
+//! **values**: a number, a text, a boolean and an error is a value,
+//! and a cell that holds nothing is not.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -3248,6 +3252,11 @@ impl Book {
                             let value = self.value_of_guarded(name, CellRef { col, row }, being);
                             if let Some(number) = value.as_number() {
                                 numbers.push(number);
+                            } else if !matches!(value, Value::Empty) {
+                                // A cell that holds **something** — a text,
+                                // a boolean or an error — is a value, and
+                                // `COUNTA` counts it.
+                                plain.push(value);
                             }
                         }
                     }
@@ -3262,6 +3271,8 @@ impl Book {
                             let value = self.value_of_guarded(&name.sheet, CellRef { col, row }, being);
                             if let Some(number) = value.as_number() {
                                 numbers.push(number);
+                            } else if !matches!(value, Value::Empty) {
+                                plain.push(value);
                             }
                         }
                     }
@@ -3270,8 +3281,11 @@ impl Book {
                     let value = self.evaluate(sheet, other, being);
                     if let Some(number) = value.as_number() {
                         numbers.push(number);
+                    } else if !matches!(value, Value::Empty) {
+                        // A value that is **nothing** is not a value, and
+                        // `COUNTA` does not count it.
+                        plain.push(value);
                     }
-                    plain.push(value);
                 }
             }
         }

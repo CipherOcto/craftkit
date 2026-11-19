@@ -1744,6 +1744,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/tables.rs",
         section: "§1044",
     },
+    Port {
+        rule: "COUNTA counts the values that are not nothing",
+        from: "gridcraft/crates/functions/src/stat.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/counta.rs",
+        section: "§1045",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
