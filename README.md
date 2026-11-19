@@ -4492,6 +4492,7 @@ so.
 | **COUNTA counts the values that are not nothing** | **built.** Every value of a range is counted, and a cell that holds nothing is not (§1045) | §1045 |
 | **the tree's aggregates take the tree's rule of numbers** | **built.** A text that names a number is a number, and an error in a range is the error of the aggregate (§1046) | §1046 |
 | a **formula that reads itself through a table is refused** | **built.** The check of the cycle sees through the structured references (§1047) | §1047 |
+| a **resize of a table that changes its fields follows the formulas** | **built.** The field of a column whose name changed is renamed, and the formulas follow (§1048) | §1048 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67708,3 +67709,40 @@ reads itself **through a table** too.
 - **The tree refuses the formula and the reference lists it**: a
   workbook of the reference may hold a circular formula, and a workbook
   of the tree may not.
+
+## 1048. A resize of a table that changes its fields follows the formulas
+
+A **resize** of a table that changes the names of its **fields** follows
+the formulas that name them.
+
+### What was built
+
+- A resize that changes the **header row** of the table changes the
+  fields — the fields are the text of the header cells — and the field
+  of a column whose name changed is renamed, and the formulas that name
+  it follow.
+- The command says **how many formulas followed**.
+
+### What the port found
+
+- **The reference's tables keep the names of their columns**: a column
+  of a table has a name of its own there, and a resize that changes the
+  header row changes the names the reference holds — and the
+  reference's structured references follow the change.
+- **The tree's fields are derived** from the header cells, so the tree
+  has nothing to keep and nothing to change: the names follow the
+  cells, and the formulas follow the names.
+
+### What it cost
+
+- **No new command**: a resize is a resize.
+- **One helper** — the renames of the fields — and one call to the rule
+  of the rename.
+- **One test** in the grid battery (`tests/tables.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **A column of a table that the resize takes away** is a field with no
+  name: the formulas that named it are refused, and the refusal says
+  that the table has no column of that name.
