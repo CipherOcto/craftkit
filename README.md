@@ -4499,6 +4499,7 @@ so.
 | **a number may be written with an exponent** | **built.** `1E3` is a thousand and `1.5e-3` is a small number, as the file writes it (§1052) | §1052 |
 | **a whole column or a whole row may be named** | **built.** `B:B` is the column and `1:3` is the rows, read as the cells the sheet holds (§1053) | §1053 |
 | **a number may be written with a percent sign** | **built.** `50%` is a half, and the sign follows the value it divides (§1054) | §1054 |
+| **a function's name may carry the prefix a file writes** | **built.** `_xlfn.XLOOKUP` is `XLOOKUP`, and the prefix is the file's way of saying the function is newer than the format (§1055) | §1055 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68027,3 +68028,59 @@ a half.
 - **The percent is not a number format**: a cell that holds `50%` as a
   *value* is a cell whose format says percent, and that is the
   format's business and not the formula's.
+
+## 1055. A function's name may carry the prefix a file writes
+
+A function's name in a formula may carry the **prefix a file writes**:
+`_xlfn.XLOOKUP` is `XLOOKUP`.
+
+### What was built
+
+- The prefix `_xlfn.` is read and the name after it is used:
+  `=_xlfn.XLOOKUP(2,A1:A3,B1:B3)` is the lookup the tree has. The
+  prefix `_xlws.` — a function of the worksheet — is read the same
+  way.
+- The prefix `_xludf.` is **kept**: it marks a function of the
+  **user's own** and never the built-in of the same name, so
+  `=_xludf.MYTHING(1)` is a function the tree does not have and says
+  so. The tree writes it in upper case — `_XLUDF.MYTHING` — as it
+  writes every function's name.
+- A formula is **kept as it was written**: the cell holds the text it
+  was given, prefix and all.
+- A **file** that writes a function with the prefix is read: the
+  formula is imported, it is not counted among the formulas the tree
+  could not read, and the cell holds the file's own text.
+
+### What the port found
+
+- **The reference has the rule in one place**: `normalize_function_name`
+  strips `_XLFN.`, `_XLWS.` and `_XLFN._XLWS.`, and keeps `_XLUDF.`
+  in lower case so that a file gets it back.
+- **The tree's reader had the rule in the wrong place**: it dropped
+  the prefix from the *text* of every formula it read — so a text that
+  held the prefix, `="a_xlfn.b"`, lost it too, and the text of a
+  formula was not the file's own.
+- **The tree's parser did not know the prefix at all**: a formula
+  written with it was not a formula, and a word that begins with an
+  underscore was not a word the parser could hold.
+
+### What it cost
+
+- **No new command**: a function's name is a name.
+- **One rule** in the parser, and one in the reader — the reader now
+  keeps the file's text.
+- **Four tests** in a new file (`tests/prefixes.rs`) and **one** in
+  the file of the import (`tests/xlsximport.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The prefix `_xleta.` is not read**: it marks a function passed by
+  name to another function, and the tree has no lambdas — so the name
+  after it is a name the tree does not have.
+- **The prefix `_xlpm.` is not read either**: the tree has no
+  parameters of a macro sheet, and a formula that carries it names a
+  function the tree does not have.
+- **The prefix is lost when a formula is written again**: the tree's
+  printer writes the name it knows, and so a formula that is copied
+  is written without the prefix — as the reference writes it.
