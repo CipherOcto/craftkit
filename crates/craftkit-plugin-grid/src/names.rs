@@ -103,7 +103,7 @@ pub fn why_not(name: &str) -> Option<String> {
 }
 
 /// Whether a word looks like an **R1C1 reference**: `R1C1`.
-fn looks_like_r1c1(name: &str) -> bool {
+pub(crate) fn looks_like_r1c1(name: &str) -> bool {
     let Some(rest) = name.strip_prefix('R') else {
         return false;
     };

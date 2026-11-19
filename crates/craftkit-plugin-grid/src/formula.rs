@@ -1495,56 +1495,27 @@ impl Parser {
     }
 
     /// A word: a reference, a range, a boolean or a function.
+    ///
+    /// A word holds the characters a **name** may hold — letters,
+    /// digits, an underscore, a dot, a backslash and a question mark —
+    /// and the dollar of an absolute reference. So a name with a dot in
+    /// it, a sheet's name with a dot in it and a function's name with
+    /// dots in it (`ERROR.TYPE`, `NORM.S.DIST`) are all one word.
     fn word(&mut self) -> Result<Expr, FormulaError> {
         let start = self.at;
         while self.at < self.characters.len()
             && (self.characters[self.at].is_ascii_alphanumeric()
                 || self.characters[self.at] == '$'
-                || self.characters[self.at] == '_')
+                || self.characters[self.at] == '_'
+                || self.characters[self.at] == '.'
+                || self.characters[self.at] == '\\'
+                || self.characters[self.at] == '?')
         {
             self.at += 1;
         }
-        let mut word: String = self.characters[start..self.at].iter().collect();
+        let word: String = self.characters[start..self.at].iter().collect();
         if word.is_empty() {
             return Err(self.error("there is nothing there"));
-        }
-        // A **function's name** may hold dots: `ERROR.TYPE`,
-        // `NORM.S.DIST` and `T.DIST.2T`. The dots are only taken when
-        // a bracket follows, so that a name with a dot in it is still
-        // a name.
-        let mut at = self.at;
-        let mut furthest = self.at;
-        loop {
-            if self.characters.get(at) != Some(&'.')
-                || !self.characters.get(at + 1).is_some_and(|character| character.is_ascii_alphanumeric())
-            {
-                break;
-            }
-            let mut end = at + 1;
-            while end < self.characters.len()
-                && (self.characters[end].is_ascii_alphanumeric() || self.characters[end] == '_')
-            {
-                end += 1;
-            }
-            let mut look = end;
-            while look < self.characters.len() && self.characters[look].is_whitespace() {
-                look += 1;
-            }
-            if self.characters.get(look) == Some(&'(') {
-                furthest = end;
-                at = end;
-                continue;
-            }
-            if self.characters.get(look) == Some(&'.') {
-                at = look;
-                continue;
-            }
-            break;
-        }
-        if furthest > self.at {
-            let tail: String = self.characters[self.at..furthest].iter().collect();
-            word.push_str(&tail);
-            self.at = furthest;
         }
         // A **structured reference**: a word and a bracket — the name
         // of a table and a column of it.

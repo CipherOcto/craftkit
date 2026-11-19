@@ -95,7 +95,7 @@ fn payload(session: &Session, sheet: u64) -> Json {
 fn a_table_moves_with_the_rows() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    set_table(&mut session, sheet, "the table", "A1:B5");
+    set_table(&mut session, sheet, "thetable", "A1:B5");
     session.execute("grid.row.insert", &json!({ "sheet": sheet, "row": 1 })).expect("the row is inserted");
     let payload = payload(&session, sheet);
     assert_eq!(payload["tables"][0]["range"], json!("A2:B6"), "the range moved down");
@@ -106,7 +106,7 @@ fn a_table_moves_with_the_rows() {
 fn a_table_moves_with_the_columns() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    set_table(&mut session, sheet, "the table", "A1:B5");
+    set_table(&mut session, sheet, "thetable", "A1:B5");
     session
         .execute("grid.column.insert", &json!({ "sheet": sheet, "column": "A" }))
         .expect("the column is inserted");
@@ -119,7 +119,7 @@ fn a_table_moves_with_the_columns() {
 fn a_table_that_is_deleted_goes_away() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    set_table(&mut session, sheet, "the table", "A2:B4");
+    set_table(&mut session, sheet, "thetable", "A2:B4");
     session
         .execute("grid.row.delete", &json!({ "sheet": sheet, "row": 2, "count": 3 }))
         .expect("the rows are deleted");
@@ -132,7 +132,7 @@ fn a_table_that_is_deleted_goes_away() {
 fn a_table_that_covers_a_deleted_row_refuses() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    set_table(&mut session, sheet, "the table", "A1:B5");
+    set_table(&mut session, sheet, "thetable", "A1:B5");
     let refused = session
         .execute("grid.row.delete", &json!({ "sheet": sheet, "row": 2 }))
         .expect_err("the delete is refused");

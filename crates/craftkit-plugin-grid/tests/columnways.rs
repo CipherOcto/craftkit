@@ -53,14 +53,14 @@ fn a_table(session: &mut Session, sheet: u64) {
     a_cell(session, sheet, "B2", json!("one"));
     a_cell(session, sheet, "B3", json!("two"));
     session
-        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "the table", "range": "A1:B4" }))
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "thetable", "range": "A1:B4" }))
         .expect("the table is created");
 }
 
 /// The **fields** of a table, as the command reads them.
 fn fields_of(session: &mut Session, sheet: u64) -> Json {
     let outcome = session
-        .execute("grid.table.fields", &json!({ "sheet": sheet, "name": "the table" }))
+        .execute("grid.table.fields", &json!({ "sheet": sheet, "name": "thetable" }))
         .expect("the fields are read");
     outcome.data["fields"].clone()
 }
@@ -68,7 +68,7 @@ fn fields_of(session: &mut Session, sheet: u64) -> Json {
 /// The **total** of a column of a table.
 fn total_of(session: &mut Session, sheet: u64, column: &str) -> Json {
     let outcome = session
-        .execute("grid.table.fields", &json!({ "sheet": sheet, "name": "the table" }))
+        .execute("grid.table.fields", &json!({ "sheet": sheet, "name": "thetable" }))
         .expect("the fields are read");
     let sums = outcome.data["sums"].as_array().expect("the sums are a list");
     let sum = sums.iter().find(|sum| sum["name"] == json!(column)).expect("the column has a total");
@@ -92,7 +92,7 @@ fn a_columns_own_way_is_said() {
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "max" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "max" }),
         )
         .expect("the way is said");
     assert_eq!(way_of(&mut session, sheet, "amount"), json!("max"), "the way is the column's own");
@@ -106,7 +106,7 @@ fn a_column_with_no_way_of_its_own_is_totalled_in_the_way_of_the_table() {
     let sheet = a_sheet(&mut session);
     a_table(&mut session, sheet);
     session
-        .execute("grid.table.totals", &json!({ "sheet": sheet, "name": "the table", "way": "average" }))
+        .execute("grid.table.totals", &json!({ "sheet": sheet, "name": "thetable", "way": "average" }))
         .expect("the way is said");
     assert_eq!(way_of(&mut session, sheet, "amount"), json!("average"), "the table's way is the column's");
     assert_eq!(way_of(&mut session, sheet, "who"), json!("average"), "and the other one too");
@@ -120,12 +120,12 @@ fn a_columns_own_way_is_the_way_of_that_column_and_not_of_the_table() {
     let sheet = a_sheet(&mut session);
     a_table(&mut session, sheet);
     session
-        .execute("grid.table.totals", &json!({ "sheet": sheet, "name": "the table", "way": "average" }))
+        .execute("grid.table.totals", &json!({ "sheet": sheet, "name": "thetable", "way": "average" }))
         .expect("the way is said");
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "max" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "max" }),
         )
         .expect("the way is said");
     assert_eq!(way_of(&mut session, sheet, "amount"), json!("max"), "the column keeps its own way");
@@ -139,18 +139,18 @@ fn the_totals_follow_the_way_of_each_column() {
     let sheet = a_sheet(&mut session);
     a_table(&mut session, sheet);
     session
-        .execute("grid.table.totals", &json!({ "sheet": sheet, "name": "the table", "totals": true }))
+        .execute("grid.table.totals", &json!({ "sheet": sheet, "name": "thetable", "totals": true }))
         .expect("the total row is said");
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "average" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "average" }),
         )
         .expect("the way is said");
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "who", "way": "count" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "who", "way": "count" }),
         )
         .expect("the way is said");
     assert_eq!(total_of(&mut session, sheet, "amount"), json!(15.0), "the average of ten and twenty");
@@ -166,7 +166,7 @@ fn a_column_that_is_not_a_column_of_the_table_is_refused() {
     let refused = session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "when", "way": "max" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "when", "way": "max" }),
         )
         .expect_err("the column is refused");
     assert!(refused.to_string().contains("no column called `when`"), "the refusal says why: {refused}");
@@ -182,7 +182,7 @@ fn a_name_that_two_columns_share_is_refused() {
     let refused = session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "max" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "max" }),
         )
         .expect_err("the name is refused");
     assert!(refused.to_string().contains("does not say which one"), "the refusal says why: {refused}");
@@ -197,7 +197,7 @@ fn a_way_that_is_not_a_way_is_refused() {
     let refused = session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "median" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "median" }),
         )
         .expect_err("the way is refused");
     assert!(refused.to_string().contains("not a way to total"), "the refusal says why: {refused}");
@@ -212,13 +212,13 @@ fn an_empty_way_takes_the_columns_own_way_away() {
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "max" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "max" }),
         )
         .expect("the way is said");
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "" }),
         )
         .expect("the way is taken away");
     assert_eq!(way_of(&mut session, sheet, "amount"), json!("sum"), "the column falls back to the table");
@@ -233,7 +233,7 @@ fn the_way_of_a_column_belongs_to_the_column_and_not_to_its_name() {
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "max" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "max" }),
         )
         .expect("the way is said");
     a_cell(&mut session, sheet, "A1", json!("sum"));
@@ -250,11 +250,11 @@ fn the_ways_of_the_columns_that_stay_are_kept_when_the_table_is_resized() {
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "amount", "way": "max" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "amount", "way": "max" }),
         )
         .expect("the way is said");
     session
-        .execute("grid.table.resize", &json!({ "sheet": sheet, "name": "the table", "range": "A1:B6" }))
+        .execute("grid.table.resize", &json!({ "sheet": sheet, "name": "thetable", "range": "A1:B6" }))
         .expect("the table is resized");
     assert_eq!(way_of(&mut session, sheet, "amount"), json!("max"), "the way stays with the column");
 }
@@ -268,11 +268,11 @@ fn the_way_of_a_column_that_is_not_there_any_more_is_gone() {
     session
         .execute(
             "grid.table.way",
-            &json!({ "sheet": sheet, "name": "the table", "column": "who", "way": "max" }),
+            &json!({ "sheet": sheet, "name": "thetable", "column": "who", "way": "max" }),
         )
         .expect("the way is said");
     session
-        .execute("grid.table.resize", &json!({ "sheet": sheet, "name": "the table", "range": "A1:A4" }))
+        .execute("grid.table.resize", &json!({ "sheet": sheet, "name": "thetable", "range": "A1:A4" }))
         .expect("the table is resized");
     let outcome =
         session.execute("grid.table.read", &json!({ "sheet": sheet })).expect("the tables are read");

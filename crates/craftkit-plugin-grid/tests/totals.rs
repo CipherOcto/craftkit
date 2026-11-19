@@ -72,9 +72,9 @@ fn a_table_with_a_total_row_says_that_it_has_one() {
     let sheet = a_sheet(&mut session);
     a_cell(&mut session, sheet, "A1", json!("amount"));
     a_cell(&mut session, sheet, "B1", json!("who"));
-    a_table(&mut session, sheet, "the table", "A1:B4");
-    totals(&mut session, sheet, "the table", true);
-    let fields = fields_of(&mut session, sheet, "the table");
+    a_table(&mut session, sheet, "thetable", "A1:B4");
+    totals(&mut session, sheet, "thetable", true);
+    let fields = fields_of(&mut session, sheet, "thetable");
     assert_eq!(fields["totals"], json!(true), "the table says that it has one");
 }
 
@@ -87,9 +87,9 @@ fn the_totals_are_the_sums_of_the_columns() {
     a_cell(&mut session, sheet, "B1", json!("who"));
     a_cell(&mut session, sheet, "A2", json!(10.0));
     a_cell(&mut session, sheet, "A3", json!(32.0));
-    a_table(&mut session, sheet, "the table", "A1:B4");
-    totals(&mut session, sheet, "the table", true);
-    let fields = fields_of(&mut session, sheet, "the table");
+    a_table(&mut session, sheet, "thetable", "A1:B4");
+    totals(&mut session, sheet, "thetable", true);
+    let fields = fields_of(&mut session, sheet, "thetable");
     let sums = fields["sums"].as_array().expect("the sums are a list");
     assert_eq!(sums[0]["name"], json!("amount"), "the column is named");
     assert_eq!(sums[0]["total"], json!(42.0), "and the total is the sum");
@@ -104,9 +104,9 @@ fn the_last_row_of_a_table_with_a_total_row_is_the_total_row() {
     a_cell(&mut session, sheet, "A2", json!(10.0));
     a_cell(&mut session, sheet, "A3", json!(32.0));
     a_cell(&mut session, sheet, "A4", json!(999.0));
-    a_table(&mut session, sheet, "the table", "A1:A4");
-    totals(&mut session, sheet, "the table", true);
-    let fields = fields_of(&mut session, sheet, "the table");
+    a_table(&mut session, sheet, "thetable", "A1:A4");
+    totals(&mut session, sheet, "thetable", true);
+    let fields = fields_of(&mut session, sheet, "thetable");
     let sums = fields["sums"].as_array().expect("the sums are a list");
     assert_eq!(sums[0]["total"], json!(42.0), "the last row is not counted in the total");
 }
@@ -118,8 +118,8 @@ fn a_table_with_no_total_row_has_no_totals() {
     let sheet = a_sheet(&mut session);
     a_cell(&mut session, sheet, "A1", json!("amount"));
     a_cell(&mut session, sheet, "A2", json!(10.0));
-    a_table(&mut session, sheet, "the table", "A1:A3");
-    let fields = fields_of(&mut session, sheet, "the table");
+    a_table(&mut session, sheet, "thetable", "A1:A3");
+    let fields = fields_of(&mut session, sheet, "thetable");
     assert_eq!(fields["totals"], json!(false), "the table has no total row");
     assert_eq!(fields["sums"], json!([]), "and no totals");
 }
@@ -131,10 +131,10 @@ fn the_total_row_may_be_taken_away() {
     let sheet = a_sheet(&mut session);
     a_cell(&mut session, sheet, "A1", json!("amount"));
     a_cell(&mut session, sheet, "A2", json!(10.0));
-    a_table(&mut session, sheet, "the table", "A1:A3");
-    totals(&mut session, sheet, "the table", true);
-    totals(&mut session, sheet, "the table", false);
-    let fields = fields_of(&mut session, sheet, "the table");
+    a_table(&mut session, sheet, "thetable", "A1:A3");
+    totals(&mut session, sheet, "thetable", true);
+    totals(&mut session, sheet, "thetable", false);
+    let fields = fields_of(&mut session, sheet, "thetable");
     assert_eq!(fields["totals"], json!(false), "the table has no total row");
     assert_eq!(fields["sums"], json!([]), "and no totals");
 }
@@ -148,9 +148,9 @@ fn a_column_with_no_numbers_has_no_total() {
     a_cell(&mut session, sheet, "B1", json!("who"));
     a_cell(&mut session, sheet, "A2", json!(10.0));
     a_cell(&mut session, sheet, "B2", json!("the first"));
-    a_table(&mut session, sheet, "the table", "A1:B4");
-    totals(&mut session, sheet, "the table", true);
-    let fields = fields_of(&mut session, sheet, "the table");
+    a_table(&mut session, sheet, "thetable", "A1:B4");
+    totals(&mut session, sheet, "thetable", true);
+    let fields = fields_of(&mut session, sheet, "thetable");
     let sums = fields["sums"].as_array().expect("the sums are a list");
     assert_eq!(sums[0]["total"], json!(10.0), "the column of numbers has a total");
     assert_eq!(sums[1]["total"], Json::Null, "and the column of text has none");
@@ -163,13 +163,13 @@ fn the_totals_are_derived_and_they_follow_the_cells() {
     let sheet = a_sheet(&mut session);
     a_cell(&mut session, sheet, "A1", json!("amount"));
     a_cell(&mut session, sheet, "A2", json!(10.0));
-    a_table(&mut session, sheet, "the table", "A1:A3");
-    totals(&mut session, sheet, "the table", true);
-    let before = fields_of(&mut session, sheet, "the table");
+    a_table(&mut session, sheet, "thetable", "A1:A3");
+    totals(&mut session, sheet, "thetable", true);
+    let before = fields_of(&mut session, sheet, "thetable");
     let sums = before["sums"].as_array().expect("the sums are a list");
     assert_eq!(sums[0]["total"], json!(10.0), "the total is the sum");
     a_cell(&mut session, sheet, "A2", json!(20.0));
-    let after = fields_of(&mut session, sheet, "the table");
+    let after = fields_of(&mut session, sheet, "thetable");
     let sums = after["sums"].as_array().expect("the sums are a list");
     assert_eq!(sums[0]["total"], json!(20.0), "and the total follows the cell");
 }
@@ -180,7 +180,7 @@ fn a_table_that_is_not_there_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let refused = session
-        .execute("grid.table.totals", &json!({ "sheet": sheet, "name": "the table", "totals": true }))
+        .execute("grid.table.totals", &json!({ "sheet": sheet, "name": "thetable", "totals": true }))
         .expect_err("the total row is refused");
     assert!(refused.to_string().contains("no table"), "the refusal says why: {refused}");
 }

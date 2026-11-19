@@ -44,6 +44,10 @@
 //! And a formula that reads **itself** through a table is refused, as
 //! any other formula that reads itself is.
 //!
+//! And a table's name is a **name**: the names of the workbook obey the
+//! same rule, for the same reason — a formula writes it, before the
+//! bracket of a structured reference.
+//!
 //! And a **rename follows** the formulas that name it: the name of a
 //! table and the name of a column are written back into the formulas
 //! that name them, so a formula that names a table keeps naming it
@@ -156,10 +160,10 @@ fn why_not_name(name: &str) -> Option<String> {
     if name.contains(':') || name.contains('!') {
         return Some(format!("`{name}` looks like a range, and a table's name is not a range"));
     }
-    if CellRef::parse(name).is_some() {
-        return Some(format!("`{name}` looks like a cell, and a table's name is not a cell"));
-    }
-    None
+    // A table's name is a **name**: the names of the workbook obey the
+    // same rule and for the same reason — a formula writes it, before
+    // the bracket of a structured reference.
+    crate::names::why_not(name)
 }
 
 /// Whether two ranges **overlap**.

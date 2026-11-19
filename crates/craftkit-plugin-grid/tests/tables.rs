@@ -697,3 +697,63 @@ fn a_resize_that_changes_the_fields_follows_the_formulas() {
     );
     assert_eq!(outcome.data["value"].as_f64(), Some(7.0), "and it reads the new column");
 }
+
+/// A table's name is a **word** that a formula can carry.
+#[test]
+fn a_table_name_is_a_word_a_formula_can_carry() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    // A name with a **hyphen** is not a word: it would read as an
+    // operator.
+    let refused = session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "A-B", "range": "A1:B2" }))
+        .expect_err("the name is refused");
+    assert!(refused.to_string().contains("not a character"), "the refusal says why: {refused}");
+    // A name with a **space** is not a word either.
+    let refused = session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "My Orders", "range": "A1:B2" }))
+        .expect_err("the name is refused");
+    assert!(refused.to_string().contains("not a character"), "the refusal says why: {refused}");
+    // A name that begins with a **digit** is not a word.
+    let refused = session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "1Orders", "range": "A1:B2" }))
+        .expect_err("the name is refused");
+    assert!(refused.to_string().contains("begins with a letter"), "the refusal says why: {refused}");
+    // A name that is too **long** is refused.
+    let long = "A".repeat(256);
+    let refused = session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": long, "range": "A1:B2" }))
+        .expect_err("the name is refused");
+    assert!(refused.to_string().contains("at most 255"), "the refusal says why: {refused}");
+}
+
+/// A name with a **dot** is a word, and a formula carries it.
+#[test]
+fn a_name_with_a_dot_is_a_word() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders.Data", "range": "A1:B2" }))
+        .expect("the table is made");
+    session
+        .execute(
+            "grid.formula.set",
+            &json!({ "sheet": sheet, "cell": "D1", "formula": "=SUM(Orders.Data[amount])" }),
+        )
+        .expect("the formula is set");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "D1" })).expect("the cell is read");
+    assert_eq!(outcome.data["value"].as_f64(), Some(3.0), "and the formula names the table");
+}
