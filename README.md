@@ -63051,7 +63051,9 @@ The width of the columns that have no width of their own, and the height of the 
   `grid.workbook.get` says the default width and the default height of
   each of its sheets, and a sheet that has neither says nothing.
 - A default of **nothing** is refused: a column of no width is a
-  hidden column, and the hiding of one is not here.
+  hidden column, and the hiding of one is not here — and §345 says
+  otherwise: the hiding of a row and a column is here, and a default
+  of nothing is still refused.
 
 ### What the port found
 
