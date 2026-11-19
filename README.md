@@ -4502,10 +4502,11 @@ so.
 | **a function's name may carry the prefix a file writes** | **built.** `_xlfn.XLOOKUP` is `XLOOKUP`, and the prefix is the file's way of saying the function is newer than the format (§1055) | §1055 |
 | **a formula may carry the sign of an implicit intersection** | **built.** `@A1:A3` is the cell of the range in the row of the formula, and it is worked out every time (§1056) | §1056 |
 | **two areas may be intersected** | **built.** `A1:C3 B2:D4` is the cells the two areas share, and it is worked out every time (§1057) | §1057 |
-| **a workbook that is encrypted is said, not read** | **built.** A compound file is refused, and the refusal says whether the workbook is encrypted or of the old format (§1058) | §1058 |
+| **a workbook that is encrypted is said, not read** | **built.** A compound file is refused when there is no password, and the refusal says whether the workbook is encrypted or of the old format (§1058) | §1058 |
 | **a spill is refused, and the refusal says what it is** | **built.** `A1#` is refused as a spill, and not as something after the formula (§1059) | §1059 |
 | **a union of ranges is refused, and the refusal says what to do** | **built.** `(A1:A3,B1:B3)` is refused, and the refusal says to give the ranges as arguments (§1060) | §1060 |
 | **a compound file is read** | **built.** The container of an encrypted workbook is opened, and its streams are read (§1061) | §1061 |
+| **an encrypted workbook is read** | **built.** The agile cipher of [MS-OFFCRYPTO] opens the package with the password, and the integrity of the file is checked (§1062) | §1062 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68351,3 +68352,57 @@ held in — is read: its directory, and the streams of it.
   the tree of the directory.
 - **The reader reads a compound file and not a workbook**: what is
   inside the streams is for the next arc to say.
+## 1062. An encrypted workbook is read: the agile cipher and the password
+
+A workbook that is **encrypted** is opened: the password, the **agile**
+scheme of [MS-OFFCRYPTO], and the workbook inside.
+
+### What was built
+
+- The tree's own **cipher** (`src/crypto.rs`): the password is hashed
+  and hashed again for every turn of the spin, the hash is checked
+  against the **verifier** of the file, and the key of the cipher comes
+  out of it.
+- The **package** of the file is opened: it is in **segments** of 4096
+  bytes, each with an **iv** of its own, and the first eight bytes of
+  the stream say how long the package is.
+- The **integrity** of the file is checked: the HMAC of the package, over
+  the package as it is encrypted, is the HMAC the file says it is.
+- A **password that is not the password** is refused as such, and not as
+  a broken file.
+- The import command takes a **password**: `grid.import.xlsx` reads an
+  encrypted file with the password that opens it.
+
+### What the port found
+
+- **The reference reads the agile scheme** — the password, the
+  verifier, the segments and the integrity — and it reads the **old**
+  scheme too (§1063).
+- **The reference's reader is careful about the same things this one
+  is**: the spin count, the sizes, and the salt.
+- **The tree said a thing that is now false**: §1058 said that an
+  encrypted workbook is *said, not read*. It is read now, and the
+  sentence is amended forward.
+
+### What it cost
+
+- **No new command**: the password is a parameter of the import
+  command that was already there.
+- **One module** of the reader (`src/crypto.rs`), written from the
+  **[MS-OFFCRYPTO]** specification.
+- **Five dependencies** — `aes`, `cbc`, `cipher`, `hmac`, `sha2` — for
+  the cipher and the hashes, and **seven tests** in a new file
+  (`tests/encrypted.rs`).
+- **Two of the tests use values that are not the tree's own**: the key
+  of a real workbook, as the specification's worked example gives it,
+  and a whole encrypted file, as another program wrote it. The tree
+  holds no binary assets, so the values are in the test as text.
+
+### What it does not settle
+
+- **The old scheme is not read**: a workbook of Excel 2007 is still
+  refused, and the refusal says what the file is (§1063).
+- **The integrity of the file is required**: a file that says nothing
+  about how to prove its package is refused rather than read.
+- **The certificate encryptor is not read**: a file whose key is held
+  in a certificate is refused, and it says so.
