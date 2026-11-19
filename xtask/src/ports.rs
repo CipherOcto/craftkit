@@ -1825,6 +1825,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/lines.rs",
         section: "§1053",
     },
+    Port {
+        rule: "a number may be written with a percent sign",
+        from: "gridcraft/crates/formula/src/parser.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/percents.rs",
+        section: "§1054",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

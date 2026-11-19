@@ -36,6 +36,9 @@
 //! row** — `1:3`: a whole line is not a place, it is every cell of
 //! the sheet in that line, and it reaches as far as the sheet holds
 //! anything.
+//!
+//! And a number may be written with a **percent sign**: `50%` is a
+//! half, and the percent follows the value it divides.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -797,6 +800,13 @@ pub enum Expr {
     Call(String, Vec<Expr>),
     /// A negation.
     Negate(Box<Expr>),
+    /// A **percent**: the value it holds, in a hundredth of itself.
+    ///
+    /// `50%` is a half, and `A1%` is the cell `A1` in a hundredth of
+    /// itself. The percent is a sign that **follows** the value it
+    /// divides, and it binds tighter than the power: `2^50%` is two to
+    /// the half.
+    Percent(Box<Expr>),
     /// A binary operation.
     Binary(String, Box<Expr>, Box<Expr>),
 }
@@ -1398,6 +1408,7 @@ fn collect_precedents(expression: &Expr, names: &BTreeMap<String, Name>, found: 
             }
         }
         Expr::Negate(inner) => collect_precedents(inner, names, found),
+        Expr::Percent(inner) => collect_precedents(inner, names, found),
         Expr::Binary(_, left, right) => {
             collect_precedents(left, names, found);
             collect_precedents(right, names, found);
@@ -1571,7 +1582,15 @@ impl Parser {
         if self.take('+') {
             return self.unary();
         }
-        self.primary()
+        let mut expression = self.primary()?;
+        // A **percent**: `50%` is a half. The sign follows the value it
+        // divides, and it binds tighter than the power — so `2^50%` is
+        // two to the half and not half of two to the fiftieth.
+        while self.peek() == Some('%') {
+            self.at += 1;
+            expression = Expr::Percent(Box::new(expression));
+        }
+        Ok(expression)
     }
 
     /// A literal, a reference or a call.
@@ -3153,6 +3172,7 @@ impl Book {
                 arguments.iter().map(|argument| self.resolved(argument, sheet, cell)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(self.resolved(inner, sheet, cell))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(self.resolved(inner, sheet, cell))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(self.resolved(left, sheet, cell)),
@@ -3496,6 +3516,15 @@ impl Book {
                 Value::Error(message) => Value::Error(message),
                 value => match value.as_number() {
                     Some(number) => Value::Number(-number),
+                    None => Value::Error("#VALUE!".to_string()),
+                },
+            },
+            // The tree's rule of a sign: the value it holds is a
+            // number, and a text is not one.
+            Expr::Percent(inner) => match self.evaluate(sheet, inner, being) {
+                Value::Error(message) => Value::Error(message),
+                value => match value.as_number() {
+                    Some(number) => Value::Number(number / 100.0),
                     None => Value::Error("#VALUE!".to_string()),
                 },
             },
@@ -4864,6 +4893,7 @@ impl Expr {
                 arguments.iter().map(|argument| argument.renamed_sheet(old, new)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.renamed_sheet(old, new))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(inner.renamed_sheet(old, new))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.renamed_sheet(old, new)),
@@ -4912,6 +4942,7 @@ impl Expr {
                 arguments.iter().map(|argument| argument.shifted(row_delta, col_delta)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.shifted(row_delta, col_delta))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(inner.shifted(row_delta, col_delta))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.shifted(row_delta, col_delta)),
@@ -4969,6 +5000,7 @@ impl Expr {
                 arguments.iter().map(|argument| argument.inserted(sheet, at, count)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.inserted(sheet, at, count))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(inner.inserted(sheet, at, count))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.inserted(sheet, at, count)),
@@ -5036,6 +5068,7 @@ impl Expr {
                 arguments.iter().map(|argument| argument.deleted(sheet, at, count)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.deleted(sheet, at, count))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(inner.deleted(sheet, at, count))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.deleted(sheet, at, count)),
@@ -5093,6 +5126,7 @@ impl Expr {
                 arguments.iter().map(|argument| argument.inserted_column(sheet, at, count)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.inserted_column(sheet, at, count))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(inner.inserted_column(sheet, at, count))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.inserted_column(sheet, at, count)),
@@ -5160,6 +5194,7 @@ impl Expr {
                 arguments.iter().map(|argument| argument.deleted_column(sheet, at, count)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.deleted_column(sheet, at, count))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(inner.deleted_column(sheet, at, count))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.deleted_column(sheet, at, count)),
@@ -5258,6 +5293,7 @@ impl Expr {
                 arguments.iter().map(|argument| argument.shifted_cells(sheet, band, way, insert)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.shifted_cells(sheet, band, way, insert))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(inner.shifted_cells(sheet, band, way, insert))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.shifted_cells(sheet, band, way, insert)),
@@ -5326,6 +5362,7 @@ impl Expr {
                 arguments.iter().map(|argument| argument.moved_column(sheet, from, count, to)).collect(),
             ),
             Expr::Negate(inner) => Expr::Negate(Box::new(inner.moved_column(sheet, from, count, to))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(inner.moved_column(sheet, from, count, to))),
             Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
                 Box::new(left.moved_column(sheet, from, count, to)),
@@ -5432,6 +5469,7 @@ impl Rename {
                 Expr::Call(name.clone(), arguments.iter().map(|argument| self.applied(argument)).collect())
             }
             Expr::Negate(inner) => Expr::Negate(Box::new(self.applied(inner))),
+            Expr::Percent(inner) => Expr::Percent(Box::new(self.applied(inner))),
             Expr::Binary(operator, left, right) => {
                 Expr::Binary(operator.clone(), Box::new(self.applied(left)), Box::new(self.applied(right)))
             }
@@ -5631,6 +5669,10 @@ fn expression_text(expression: &Expr, min_precedence: u8) -> String {
             format!("{name}({})", arguments.join(", "))
         }
         Expr::Negate(inner) => format!("-{}", expression_text(inner, UNARY)),
+        // The percent follows the value it divides, and the value is
+        // written whole: a power in it keeps its brackets, so that the
+        // formula that is written again is the formula that was read.
+        Expr::Percent(inner) => format!("{}%", expression_text(inner, UNARY + 1)),
         Expr::Binary(operator, left, right) => {
             // A power binds to the right and everything else to the left.
             let (left_minimum, right_minimum) =
@@ -5744,6 +5786,7 @@ pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Expr {
             Expr::Call(name.clone(), moved)
         }
         Expr::Negate(inner) => Expr::Negate(Box::new(shift(inner, dr, dc))),
+        Expr::Percent(inner) => Expr::Percent(Box::new(shift(inner, dr, dc))),
         Expr::Binary(operator, left, right) => {
             Expr::Binary(operator.clone(), Box::new(shift(left, dr, dc)), Box::new(shift(right, dr, dc)))
         }
