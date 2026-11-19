@@ -4490,6 +4490,7 @@ so.
 | **what a file's table carries that the tree's table has not is said** | **built.** A table with no header row is not read, and the filter and the way the tree has not are left out and said (§1043) | §1043 |
 | a **change of a header follows the formulas that name it** | **built.** The edit, the paste and the fill of a header rename the field, and the formulas follow (§1044) | §1044 |
 | **COUNTA counts the values that are not nothing** | **built.** Every value of a range is counted, and a cell that holds nothing is not (§1045) | §1045 |
+| **the tree's aggregates take the tree's rule of numbers** | **built.** A text that names a number is a number, and an error in a range is the error of the aggregate (§1046) | §1046 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67615,3 +67616,54 @@ name the field follow it.
 - **The tree's `COUNT` counts the numbers** and its `COUNTA` counts the
   values, and the two agree on a range of numbers and differ on a range
   that holds texts — which is the rule.
+
+## 1046. The tree's aggregates take the tree's rule of numbers
+
+`SUM`, `AVERAGE`, `MIN`, `MAX` and `COUNT` take the tree's **rule of
+numbers**.
+
+### What was built
+
+- A **text** that was given **directly** and names a number **is** a
+  number: `SUM("5")` is `5`, `AVERAGE("5")` is `5`, and `COUNT("5")` is
+  `1`. Before this, the tree ignored such a text and said `0`.
+- A **text** that was given directly and names **nothing** is
+  `#VALUE!`: `SUM("abc")` is refused, and the refusal is the tree's own.
+- A **text in a range** is not a number: `SUM(A1:A2)` over the text
+  `5` and the number `3` is `3` — the cells of a range are read as they
+  are.
+- An **error in a range** is the error of the whole aggregate:
+  `SUM(A1:A3)` over a range with `#DIV/0!` in it is `#DIV/0!`. Before
+  this, the tree skipped the error and summed the rest.
+- The tree's **SUBTOTAL** already said so — an error in the range is
+  the error of the whole subtotal — and the rule is written once: the
+  two paths agree.
+
+### What the port found
+
+- **The reference states the rule in one place**: *inside references and
+  arrays only numbers count (text, booleans and blanks are skipped);
+  direct scalar arguments are coerced ("3" → 3, TRUE → 1, other text →
+  `#VALUE!`). Errors propagate.* The tree had the rule in the SUBTOTAL
+  and not in the aggregates.
+- **The reference's `COUNT` and `COUNTA` do not propagate an error**,
+  and neither does the tree's: an error is a value, and `COUNTA` counts
+  it (§1045).
+
+### What it cost
+
+- **No new command**: the rule is the rule of the functions that were
+  there.
+- **One helper** — the numbers with the texts — and the arms of the
+  aggregates.
+- **Four tests** in a new file (`tests/numbers.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's `MIN` and `MAX` of nothing are nothing**, and the
+  reference's are `0`: the tree's rule — *nothing is an option, not a
+  zero* — wins.
+- **An error in a range is not propagated by `COUNT` and `COUNTA`**, and
+  the reference's are the same; a spreadsheet that propagates it there
+  is a spreadsheet of another rule.
