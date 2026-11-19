@@ -1753,6 +1753,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/counta.rs",
         section: "§1045",
     },
+    Port {
+        rule: "the tree's aggregates take the tree's rule of numbers",
+        from: "gridcraft/crates/functions/src/util.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/numbers.rs",
+        section: "§1046",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

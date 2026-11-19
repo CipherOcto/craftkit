@@ -18,6 +18,11 @@
 //! And `COUNT` counts the **numbers** and `COUNTA` counts the
 //! **values**: a number, a text, a boolean and an error is a value,
 //! and a cell that holds nothing is not.
+//!
+//! And the aggregates take the tree's **rule of numbers**: a text that
+//! was given directly and names a number **is** a number, and a text
+//! that names nothing is `#VALUE!`; and an error in a range is the
+//! error of the whole aggregate.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -3239,6 +3244,8 @@ impl Book {
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
+        let mut texts: Vec<String> = Vec::new();
+        let mut error: Option<String> = None;
         for argument in arguments {
             match argument {
                 Expr::Range { sheet: named, start, end } => {
@@ -3250,6 +3257,16 @@ impl Book {
                     for row in area.start.row..=area.end.row {
                         for col in area.start.col..=area.end.col {
                             let value = self.value_of_guarded(name, CellRef { col, row }, being);
+                            if let Value::Error(message) = &value {
+                                // The tree's rule: an **error** in a
+                                // range is the error of the whole
+                                // aggregate.
+                                if error.is_none() {
+                                    error = Some(message.clone());
+                                }
+                                plain.push(value);
+                                continue;
+                            }
                             if let Some(number) = value.as_number() {
                                 numbers.push(number);
                             } else if !matches!(value, Value::Empty) {
@@ -3269,6 +3286,13 @@ impl Book {
                     for row in area.start.row..=area.end.row {
                         for col in area.start.col..=area.end.col {
                             let value = self.value_of_guarded(&name.sheet, CellRef { col, row }, being);
+                            if let Value::Error(message) = &value {
+                                if error.is_none() {
+                                    error = Some(message.clone());
+                                }
+                                plain.push(value);
+                                continue;
+                            }
                             if let Some(number) = value.as_number() {
                                 numbers.push(number);
                             } else if !matches!(value, Value::Empty) {
@@ -3279,45 +3303,103 @@ impl Book {
                 }
                 other => {
                     let value = self.evaluate(sheet, other, being);
-                    if let Some(number) = value.as_number() {
-                        numbers.push(number);
-                    } else if !matches!(value, Value::Empty) {
-                        // A value that is **nothing** is not a value, and
-                        // `COUNTA` does not count it.
+                    if let Value::Error(message) = &value {
+                        if error.is_none() {
+                            error = Some(message.clone());
+                        }
                         plain.push(value);
+                        continue;
+                    }
+                    match &value {
+                        // A **text** that was given directly is a value
+                        // of its own: it is coerced when it is used as a
+                        // number, and it is counted when it is counted.
+                        Value::Text(text) => texts.push(text.clone()),
+                        _ => {
+                            if let Some(number) = value.as_number() {
+                                numbers.push(number);
+                            } else if !matches!(value, Value::Empty) {
+                                plain.push(value);
+                            }
+                        }
                     }
                 }
             }
         }
         match name {
-            "SUM" => Value::Number(numbers.iter().sum()),
-            "AVERAGE" => {
-                if numbers.is_empty() {
-                    Value::Error("#DIV/0!".to_string())
-                } else {
-                    Value::Number(numbers.iter().sum::<f64>() / numbers.len() as f64)
+            "SUM" => match self.numbers_with(&texts, numbers, error) {
+                Ok(numbers) => Value::Number(numbers.iter().sum()),
+                Err(error) => Value::Error(error),
+            },
+            "AVERAGE" => match self.numbers_with(&texts, numbers, error) {
+                Ok(numbers) => {
+                    if numbers.is_empty() {
+                        Value::Error("#DIV/0!".to_string())
+                    } else {
+                        Value::Number(numbers.iter().sum::<f64>() / numbers.len() as f64)
+                    }
                 }
+                Err(error) => Value::Error(error),
+            },
+            "MIN" => match self.numbers_with(&texts, numbers, error) {
+                Ok(numbers) => numbers
+                    .iter()
+                    .copied()
+                    .fold(None, |smallest: Option<f64>, number| {
+                        Some(smallest.map_or(number, |smallest| smallest.min(number)))
+                    })
+                    .map(Value::Number)
+                    .unwrap_or(Value::Empty),
+                Err(error) => Value::Error(error),
+            },
+            "MAX" => match self.numbers_with(&texts, numbers, error) {
+                Ok(numbers) => numbers
+                    .iter()
+                    .copied()
+                    .fold(None, |largest: Option<f64>, number| {
+                        Some(largest.map_or(number, |largest| largest.max(number)))
+                    })
+                    .map(Value::Number)
+                    .unwrap_or(Value::Empty),
+                Err(error) => Value::Error(error),
+            },
+            "COUNT" => {
+                // A **text** that was given directly is counted when it
+                // names a number, and it is not counted otherwise.
+                let texts = texts
+                    .iter()
+                    .filter(|text| crate::textvalue::number_of(text, self.system()).is_some())
+                    .count();
+                Value::Number((numbers.len() + texts) as f64)
             }
-            "MIN" => numbers
-                .iter()
-                .copied()
-                .fold(None, |smallest: Option<f64>, number| {
-                    Some(smallest.map_or(number, |smallest| smallest.min(number)))
-                })
-                .map(Value::Number)
-                .unwrap_or(Value::Empty),
-            "MAX" => numbers
-                .iter()
-                .copied()
-                .fold(None, |largest: Option<f64>, number| {
-                    Some(largest.map_or(number, |largest| largest.max(number)))
-                })
-                .map(Value::Number)
-                .unwrap_or(Value::Empty),
-            "COUNT" => Value::Number(numbers.len() as f64),
-            "COUNTA" => Value::Number((numbers.len() + plain.len()) as f64),
+            "COUNTA" => Value::Number((numbers.len() + plain.len() + texts.len()) as f64),
             other => Value::Error(format!("there is no function `{other}`")),
         }
+    }
+
+    /// The **numbers** of the arguments, with the **texts** that were
+    /// given directly.
+    ///
+    /// The tree's rule of numbers: a text that names a number **is** a
+    /// number, and a text that names nothing is `#VALUE!`. And an
+    /// **error** in a range is the error of the whole aggregate.
+    fn numbers_with(
+        &self,
+        texts: &[String],
+        numbers: Vec<f64>,
+        error: Option<String>,
+    ) -> Result<Vec<f64>, String> {
+        if let Some(message) = error {
+            return Err(message);
+        }
+        let mut numbers = numbers;
+        for text in texts {
+            match crate::textvalue::number_of(text, self.system()) {
+                Some(number) => numbers.push(number),
+                None => return Err("#VALUE!".to_string()),
+            }
+        }
+        Ok(numbers)
     }
 
     /// The tree's `IF`: a **choice** between two values.    ///

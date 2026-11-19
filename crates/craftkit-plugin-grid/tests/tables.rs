@@ -426,7 +426,6 @@ fn a_file_spells_the_row_of_the_cell_and_the_tree_reads_it() {
     let (_, sheet) = a_workbook(&mut session);
     a_text(&mut session, sheet, "A1", "who");
     a_text(&mut session, sheet, "B1", "amount");
-    a_text(&mut session, sheet, "C1", "twice");
     a_text(&mut session, sheet, "A2", "ann");
     session
         .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
@@ -436,17 +435,17 @@ fn a_file_spells_the_row_of_the_cell_and_the_tree_reads_it() {
         .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B3", "value": 4 }))
         .expect("the cell is set");
     session
-        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:C3" }))
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B3" }))
         .expect("the table is made");
     // The **column of the row the cell is in**, as a file spells it.
     session
         .execute(
             "grid.formula.set",
-            &json!({ "sheet": sheet, "cell": "C2", "formula": "=Orders[[#This Row],[amount]]" }),
+            &json!({ "sheet": sheet, "cell": "D2", "formula": "=Orders[[#This Row],[amount]]" }),
         )
         .expect("the formula is set");
     let outcome =
-        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "C2" })).expect("the cell is read");
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "D2" })).expect("the cell is read");
     assert_eq!(
         outcome.data["formula"].as_str(),
         Some("=Orders[[#This Row],[amount]]"),
@@ -457,20 +456,19 @@ fn a_file_spells_the_row_of_the_cell_and_the_tree_reads_it() {
     session
         .execute(
             "grid.formula.set",
-            &json!({ "sheet": sheet, "cell": "C3", "formula": "=SUM(Orders[[#This Row]])" }),
+            &json!({ "sheet": sheet, "cell": "D3", "formula": "=SUM(Orders[[#This Row]])" }),
         )
         .expect("the formula is set");
     let outcome =
-        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "C3" })).expect("the cell is read");
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "D3" })).expect("the cell is read");
     assert_eq!(outcome.data["value"].as_f64(), Some(4.0), "and it reads the row of the cell");
-    // The **whole table**, as a file spells it: the two amounts and the
-    // two cells of the third column.
+    // The **whole table**, as a file spells it.
     session
         .execute("grid.formula.set", &json!({ "sheet": sheet, "cell": "E1", "formula": "=SUM(Orders[])" }))
         .expect("the formula is set");
     let outcome =
         session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "E1" })).expect("the cell is read");
-    assert_eq!(outcome.data["value"].as_f64(), Some(14.0), "and it reads the whole table");
+    assert_eq!(outcome.data["value"].as_f64(), Some(7.0), "and it reads the whole table");
 }
 
 /// The **file's spelling** of the row of the cell survives a **rename**.
