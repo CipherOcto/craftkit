@@ -622,3 +622,37 @@ fn a_fill_that_changes_a_header_follows_the_formulas() {
     );
     assert_eq!(outcome.data["value"].as_str(), Some("2 values"), "and it still reads the column");
 }
+
+/// A formula that reads **itself** through a table is refused, as any
+/// other formula that reads itself is.
+#[test]
+fn a_formula_that_reads_itself_through_a_table_is_refused() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "C1", "twice");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:C2" }))
+        .expect("the table is made");
+    // The **row of the cell** holds the cell itself.
+    let refused = session
+        .execute(
+            "grid.formula.set",
+            &json!({ "sheet": sheet, "cell": "C2", "formula": "=SUM(Orders[[#This Row]])" }),
+        )
+        .expect_err("the formula is refused");
+    assert!(refused.to_string().contains("reads itself"), "the refusal says why: {refused}");
+    // The **column** of the table holds the cell itself.
+    let refused = session
+        .execute(
+            "grid.formula.set",
+            &json!({ "sheet": sheet, "cell": "B2", "formula": "=SUM(Orders[amount])" }),
+        )
+        .expect_err("the formula is refused");
+    assert!(refused.to_string().contains("reads itself"), "the refusal says why: {refused}");
+}

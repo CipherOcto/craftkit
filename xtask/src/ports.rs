@@ -1762,6 +1762,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/numbers.rs",
         section: "§1046",
     },
+    Port {
+        rule: "a formula that reads itself through a table is refused",
+        from: "gridcraft/crates/engine/src/cmd/formulas.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/tables.rs",
+        section: "§1047",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

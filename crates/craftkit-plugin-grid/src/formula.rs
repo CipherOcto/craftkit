@@ -2957,6 +2957,10 @@ impl Book {
         }
         being.push((sheet.to_string(), cell));
         let mut found = false;
+        // The **structured references** are worked out into the ranges of
+        // cells they name, so that a formula that reads itself through a
+        // table is found.
+        let expression = self.resolved(&expression, sheet, Some(cell));
         for reference in precedents(&expression, &self.names) {
             let name = reference.sheet.as_deref().unwrap_or(sheet);
             for row in reference.area.start.row..=reference.area.end.row {

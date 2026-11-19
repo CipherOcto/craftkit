@@ -41,6 +41,9 @@
 //! that name the field follow it: the edit of a header cell, the paste
 //! over one and the fill of one are the same change.
 //!
+//! And a formula that reads **itself** through a table is refused, as
+//! any other formula that reads itself is.
+//!
 //! And a **rename follows** the formulas that name it: the name of a
 //! table and the name of a column are written back into the formulas
 //! that name them, so a formula that names a table keeps naming it
