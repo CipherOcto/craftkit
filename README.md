@@ -4502,6 +4502,7 @@ so.
 | **a function's name may carry the prefix a file writes** | **built.** `_xlfn.XLOOKUP` is `XLOOKUP`, and the prefix is the file's way of saying the function is newer than the format (§1055) | §1055 |
 | **a formula may carry the sign of an implicit intersection** | **built.** `@A1:A3` is the cell of the range in the row of the formula, and it is worked out every time (§1056) | §1056 |
 | **two areas may be intersected** | **built.** `A1:C3 B2:D4` is the cells the two areas share, and it is worked out every time (§1057) | §1057 |
+| **a workbook that is encrypted is said, not read** | **built.** A compound file is refused, and the refusal says whether the workbook is encrypted or of the old format (§1058) | §1058 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68179,3 +68180,50 @@ cells that the two areas share.
 - **The intersection is of rectangles**: the tree's areas are
   rectangles, and so the cells two areas share are a rectangle too —
   where a file may write an intersection of shapes that is not.
+
+## 1058. A workbook that is encrypted is said, not read
+
+A file that is a **compound file** — the container a workbook that is
+encrypted, or a workbook of the old format, is held in — is not a
+package, and the tree says what it is.
+
+### What was built
+
+- A file that is a compound file is **refused**, and the refusal says
+  what the file is: *the workbook is encrypted*, or *the file holds a
+  workbook of the old format*.
+- The two are told apart by the **name of the package**: a compound
+  file writes its names in two bytes each, and the package of an
+  encrypted workbook is named `EncryptedPackage`.
+- The tree's reader has its own way of saying it: a new **error** of
+  its own, and the import says it as it is.
+
+### What the port found
+
+- **The reference reads encrypted workbooks**: its `cfb` module opens
+  the compound file, and its `crypto` module reads the Agile and the
+  Standard encryption.
+- **The reference tells an encrypted workbook from an old one** by the
+  names of the directory: `is_encrypted` looks for `EncryptedPackage`
+  and for `EncryptionInfo`, and it falls back on looking for the name
+  in the bytes when the directory cannot be read.
+- **The tree's reader had no word for either**: a compound file was
+  not a package, and the refusal said that the package could not be
+  read — which is true and says nothing.
+
+### What it cost
+
+- **No new command**: a file is read or it is refused.
+- **One error** of the tree's own, and two small rules in the reader.
+- **Two tests** in the file of the workbook (`tests/workbook.rs`) and
+  **one** in the file of the import (`tests/xlsximport.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree does not read an encrypted workbook**: the reference does,
+  and it does it with a cipher and a hash the tree does not have — and
+  a dependency is the owner's word, not the tree's.
+- **The name of the package is looked for in the bytes**: a file that
+  holds the name without being an encrypted workbook is said to be
+  encrypted, and the tree does not open the compound file to be sure.
