@@ -4487,6 +4487,7 @@ so.
 | a **rename follows the formulas that name it** | **built.** The table's name and the column's name are written back into the formulas that name them (§1040) | §1040 |
 | a **file's spelling of a structured reference is read** | **built.** The row of the cell and the whole table are read as a file spells them (§1041) | §1041 |
 | a **name that two columns share names neither of them** | **built.** A formula that names a column two columns share is an error, and the fields say the name is shared (§1042) | §1042 |
+| **what a file's table carries that the tree's table has not is said** | **built.** A table with no header row is not read, and the filter and the way the tree has not are left out and said (§1043) | §1043 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67485,3 +67486,49 @@ A name that **two columns share** says **neither** of them.
 - **A file's table may hold two fields of the same name**, and the
   import does not count them: the tree says it where the fields are
   read.
+
+## 1043. What a file's table carries that the tree's table has not is said
+
+A **file's table** may carry more than the **tree's table** holds, and
+the reader says what it left out.
+
+### What was built
+
+- A table whose **header row is off** is not a table of the tree — the
+  fields of a table are the text of its header row — and it is **not
+  read**: the reader says it.
+- A table with a **filter of its own** is read, and the **filter** is
+  left out: the filters of the tree are the sheet's, and the reader
+  says it.
+- A column **totalled in a way the tree has not** — a custom total,
+  with a formula in it — keeps its table, and the **way** is left out;
+  and the reader says it.
+
+### What the port found
+
+- **The reference reads the header row of a table** and keeps it as a
+  flag; it reads the **filter** of the table and the **custom total**
+  of a column, and it keeps the formula of that total. The tree's
+  table has one header row and no filter of its own, and its ways are
+  the tree's own.
+- **The reference does not say**: it keeps what it can and drops what
+  it cannot, quietly. The tree's rule is *counted and said*, and so
+  the reader says.
+
+### What it cost
+
+- **No new command**: the reader reads a file. The battery still
+  carries **251** commands.
+- **Three warnings** in the reader, and the tables the reader leaves
+  out.
+- **Four tests**: three in the reader (`crates/craftkit-xlsx/tests/workbook.rs`)
+  and one in the import's test.
+- **No new dependency**.
+
+### What it does not settle
+
+- **A table of a file keeps its name and its range**, and the tree's
+  fields are the text of the header cells and not the names the file
+  gives its columns.
+- **The tree's tables have no look**: a file's banded rows, and its
+  first and last column, are not read (the tree's deliberate refusal).
