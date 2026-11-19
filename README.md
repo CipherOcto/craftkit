@@ -4500,6 +4500,7 @@ so.
 | **a whole column or a whole row may be named** | **built.** `B:B` is the column and `1:3` is the rows, read as the cells the sheet holds (§1053) | §1053 |
 | **a number may be written with a percent sign** | **built.** `50%` is a half, and the sign follows the value it divides (§1054) | §1054 |
 | **a function's name may carry the prefix a file writes** | **built.** `_xlfn.XLOOKUP` is `XLOOKUP`, and the prefix is the file's way of saying the function is newer than the format (§1055) | §1055 |
+| **a formula may carry the sign of an implicit intersection** | **built.** `@A1:A3` is the cell of the range in the row of the formula, and it is worked out every time (§1056) | §1056 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68084,3 +68085,50 @@ A function's name in a formula may carry the **prefix a file writes**:
 - **The prefix is lost when a formula is written again**: the tree's
   printer writes the name it knows, and so a formula that is copied
   is written without the prefix — as the reference writes it.
+
+## 1056. A formula may carry the sign of an implicit intersection
+
+A formula may carry the **`@`** of an implicit intersection: `@A1:A3`
+is the cell of the range that the cell the formula is in stands for.
+
+### What was built
+
+- The `@` of a **column** is the cell of the column in the **row** of
+  the formula: `=@A1:A3` in `C2` is `A2`. The `@` of a **row** is the
+  cell of the row in the **column** of the formula, and the `@` of a
+  **cell** is the cell itself.
+- An area that does **not** meet the cell of the formula is
+  `#VALUE!`: the tree does not guess which cell was meant.
+- The `@` is **derived**: it is worked out every time the formula is,
+  and so the same formula in another cell is another cell.
+- The `@` is written as it was written, and a **file** that writes the
+  intersection as `_xlfn.SINGLE(x)` is read as the sign it stands for.
+
+### What the port found
+
+- **The reference has the sign as an operator of its own**: `UnOp::At`
+  in its tree of the expressions, and its `implicit_intersect` has the
+  tree's three rules — the cell itself, the cell in the row, and the
+  cell in the column.
+- **The reference reads a file's `_xlfn.SINGLE(x)` as the sign**: the
+  file's way of writing `@x`, and the reference's parser says so.
+- **The tree's parser did not know the sign at all**: `@` was a
+  character a formula could not hold, and so a formula of a file that
+  held one was a formula the tree could not read.
+
+### What it cost
+
+- **No new command**: the sign is a sign.
+- **One variant** in the tree of the expressions (`Expr::At`), and the
+  rule that works it out.
+- **Seven tests** in a new file (`tests/intersections.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree has no arrays that spill**: the sign cuts a range down to
+  a cell, and a file that writes the spill — `_xlfn.ANCHORARRAY(x)` —
+  names a function the tree does not have.
+- **The sign is not a way of writing a range into a function**: the
+  tree's functions take ranges, and the sign turns one into a cell
+  first.
