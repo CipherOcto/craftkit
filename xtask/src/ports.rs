@@ -1861,6 +1861,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/cuts.rs",
         section: "§1057",
     },
+    Port {
+        rule: "a workbook that is encrypted is said, not read",
+        from: "gridcraft/crates/xlsx/src/cfb.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "grid.import.xlsx",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§1058",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

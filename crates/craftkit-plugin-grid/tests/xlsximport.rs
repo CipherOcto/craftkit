@@ -1808,6 +1808,23 @@ fn a_file_that_is_not_a_workbook_is_refused() {
     assert!(error.to_string().contains("workbook"), "{error}");
 }
 
+/// A file that is a **compound file** — a workbook that is encrypted, or
+/// a workbook of the old format — is refused, and the refusal says
+/// what the file is.
+#[test]
+fn a_compound_file_is_refused_and_says_what_it_is() {
+    let mut session = session();
+    let mut bytes = vec![0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    bytes.extend_from_slice(&[0u8; 64]);
+    for unit in "EncryptedPackage".encode_utf16() {
+        bytes.extend_from_slice(&unit.to_le_bytes());
+    }
+    let path = a_file(bytes);
+    let error =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect_err("that is not a package");
+    assert!(error.to_string().contains("encrypted"), "the refusal says what it is: {error}");
+}
+
 /// The **date system** of the file is the date system of the workbook.
 #[test]
 fn the_date_system_of_the_file_is_the_date_system_of_the_workbook() {

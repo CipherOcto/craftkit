@@ -63,6 +63,9 @@
 //!   whose header row is off is not read. A table's **filter** and a
 //!   column's **custom total** are the sheet's and the tree's own, and
 //!   they are left out — and every one of them is said.
+//! - It does not read a workbook that is **encrypted**: such a file is
+//!   a compound file and not a package, and the refusal says what the
+//!   file is — an encrypted workbook, or a workbook of the old format.
 
 #![deny(
     clippy::unwrap_used,
@@ -123,6 +126,9 @@ pub enum Error {
     Package(String),
     /// A part of the file is not XML, or is broken XML.
     Xml(String),
+    /// The file is a **compound file**: it holds a workbook that is
+    /// encrypted, or a workbook of the old format.
+    Compound(String),
 }
 
 impl std::fmt::Display for Error {
@@ -132,6 +138,7 @@ impl std::fmt::Display for Error {
             Error::TooLarge(message) => write!(f, "limit exceeded: {message}"),
             Error::Package(message) => write!(f, "the package could not be read: {message}"),
             Error::Xml(message) => write!(f, "a part of the workbook is not readable xml: {message}"),
+            Error::Compound(message) => write!(f, "the file is a compound file: {message}"),
         }
     }
 }
@@ -1539,12 +1546,46 @@ pub struct WorkbookProtection {
     pub password: bool,
 }
 
+/// The **signature** of a compound file: the container a workbook that
+/// is encrypted — or a workbook of the old format — is held in.
+const COMPOUND: [u8; 8] = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+
+/// The name of the stream a **password-encrypted** workbook is held
+/// in.
+const ENCRYPTED_PACKAGE: &str = "EncryptedPackage";
+
+/// Whether the file is a **compound file**.
+fn is_compound(bytes: &[u8]) -> bool {
+    bytes.starts_with(&COMPOUND)
+}
+
+/// Whether the compound file holds an **encrypted** workbook.
+///
+/// A compound file writes its names the way Windows writes them — in
+/// two bytes each — and the name of the package of an encrypted
+/// workbook is in the file.
+fn holds_encrypted_package(bytes: &[u8]) -> bool {
+    let name: Vec<u8> = ENCRYPTED_PACKAGE.encode_utf16().flat_map(|unit| unit.to_le_bytes()).collect();
+    !name.is_empty() && bytes.windows(name.len()).any(|window| window == name.as_slice())
+}
+
 /// Read a workbook file.
 ///
 /// The file is a package; the workbook part is the one the package's
 /// own relationships name, and `xl/workbook.xml` is the fallback for a
 /// package that does not say.
+///
+/// A file that is a **compound file** is not a package: it holds a
+/// workbook that is encrypted, or a workbook of the old format, and
+/// this tree reads neither — and the file says which of the two it is.
 pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
+    if is_compound(bytes) {
+        return Err(Error::Compound(if holds_encrypted_package(bytes) {
+            "the workbook is encrypted, and this tree does not read an encrypted workbook".to_string()
+        } else {
+            "the file holds a workbook of the old format, and this tree does not read it".to_string()
+        }));
+    }
     let mut package =
         craftkit_zip::Package::open(bytes).map_err(|error| Error::Package(error.to_string()))?;
     let mut workbook = Workbook::default();

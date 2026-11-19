@@ -1788,6 +1788,31 @@ fn a_package_with_no_workbook_is_refused() {
     assert!(matches!(error, craftkit_xlsx::Error::Malformed(_)), "{error}");
 }
 
+/// A file that is a **compound file** is not a package, and the
+/// refusal says what it is: a workbook that is encrypted, or a
+/// workbook of the old format.
+#[test]
+fn a_compound_file_is_refused_and_says_what_it_is() {
+    let mut bytes = vec![0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    bytes.extend_from_slice(&[0u8; 64]);
+    let error = read(&bytes).expect_err("that is not a package");
+    assert!(matches!(error, craftkit_xlsx::Error::Compound(_)), "{error}");
+    assert!(error.to_string().contains("old format"), "the refusal says what it is: {error}");
+}
+
+/// A compound file that holds an **encrypted** workbook says so.
+#[test]
+fn an_encrypted_workbook_says_that_it_is_encrypted() {
+    let mut bytes = vec![0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+    bytes.extend_from_slice(&[0u8; 64]);
+    for unit in "EncryptedPackage".encode_utf16() {
+        bytes.extend_from_slice(&unit.to_le_bytes());
+    }
+    let error = read(&bytes).expect_err("that is not a package");
+    assert!(matches!(error, craftkit_xlsx::Error::Compound(_)), "{error}");
+    assert!(error.to_string().contains("encrypted"), "the refusal says what it is: {error}");
+}
+
 /// A sheet whose part is **not there** is empty, and says so.
 #[test]
 fn a_sheet_that_is_not_there_says_so() {
