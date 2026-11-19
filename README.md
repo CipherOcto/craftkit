@@ -4491,6 +4491,7 @@ so.
 | a **change of a header follows the formulas that name it** | **built.** The edit, the paste and the fill of a header rename the field, and the formulas follow (§1044) | §1044 |
 | **COUNTA counts the values that are not nothing** | **built.** Every value of a range is counted, and a cell that holds nothing is not (§1045) | §1045 |
 | **the tree's aggregates take the tree's rule of numbers** | **built.** A text that names a number is a number, and an error in a range is the error of the aggregate (§1046) | §1046 |
+| a **formula that reads itself through a table is refused** | **built.** The check of the cycle sees through the structured references (§1047) | §1047 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67667,3 +67668,43 @@ numbers**.
 - **An error in a range is not propagated by `COUNT` and `COUNTA`**, and
   the reference's are the same; a spreadsheet that propagates it there
   is a spreadsheet of another rule.
+
+## 1047. A formula that reads itself through a table is refused
+
+A formula that reads **itself** is refused — and it is refused when it
+reads itself **through a table** too.
+
+### What was built
+
+- The **check of the cycle** sees through the **structured references**:
+  a formula in a cell of a table that names the row of the cell —
+  `=SUM(Orders[[#This Row]])` — reads itself, and the formula is
+  refused.
+- A formula in a cell of a table that names the **column** the cell is
+  in — `=SUM(Orders[amount])` in a cell of that column — reads itself
+  too, and it is refused.
+- The refusal says the tree's own: *the formula in `One!C2` reads
+  itself*.
+
+### What the port found
+
+- **The reference does not refuse a circular formula**: it keeps it and
+  **lists** the circular references when the errors are checked. The
+  tree refuses the formula, and it refuses it where the formula is set.
+- **The tree's check did not look through the tables**: a formula that
+  read itself through a table was kept, and the cycle was found only
+  when the formula was worked out.
+
+### What it cost
+
+- **No new command**: the rule of the cycle is the rule of the formula
+  command.
+- **One line** in the check of the cycle.
+- **One test** in the grid battery (`tests/tables.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree refuses the formula and the reference lists it**: a
+  workbook of the reference may hold a circular formula, and a workbook
+  of the tree may not.
