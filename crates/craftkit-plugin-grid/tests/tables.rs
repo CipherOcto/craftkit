@@ -547,3 +547,80 @@ fn a_name_that_two_columns_share_names_neither_of_them() {
         "and the name names neither of them"
     );
 }
+
+/// A **paste** that writes over the header of a table renames the
+/// column, and the rename follows the formulas that name it.
+#[test]
+fn a_paste_that_changes_a_header_follows_the_formulas() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "amount");
+    a_text(&mut session, sheet, "B1", "who");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A3", "value": 3 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B3" }))
+        .expect("the table is made");
+    session
+        .execute(
+            "grid.formula.set",
+            &json!({ "sheet": sheet, "cell": "D1", "formula": "=SUM(Orders[amount])" }),
+        )
+        .expect("the formula is set");
+    a_text(&mut session, sheet, "F1", "sum");
+    session
+        .execute("grid.range.copy", &json!({ "sheet": sheet, "range": "F1" }))
+        .expect("the cell is copied");
+    let outcome = session
+        .execute("grid.range.paste", &json!({ "sheet": sheet, "at": "A1", "overwrite": true }))
+        .expect("the cell is pasted");
+    assert_eq!(outcome.data["followed"].as_u64(), Some(1), "the formula follows the paste");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "D1" })).expect("the cell is read");
+    assert_eq!(
+        outcome.data["formula"].as_str(),
+        Some("=SUM(Orders[sum])"),
+        "and it names the column by its new name"
+    );
+    assert_eq!(outcome.data["value"].as_f64(), Some(3.0), "and it still reads the column");
+}
+
+/// A **fill** that writes over the header of a table renames the
+/// column, and the rename follows the formulas that name it.
+#[test]
+fn a_fill_that_changes_a_header_follows_the_formulas() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "sum");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    a_text(&mut session, sheet, "A3", "bob");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B3", "value": 4 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B3" }))
+        .expect("the table is made");
+    session
+        .execute("grid.formula.set", &json!({ "sheet": sheet, "cell": "D1", "formula": "=Orders[who]" }))
+        .expect("the formula is set");
+    // The **source** of the fill is the cell under the header, and it
+    // holds the new name of the column.
+    let outcome = session
+        .execute("grid.range.fill", &json!({ "sheet": sheet, "from": "A2", "to": "A1:A2", "mode": "copy" }))
+        .expect("the cell is filled");
+    assert_eq!(outcome.data["followed"].as_u64(), Some(1), "the formula follows the fill");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "D1" })).expect("the cell is read");
+    assert_eq!(
+        outcome.data["formula"].as_str(),
+        Some("=Orders[sum]"),
+        "and it names the column by its new name"
+    );
+    assert_eq!(outcome.data["value"].as_str(), Some("2 values"), "and it still reads the column");
+}

@@ -1735,6 +1735,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§1043",
     },
+    Port {
+        rule: "a change of a header follows the formulas that name it",
+        from: "gridcraft/crates/engine/src/tables.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/tables.rs",
+        command: "grid.cell.set",
+        test: "crates/craftkit-plugin-grid/tests/tables.rs",
+        section: "§1044",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

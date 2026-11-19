@@ -87,7 +87,7 @@ use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 use crate::dates;
 use crate::format::Format;
-use crate::formula::{self, Area, CellRef, Value};
+use crate::formula::{self, Area, CellRef, Cells, Value};
 use crate::{cells_into, cells_of, sheet_cells_mut};
 
 /// The most cells one fill may write.
@@ -826,8 +826,13 @@ commands! {
                 crate::protection::refuse_locked(node, &crate::style_locks(session, sheet), &cells, &id)?;
             }
             let mut written: Vec<serde_json::Value> = Vec::new();
+            // The **cells before the fill**, so that a header that the
+            // fill renames is known.
+            let mut before = Cells::new();
+            let mut after = Cells::new();
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 let mut sheet_cells = sheet_cells_mut(node);
+                before = sheet_cells.clone();
                 for write in &writes {
                     match (&write.formula, &write.value) {
                         (Some(text), _) => sheet_cells.set_formula(write.cell, text.clone()),
@@ -860,11 +865,20 @@ commands! {
                     }
                 }
                 node.data["cells"] = cells_into(&sheet_cells);
+                after = sheet_cells;
             }
             let count = written.len();
-            Ok(Outcome::changed(format!("filled {count} cell(s)")).with_data(
-                json!({ "sheet": sheet, "source": source.to_text(), "mode": mode_name(mode), "cells": written }),
-            ))
+            // A **change of a header** follows the formulas that name it:
+            // a fill may write over the header of a table, and the field
+            // it names is a field with a new name.
+            let followed = crate::tables::follow_headers(session, sheet, &before, &after);
+            Ok(Outcome::changed(format!("filled {count} cell(s)")).with_data(json!({
+                "sheet": sheet,
+                "source": source.to_text(),
+                "mode": mode_name(mode),
+                "cells": written,
+                "followed": followed,
+            })))
 
         }
     }

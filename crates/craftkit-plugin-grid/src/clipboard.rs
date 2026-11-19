@@ -955,6 +955,10 @@ commands! {
                         craftkit_sdk::serde_json::Value::Array(rules.iter().map(|rule| rule.to_json()).collect());
                 }
             }
+            // A **change of a header** follows the formulas that name it:
+            // a paste may write over the header of a table, and the
+            // field it names is a field with a new name.
+            let followed = crate::tables::follow_headers(session, sheet, &cells, &written);
             Ok(Outcome::changed(format!("{count} cell(s) were pasted at {}", at.to_text()))
                 .with_data(json!({
                     "sheet": sheet,
@@ -965,6 +969,7 @@ commands! {
                     "transpose": transpose,
                     "formats": formats,
                     "skipBlanks": skip_blanks,
+                    "followed": followed,
                     "operation": match operation {
                         Some(operation) => json!(operation),
                         None => Json::Null,

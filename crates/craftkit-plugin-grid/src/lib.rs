@@ -1381,36 +1381,13 @@ commands! {
             }
             merges::refuse_covered(node, &[cell], "grid.cell.set")?;
             crate::protection::refuse_locked(node, &locks, &[cell], "grid.cell.set")?;
-            let sheet_name = node.name.clone();
-            let tables = crate::tables::tables_of(node);
             let mut cells = sheet_cells_mut(node);
             // The **header** of a table: the text that names a column.
-            let was = crate::tables::header_name(&tables, &cells, cell);
+            let before = cells.clone();
             cells.set_value(cell, value.clone());
             node.data["cells"] = cells_into(&cells);
-            // A **rename follows** the formulas that name the column.
-            let mut followed = 0usize;
-            if let (Some((table, old)), Value::Text(new)) = (was, value.clone()) {
-                let new = new.trim().to_string();
-                let range = tables.iter().find(|other| other.name == table).map(|other| other.range);
-                if !new.is_empty() && new != old {
-                    let rename = crate::formula::Rename {
-                        table: None,
-                        column: Some(crate::formula::ColumnRename {
-                            table: table.clone(),
-                            old: old.clone(),
-                            new: new.clone(),
-                        }),
-                        in_table: false,
-                    };
-                    followed = crate::tables::follow_rename(session, &rename, &|sheet, cell| {
-                        match range {
-                            Some(range) => sheet == sheet_name && range.covers(cell),
-                            None => false,
-                        }
-                    });
-                }
-            }
+            // A **change of a header** follows the formulas that name it.
+            let followed = crate::tables::follow_headers(session, sheet, &before, &cells);
             Ok(Outcome::changed(format!("set the cell {}", cell.to_text()))
                 .with_data(json!({
                     "sheet": sheet,

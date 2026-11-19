@@ -37,6 +37,10 @@
 //! tree does not guess which one is meant, and every use of that name
 //! is refused.
 //!
+//! And a **change of a header** renames the field, and the formulas
+//! that name the field follow it: the edit of a header cell, the paste
+//! over one and the fill of one are the same change.
+//!
 //! And a **rename follows** the formulas that name it: the name of a
 //! table and the name of a column are written back into the formulas
 //! that name them, so a formula that names a table keeps naming it
@@ -201,23 +205,6 @@ pub(crate) fn fields_of(table: &Table, cells: &Cells) -> Result<Vec<(CellRef, St
     Ok(fields)
 }
 
-/// The **table** a cell is the header of, and the **name** of the column
-/// it names.
-///
-/// The header of a table is its first row, and the text of a header
-/// cell names the column under it. A cell that is not a header names no
-/// column, and a header that holds no text names no column either.
-pub(crate) fn header_name(tables: &[Table], cells: &Cells, cell: CellRef) -> Option<(String, String)> {
-    for table in tables {
-        if cell.row != table.range.start.row || !table.range.covers(cell) {
-            continue;
-        }
-        let Ok(name) = header_text(cells, cell) else { continue };
-        return Some((table.name.clone(), name));
-    }
-    None
-}
-
 /// The **names** two fields of a table share, and how many fields share
 /// each of them.
 ///
@@ -241,6 +228,48 @@ pub(crate) fn repeated_fields(fields: &[(CellRef, String)]) -> Vec<(String, usiz
             }
         })
         .collect()
+}
+
+/// The **changes of the headers** of a sheet, and the formulas that
+/// follow them.
+///
+/// A header cell names a **field**, and a field whose name changed is a
+/// field with a new name — so the formulas that name it follow it, as
+/// every rename follows.
+///
+/// The `before` and the `after` are the cells of the sheet before and
+/// after the change; a header that names a field before and names
+/// another field after is a field that was renamed.
+///
+/// The answer is how many formulas were rewritten.
+pub(crate) fn follow_headers(session: &mut Session, sheet: u64, before: &Cells, after: &Cells) -> usize {
+    let Some(node) = session.document().node(sheet) else { return 0 };
+    let tables = tables_of(node);
+    let sheet_name = node.name.clone();
+    let mut rewritten = 0usize;
+    for table in &tables {
+        for col in table.range.start.col..=table.range.end.col {
+            let header = CellRef { col, row: table.range.start.row };
+            let Some(old) = header_text(before, header).ok() else { continue };
+            let Some(new) = header_text(after, header).ok() else { continue };
+            if old == new {
+                continue;
+            }
+            let rename = crate::formula::Rename {
+                table: None,
+                column: Some(crate::formula::ColumnRename {
+                    table: table.name.clone(),
+                    old: old.clone(),
+                    new: new.clone(),
+                }),
+                in_table: false,
+            };
+            let range = table.range;
+            rewritten +=
+                follow_rename(session, &rename, &|sheet, cell| sheet == sheet_name && range.covers(cell));
+        }
+    }
+    rewritten
 }
 
 /// The formulas of every sheet of the workbook, with the renames in
