@@ -4497,6 +4497,7 @@ so.
 | a **quote in a quoted thing is written twice** | **built.** A text and a sheet's name with a quote in it are read, as the tree writes them (§1050) | §1050 |
 | **the word carries the letters of every alphabet** | **built.** A name, a sheet and a table with a letter of another alphabet in it are words (§1051) | §1051 |
 | **a number may be written with an exponent** | **built.** `1E3` is a thousand and `1.5e-3` is a small number, as the file writes it (§1052) | §1052 |
+| **a whole column or a whole row may be named** | **built.** `B:B` is the column and `1:3` is the rows, read as the cells the sheet holds (§1053) | §1053 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67914,3 +67915,64 @@ A **number** in a formula may be written with an **exponent**.
 - **The tree's formula writes a number as it is**: a hundred is
   written `100` and not `1E2`, so a formula that is rewritten says the
   number in full.
+
+## 1053. A whole column or a whole row may be named
+
+A formula may name a **whole column** — `B:B` — or a **whole row** —
+`1:3`.
+
+### What was built
+
+- `=SUM(B:B)` is the sum of the column `B`, and `=SUM(1:3)` is the sum
+  of the rows `1` to `3`: a whole line is read as the range of cells it
+  names.
+- A whole line **reaches as far as the sheet holds anything**: a whole
+  column reaches the last row that has a cell in it, and a whole row
+  the last column — and beyond that there is nothing to read.
+- A whole line **moves** with the line it names when the formula is
+  copied: `=SUM(B:B)` copied one cell to the right is `=SUM(C:C)`, and
+  `=SUM(1:3)` copied one cell down is `=SUM(2:4)`. An **anchored** line
+  — `$B:$B` — does not move.
+- A whole line follows a **change of the sheet**: a row that is
+  inserted moves a whole row of lines and leaves a whole column alone,
+  and a column that is **deleted** makes the line that names it
+  `#REF!`.
+- A line that reads **itself** is refused, as any other formula that
+  reads itself is.
+- A **mixed** range is not a range: `=SUM(A1:B)` is refused, and the
+  refusal says that a range is two cells, two whole columns or two
+  whole rows.
+
+### What the port found
+
+- **The reference's `RangeRef` has whole lines in it**: `RangeRef::cols`
+  and `RangeRef::rows` are its constructors, and `RangeRef::parse`
+  reads `A:A` and `1:3`.
+- **The reference's lexer reads a whole row as a word**: the digits of
+  a row are a word when a colon and another row follow them.
+- **The reference keeps a whole line whole**: a row that is inserted
+  does not change `A:A`, and a column that is deleted makes it
+  `#REF!`.
+- **The tree's parser knew only two corners**: a range was two cells,
+  so `B:B` was a name and `1:3` was a number and a colon — and a
+  formula of a file that held one was a formula the tree could not
+  read.
+
+### What it cost
+
+- **No new command**: a whole line is a reference.
+- **One variant** in the tree of the expressions (`Expr::Lines`), and
+  the rules that move it and that change it with the sheet.
+- **Eight tests** in a new file (`tests/lines.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **A whole line is a formula's reference**: the tree's own ranges —
+  a selection, a copy, a fill — are still two corners (`A1:B4`), and
+  its column commands name one column at a time (`A`, `B`, `AA`)
+  where the reference's take a range (`A:A`).
+- **A name may not stand for a whole line**: a name is a range of
+  cells with two corners, and `B:B` is not one.
+- **The `$` of a whole line is the `$` of its first side**: `B:$B` is
+  written `$B:$B` when the formula is written again.
