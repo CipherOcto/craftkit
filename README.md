@@ -4495,6 +4495,7 @@ so.
 | a **resize of a table that changes its fields follows the formulas** | **built.** The field of a column whose name changed is renamed, and the formulas follow (§1048) | §1048 |
 | a **name is a word a formula can carry** | **built.** A name, a sheet and a table with a dot in it are words, and a table's name obeys the rule of the names (§1049) | §1049 |
 | a **quote in a quoted thing is written twice** | **built.** A text and a sheet's name with a quote in it are read, as the tree writes them (§1050) | §1050 |
+| **the word carries the letters of every alphabet** | **built.** A name, a sheet and a table with a letter of another alphabet in it are words (§1051) | §1051 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67837,3 +67838,40 @@ is written **twice**.
   doubled — and a name of a **file** keeps the apostrophes it holds,
   and a formula that names it is a formula the tree could not read
   (the reader counts them).
+
+## 1051. The word carries the letters of every alphabet
+
+A **word** of a formula carries the letters of **every** alphabet.
+
+### What was built
+
+- The **word** of a formula is not only ASCII: a name, a sheet's name
+  and a table's name may hold a letter that is not an ASCII letter, and
+  a formula carries it:
+  - `=SUM(Ökonomie)` reads the name `Ökonomie`;
+  - `=Ünidad.2024!A1` reads the cell of the sheet `Ünidad.2024`.
+- Before this, the tree's word stopped at the first letter that was
+  not an ASCII letter — so a name the tree allowed could not be used in
+  a formula at all.
+
+### What the port found
+
+- **The reference's word holds every alphanumeric character**: the
+  letters of every alphabet are letters.
+- **The tree's names already allowed them**: the rule of the names
+  says *a letter* and not *an ASCII letter* — and so the tree's rule
+  and its reader disagreed.
+
+### What it cost
+
+- **No new command**: a word is a word.
+- **Two characters of the reader**: the letters a word holds and the
+  character a word begins with.
+- **Two tests** in the file of the words (`tests/words.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **A cell is an ASCII cell**: `A1` is a cell and `Ü1` is not — the
+  cells of a sheet are named in letters and digits, and the tree's
+  references are ASCII.
