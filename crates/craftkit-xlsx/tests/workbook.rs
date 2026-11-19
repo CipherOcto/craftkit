@@ -2620,3 +2620,132 @@ fn the_colour_of_the_text_of_a_rule_is_read() {
     assert_eq!(border.style, "thin", "the style of the line");
     assert_eq!(border.colour.as_deref(), Some("#00b050"), "and the colour of it");
 }
+
+/// A table whose **header row is off** is not a table of this tree, and
+/// the reader says that it did not read it.
+#[test]
+fn a_table_with_no_header_row_is_not_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:C5" headerRowCount="0"><tableColumns count="3"><tableColumn id="1" name="who"/><tableColumn id="2" name="amount"/><tableColumn id="3" name="when"/></tableColumns></table>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.tables.is_empty(), "the sheet has no tables");
+    assert_eq!(
+        workbook.warnings,
+        vec![
+            "the table `Table1` has no header row, and a table of this tree has one; it was not read"
+                .to_string()
+        ],
+        "and the reader says why"
+    );
+}
+
+/// A table with a **filter of its own** is read, and the filter is
+/// left out — and the reader says so.
+#[test]
+fn the_filter_of_a_table_is_left_out_and_said() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:C5"><autoFilter ref="A1:C5"/><tableColumns count="3"><tableColumn id="1" name="who"/><tableColumn id="2" name="amount"/><tableColumn id="3" name="when"/></tableColumns></table>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert_eq!(workbook.tables.len(), 1, "the sheet has a table");
+    assert_eq!(workbook.tables[0].1.len(), 1, "and the table is read");
+    assert_eq!(
+        workbook.warnings,
+        vec![
+            "the table `Table1` has a filter of its own, and the filters of this tree are the sheet's; it was not read"
+                .to_string()
+        ],
+        "and the reader says that the filter was not read"
+    );
+}
+
+/// A column totalled in a **way this tree does not have** keeps its
+/// table, and the reader says that the way was not read.
+#[test]
+fn a_way_this_tree_does_not_have_is_said() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:C5" totalsRowCount="1"><tableColumns count="3"><tableColumn id="1" name="who" totalsRowFunction="custom"/><tableColumn id="2" name="amount" totalsRowFunction="sum"/><tableColumn id="3" name="when"/></tableColumns></table>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, tables) = &workbook.tables[0];
+    assert_eq!(tables.len(), 1, "the table is read");
+    assert_eq!(tables[0].ways, vec![(1, "sum".to_string())], "and only the way this tree has is kept");
+    assert_eq!(
+        workbook.warnings,
+        vec![
+            "the column `who` of the table `Table1` is totalled in a way this tree does not have; it was not read"
+                .to_string()
+        ],
+        "and the reader says that the way was not read"
+    );
+}

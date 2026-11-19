@@ -2501,3 +2501,47 @@ fn a_formula_of_a_workbook_may_name_the_row_of_the_cell() {
     );
     assert_eq!(value_of(&mut session, sheet, "C2"), Some(json!(3.0)), "and it reads the row of the cell");
 }
+
+/// A workbook's table that has **no header row** is not a table of the
+/// tree, and the import says that it did not read it.
+#[test]
+fn a_table_with_no_header_row_is_not_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:C5" headerRowCount="0"><tableColumns count="3"><tableColumn id="1" name="who"/><tableColumn id="2" name="amount"/><tableColumn id="3" name="when"/></tableColumns></table>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["tables"].as_u64(), Some(0), "no table was imported");
+    let warnings = outcome.data["warnings"].as_array().expect("the warnings are a list");
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| { warning.as_str().is_some_and(|warning| warning.contains("has no header row")) }),
+        "and the import says why: {warnings:?}"
+    );
+}

@@ -58,6 +58,11 @@
 //!   colour scale, the top ten, the average, the duplicates, the data
 //!   bar and the icon set. The kind it does not have — the rule of the
 //!   time period — is counted, and it says how many it left out.
+//! - It reads the **tables** it can hold: a table has one header row
+//!   here, and its fields are the text of that row, and so a table
+//!   whose header row is off is not read. A table's **filter** and a
+//!   column's **custom total** are the sheet's and the tree's own, and
+//!   they are left out — and every one of them is said.
 
 #![deny(
     clippy::unwrap_used,
@@ -1877,7 +1882,7 @@ fn read_sheet(
     let comments = read_comments(package, &sheet_rels, workbook_rels, warnings);
     // The **tables** of the sheet: they are in parts of their own
     // that the sheet names by a relationship.
-    let tables = read_tables(package, &root, &sheet_rels);
+    let tables = read_tables(package, &root, &sheet_rels, warnings);
     // The **charts** of the sheet: they are in parts of their own,
     // named by the drawing of the sheet.
     let (charts, pictures) = read_drawings(package, &root, &sheet_rels, theme, warnings);
@@ -2881,6 +2886,7 @@ fn read_tables(
     package: &mut craftkit_zip::Package<'_>,
     root: &craftkit_xml::El,
     sheet_rels: &[Rel],
+    warnings: &mut Vec<String>,
 ) -> Vec<Table> {
     let Some(parts) = root.child("tableParts") else { return Vec::new() };
     let mut out = Vec::new();
@@ -2891,6 +2897,23 @@ fn read_tables(
         let Some(table) = read_xml(package, &relation.target).ok().flatten() else { continue };
         let Some(range) = table.attr("ref") else { continue };
         let name = table.attr("displayName").or_else(|| table.attr("name")).unwrap_or("Table").to_string();
+        // The **header row**: a table of this tree has one, and the
+        // fields of the table are the text of that row — so a table
+        // whose header row is off is not a table of this tree, and it
+        // is not read.
+        if table.attr_u32("headerRowCount").unwrap_or(1) == 0 {
+            warnings.push(format!(
+                "the table `{name}` has no header row, and a table of this tree has one; it was not read"
+            ));
+            continue;
+        }
+        // The **filter** of the table: the filters of this tree are the
+        // sheet's, and so a filter of a table is left out.
+        if table.child("autoFilter").is_some() {
+            warnings.push(format!(
+                "the table `{name}` has a filter of its own, and the filters of this tree are the sheet's; it was not read"
+            ));
+        }
         let totals = table.attr_u32("totalsRowCount").unwrap_or(0) > 0;
         // The **way** each column is totalled in, and the way of the
         // table itself: the first column that has a way of its own
@@ -2901,8 +2924,16 @@ fn read_tables(
         let mut label = None;
         if let Some(columns) = table.child("tableColumns") {
             for (index, column) in columns.kids("tableColumn").enumerate() {
+                let column_name = column.attr("name").unwrap_or("").to_string();
                 let totals_way = totals_way(column.attr("totalsRowFunction"));
-                let Some(totals_way) = totals_way else { continue };
+                let Some(totals_way) = totals_way else {
+                    // A way this tree does not have is not a way, and
+                    // the reader says that it left it out.
+                    warnings.push(format!(
+                        "the column `{column_name}` of the table `{name}` is totalled in a way this tree does not have; it was not read"
+                    ));
+                    continue;
+                };
                 if totals_way != "none" {
                     ways.push((index as u32, totals_way.clone()));
                     if way.is_empty() {
