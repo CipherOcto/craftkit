@@ -4494,6 +4494,7 @@ so.
 | a **formula that reads itself through a table is refused** | **built.** The check of the cycle sees through the structured references (§1047) | §1047 |
 | a **resize of a table that changes its fields follows the formulas** | **built.** The field of a column whose name changed is renamed, and the formulas follow (§1048) | §1048 |
 | a **name is a word a formula can carry** | **built.** A name, a sheet and a table with a dot in it are words, and a table's name obeys the rule of the names (§1049) | §1049 |
+| a **quote in a quoted thing is written twice** | **built.** A text and a sheet's name with a quote in it are read, as the tree writes them (§1050) | §1050 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67798,3 +67799,41 @@ and a formula carries it.
 - **A name of a file is not a name of the tree**: a workbook of a file
   keeps the names it holds, and a formula that names one of them may
   not be read — and the reader counts the formulas it could not read.
+
+## 1050. A quote in a quoted thing is written twice
+
+A **quote** inside a quoted thing — a **text** or a **sheet's name** —
+is written **twice**.
+
+### What was built
+
+- A **text** with a quote in it is read: `="say ""hi"""` is the text
+  `say "hi"`, and the formula is written back as it was read.
+- A **sheet's name** with a quote in it is read: `='Bob''s Q1'!A1` reads
+  the cell of the sheet `Bob's Q1`.
+- Before this, the tree's **writer** doubled the quote and its
+  **reader** did not — so a formula the tree wrote could not be read
+  back by the tree.
+
+### What the port found
+
+- **The reference's lexer doubles the quote** in the text and in the
+  sheet's name — the same rule for the two.
+- **The tree's writer already doubled it** and the reader did not: the
+  two halves of the tree disagreed, and the reader was the half that
+  was wrong.
+
+### What it cost
+
+- **No new command**: a quote is a quote.
+- **Two rules** in the reader and one helper to look ahead.
+- **Two tests** in a new file (`tests/quotes.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's sheet's name may not begin or end with an apostrophe**,
+  and a sheet's name with an apostrophe in it is written with it
+  doubled — and a name of a **file** keeps the apostrophes it holds,
+  and a formula that names it is a formula the tree could not read
+  (the reader counts them).
