@@ -4489,6 +4489,7 @@ so.
 | a **name that two columns share names neither of them** | **built.** A formula that names a column two columns share is an error, and the fields say the name is shared (§1042) | §1042 |
 | **what a file's table carries that the tree's table has not is said** | **built.** A table with no header row is not read, and the filter and the way the tree has not are left out and said (§1043) | §1043 |
 | a **change of a header follows the formulas that name it** | **built.** The edit, the paste and the fill of a header rename the field, and the formulas follow (§1044) | §1044 |
+| **COUNTA counts the values that are not nothing** | **built.** Every value of a range is counted, and a cell that holds nothing is not (§1045) | §1045 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67574,3 +67575,43 @@ name the field follow it.
 - **A resize of a table** that changes the names of its fields does not
   follow yet: the fields of a table are derived from the header cells,
   and a resize changes which row is the header.
+
+## 1045. COUNTA counts the values that are not nothing
+
+**COUNTA** counts the values that are **not nothing**.
+
+### What was built
+
+- **COUNTA of a range** counts every cell that holds something: a
+  number, a text, a boolean and an error. Before this, it counted only
+  the numbers of the range — so `COUNTA(A1:A3)` over a number, a text
+  and a boolean said `1`.
+- **A cell that holds nothing is not a value**: `COUNTA` of an empty
+  cell says `0`, and an empty cell inside a range is not counted.
+- **Two values are two values**: `COUNTA(1,2)` says `2` — before this
+  it said `4`, for each number was counted twice.
+- The tree's **SUBTOTAL** already counted this way, and the rule is
+  written once: the two paths agree.
+
+### What the port found
+
+- **The reference's COUNTA counts the non-empty values**: a number, a
+  text, a boolean and an error, and not a cell that holds nothing. The
+  tree counted the numbers of a range and nothing else.
+- **The reference's own tests say it**: `COUNTA` of a mixed range is
+  `4`, and `COUNTA(1, "")` is `2` — an empty text is a value, and a
+  cell that holds nothing is not.
+
+### What it cost
+
+- **No new command**: `COUNTA` is a function of a formula.
+- **Two lines** in the reading of the arguments, in the two paths that
+  read them.
+- **Five tests** in a new file (`tests/counta.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's `COUNT` counts the numbers** and its `COUNTA` counts the
+  values, and the two agree on a range of numbers and differ on a range
+  that holds texts — which is the rule.
