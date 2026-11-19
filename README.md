@@ -4496,6 +4496,7 @@ so.
 | a **name is a word a formula can carry** | **built.** A name, a sheet and a table with a dot in it are words, and a table's name obeys the rule of the names (§1049) | §1049 |
 | a **quote in a quoted thing is written twice** | **built.** A text and a sheet's name with a quote in it are read, as the tree writes them (§1050) | §1050 |
 | **the word carries the letters of every alphabet** | **built.** A name, a sheet and a table with a letter of another alphabet in it are words (§1051) | §1051 |
+| **a number may be written with an exponent** | **built.** `1E3` is a thousand and `1.5e-3` is a small number, as the file writes it (§1052) | §1052 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -67875,3 +67876,41 @@ A **word** of a formula carries the letters of **every** alphabet.
 - **A cell is an ASCII cell**: `A1` is a cell and `Ü1` is not — the
   cells of a sheet are named in letters and digits, and the tree's
   references are ASCII.
+
+## 1052. A number may be written with an exponent
+
+A **number** in a formula may be written with an **exponent**.
+
+### What was built
+
+- `=1E3` is a thousand, `=1.5e-3` is a small number, and `=2E+2` is
+  two hundred: the exponent is part of the number when digits follow
+  it.
+- A letter that is not followed by digits is **not** an exponent: `=1E`
+  is refused, and the refusal says that there is something after the
+  formula.
+- Before this, the tree's number was digits and a point — so a
+  formula of a file that held an exponent was a formula the tree could
+  not read, and the reader counted it among the formulas it could not
+  read.
+
+### What the port found
+
+- **The reference's lexer reads the exponent**: the digits, the point
+  and then `e` or `E`, a sign and the digits.
+- **The tree's own format has the scientific** — `0.00E+00` is the way
+  a number is *written* — and its formula language had no exponent: the
+  two halves of the tree disagreed.
+
+### What it cost
+
+- **No new command**: a number is a number.
+- **One rule** in the reader.
+- **Two tests** in a new file (`tests/exponents.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The tree's formula writes a number as it is**: a hundred is
+  written `100` and not `1E2`, so a formula that is rewritten says the
+  number in full.
