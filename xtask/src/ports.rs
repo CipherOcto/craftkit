@@ -1897,6 +1897,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/compound.rs",
         section: "§1061",
     },
+    Port {
+        rule: "an encrypted workbook is read: the agile cipher and the password",
+        from: "gridcraft/crates/xlsx/src/crypto.rs",
+        to: "craftkit-xlsx",
+        module: "src/crypto.rs",
+        command: "grid.import.xlsx",
+        test: "crates/craftkit-xlsx/tests/encrypted.rs",
+        section: "§1062",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -1825,6 +1825,18 @@ fn a_compound_file_is_refused_and_says_what_it_is() {
     assert!(error.to_string().contains("encrypted"), "the refusal says what it is: {error}");
 }
 
+/// A file that is **not encrypted**, with a password, is refused, and
+/// the refusal says why.
+#[test]
+fn a_file_that_is_not_encrypted_is_refused_when_a_password_is_given() {
+    let mut session = session();
+    let path = a_file(a_workbook_file(r#"<worksheet><sheetData/></worksheet>"#, r#"<sst/>"#));
+    let error = session
+        .execute("grid.import.xlsx", &json!({ "path": path, "password": "the password" }))
+        .expect_err("that file is not encrypted");
+    assert!(error.to_string().contains("not encrypted"), "the refusal says why: {error}");
+}
+
 /// The **date system** of the file is the date system of the workbook.
 #[test]
 fn the_date_system_of_the_file_is_the_date_system_of_the_workbook() {

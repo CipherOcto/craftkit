@@ -63,11 +63,12 @@
 //!   whose header row is off is not read. A table's **filter** and a
 //!   column's **custom total** are the sheet's and the tree's own, and
 //!   they are left out — and every one of them is said.
-//! - It does not read a workbook that is **encrypted**: such a file is
-//!   a compound file and not a package, and the refusal says what the
-//!   file is — an encrypted workbook, or a workbook of the old format.
-//!   The **container** is read (`cfb`), and what is inside it is for
-//!   the cipher that opens it.
+//! - It reads a workbook that is **encrypted** in the **agile** way:
+//!   such a file is a compound file and not a package, and the
+//!   password opens it (`crypto`). The **container** is read (`cfb`),
+//!   and the cipher of [MS-OFFCRYPTO] opens what is inside it. A
+//!   workbook of the **old format** is not read: the refusal says
+//!   what the file is.
 
 #![deny(
     clippy::unwrap_used,
@@ -87,6 +88,7 @@ mod styles;
 mod theme;
 
 pub mod cfb;
+pub mod crypto;
 
 pub use calculation::{
     Calculation, DEFAULT_CHANGE, DEFAULT_ITERATIONS, MAX_ITERATIONS, Mode as CalculationMode,
@@ -133,6 +135,9 @@ pub enum Error {
     /// The file is a **compound file**: it holds a workbook that is
     /// encrypted, or a workbook of the old format.
     Compound(String),
+    /// The file is **encrypted**, and the password is not the password
+    /// of the file — or the cipher could not open it.
+    Encrypted(String),
 }
 
 impl std::fmt::Display for Error {
@@ -143,6 +148,7 @@ impl std::fmt::Display for Error {
             Error::Package(message) => write!(f, "the package could not be read: {message}"),
             Error::Xml(message) => write!(f, "a part of the workbook is not readable xml: {message}"),
             Error::Compound(message) => write!(f, "the file is a compound file: {message}"),
+            Error::Encrypted(message) => write!(f, "the workbook is encrypted: {message}"),
         }
     }
 }
@@ -1581,15 +1587,37 @@ fn holds_encrypted_package(bytes: &[u8]) -> bool {
 ///
 /// A file that is a **compound file** is not a package: it holds a
 /// workbook that is encrypted, or a workbook of the old format, and
-/// this tree reads neither — and the file says which of the two it is.
+/// the file says which of the two it is. A workbook that is
+/// **encrypted** is read with [`read_with_password`]; a workbook of the
+/// old format is not read.
 pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
     if is_compound(bytes) {
         return Err(Error::Compound(if holds_encrypted_package(bytes) {
-            "the workbook is encrypted, and this tree does not read an encrypted workbook".to_string()
+            "the workbook is encrypted, and it is read with a password".to_string()
         } else {
             "the file holds a workbook of the old format, and this tree does not read it".to_string()
         }));
     }
+    read_package(bytes)
+}
+
+/// Read a workbook file that is **encrypted**, with the password that
+/// opens it.
+///
+/// The file is a compound file, and the cipher that opens it is the
+/// one of [MS-OFFCRYPTO]: the password is checked against the verifier
+/// of the file, and the workbook is the package inside it.
+pub fn read_with_password(bytes: &[u8], password: &str) -> Result<Workbook, Error> {
+    if !is_compound(bytes) {
+        return Err(Error::Encrypted("the file is not encrypted".to_string()));
+    }
+    let compound = cfb::Compound::open(bytes).map_err(|error| Error::Compound(error.message))?;
+    let plain = crypto::open(&compound, password).map_err(|error| Error::Encrypted(error.message))?;
+    read_package(&plain)
+}
+
+/// Read a workbook from the bytes of its **package**.
+fn read_package(bytes: &[u8]) -> Result<Workbook, Error> {
     let mut package =
         craftkit_zip::Package::open(bytes).map_err(|error| Error::Package(error.to_string()))?;
     let mut workbook = Workbook::default();

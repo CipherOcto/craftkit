@@ -152,6 +152,9 @@ commands! {
             /// What to call the workbook. Without it, the name of the
             /// file.
             name: Option<Text>,
+            /// The **password** of the file, when the file is
+            /// encrypted.
+            password: Option<Text>,
         },
         run: {
             let id = "grid.import.xlsx".to_string();
@@ -164,10 +167,18 @@ commands! {
                 .map_err(|message| {
                     EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
                 })?;
-            let workbook = craftkit_xlsx::read(&bytes)
-                .map_err(|error| {
-                    EngineError::Failed { id: id.clone(), message: error.to_string() }
-                })?;
+            // A file that is **encrypted** is read with the password
+            // that opens it, and a file that is not is read without.
+            let password = self.password.as_ref().map(|password| password.0.trim().to_string());
+            let workbook = match &password {
+                Some(password) if !password.is_empty() => {
+                    craftkit_xlsx::read_with_password(&bytes, password)
+                }
+                _ => craftkit_xlsx::read(&bytes),
+            }
+            .map_err(|error| {
+                EngineError::Failed { id: id.clone(), message: error.to_string() }
+            })?;
             if workbook.sheets.is_empty() {
                 return Err(EngineError::Failed {
                     id: id.clone(),

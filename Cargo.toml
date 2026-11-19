@@ -157,6 +157,15 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 inventory = "0.3"
 
+# The **cipher** that opens an encrypted workbook: AES, the mode it
+# works in, and the hashes of the password. They are the libraries of
+# the [MS-OFFCRYPTO] scheme, and the reader of a workbook uses them
+# and nothing else.
+aes = "0.8"
+cbc = "0.1"
+hmac = "0.12"
+sha2 = "0.10"
+
 # The **toolkit** the window is drawn with, and the window itself. They
 # are **libraries**, not plugins: they contribute no command and no
 # kind, and the linker does not wire them in.

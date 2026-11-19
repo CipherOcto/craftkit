@@ -13,7 +13,19 @@ license.workspace = true
 craftkit-zip = { workspace = true }
 craftkit-xml = { workspace = true }
 
+# The **cipher** that opens an encrypted workbook.
+aes = { workspace = true }
+cbc = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+
 [dev-dependencies]
 # The **package reader**, and only for the tests: it writes the
 # packages the tests read. Nothing that ships links it.
 craftkit-zip = { workspace = true }
+# The **cipher**, for the tests that make an encrypted workbook: they
+# close what the reader opens.
+aes = { workspace = true }
+cbc = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
