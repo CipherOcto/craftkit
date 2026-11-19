@@ -1798,6 +1798,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/quotes.rs",
         section: "§1050",
     },
+    Port {
+        rule: "the word carries the letters of every alphabet",
+        from: "gridcraft/crates/formula/src/lexer.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/words.rs",
+        section: "§1051",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

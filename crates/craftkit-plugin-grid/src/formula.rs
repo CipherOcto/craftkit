@@ -1472,7 +1472,7 @@ impl Parser {
         if character.is_ascii_digit() || (character == '.' && self.next_is_digit()) {
             return self.number();
         }
-        if character.is_ascii_alphabetic() || character == '$' {
+        if character.is_alphabetic() || character == '$' {
             return self.word();
         }
         Err(self.error("this is not something a formula can hold"))
@@ -1517,15 +1517,16 @@ impl Parser {
 
     /// A word: a reference, a range, a boolean or a function.
     ///
-    /// A word holds the characters a **name** may hold — letters,
-    /// digits, an underscore, a dot, a backslash and a question mark —
-    /// and the dollar of an absolute reference. So a name with a dot in
-    /// it, a sheet's name with a dot in it and a function's name with
-    /// dots in it (`ERROR.TYPE`, `NORM.S.DIST`) are all one word.
+    /// A word holds the characters a **name** may hold — the letters of
+    /// every alphabet, digits, an underscore, a dot, a backslash and a
+    /// question mark — and the dollar of an absolute reference. So a
+    /// name with a dot in it, a sheet's name with a dot in it and a
+    /// function's name with dots in it (`ERROR.TYPE`, `NORM.S.DIST`) are
+    /// all one word.
     fn word(&mut self) -> Result<Expr, FormulaError> {
         let start = self.at;
         while self.at < self.characters.len()
-            && (self.characters[self.at].is_ascii_alphanumeric()
+            && (self.characters[self.at].is_alphanumeric()
                 || self.characters[self.at] == '$'
                 || self.characters[self.at] == '_'
                 || self.characters[self.at] == '.'

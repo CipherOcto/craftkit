@@ -138,3 +138,35 @@ fn a_table_name_is_a_name() {
         .expect_err("the name is refused");
     assert!(refused.to_string().contains("at most 255"), "the refusal says why: {refused}");
 }
+
+/// A name with a letter that is not an **ASCII** letter is a word, and
+/// a formula carries it.
+#[test]
+fn a_name_with_a_letter_of_another_alphabet_is_a_word() {
+    let mut session = session();
+    let (workbook, sheet) = a_sheet(&mut session);
+    value(&mut session, sheet, "A1", 5);
+    session
+        .execute(
+            "grid.name.set",
+            &json!({ "workbook": workbook, "name": "Ökonomie", "refers_to": "Sheet1!A1" }),
+        )
+        .expect("the name is written");
+    let answer = computed(&mut session, sheet, "B1", "=SUM(Ökonomie)");
+    assert_eq!(answer, json!(5.0), "and the formula reads the name");
+}
+
+/// A **sheet** with a letter of another alphabet in its name is a word,
+/// and a formula carries it.
+#[test]
+fn a_sheet_with_a_letter_of_another_alphabet_is_a_word() {
+    let mut session = session();
+    let (workbook, _) = a_sheet(&mut session);
+    let outcome = session
+        .execute("grid.sheet.add", &json!({ "workbook": workbook, "name": "Ünidad.2024" }))
+        .expect("the sheet is added");
+    let sheet = outcome.data["id"].as_u64().expect("the sheet has an id");
+    value(&mut session, sheet, "A1", 7);
+    let answer = computed(&mut session, sheet, "B1", "=Ünidad.2024!A1");
+    assert_eq!(answer, json!(7.0), "and the formula reads the sheet");
+}
