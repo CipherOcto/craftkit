@@ -4505,6 +4505,7 @@ so.
 | **a workbook that is encrypted is said, not read** | **built.** A compound file is refused, and the refusal says whether the workbook is encrypted or of the old format (§1058) | §1058 |
 | **a spill is refused, and the refusal says what it is** | **built.** `A1#` is refused as a spill, and not as something after the formula (§1059) | §1059 |
 | **a union of ranges is refused, and the refusal says what to do** | **built.** `(A1:A3,B1:B3)` is refused, and the refusal says to give the ranges as arguments (§1060) | §1060 |
+| **a compound file is read** | **built.** The container of an encrypted workbook is opened, and its streams are read (§1061) | §1061 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68304,3 +68305,49 @@ tree, and the refusal says what to do instead.
 - **The tree does not read a union as a value**: a formula that names
   one is refused, and the tree does not take the first of the two and
   call it the answer.
+
+## 1061. A compound file is read
+
+A **compound file** — the container a workbook that is encrypted is
+held in — is read: its directory, and the streams of it.
+
+### What was built
+
+- The tree's own reader of the container: the **header**, the **table
+  of allocation** of the sectors, the **directory**, the table of
+  allocation of the **mini sectors**, and the **mini stream**.
+- A **big** stream — one of more than 4096 bytes — is read from the
+  sectors of the file, and a **small** one is read from the mini
+  stream.
+- The **names** of the streams are said, and a stream that is not
+  there is nothing and not an error.
+- The reader **refuses within limits**: the file may hold 64 000
+  sectors of allocation, and a stream of more than 512 MB is not read.
+
+### What the port found
+
+- **The reference has a compound file reader of its own** — its `cfb`
+  module — and it reads the directory and the streams of the file.
+- **The reference's reader is careful about the same things this one
+  is**: the sector size, the mini sector size, the chains that go on
+  for ever, and the sizes that are too big.
+- **The tree had no word for the container at all**: §1058 could say
+  that a file was a compound file, and nothing more.
+
+### What it cost
+
+- **No new command**: the container is not a command.
+- **One module** of the reader (`src/cfb.rs`), written from the
+  **[MS-CFB]** specification.
+- **Five tests** in a new file (`tests/compound.rs`), and a writer of
+  compound files in the test — the tree holds no binary assets, so a
+  file of the tree's own making is made in code.
+- **No new dependency**.
+
+### What it does not settle
+
+- **The directory is read as a list, not as a tree**: the entries are
+  scanned for the name wanted, and not walked through the siblings of
+  the tree of the directory.
+- **The reader reads a compound file and not a workbook**: what is
+  inside the streams is for the next arc to say.
