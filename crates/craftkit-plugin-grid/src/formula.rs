@@ -50,6 +50,10 @@
 //!
 //! And two areas may be **intersected**: `A1:C3 B2:D4` is the cells
 //! that the two areas share.
+//!
+//! And a formula the tree cannot read says **what it is**: a spill
+//! (`A1#`) is a spill, and a union of ranges (`(A1:A3,B1:B3)`) is a
+//! union of ranges.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -80,6 +84,13 @@ use crate::format::Format;
 ///
 /// The tree's own spelling: `#REF!`.
 const REF_ERROR: &str = "#REF!";
+
+/// The **refusal** of a spill: the range that an array spills into.
+///
+/// The tree has no arrays that spill, and so a formula that names one
+/// is refused with these words — and not with "there is something
+/// after the formula".
+const SPILL_REFUSED: &str = "a spill is not a formula this tree has: the tree has no arrays that spill";
 
 /// The most rows a sheet has.
 ///
@@ -1615,6 +1626,12 @@ impl Parser {
         // in.
         let intersection = self.take('@');
         let mut expression = self.primary()?;
+        // A **spill**: `A1#` is the range that the array at `A1`
+        // spills into. The tree has no arrays that spill, and so it
+        // says so.
+        if self.peek() == Some('#') {
+            return Err(self.error(SPILL_REFUSED));
+        }
         if intersection {
             expression = Expr::At(Box::new(expression));
         }
@@ -1869,6 +1886,11 @@ impl Parser {
                 }
             }
             let name = function_name(&word);
+            // `_xlfn.ANCHORARRAY(x)` is how a **file** writes the
+            // spill `x#`, and the tree has no arrays that spill.
+            if name == "ANCHORARRAY" {
+                return Err(self.error(SPILL_REFUSED));
+            }
             // `_xlfn.SINGLE(x)` is how a **file** writes the implicit
             // intersection `@x`: the sign and the reference it cuts
             // down to the cell the formula is in.

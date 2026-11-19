@@ -1870,6 +1870,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§1058",
     },
+    Port {
+        rule: "a spill is refused, and the refusal says what it is",
+        from: "gridcraft/crates/formula/src/parser.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/refusals.rs",
+        section: "§1059",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
