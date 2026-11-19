@@ -179,6 +179,29 @@ fn a_formula_that_cannot_be_read_is_not_imported() {
     assert_eq!(value_of(&mut session, sheet, "A1"), Some(json!(3.0)), "but the value is kept");
 }
 
+/// A function that a file writes with the **prefix** — `_xlfn.` — is
+/// read: the prefix is how the file says that the function is newer
+/// than the format.
+#[test]
+fn a_function_with_a_prefix_is_read() {
+    let mut session = session();
+    let path = a_file(a_workbook_file(
+        r#"<worksheet><sheetData><row r="1"><c r="A1"><f>_xlfn.XLOOKUP(1,B1:B3,C1:C3)</f><v>3</v></c></row></sheetData></worksheet>"#,
+        r#"<sst/>"#,
+    ));
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["formulas"].as_u64(), Some(1), "the formula was read");
+    assert_eq!(outcome.data["unread_formulas"].as_u64(), Some(0), "and none was left out");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    assert_eq!(
+        formula_of(&mut session, sheet, "A1"),
+        Some("_xlfn.XLOOKUP(1,B1:B3,C1:C3)".to_string()),
+        "the text is the file's own"
+    );
+}
+
 /// A cell with a **date format** is a date: the number is written as
 /// the date it is.
 #[test]

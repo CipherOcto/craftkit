@@ -61,11 +61,13 @@ const MAX_MERGE_CELLS: u64 = 10_000;
 
 /// The **text of a file's formula**, as the tree reads it.
 ///
-/// A file spells some functions with a prefix — `_xlfn.` — and some
-/// parameters with another — `_xlpm.` — and the tree knows neither.
-/// The prefixes are dropped, and what is left is the tree's own text.
+/// The text is the **file's own**: a formula that a file spells with a
+/// prefix — `_xlfn.XLOOKUP` — is kept as it was written, and the
+/// parser reads the name after the prefix. The prefix belongs to a
+/// **function's name** and to nothing else, so a text that holds one
+/// is a text that holds it.
 fn tree_formula(text: &str) -> String {
-    text.replace("_xlfn.", "").replace("_xlpm.", "")
+    text.to_string()
 }
 
 /// The **properties** of a workbook, as the answer holds them.

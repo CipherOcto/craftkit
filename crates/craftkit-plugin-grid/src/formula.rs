@@ -39,6 +39,10 @@
 //!
 //! And a number may be written with a **percent sign**: `50%` is a
 //! half, and the percent follows the value it divides.
+//!
+//! And a function's name may carry the **prefix a file writes**:
+//! `_xlfn.XLOOKUP` is `XLOOKUP`, and the prefix is how the file says
+//! that the function is newer than the format.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -1681,7 +1685,7 @@ impl Parser {
             }
             return self.number();
         }
-        if character.is_alphabetic() || character == '$' {
+        if character.is_alphabetic() || character == '$' || character == '_' || character == '\\' {
             return self.word();
         }
         Err(self.error("this is not something a formula can hold"))
@@ -1805,7 +1809,7 @@ impl Parser {
                     return Err(self.error("the bracket is not closed"));
                 }
             }
-            return Ok(Expr::Call(word.to_ascii_uppercase(), arguments));
+            return Ok(Expr::Call(function_name(&word), arguments));
         }
         // A **whole column** or a **whole row**: `B:B` or `$1:3`. The
         // word names a line of the sheet and nothing else, and a colon
@@ -2087,6 +2091,27 @@ impl Parser {
             None => Err(FormulaError { message: format!("`{word}` is not a cell or a function") }),
         }
     }
+}
+
+/// The **name** of a function, as a file writes it.
+///
+/// A file writes a function that the format did not know with the
+/// prefix `_xlfn.` — `_xlfn.XLOOKUP` is `XLOOKUP` — and a function of
+/// the worksheet with the prefix `_xlws.`. The prefix is how the file
+/// says *this is a function the format did not have*, and the tree
+/// reads the name after it.
+///
+/// The prefix `_xludf.` is **kept**: it marks a function of the user's
+/// own and never the built-in of the same name, and a file needs it
+/// back.
+fn function_name(word: &str) -> String {
+    let upper = word.to_ascii_uppercase();
+    for prefix in ["_XLFN._XLWS.", "_XLFN.", "_XLWS."] {
+        if let Some(rest) = upper.strip_prefix(prefix) {
+            return rest.to_string();
+        }
+    }
+    upper
 }
 
 /// What a word of a range names: a **cell**, a whole **column** or a

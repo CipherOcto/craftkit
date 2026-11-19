@@ -1834,6 +1834,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/percents.rs",
         section: "§1054",
     },
+    Port {
+        rule: "a function's name may carry the prefix a file writes",
+        from: "gridcraft/crates/formula/src/parser.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/formula.rs",
+        command: "grid.formula.set",
+        test: "crates/craftkit-plugin-grid/tests/prefixes.rs",
+        section: "§1055",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
