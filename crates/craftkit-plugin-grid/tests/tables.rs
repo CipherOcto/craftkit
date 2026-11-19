@@ -656,3 +656,44 @@ fn a_formula_that_reads_itself_through_a_table_is_refused() {
         .expect_err("the formula is refused");
     assert!(refused.to_string().contains("reads itself"), "the refusal says why: {refused}");
 }
+
+/// A **resize** of a table that changes the names of its fields follows
+/// the formulas that name them.
+#[test]
+fn a_resize_that_changes_the_fields_follows_the_formulas() {
+    let mut session = session();
+    let (_, sheet) = a_workbook(&mut session);
+    a_text(&mut session, sheet, "A1", "who");
+    a_text(&mut session, sheet, "B1", "amount");
+    a_text(&mut session, sheet, "A2", "ann");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B2", "value": 3 }))
+        .expect("the cell is set");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "Orders", "range": "A1:B2" }))
+        .expect("the table is made");
+    session
+        .execute(
+            "grid.formula.set",
+            &json!({ "sheet": sheet, "cell": "D1", "formula": "=SUM(Orders[amount])" }),
+        )
+        .expect("the formula is set");
+    // The **header row** of the new range names the fields differently.
+    a_text(&mut session, sheet, "A4", "who");
+    a_text(&mut session, sheet, "B4", "sum");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B5", "value": 7 }))
+        .expect("the cell is set");
+    let outcome = session
+        .execute("grid.table.resize", &json!({ "sheet": sheet, "name": "Orders", "range": "A4:B5" }))
+        .expect("the table is resized");
+    assert_eq!(outcome.data["followed"].as_u64(), Some(1), "the formula follows the resize");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "D1" })).expect("the cell is read");
+    assert_eq!(
+        outcome.data["formula"].as_str(),
+        Some("=SUM(Orders[sum])"),
+        "and it names the field by its new name"
+    );
+    assert_eq!(outcome.data["value"].as_f64(), Some(7.0), "and it reads the new column");
+}

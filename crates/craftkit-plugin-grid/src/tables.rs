@@ -233,6 +233,25 @@ pub(crate) fn repeated_fields(fields: &[(CellRef, String)]) -> Vec<(String, usiz
         .collect()
 }
 
+/// The **renames** of the fields of a table: what a change of the
+/// range of the table renames.
+///
+/// The fields of a table are the text of its header cells, and a resize
+/// that changes the header row changes the fields — so the field of a
+/// column whose name changed is renamed, and the formulas that name it
+/// follow.
+fn renames_of(old: &[(CellRef, String)], new: &[(CellRef, String)]) -> Vec<(String, String)> {
+    let mut renames = Vec::new();
+    for (index, (_, old_name)) in old.iter().enumerate() {
+        let Some((_, new_name)) = new.get(index) else { continue };
+        if old_name == new_name {
+            continue;
+        }
+        renames.push((old_name.clone(), new_name.clone()));
+    }
+    renames
+}
+
 /// The **changes of the headers** of a sheet, and the formulas that
 /// follow them.
 ///
@@ -870,6 +889,9 @@ commands! {
     /// **Resize** a table of a sheet.
     ///
     /// The new range must name its fields the same way: a row of text.
+    ///
+    /// A resize that changes the **header row** changes the fields, and
+    /// the formulas that name a field whose name changed follow it.
     grid.table.resize {
         area: "grid",
         layer: "grid",
@@ -935,18 +957,44 @@ commands! {
                 ways: ways.clone(),
             };
             let cells = crate::cells_of(&node);
+            let sheet_name = node.name.clone();
+            // The **fields** the table had before the resize: a resize
+            // that changes the header row changes the fields.
+            let old = fields_of(table, &cells);
             let fields =
                 fields_of(&resized, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let renames = match &old {
+                Ok(old) => renames_of(old, &fields),
+                Err(_) => Vec::new(),
+            };
             table.range = area;
             table.ways = ways;
             if let Some(node) = session.document_mut()?.node_mut(sheet) {
                 node.data["tables"] = tables_json(&tables);
+            }
+            // A **change of the fields** follows the formulas that name
+            // them.
+            let mut followed = 0usize;
+            for (old_name, new_name) in renames {
+                let rename = crate::formula::Rename {
+                    table: None,
+                    column: Some(crate::formula::ColumnRename {
+                        table: name.clone(),
+                        old: old_name,
+                        new: new_name,
+                    }),
+                    in_table: false,
+                };
+                followed += follow_rename(session, &rename, &|sheet, cell| {
+                    sheet == sheet_name && area.covers(cell)
+                });
             }
             Ok(Outcome::changed(format!("the table `{name}` reaches {text} now")).with_data(json!({
                 "sheet": sheet,
                 "name": name,
                 "range": text,
                 "fields": fields.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>(),
+                "followed": followed,
             })))
 
         }

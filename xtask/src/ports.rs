@@ -1771,6 +1771,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/tables.rs",
         section: "§1047",
     },
+    Port {
+        rule: "a resize of a table that changes its fields follows the formulas",
+        from: "gridcraft/crates/engine/src/tables.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/tables.rs",
+        command: "grid.table.resize",
+        test: "crates/craftkit-plugin-grid/tests/tables.rs",
+        section: "§1048",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
