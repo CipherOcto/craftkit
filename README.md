@@ -4501,6 +4501,7 @@ so.
 | **a number may be written with a percent sign** | **built.** `50%` is a half, and the sign follows the value it divides (§1054) | §1054 |
 | **a function's name may carry the prefix a file writes** | **built.** `_xlfn.XLOOKUP` is `XLOOKUP`, and the prefix is the file's way of saying the function is newer than the format (§1055) | §1055 |
 | **a formula may carry the sign of an implicit intersection** | **built.** `@A1:A3` is the cell of the range in the row of the formula, and it is worked out every time (§1056) | §1056 |
+| **two areas may be intersected** | **built.** `A1:C3 B2:D4` is the cells the two areas share, and it is worked out every time (§1057) | §1057 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68132,3 +68133,49 @@ is the cell of the range that the cell the formula is in stands for.
 - **The sign is not a way of writing a range into a function**: the
   tree's functions take ranges, and the sign turns one into a cell
   first.
+
+## 1057. Two areas may be intersected
+
+Two areas in a formula may be **intersected**: `A1:C3 B2:D4` is the
+cells that the two areas share.
+
+### What was built
+
+- The **space** between two areas is the operator: `=SUM(A1:C3 B2:D4)`
+  is the sum of the four cells that are in both.
+- Two areas that do **not** meet are `#VALUE!`: there are no cells
+  that are in both, and the tree does not say there are.
+- Two areas of **two sheets** do not meet either, and the refusal says
+  so: an intersection is of two areas of one sheet.
+- The intersection is **derived**: it is worked out every time the
+  formula is, and it is written as it was written.
+- A space before an **operator** is not an intersection: `=A1 + B1` is
+  a sum, and `=SUM(A1 , B1)` is a sum of two arguments.
+
+### What the port found
+
+- **The reference's lexer makes the space a token of its own** —
+  `Tok::Space` — and its parser reads it as the operator of the
+  intersection, with a binding power between the range and the power.
+- **The reference's rule for an empty intersection is `#NULL!`**.
+- **The tree's parser knew only one way to put two things side by
+  side**: a range with a colon, and a comma in a call. A space was a
+  space, and a formula of a file that held one was a formula the tree
+  could not read.
+
+### What it cost
+
+- **No new command**: an intersection is a reference.
+- **One variant** in the tree of the expressions (`Expr::Intersect`),
+  and the rule that works it out.
+- **Five tests** in a new file (`tests/cuts.rs`).
+- **No new dependency**.
+
+### What it does not settle
+
+- **The empty intersection is `#VALUE!`**: the tree has no `#NULL!` in
+  its vocabulary, and the error it says is the one it says for a
+  value that is not there.
+- **The intersection is of rectangles**: the tree's areas are
+  rectangles, and so the cells two areas share are a rectangle too —
+  where a file may write an intersection of shapes that is not.
