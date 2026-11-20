@@ -4526,6 +4526,7 @@ so.
 | **the kinds of pages that have a header of their own are read** | **built.** The file says of a sheet whether the first page and the even pages have a header of their own, and the tree prints the sheet that way (§1079) | §1079 |
 | **the cell a chart is drawn in is read** | **built.** The anchor of the drawing says the cell a chart is drawn in, and the tree keeps it (§1080) | §1080 |
 | **the way a sheet is looked at is read** | **built.** The file says of a sheet whether it is looked at the ordinary way, the way of the pages or the way of the breaks, and the tree keeps it (§1081) | §1081 |
+| **a chart may name its range by a name of the workbook** | **built.** The name says what the range of a chart is, and the tree reads the chart with it (§1082) | §1082 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69200,3 +69201,43 @@ the pages, or the way of the breaks between them.
 - **A way the file names that the tree does not have is kept as it is
   written**: the tree does not refuse a word of the file it does not
   know, and it does not pretend to know it either.
+
+## 1082. A chart may name its range by a name of the workbook
+
+A chart may name its range by a **name** of the workbook, and the name
+says what the range is.
+
+### What was built
+
+- The **reader** reads the names of the charts — the names the file
+  gives its own charts — and the ranges of the charts are said by them.
+- The **import** carries it: the chart of the tree reads the range the
+  name says, and the chart is imported as it should be.
+- The name of a chart is **not a name of the workbook**: it is the
+  file's own way of naming the range of a chart, and the tree reads the
+  chart with it.
+
+### What the port found
+
+- **The reference resolves the names of the charts** — `_xlchart.v5.0`
+  and its like — into the ranges of the series and of the categories,
+  and keeps them out of the names of the workbook.
+- **The tree read the name and not the range**: a chart whose series
+  named a range by a name came in with no range at all, and was left
+  out and counted.
+
+### What it cost
+
+- **No new command**: the range of a chart is a part of the chart.
+- **Two functions** in the reader — the names of the charts and the
+  resolving of them — and no field at all.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **A name the tree does not have is not resolved**: a chart that
+  names a range by a name the workbook does not hold has no range,
+  and the tree says nothing about it.
+- **The names of the charts are the file's own**: the tree does not
+  write them back, and it does not keep them as names of the
+  workbook.
