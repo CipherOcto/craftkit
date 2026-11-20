@@ -4507,6 +4507,7 @@ so.
 | **a union of ranges is refused, and the refusal says what to do** | **built.** `(A1:A3,B1:B3)` is refused, and the refusal says to give the ranges as arguments (§1060) | §1060 |
 | **a compound file is read** | **built.** The container of an encrypted workbook is opened, and its streams are read (§1061) | §1061 |
 | **an encrypted workbook is read** | **built.** The agile cipher of [MS-OFFCRYPTO] opens the package with the password, and the integrity of the file is checked (§1062) | §1062 |
+| **a workbook of the old encryption is read** | **built.** The Standard cipher of [MS-OFFCRYPTO] opens the package of a workbook of 2007, with AES and with RC4 (§1063) | §1063 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68406,3 +68407,60 @@ scheme of [MS-OFFCRYPTO], and the workbook inside.
   about how to prove its package is refused rather than read.
 - **The certificate encryptor is not read**: a file whose key is held
   in a certificate is refused, and it says so.
+## 1063. A workbook of the old encryption is read: the Standard scheme, with AES and with RC4
+
+A workbook that is encrypted the **old** way — the way Excel 2007
+encrypts — is opened: the **Standard** scheme of [MS-OFFCRYPTO]
+§2.3.4, with **AES** and with **RC4**.
+
+### What was built
+
+- The tree's own reader of the old scheme (`src/standard.rs`): the
+  **header** of the file, the **verifier**, and the **key** — SHA-1,
+  fifty thousand turns of it, and the expansion with `0x36` and `0x5C`.
+- **AES** is read in the mode of **no chaining**: every block stands
+  on its own.
+- **RC4** is read too, and the tree's own cipher is written from its
+  public description (`src/rc4.rs`): the permutation of the key, and
+  the walk of it.
+- A **password that is not the password** is refused as such, and the
+  **verifier** of the file is what says so.
+- The **import command** reads such a file with the same password it
+  reads an agile one with.
+
+### What the port found
+
+- **The reference reads the Standard scheme**, and it refuses the
+  **RC4** form by name. The tree reads it as well — the owner said so
+  — and the refusal is gone.
+- **The reference's reader is careful about the same things this one
+  is**: the size of the header, the sizes that are too big, and the
+  salt.
+- **The reference's key derivation is the one of the specification**:
+  the turn of the spin in front of the hash, and the block `0` at the
+  end of the last hash.
+
+### What it cost
+
+- **No new command**: the password is a parameter of the import
+  command that was already there.
+- **Two modules** of the reader (`src/standard.rs` and `src/rc4.rs`),
+  written from the **[MS-OFFCRYPTO]** specification.
+- **One dependency** — `sha1` — for the hash of the old scheme, and
+  **seven tests** in a new file (`tests/standard.rs`).
+- **Three of the tests use values that are not the tree's own**: the
+  key and the verifier of a real workbook, as the specification's
+  worked example gives them, and three whole files — with AES of 128
+  bits, with AES of 256 bits and with RC4 — as another program wrote
+  them. The tree holds no binary assets, so the values are in the
+  test as text.
+
+### What it does not settle
+
+- **The extensible scheme is not read**: a file of the 3.3 or the 4.3
+  is refused, and it says so.
+- **A file of rights management is not read**: the flags say so, and
+  the refusal says so.
+- **The old scheme has no integrity**: nothing in the file says the
+  package was not changed on the way, and the tree does not pretend
+  otherwise.
