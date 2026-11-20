@@ -50,6 +50,12 @@ use crate::formula::{Area, CellRef, Value};
 /// The **kinds** of chart there are.
 pub const KINDS: [&str; 4] = ["column", "bar", "line", "pie"];
 
+/// The **stackings** of a chart there are.
+///
+/// A chart that is not stacked has none: the tree's own way of saying
+/// that is nothing at all.
+pub const STACKINGS: [&str; 2] = ["stacked", "percentStacked"];
+
 /// The **positions** of the legend of a chart: the tree's own.
 pub const LEGENDS: [&str; 5] = ["none", "bottom", "top", "left", "right"];
 
@@ -86,6 +92,11 @@ pub fn legend_of_chart(chart: &Node, kind: &str) -> String {
             }
         }
     }
+}
+
+/// The **stacking** of a chart, as it is written.
+pub fn stacking_of(chart: &Node) -> Option<String> {
+    chart.data.get("stacking").and_then(|stacking| stacking.as_str()).map(|stacking| stacking.to_string())
 }
 
 /// The kind of chart, from its name.
@@ -371,6 +382,7 @@ commands! {
                 json!({
                     "range": area.to_text(),
                     "kind": kind.clone(),
+                    "stacking": Json::Null,
                     "title": title,
                     "legend": legend,
                     "dataLabels": self.data_labels.map(|on| on.0).unwrap_or(false),
@@ -428,6 +440,10 @@ commands! {
                     None => Json::Null,
                 },
                 "kind": kind.clone(),
+                "stacking": match stacking_of(&node) {
+                    Some(stacking) => json!(stacking),
+                    None => Json::Null,
+                },
                 "title": title_of(&node),
                 "legend": legend_of_chart(&node, &kind),
                 "dataLabels": element_on(&node, "dataLabels"),
@@ -459,6 +475,9 @@ commands! {
             range: Option<Text>,
             /// The kind of chart.
             kind: Option<Text>,
+            /// The **stacking** of the chart: `stacked` or
+            /// `percentStacked`. Without it, the chart is not stacked.
+            stacking: Option<Text>,
             /// The title of the chart.
             title: Option<Text>,
             /// Where the legend is: `none`, `bottom`, `top`, `left` or `right`.
@@ -528,6 +547,26 @@ commands! {
                 let text = text.0.trim().to_string();
                 title = if text.is_empty() { Json::Null } else { json!(text) };
             }
+            // The **stacking**: nothing at all means that the chart is
+            // not stacked.
+            let mut stacking = stacking_of(&node);
+            if let Some(text) = &self.stacking {
+                let text = text.0.trim();
+                if text.is_empty() {
+                    stacking = None;
+                } else {
+                    let Some(stacking_text) = STACKINGS.iter().find(|known| **known == text) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "`{text}` is not a stacking of a chart: it is one of {}",
+                                STACKINGS.join(", ")
+                            ),
+                        });
+                    };
+                    stacking = Some(stacking_text.to_string());
+                }
+            }
             // The **colours** of the series: a list of the tree's own
             // colours.
             let mut colours = colours_of(&node);
@@ -586,6 +625,10 @@ commands! {
                     None => Json::Null,
                 };
                 node.data["kind"] = json!(kind.clone());
+                node.data["stacking"] = match &stacking {
+                    Some(stacking) => json!(stacking),
+                    None => Json::Null,
+                };
                 node.data["title"] = title.clone();
                 node.data["legend"] = json!(legend.clone());
                 node.data["colours"] = json!(colours.clone());

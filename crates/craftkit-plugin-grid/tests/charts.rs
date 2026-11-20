@@ -290,3 +290,48 @@ fn the_colours_of_a_chart_are_colours() {
     let message = failure.to_string();
     assert!(message.contains("a list of them"), "the refusal says why: {message}");
 }
+
+/// The **stacking** of a chart may be set, and it is read back.
+#[test]
+fn the_stacking_of_a_chart_may_be_set() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    let chart = a_chart(&mut session, sheet, "A1:B4");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(
+        read["stacking"],
+        craftkit_sdk::serde_json::Value::Null,
+        "a chart is not stacked to begin with"
+    );
+    session
+        .execute("grid.chart.set", &json!({ "chart": chart, "stacking": "stacked" }))
+        .expect("the chart is stacked");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["stacking"].as_str(), Some("stacked"), "the chart is stacked");
+    session
+        .execute("grid.chart.set", &json!({ "chart": chart, "stacking": "percentStacked" }))
+        .expect("the chart is stacked to a hundred percent");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(
+        read["stacking"].as_str(),
+        Some("percentStacked"),
+        "the chart is stacked to a hundred percent"
+    );
+    session
+        .execute("grid.chart.set", &json!({ "chart": chart, "stacking": "" }))
+        .expect("the chart is not stacked");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["stacking"], craftkit_sdk::serde_json::Value::Null, "the chart is not stacked");
+}
+
+/// A **stacking** that is not one of the tree's is refused.
+#[test]
+fn a_stacking_that_is_not_one_of_the_trees_is_refused() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    let chart = a_chart(&mut session, sheet, "A1:B4");
+    let error = session
+        .execute("grid.chart.set", &json!({ "chart": chart, "stacking": "sideways" }))
+        .expect_err("that is not a stacking");
+    assert!(error.to_string().contains("stacked"), "the refusal says what is one: {error}");
+}

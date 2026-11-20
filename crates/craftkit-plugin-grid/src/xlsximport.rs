@@ -1128,6 +1128,10 @@ commands! {
                     let node = json!({
                         "range": area.to_text(),
                         "kind": kind,
+                        "stacking": match &chart.stacking {
+                            Some(stacking) => json!(stacking),
+                            None => Json::Null,
+                        },
                         "title": chart.title,
                         "legend": legend,
                         "dataLabels": chart.data_labels,

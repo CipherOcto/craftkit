@@ -465,6 +465,12 @@ pub struct Chart {
     /// The **kind** of the chart: `column`, `bar`, `line`, `pie`,
     /// `area`, `scatter`, `doughnut`, `bubble`, `radar` or `stock`.
     pub kind: String,
+    /// The **stacking** of the chart: `stacked` or `percentStacked`,
+    /// when the file says the chart is stacked.
+    ///
+    /// A chart that is not stacked has none: the file may say
+    /// `clustered`, and that is the way of saying nothing.
+    pub stacking: Option<String>,
     /// The **title** of the chart.
     pub title: Option<String>,
     /// The **legend**: where it is — `none`, `bottom`, `top`, `left`
@@ -755,6 +761,14 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         }
     }
     let (element, name) = group?;
+    // The **stacking**: the way the series of the chart are laid on
+    // one another. A chart that is not stacked says nothing, or says
+    // `clustered`, and that is the way of saying nothing.
+    let stacking = match element.child_val("grouping") {
+        Some("stacked") => Some("stacked".to_string()),
+        Some("percentStacked") => Some("percentStacked".to_string()),
+        _ => None,
+    };
     let kind = match name {
         "barChart" => {
             if element.child_val("barDir") == Some("bar") {
@@ -821,6 +835,7 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
     let gridlines = values_axis.is_some_and(|axis| axis.child("majorGridlines").is_some());
     Some(Chart {
         kind: kind.to_string(),
+        stacking,
         title,
         legend,
         data_labels,

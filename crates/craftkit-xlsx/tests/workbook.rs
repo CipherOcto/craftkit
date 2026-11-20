@@ -1368,6 +1368,56 @@ fn the_charts_of_a_sheet_are_read() {
     assert!(charts[0].colours.is_empty(), "and the series have no colour of their own");
 }
 
+/// The **stacking** of a chart is read: a chart of a file may be
+/// stacked, and stacked to a hundred percent.
+#[test]
+fn the_stacking_of_a_chart_is_read() {
+    for (grouping, expected) in
+        [("stacked", Some("stacked")), ("percentStacked", Some("percentStacked")), ("clustered", None)]
+    {
+        let package = a_package_of(&[
+            (
+                "_rels/.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                br#"<workbook><workbookPr/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><drawing r:id="rId1"/><sheetData/></worksheet>"#,
+            ),
+            (
+                "xl/drawings/drawing1.xml",
+                br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+            ),
+            (
+                "xl/drawings/_rels/drawing1.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/charts/chart1.xml",
+                format!(
+                    r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="{grouping}"/><c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#
+                )
+                .as_bytes(),
+            ),
+        ]);
+        let read = read(&package).expect("the workbook is read");
+        let (_, charts) = &read.charts[0];
+        assert_eq!(charts[0].stacking.as_deref(), expected, "the stacking of the chart");
+    }
+}
+
 /// The **colours** of the series of a chart are read: the colour a
 /// series is drawn in.
 #[test]
