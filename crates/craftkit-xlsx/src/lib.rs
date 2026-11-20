@@ -2318,6 +2318,9 @@ fn read_package(bytes: &[u8]) -> Result<Workbook, Error> {
         })
         .unwrap_or_default();
     workbook.names = names_of(&workbook_xml, &sheet_names);
+    // The **names of the charts**: the ranges a chart may name by a
+    // name of the workbook.
+    let chart_names = chart_names_of(&workbook_xml);
     // The **printing** of the sheets: the area a sheet prints and the
     // titles it repeats. A file says these with the built-in names.
     let prints = print_of(&workbook_xml, &sheet_names);
@@ -2398,7 +2401,36 @@ fn read_package(bytes: &[u8]) -> Result<Workbook, Error> {
         let _ = index;
     }
 
+    // The **charts** may name their ranges by a name of the workbook,
+    // and the name says what the range is.
+    if !chart_names.is_empty() {
+        for (_, charts) in workbook.charts.iter_mut() {
+            for chart in charts.iter_mut() {
+                resolve_chart_names(chart, &chart_names);
+            }
+        }
+    }
+
     Ok(workbook)
+}
+
+/// The **ranges** a chart names by a name of the workbook: the names
+/// are looked up, and a range that names one of them says what the
+/// name says.
+fn resolve_chart_names(chart: &mut Chart, names: &[(String, String)]) {
+    let resolve = |text: &mut String| {
+        let Some((_, range)) = names.iter().find(|(name, _)| name == &text.trim().to_ascii_lowercase())
+        else {
+            return;
+        };
+        *text = range.clone();
+    };
+    for series in chart.series.iter_mut() {
+        resolve(series);
+    }
+    if let Some(categories) = chart.categories.as_mut() {
+        resolve(categories);
+    }
 }
 
 /// The **names** of a workbook: the words its formulas use.
@@ -2413,8 +2445,11 @@ fn names_of(workbook_xml: &craftkit_xml::El, sheets: &[String]) -> Vec<Name> {
     for element in names.kids("definedName") {
         let Some(name) = element.attr("name") else { continue };
         // A **built-in** name is not a name: it says something about
-        // the printing of a sheet or the filter of one.
-        if name.to_ascii_lowercase().starts_with("_xlnm.") {
+        // the printing of a sheet or the filter of one. And the name of
+        // a **chart** is not a name either: it is the file's own way of
+        // naming the range of a chart, and the chart is read with it.
+        let lower = name.to_ascii_lowercase();
+        if lower.starts_with("_xlnm.") || lower.starts_with("_xlchart.") {
             continue;
         }
         let refers_to = element.text.trim().to_string();
@@ -2426,6 +2461,30 @@ fn names_of(workbook_xml: &craftkit_xml::El, sheets: &[String]) -> Vec<Name> {
         // file and not the sheets this reader reads.
         let scope = element.attr_u32("localSheetId").and_then(|number| sheets.get(number as usize).cloned());
         out.push(Name { name: name.to_string(), scope, refers_to });
+    }
+    out
+}
+
+/// The **names of the charts** of a workbook: the ranges a chart may
+/// name by a name of its own.
+///
+/// A chart of a file may name its range by a name the workbook holds —
+/// `_xlchart.v5.0` — and the name says what the range is. The names
+/// are the file's own words, and the tree keeps them as they are.
+fn chart_names_of(workbook_xml: &craftkit_xml::El) -> Vec<(String, String)> {
+    let Some(names) = workbook_xml.child("definedNames") else { return Vec::new() };
+    let mut out = Vec::new();
+    for element in names.kids("definedName") {
+        let Some(name) = element.attr("name") else { continue };
+        let lower = name.to_ascii_lowercase();
+        if !lower.starts_with("_xlchart.") {
+            continue;
+        }
+        let refers_to = element.text.trim().trim_start_matches('=').to_string();
+        if refers_to.is_empty() {
+            continue;
+        }
+        out.push((lower, refers_to));
     }
     out
 }
