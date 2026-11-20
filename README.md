@@ -4519,6 +4519,7 @@ so.
 | **the trendlines of a chart are read** | **built.** The file says of what kind the fit of a series is, and the tree keeps the fit (§1072) | §1072 |
 | **a pivot says whether it has grand totals** | **built.** The file says of a pivot whether it has the column that totals the rows and the line that totals the columns, and the tree keeps it (§1073) | §1073 |
 | **the way a pivot shows its value is read** | **built.** The file says of a pivot whether its value is shown as it is, as a share, as a running total or as a rank, and the tree keeps it (§1074) | §1074 |
+| **the subtotals of the groups of a pivot are read** | **built.** The file says of the groups of a pivot whether they have a subtotal and where it is, and the tree keeps it (§1075) | §1075 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68881,9 +68882,8 @@ columns.
 - **The names of the file are the other way round**: the file's
   `colGrandTotals` is the column at the right that totals the rows,
   and the tree keeps the file's names and the tree's meaning.
-- **The other settings of a pivot are not read**: the subtotals of
-  the groups, the order of the items and the filter of the pivot are
-  not read yet.
+- **The other settings of a pivot are not read**: the order of the
+  items and the filter of the pivot are not read yet.
 
 ## 1074. The way a pivot shows its value is read
 
@@ -68922,3 +68922,44 @@ as a running total, or as a rank.
   first, as it reads the first value.
 - **The number format of the value is not read**: the file says of the
   value how its numbers are written, and the tree does not say yet.
+
+## 1075. The subtotals of the groups of a pivot are read
+
+The **subtotals** of the groups of a pivot are read: whether a group
+has a subtotal, and whether it is at the top of the group or at the
+bottom of it.
+
+### What was built
+
+- The **reader** reads the two words of the field of the first axis:
+  whether the group has a subtotal at all, and whether it is at the
+  top.
+- The **import** carries it: the tree's pivot has the subtotals the
+  file says of, and a file that says nothing keeps the tree's own way.
+
+### What the port found
+
+- **The reference reads the two words** and keeps them on the pivot:
+  whether there are subtotals, and whether they are at the top.
+- **The tree had no subtotals at all**: the import wrote that a pivot
+  has none, so a pivot whose groups had subtotals came in without
+  them.
+
+### What it cost
+
+- **No new command**: the subtotals are a part of the pivot.
+- **One field** of the pivot of the reader, and one line of the
+  import.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The file and the tree differ about a silent file**: the standard
+  says that a file that says nothing has its subtotals at the top of
+  the group, and the reference reads it that way; the tree keeps its
+  own way when the file says nothing, because a file that says
+  nothing has not said it.
+- **The subtotals of a group are of one field**: the tree's pivot has
+  one set of subtotals, and the file may give each field its own. The
+  tree reads the field of the first axis, as it reads the first
+  value.
