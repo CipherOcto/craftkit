@@ -4516,6 +4516,7 @@ so.
 | **a comment says when it was written** | **built.** The file dates the note and every reply under it, and the tree keeps the date (§1069) | §1069 |
 | **a note may be shown** | **built.** The drawing of the notes says whether a note is on its cell or behind a mark, and the tree keeps it (§1070) | §1070 |
 | **the box of a note is read** | **built.** The drawing of the notes says where the box of a note sits and how big it is, and the tree keeps it (§1071) | §1071 |
+| **the trendlines of a chart are read** | **built.** The file says of what kind the fit of a series is, and the tree keeps the fit (§1072) | §1072 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68797,3 +68798,48 @@ big it is, and the tree keeps it.
 - **The corners are in pixels and the size is in points**: the file
   measures the corners in the pixels of a screen and the box in the
   points of a printer, and the tree does not reconcile the two.
+
+## 1072. The trendlines of a chart are read
+
+The **trendlines** of a chart are read: the fits of the lines of its
+series, and the file says of what kind each fit is.
+
+### What was built
+
+- The **reader** reads the trendlines of every series of a chart: the
+  **kind** of the fit — a straight line, a curve, a logarithm, a power,
+  a polynomial, a moving average — and the **order** of a polynomial
+  and the **period** of a moving average.
+- The **name** of the fit is read, and how far it is carried **forward**
+  and **backward**, and the **intercept** it meets the axis at, and
+  whether its **equation** and its **r squared** are shown.
+- The **import** carries them, and the chart is read back with them:
+  `grid.chart.read` gives the trendlines of a chart.
+
+### What the port found
+
+- **The reference reads the trendlines of a series** and keeps them on
+  the series itself, with the line's colour, its width and its dash.
+- **The tree kept the line and lost the fit**: the file says of every
+  series what fit is drawn over it, and the tree said nothing.
+
+### What it cost
+
+- **No new command**: a trendline is a part of a chart, and the chart
+  is read already.
+- **One kind** in the reader — the trendline — and one field of the
+  chart of the reader, and one of the chart of the document.
+- **Three tests**: two in the reader, and one in the import.
+
+### What it does not settle
+
+- **The line of a fit is not read**: the file says of the trendline
+  what colour it is, how wide it is and what dash it has, and the tree
+  draws the fit in the colour of its series.
+- **The tree does not clamp what the file says**: the reference caps a
+  forecast at a hundred thousand and a polynomial at the sixth order,
+  and the tree keeps what the file says and counts a kind it does not
+  have.
+- **A trendline of a series the tree does not have is not read**: a
+  series with no values is not a series here, and a fit over it is
+  left out and said.
