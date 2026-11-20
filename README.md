@@ -4525,6 +4525,7 @@ so.
 | **the filter of a pivot is read** | **built.** The file says of the field a pivot filters by and of the items it keeps, and the tree keeps it (§1078) | §1078 |
 | **the kinds of pages that have a header of their own are read** | **built.** The file says of a sheet whether the first page and the even pages have a header of their own, and the tree prints the sheet that way (§1079) | §1079 |
 | **the cell a chart is drawn in is read** | **built.** The anchor of the drawing says the cell a chart is drawn in, and the tree keeps it (§1080) | §1080 |
+| **the way a sheet is looked at is read** | **built.** The file says of a sheet whether it is looked at the ordinary way, the way of the pages or the way of the breaks, and the tree keeps it (§1081) | §1081 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69161,3 +69162,41 @@ says it.
   are not read. Where a chart is drawn is the front end's business.
 - **A chart that is drawn in no anchor has no cell**: the tree says
   nothing rather than guessing a cell.
+
+## 1081. The way a sheet is looked at is read
+
+The **way** a sheet is looked at is read: the ordinary way, the way of
+the pages, or the way of the breaks between them.
+
+### What was built
+
+- The **reader** reads the way of the **view** of the sheet.
+- The **import** carries it, and the **view** of the sheet keeps it:
+  a flag that is set afterwards does not take it away, because what is
+  not said stays as it was.
+
+### What the port found
+
+- **The reference reads the way of the view** and keeps it on the
+  sheet.
+- **The tree did not say how a sheet was looked at**: the view of a
+  file came in with its flags — the gridlines, the headings, the
+  zeros — and without the way of looking at it.
+
+### What it cost
+
+- **No new command**: the way of the sheet is a part of its view, and
+  the tree has had a command for the view since the view itself.
+- **One field** of the view of the reader, and one of the view of the
+  document.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The tree does not look at a sheet in another way**: the way is
+  kept as the file says it, and a sheet of the tree is looked at the
+  ordinary way. Where a sheet is looked at is the front end's
+  business.
+- **A way the file names that the tree does not have is kept as it is
+  written**: the tree does not refuse a word of the file it does not
+  know, and it does not pretend to know it either.
