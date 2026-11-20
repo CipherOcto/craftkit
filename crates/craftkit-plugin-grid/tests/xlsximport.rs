@@ -2273,6 +2273,56 @@ fn the_way_a_pivot_shows_its_value_is_imported() {
     assert_eq!(pivot["show_as"].as_str(), Some("percentOfGrandTotal"), "the value is shown as a share");
 }
 
+/// The **subtotals** of the groups of a pivot are imported: the file
+/// says where they are, and the tree keeps it.
+#[test]
+fn the_subtotals_of_a_pivot_are_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Region</t></is></c><c r="B1" t="inlineStr"><is><t>Product</t></is></c><c r="C1" t="inlineStr"><is><t>Amount</t></is></c></row></sheetData></worksheet>"#,
+        ),
+        (
+            "xl/pivotTables/pivotTable1.xml",
+            r#"<pivotTableDefinition name="The Pivot" cacheId="1"><location ref="A1:B5"/><pivotFields count="3"><pivotField axis="axisRow" defaultSubtotal="1" subtotalTop="0"><items count="2"><item x="0"/><item t="default"/></items></pivotField><pivotField dataField="1"/><pivotField/></pivotFields><rowFields count="1"><field x="0"/></rowFields><dataFields count="1"><dataField name="Sum of Amount" fld="2"/></dataFields></pivotTableDefinition>"#,
+        ),
+        (
+            "xl/pivotTables/_rels/pivotTable1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/pivotCacheDefinition1.xml",
+            r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Region"/><cacheField name="Product"/><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["pivots"].as_u64(), Some(1), "one pivot was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let pivot = &node.data["pivots"][0];
+    assert_eq!(pivot["subtotals"].as_str(), Some("bottom"), "the subtotals are at the bottom");
+}
+
 /// The **conditional formats** of the extension list are not imported,
 /// and the import says so.
 #[test]

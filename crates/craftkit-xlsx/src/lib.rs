@@ -431,6 +431,12 @@ pub struct PivotTable {
     ///
     /// A file that says nothing shows the value as it is.
     pub show_as: Option<String>,
+    /// The **subtotals** of the groups of the pivot: `none`, `top` or
+    /// `bottom`.
+    ///
+    /// A file that says nothing about them says nothing, and the tree
+    /// keeps its own way.
+    pub subtotals: Option<String>,
 }
 
 /// The **parts** of a sheet: the things it holds in parts of their
@@ -793,10 +799,10 @@ fn read_pivots(
             })
             .unwrap_or_default()
         };
-        let row_fields: Vec<String> =
-            indexes(root.child("rowFields")).iter().map(|index| name_of(*index)).collect();
-        let column_fields: Vec<String> =
-            indexes(root.child("colFields")).iter().map(|index| name_of(*index)).collect();
+        let row_indexes = indexes(root.child("rowFields"));
+        let column_indexes = indexes(root.child("colFields"));
+        let row_fields: Vec<String> = row_indexes.iter().map(|index| name_of(*index)).collect();
+        let column_fields: Vec<String> = column_indexes.iter().map(|index| name_of(*index)).collect();
         // The **value**: the field that is put together, and the way
         // of putting it together.
         let data_field = root.child("dataFields").and_then(|fields| fields.child("dataField"));
@@ -807,6 +813,14 @@ fn read_pivots(
         // The way the pivot **shows** its value: as it is, as a share
         // of a total, as a running total or as a rank.
         let show_as = data_field.and_then(|field| show_as_of(field, warnings));
+        // The **subtotals** of the groups: the field of the first axis
+        // says where they are, or that they are not there.
+        let axis = row_indexes.first().or(column_indexes.first()).copied();
+        let subtotals = axis
+            .and_then(|index| {
+                root.child("pivotFields").and_then(|fields| fields.kids("pivotField").nth(index))
+            })
+            .and_then(subtotals_of);
         let name = root.attr("name").map(|name| name.to_string());
         // The **grand totals**: the column at the right that totals the
         // rows, and the line at the bottom that totals the columns. The
@@ -823,9 +837,27 @@ fn read_pivots(
             grand_totals_rows,
             grand_totals_cols,
             show_as,
+            subtotals,
         });
     }
     out
+}
+
+/// The **subtotals** of the groups of a pivot: `none`, `top` or
+/// `bottom`.
+///
+/// The field says of them in two words: whether the group has a
+/// subtotal at all, and whether it is at the top of the group. A field
+/// that says neither says nothing, and the tree keeps its own way.
+fn subtotals_of(field: &craftkit_xml::El) -> Option<String> {
+    let default = field.attr_bool("defaultSubtotal");
+    let top = field.attr_bool("subtotalTop");
+    match (default, top) {
+        (None, None) => None,
+        (Some(false), _) => Some("none".to_string()),
+        (_, Some(false)) => Some("bottom".to_string()),
+        _ => Some("top".to_string()),
+    }
 }
 
 /// The way a pivot **shows its value**: as it is, as a share of the

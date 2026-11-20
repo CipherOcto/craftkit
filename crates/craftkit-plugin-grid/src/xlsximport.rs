@@ -1906,7 +1906,14 @@ fn pivot_of(
             .as_deref()
             .and_then(crate::pivots::ShowAs::parse)
             .unwrap_or(crate::pivots::ShowAs::Normal),
-        subtotals: crate::pivots::Subtotals::None,
+        // The **subtotals** of the groups: the file says where they
+        // are, or that they are not there. A file that says nothing
+        // keeps the tree's own way.
+        subtotals: pivot
+            .subtotals
+            .as_deref()
+            .and_then(crate::pivots::Subtotals::parse)
+            .unwrap_or(crate::pivots::Subtotals::None),
     })
 }
 
