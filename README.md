@@ -4511,6 +4511,7 @@ so.
 | **the stacking of a chart is read** | **built.** A chart of a file may be stacked, and stacked to a hundred percent, and the tree's chart keeps it (§1064) | §1064 |
 | **the smooth line of a chart is read** | **built.** The file says of each of its series whether the line is smooth, and the tree's chart keeps the smooth line it can draw (§1065) | §1065 |
 | **the markers of a chart are read** | **built.** The file says of the group whether it has markers, and of each of its series whether it shows them (§1066) | §1066 |
+| **a chart that draws two kinds in one is a combo chart** | **built.** A chart of a column and a line over it is one chart of two kinds, and the tree says so and leaves it out (§1067) | §1067 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68587,3 +68588,43 @@ whether it has them, and of each of its series whether it shows them.
 - **The colour of a line is not read**: the file says of a series
   what colour its line is, and the tree's chart has the colours of
   the series and not the colour of the line.
+## 1067. A chart that draws two kinds in one is a combo chart
+
+A chart that draws **two kinds** in one — a column chart and a line
+over it — is a chart of two kinds, and the tree says so.
+
+### What was built
+
+- The **reader** counts the groups of a chart: a chart with one group
+  is the chart it is, and a chart with two is a **combo chart**.
+- The tree **says so**: the reader's warning names the chart.
+- The **import** leaves it out and **counts** it — the tree's chart is
+  one kind of drawing, and a combo chart is a kind the tree does not
+  have.
+
+### What the port found
+
+- **The reference has a kind for it** — a chart of two kinds is a
+  combo chart, and each of its series says which axis it is on. The
+  tree has no such chart, and says so.
+- **The tree kept the first group and said nothing**: a combo chart
+  came in as the column chart it began with, and the line over it was
+  lost without a word. The tree's rule is that an unread value is
+  counted and reported and never repaired, and a chart that is not the
+  chart of the file is an unread value.
+
+### What it cost
+
+- **No new command**: a combo chart is not a chart the tree has.
+- **One kind** in the reader, and a warning.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The axis a series is on is not read**: the file says of each of
+  the series of a combo chart which axis it belongs to, and the tree
+  does not read combo charts.
+- **The extended charts are not read**: the kinds Excel 2016 added —
+  the histogram, the box and whisker, the waterfall, the funnel, the
+  treemap and the sunburst — are in parts of their own, and the tree
+  does not read those parts yet.
