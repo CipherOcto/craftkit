@@ -4513,6 +4513,7 @@ so.
 | **the markers of a chart are read** | **built.** The file says of the group whether it has markers, and of each of its series whether it shows them (§1066) | §1066 |
 | **a chart that draws two kinds in one is a combo chart** | **built.** A chart of a column and a line over it is one chart of two kinds, and the tree says so and leaves it out (§1067) | §1067 |
 | **the extended charts are read** | **built.** The kinds Excel 2016 added are in parts of their own, and the tree reads them and says which kind they are (§1068) | §1068 |
+| **a comment says when it was written** | **built.** The file dates the note and every reply under it, and the tree keeps the date (§1069) | §1069 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68671,3 +68672,38 @@ and the sunburst — are in parts of their own, and the tree reads them.
   reads the name and not the range.
 - **The tree has no chart of those kinds**: a front end that draws a
   treemap has nothing to draw yet.
+## 1069. A comment says when it was written
+
+A comment says **when it was written**: the file dates the note and
+every reply under it, and the tree keeps the date.
+
+### What was built
+
+- The **reader** reads the date of a note and of its replies.
+- The **import** carries it: the sheet's comment holds the date, and
+  so does every reply under it.
+- The tree's own rule holds: a comment that is **edited** keeps the
+  date it had, because what is not said stays as it was.
+
+### What the port found
+
+- **The reference keeps the dates of the comments** — a note of a new
+  file is dated, and so is every reply under it.
+- **The tree kept the text, the author, the replies and the resolved
+  flag, and left the date out**: a note that was written on a day was
+  a note of no day.
+
+### What it cost
+
+- **No new command**: the date is part of the comment.
+- **One field** of the comment of the reader, and one of the comment
+  of the document.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **A note of the old kind has no date**: the file does not say when
+  it was written, and the tree does not guess.
+- **A note that is hidden is not said to be hidden**: the file keeps
+  the shape of the note in a part of its own, and the tree does not
+  read that part yet.
