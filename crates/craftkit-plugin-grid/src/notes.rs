@@ -290,6 +290,7 @@ commands! {
                         resolved,
                         date: None,
                         visible: false,
+                        note_box: None,
                     },
                 );
                 converted.push(address.clone());

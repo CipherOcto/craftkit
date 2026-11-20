@@ -2086,6 +2086,84 @@ fn a_thread_is_not_shown_the_way_a_note_is() {
     assert!(!comments[0].visible, "and it is not shown the way a note is");
 }
 
+/// The **box** of a note is read: where it sits and how big it is.
+#[test]
+fn the_box_of_a_note_is_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/comments1.xml",
+            r#"<comments><authors><author>ann</author></authors><commentList><comment ref="B2" authorId="0"><text><r><t>the note</t></r></text></comment></commentList></comments>"#,
+        ),
+        (
+            "xl/drawings/vmlDrawing1.vml",
+            r##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel"><v:shape id="_x0000_s1025" type="#_x0000_t202" style="position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:108pt;height:59.25pt;z-index:1"><x:ClientData ObjectType="Note"><x:MoveWithCells/><x:SizeWithCells/><x:Anchor>2, 15, 1, 2, 4, 15, 5, 16</x:Anchor><x:Row>1</x:Row><x:Column>1</x:Column></x:ClientData></v:shape></xml>"##,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, comments) = &workbook.comments[0];
+    let box_of = comments[0].note_box.as_ref().expect("the note has a box");
+    assert_eq!(box_of.from.column, 1, "the top-left corner is a column right of the cell");
+    assert_eq!(box_of.from.column_px, 15, "and fifteen pixels into it");
+    assert_eq!(box_of.from.row, 0, "the top corner is on the row of the cell");
+    assert_eq!(box_of.from.row_px, 2, "and two pixels into it");
+    assert_eq!(box_of.to.column, 3, "the bottom-right corner is three columns right");
+    assert_eq!(box_of.to.row, 4, "and four rows down");
+    assert_eq!(box_of.size_pt, Some((108.0, 59.25)), "and the box is a hundred and eight by fifty-nine");
+}
+
+/// An **anchor** that is not eight numbers is not a box: the note has
+/// none, and the tree does not guess one.
+#[test]
+fn an_anchor_that_is_not_a_box_is_not_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/comments1.xml",
+            r#"<comments><authors><author>ann</author></authors><commentList><comment ref="A1" authorId="0"><text><r><t>the note</t></r></text></comment></commentList></comments>"#,
+        ),
+        (
+            "xl/drawings/vmlDrawing1.vml",
+            r##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel"><v:shape id="_x0000_s1025" type="#_x0000_t202" style="position:absolute;width:108pt"><x:ClientData ObjectType="Note"><x:Anchor>1, 0, 1</x:Anchor><x:Row>0</x:Row><x:Column>0</x:Column></x:ClientData></v:shape></xml>"##,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, comments) = &workbook.comments[0];
+    assert!(comments[0].note_box.is_none(), "the note has no box");
+}
+
 /// The **tables** of a sheet are read: they are in parts of their own
 /// that the sheet names by a relationship.
 #[test]

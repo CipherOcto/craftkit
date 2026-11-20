@@ -493,6 +493,53 @@ fn an_edited_comment_keeps_the_note_as_it_was_shown() {
     assert_eq!(read.data["comment"]["visible"].as_bool(), Some(true), "and the note is still shown");
 }
 
+/// The **box** of a note is imported: where it sits and how big it is.
+#[test]
+fn the_box_of_a_note_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/comments1.xml",
+            r#"<comments><authors><author>ann</author></authors><commentList><comment ref="B2" authorId="0"><text><r><t>the note</t></r></text></comment></commentList></comments>"#,
+        ),
+        (
+            "xl/drawings/vmlDrawing1.vml",
+            r##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel"><v:shape id="_x0000_s1025" type="#_x0000_t202" style="position:absolute;width:108pt;height:59.25pt"><x:ClientData ObjectType="Note"><x:Anchor>2, 15, 1, 2, 4, 15, 5, 16</x:Anchor><x:Row>1</x:Row><x:Column>1</x:Column></x:ClientData></v:shape></xml>"##,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let read = session
+        .execute("grid.cell.comment.get", &json!({ "sheet": sheet, "cell": "B2" }))
+        .expect("the comment is read");
+    let box_of = &read.data["comment"]["note_box"];
+    assert_eq!(box_of["from"]["column"].as_i64(), Some(1), "the top-left corner is a column right");
+    assert_eq!(box_of["from"]["column_px"].as_u64(), Some(15), "and fifteen pixels into it");
+    assert_eq!(box_of["to"]["row"].as_i64(), Some(4), "the bottom-right corner is four rows down");
+    assert_eq!(box_of["size_pt"]["width"].as_f64(), Some(108.0), "and the box is a hundred and eight wide");
+    assert_eq!(box_of["size_pt"]["height"].as_f64(), Some(59.25), "and fifty-nine and a quarter tall");
+}
+
 /// The **tables** of a sheet are imported: the ranges with a name and
 /// a way of being totalled.
 #[test]

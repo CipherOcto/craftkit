@@ -51,8 +51,79 @@ pub struct Reply {
     pub date: Option<String>,
 }
 
+/// The **box of a note**: where it sits and how big it is.
+///
+/// A corner is counted from the **cell** of the note: a column to the
+/// left of it is negative, and so is a row above it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NoteBox {
+    /// The top-left corner of the box.
+    pub from: NoteCorner,
+    /// The bottom-right corner of the box.
+    pub to: NoteCorner,
+    /// The width and the height of the box in **points**, when the file
+    /// says them.
+    pub size_pt: Option<(f64, f64)>,
+}
+
+/// One **corner** of the box of a note.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NoteCorner {
+    /// The column from the cell of the note: negative is left of it.
+    pub column: i64,
+    /// The offset into that column, in **pixels**.
+    pub column_px: u32,
+    /// The row from the cell of the note: negative is above it.
+    pub row: i64,
+    /// The offset into that row, in **pixels**.
+    pub row_px: u32,
+}
+
+/// The **corner** of a box, as it is read.
+fn corner_from(value: &Json) -> Option<NoteCorner> {
+    Some(NoteCorner {
+        column: value.get("column").and_then(|column| column.as_i64())?,
+        column_px: value.get("column_px").and_then(|pixels| pixels.as_u64())? as u32,
+        row: value.get("row").and_then(|row| row.as_i64())?,
+        row_px: value.get("row_px").and_then(|pixels| pixels.as_u64())? as u32,
+    })
+}
+
+/// The **box** of a note, as it is read.
+fn note_box_from(value: &Json) -> Option<NoteBox> {
+    let from = corner_from(value.get("from")?)?;
+    let to = corner_from(value.get("to")?)?;
+    let size = value.get("size_pt").and_then(|size| {
+        let width = size.get("width").and_then(|width| width.as_f64())?;
+        let height = size.get("height").and_then(|height| height.as_f64())?;
+        Some((width, height))
+    });
+    Some(NoteBox { from, to, size_pt: size })
+}
+
+/// The **box** of a note, as it is kept.
+fn note_box_into(box_of: &NoteBox) -> Json {
+    let corner = |corner: &NoteCorner| {
+        json!({
+            "column": corner.column,
+            "column_px": corner.column_px,
+            "row": corner.row,
+            "row_px": corner.row_px,
+        })
+    };
+    let size = match box_of.size_pt {
+        Some((width, height)) => json!({ "width": width, "height": height }),
+        None => Json::Null,
+    };
+    json!({
+        "from": corner(&box_of.from),
+        "to": corner(&box_of.to),
+        "size_pt": size,
+    })
+}
+
 /// A **comment**: a thread on a cell.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Comment {
     /// The text of the comment.
     pub text: String,
@@ -67,6 +138,9 @@ pub struct Comment {
     /// Whether the note is **shown**: a note that is shown is on its
     /// cell and not behind a mark in the corner of it.
     pub visible: bool,
+    /// The **box** the note is shown in, when the file says where it
+    /// sits and how big it is.
+    pub note_box: Option<NoteBox>,
 }
 
 /// The **comment** a value holds, if it holds one.
@@ -86,7 +160,8 @@ pub fn comment_from(value: &Json) -> Option<Comment> {
     let resolved = value.get("resolved").and_then(|resolved| resolved.as_bool()).unwrap_or(false);
     let date = value.get("date").and_then(|date| date.as_str()).map(|date| date.to_string());
     let visible = value.get("visible").and_then(|visible| visible.as_bool()).unwrap_or(false);
-    Some(Comment { text, author, replies, resolved, date, visible })
+    let note_box = value.get("note_box").and_then(note_box_from);
+    Some(Comment { text, author, replies, resolved, date, visible, note_box })
 }
 
 /// The **comments** of a sheet: by the address of the cell they are on.
@@ -116,6 +191,13 @@ pub fn comments_into(comments: &BTreeMap<String, Comment>) -> Json {
             one.insert("date".to_string(), Json::String(date.clone()));
         }
         one.insert("visible".to_string(), Json::Bool(comment.visible));
+        one.insert(
+            "note_box".to_string(),
+            match &comment.note_box {
+                Some(box_of) => note_box_into(box_of),
+                None => Json::Null,
+            },
+        );
         let replies: Vec<Json> = comment
             .replies
             .iter()
@@ -150,6 +232,13 @@ pub fn comment_of(comment: &Comment) -> Json {
     );
     one.insert("resolved".to_string(), Json::Bool(comment.resolved));
     one.insert("visible".to_string(), Json::Bool(comment.visible));
+    one.insert(
+        "note_box".to_string(),
+        match &comment.note_box {
+            Some(box_of) => note_box_into(box_of),
+            None => Json::Null,
+        },
+    );
     let replies: Vec<Json> = comment
         .replies
         .iter()
@@ -297,7 +386,13 @@ commands! {
             // The note stays as it was **shown** or not: what is not
             // said stays as it was. The tree's own rule.
             let visible = held.map(|comment| comment.visible).unwrap_or(false);
-            comments.insert(address.clone(), Comment { text, author: author.clone(), replies, resolved, date, visible });
+            // The **box** of an edited comment stays as it was: what
+            // is not said stays as it was. The tree's own rule.
+            let note_box = held.and_then(|comment| comment.note_box.clone());
+            comments.insert(
+                address.clone(),
+                Comment { text, author: author.clone(), replies, resolved, date, visible, note_box },
+            );
             node.data["comments"] = comments_into(&comments);
             // A **note replaces a comment**: the note on the cell goes away.
             let mut notes = crate::notes::notes_of(node);

@@ -1514,7 +1514,7 @@ pub struct Table {
 ///
 /// A comment has an **author** and a **text**, and it is on one cell.
 /// A note of a newer file is a **thread**: it has replies under it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Comment {
     /// The column of the cell, counted from zero.
     pub column: u32,
@@ -1539,6 +1539,44 @@ pub struct Comment {
     /// The file says so in the drawing of the notes, and a note of a
     /// newer file — a thread — is not shown this way.
     pub visible: bool,
+    /// The **box** the note is shown in, when the file says where it
+    /// sits and how big it is.
+    ///
+    /// A note of a newer file — a thread — has no box: it is not shown
+    /// in a box of its cell.
+    pub note_box: Option<NoteBox>,
+}
+
+/// The **box of a note**: where it sits and how big it is.
+///
+/// The box is in the drawing of the notes, and it is said in two ways:
+/// the **anchor** says where the corners of the box are, and the
+/// **style** of the shape says how big it is.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NoteBox {
+    /// The top-left corner of the box.
+    pub from: NoteCorner,
+    /// The bottom-right corner of the box.
+    pub to: NoteCorner,
+    /// The width and the height of the box in **points**, when the file
+    /// says them.
+    pub size_pt: Option<(f64, f64)>,
+}
+
+/// One **corner** of the box of a note.
+///
+/// A corner is counted from the **cell** of the note: a column to the
+/// left of it is negative, and so is a row above it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoteCorner {
+    /// The column from the cell of the note: negative is left of it.
+    pub column: i64,
+    /// The offset into that column, in **pixels**.
+    pub column_px: u32,
+    /// The row from the cell of the note: negative is above it.
+    pub row: i64,
+    /// The offset into that row, in **pixels**.
+    pub row_px: u32,
 }
 
 /// A **reply** to a comment: a note written under another note.
@@ -3309,8 +3347,9 @@ fn read_comments(
     warnings: &mut Vec<String>,
 ) -> Vec<Comment> {
     let mut out = Vec::new();
-    // The notes that are **shown**: the drawing of the notes says so.
-    let shown = read_shown_notes(package, sheet_rels);
+    // The **shapes of the notes**: the drawing of the notes says
+    // whether a note is shown, and where its box sits.
+    let shapes = read_note_shapes(package, sheet_rels);
     for relation in sheet_rels.iter().filter(|relation| relation.kind == "comments") {
         let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
         let authors: Vec<String> = root
@@ -3340,7 +3379,8 @@ fn read_comments(
                 replies: Vec::new(),
                 resolved: false,
                 date: None,
-                visible: shown.contains(&(column, row as u32)),
+                visible: shape_of(&shapes, column, row as u32).is_some_and(|shape| shape.visible),
+                note_box: shape_of(&shapes, column, row as u32).and_then(note_box_of),
             });
         }
     }
@@ -3371,6 +3411,7 @@ fn read_comments(
                 resolved: element.flag("done", false),
                 date: element.attr("dT").map(|date| date.to_string()),
                 visible: false,
+                note_box: None,
             };
             threads.push((id.to_string(), comment));
         }
@@ -3404,49 +3445,121 @@ fn read_comments(
     out
 }
 
-/// Read the **notes that are shown** in a sheet.
+/// Read the **shapes of the notes** of a sheet.
 ///
 /// A note of the old kind has a shape of its own in a part of the
 /// sheet's own — the drawing of the **VML** — and the shape says
 /// whether the note is **shown**: a note that is shown is on its cell
-/// and not behind a mark in the corner of it.
+/// and not behind a mark in the corner of it. The shape says where the
+/// **box** of the note sits as well.
 ///
 /// The cells are given as their column and their row, counted from
 /// zero, as the shape says them. A shape that says no cell, or a cell
 /// that is not one, is not a note.
-fn read_shown_notes(
-    package: &mut craftkit_zip::Package<'_>,
-    sheet_rels: &[Rel],
-) -> std::collections::HashSet<(u32, u32)> {
-    let mut out = std::collections::HashSet::new();
+fn read_note_shapes(package: &mut craftkit_zip::Package<'_>, sheet_rels: &[Rel]) -> Vec<NoteShape> {
+    let mut out = Vec::new();
     for relation in sheet_rels.iter().filter(|relation| relation.kind == "vmlDrawing") {
         let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
-        shown_notes_of(&root, &mut out, 0);
+        note_shapes_of(&root, &mut out, 0);
     }
     out
 }
 
-/// The **notes that are shown** in a drawing: the shapes of the notes
-/// are looked for, and a shape may sit in a group of shapes.
-fn shown_notes_of(root: &craftkit_xml::El, out: &mut std::collections::HashSet<(u32, u32)>, depth: usize) {
+/// The **shapes of the notes** in a drawing: the shapes are looked for,
+/// and a shape may sit in a group of shapes.
+fn note_shapes_of(root: &craftkit_xml::El, out: &mut Vec<NoteShape>, depth: usize) {
     if depth > craftkit_xml::MAX_DEPTH {
         return;
     }
     for element in root.children.iter() {
         if element.name == "shape" {
             let data = element.child("ClientData").filter(|data| data.attr("ObjectType") == Some("Note"));
-            if let Some(data) = data
-                && data.child("Visible").is_some()
-            {
+            if let Some(data) = data {
                 let row = data.child("Row").and_then(|row| row.text.trim().parse::<u32>().ok());
                 let column = data.child("Column").and_then(|column| column.text.trim().parse::<u32>().ok());
                 if let (Some(column), Some(row)) = (column, row) {
-                    out.insert((column, row));
+                    out.push(NoteShape {
+                        column,
+                        row,
+                        visible: data.child("Visible").is_some(),
+                        anchor: data.child("Anchor").map(|anchor| anchor.text.clone()),
+                        style: element.attr("style").map(|style| style.to_string()),
+                    });
                 }
             }
         }
-        shown_notes_of(element, out, depth + 1);
+        note_shapes_of(element, out, depth + 1);
     }
+}
+
+/// The **shape of the note** of a cell, when the drawing of the notes
+/// has one.
+fn shape_of(shapes: &[NoteShape], column: u32, row: u32) -> Option<&NoteShape> {
+    shapes.iter().find(|shape| shape.column == column && shape.row == row)
+}
+
+/// The **shape of a note**: what the drawing of the notes says of it.
+struct NoteShape {
+    /// The column of the cell the note is on.
+    column: u32,
+    /// The row of that cell.
+    row: u32,
+    /// Whether the note is shown.
+    visible: bool,
+    /// The **anchor** of the shape: where the box of the note sits.
+    anchor: Option<String>,
+    /// The **style** of the shape: how big the box is.
+    style: Option<String>,
+}
+
+/// The **box** of a note, from the anchor of its shape and the style of
+/// the shape.
+///
+/// The anchor is eight numbers: the column and the offset of the left
+/// corner, the row and the offset of the top corner, and the same for
+/// the right and the bottom corner. The corners are counted from the
+/// **cell** of the note, so a box to the left of its cell has a
+/// negative column.
+///
+/// An anchor that is not eight numbers, or that names a cell that is
+/// not one, is not a box: the note has none.
+fn note_box_of(shape: &NoteShape) -> Option<NoteBox> {
+    let anchor = shape.anchor.as_ref()?;
+    let numbers: Vec<u32> =
+        anchor.split(',').map(|part| part.trim().parse::<u32>().ok()).collect::<Option<_>>()?;
+    let [c1, dx1, r1, dy1, c2, dx2, r2, dy2] = <[u32; 8]>::try_from(numbers).ok()?;
+    if u64::from(c1.max(c2)) >= MAX_COLS || u64::from(r1.max(r2)) >= MAX_ROWS {
+        return None;
+    }
+    let corner = |column: u32, column_px: u32, row: u32, row_px: u32| NoteCorner {
+        column: i64::from(column) - i64::from(shape.column),
+        column_px,
+        row: i64::from(row) - i64::from(shape.row),
+        row_px,
+    };
+    Some(NoteBox {
+        from: corner(c1, dx1, r1, dy1),
+        to: corner(c2, dx2, r2, dy2),
+        size_pt: note_size_pt(shape.style.as_deref()),
+    })
+}
+
+/// The **size of a box** in points, from the style of its shape.
+///
+/// The style says of the shape how wide it is and how tall it is, in
+/// points. A style that says only one of them, or that says a size
+/// that is not a number, is no size.
+fn note_size_pt(style: Option<&str>) -> Option<(f64, f64)> {
+    let style = style?;
+    let point = |key: &str| {
+        style
+            .split(';')
+            .filter_map(|declaration| declaration.split_once(':'))
+            .find(|(name, _)| name.trim().eq_ignore_ascii_case(key))
+            .and_then(|(_, value)| value.trim().strip_suffix("pt")?.trim().parse::<f64>().ok())
+            .filter(|size| size.is_finite() && *size > 0.0 && *size < 1e6)
+    };
+    Some((point("width")?, point("height")?))
 }
 
 /// The text of a **thread's** note: the text of the element itself, or

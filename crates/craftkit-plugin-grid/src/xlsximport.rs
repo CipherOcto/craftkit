@@ -1373,6 +1373,31 @@ commands! {
                     }
                     // Whether the note is **shown** on its cell.
                     one.insert("visible".to_string(), json!(comment.visible));
+                    // The **box** the note is shown in.
+                    one.insert(
+                        "note_box".to_string(),
+                        match &comment.note_box {
+                            Some(box_of) => json!({
+                                "from": {
+                                    "column": box_of.from.column,
+                                    "column_px": box_of.from.column_px,
+                                    "row": box_of.from.row,
+                                    "row_px": box_of.from.row_px,
+                                },
+                                "to": {
+                                    "column": box_of.to.column,
+                                    "column_px": box_of.to.column_px,
+                                    "row": box_of.to.row,
+                                    "row_px": box_of.to.row_px,
+                                },
+                                "size_pt": match box_of.size_pt {
+                                    Some((width, height)) => json!({ "width": width, "height": height }),
+                                    None => Json::Null,
+                                },
+                            }),
+                            None => Json::Null,
+                        },
+                    );
                     // The **replies** under the note: a thread of a
                     // newer file.
                     let replies: Vec<Json> = comment
