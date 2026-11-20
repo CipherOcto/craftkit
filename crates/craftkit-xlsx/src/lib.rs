@@ -548,7 +548,7 @@ fn read_drawings(
         };
         let Some(relation) = drawing_rels.iter().find(|relation| relation.id == id) else { continue };
         let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
-        let Some(chart) = read_chart(&root, theme) else { continue };
+        let Some(chart) = read_chart(&root, theme, warnings) else { continue };
         if chart.smooth.is_none() {
             warnings.push(
                 "a chart of the sheet has series that do not all say the same about the smooth line"
@@ -759,11 +759,13 @@ fn read_pivots(
 ///
 /// The chart is a **group** of series — a bar chart, a line chart, a
 /// pie chart — and the group says of itself what kind of drawing it is.
-fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
+fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>) -> Option<Chart> {
     let chart = root.child("chart")?;
     let plot = chart.child("plotArea")?;
-    // The **group**: the kind of drawing and its series.
-    let mut group: Option<(&craftkit_xml::El, &str)> = None;
+    // The **groups**: the kinds of drawing and their series. A chart
+    // may hold more than one — a column chart and a line over it — and
+    // that is a chart of two kinds.
+    let mut groups: Vec<(&craftkit_xml::El, &str)> = Vec::new();
     for name in [
         "barChart",
         "lineChart",
@@ -776,11 +778,10 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         "stockChart",
     ] {
         if let Some(element) = plot.child(name) {
-            group = Some((element, name));
-            break;
+            groups.push((element, name));
         }
     }
-    let (element, name) = group?;
+    let (element, name) = groups.first().copied()?;
     // The **stacking**: the way the series of the chart are laid on
     // one another. A chart that is not stacked says nothing, or says
     // `clustered`, and that is the way of saying nothing.
@@ -789,22 +790,27 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         Some("percentStacked") => Some("percentStacked".to_string()),
         _ => None,
     };
-    let kind = match name {
-        "barChart" => {
-            if element.child_val("barDir") == Some("bar") {
-                "bar"
-            } else {
-                "column"
+    let kind = if groups.len() > 1 {
+        warnings.push("a chart of the sheet draws two kinds of chart in one".to_string());
+        "combo"
+    } else {
+        match name {
+            "barChart" => {
+                if element.child_val("barDir") == Some("bar") {
+                    "bar"
+                } else {
+                    "column"
+                }
             }
+            "lineChart" => "line",
+            "pieChart" => "pie",
+            "doughnutChart" => "doughnut",
+            "areaChart" => "area",
+            "scatterChart" => "scatter",
+            "bubbleChart" => "bubble",
+            "radarChart" => "radar",
+            _ => "stock",
         }
-        "lineChart" => "line",
-        "pieChart" => "pie",
-        "doughnutChart" => "doughnut",
-        "areaChart" => "area",
-        "scatterChart" => "scatter",
-        "bubbleChart" => "bubble",
-        "radarChart" => "radar",
-        _ => "stock",
     };
     // The **series**: each of them names its categories and its
     // values.
