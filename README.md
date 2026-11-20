@@ -4509,6 +4509,7 @@ so.
 | **an encrypted workbook is read** | **built.** The agile cipher of [MS-OFFCRYPTO] opens the package with the password, and the integrity of the file is checked (§1062) | §1062 |
 | **a workbook of the old encryption is read** | **built.** The Standard cipher of [MS-OFFCRYPTO] opens the package of a workbook of 2007, with AES and with RC4 (§1063) | §1063 |
 | **the stacking of a chart is read** | **built.** A chart of a file may be stacked, and stacked to a hundred percent, and the tree's chart keeps it (§1064) | §1064 |
+| **the smooth line of a chart is read** | **built.** The file says of each of its series whether the line is smooth, and the tree's chart keeps the smooth line it can draw (§1065) | §1065 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68505,3 +68506,43 @@ percent — and the tree reads it and keeps it.
   one flag for the whole chart.
 - **The markers of a line are not read**: the tree's line has no
   markers of its own.
+## 1065. The smooth line of a chart is read
+
+The **smooth line** of a chart is read: the file says of each of its
+series whether the line is smooth, and the tree's chart keeps it.
+
+### What was built
+
+- The **reader** reads the smooth line of every series of a chart.
+- The **import** carries it: the tree's chart is smooth when the
+  file's chart was.
+- A chart whose series do not all say the same is **left out** and
+  counted — the tree's chart has one line for all of its series, and
+  a chart that draws some of them smooth and some straight is a chart
+  the tree cannot draw as it is.
+
+### What the port found
+
+- **The reference keeps the smooth line of each series**, because its
+  chart is a list of series. The tree's chart is one drawing of one
+  range, and its smooth line is one — so the tree reads the line it
+  can hold, and refuses the chart it cannot.
+- **The tree could already turn the smooth line on** — the element
+  `smooth` of a chart was there — and could not read one. The half
+  that was missing is the half that is now there.
+
+### What it cost
+
+- **No new command**: the smooth line is an element of a chart, and
+  the element was already there.
+- **One field** of the chart of the reader, and the import's use of
+  it.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The markers of a line are not read**: the file says whether the
+  points of a line are shown, and the tree's line has no markers.
+- **The line of a chart of the old kinds is not read**: a scatter
+  chart says of its series whether it draws lines at all, and the
+  tree's scatter draws them.
