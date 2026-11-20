@@ -4522,6 +4522,7 @@ so.
 | **the subtotals of the groups of a pivot are read** | **built.** The file says of the groups of a pivot whether they have a subtotal and where it is, and the tree keeps it (§1075) | §1075 |
 | **the order of the items of a pivot is read** | **built.** The file says of the field the items of a pivot are ordered by, and of the order, and the tree keeps it (§1076) | §1076 |
 | **the grouping of the dates of a field is read** | **built.** The file says of a field that gathers its dates by the year, the quarter, the month or the day, and the tree keeps it (§1077) | §1077 |
+| **the filter of a pivot is read** | **built.** The file says of the field a pivot filters by and of the items it keeps, and the tree keeps it (§1078) | §1078 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68884,8 +68885,8 @@ columns.
 - **The names of the file are the other way round**: the file's
   `colGrandTotals` is the column at the right that totals the rows,
   and the tree keeps the file's names and the tree's meaning.
-- **The other settings of a pivot are not read**: the filter of the
-  pivot is not read yet.
+- **The other settings of a pivot are not read**: the way the pivot is
+  laid out, the style of it and the headers of it are not read yet.
 
 ## 1074. The way a pivot shows its value is read
 
@@ -69041,3 +69042,43 @@ the day.
 - **The items of the grouping are not read**: the file names the
   months or the quarters it made, and the tree gathers the dates
   itself.
+
+## 1078. The filter of a pivot is read
+
+The **filter** of a pivot is read: the field it filters by, and the
+items of that field it keeps.
+
+### What was built
+
+- The **reader** reads the **page field** of the pivot — the field the
+  pivot is filtered by — and the items of the field that are not
+  hidden.
+- The **import** carries it: the tree's pivot keeps the items the
+  file keeps, and the items are the labels as the file writes them.
+
+### What the port found
+
+- **The reference reads the filter of every field** — the page fields
+  and the fields of the axes — from the items the cache shares and
+  the items the pivot hides.
+- **The tree filtered nothing**: the import wrote no filter at all, so
+  a pivot that kept only some of its items came in keeping all of
+  them.
+
+### What it cost
+
+- **No new command**: the filter is a part of the pivot, and the tree
+  has had a command for it since the pivot itself.
+- **One field** of the pivot of the reader, and a few lines of the
+  import.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The tree filters by one field**: the tree's pivot has one filter,
+  and the file may filter each of its fields. The tree reads the page
+  field first, and then the field of the first axis that keeps only
+  some of its items.
+- **The items of a field are the labels of the cache**: the file shares
+  the items of a field in the cache, and the tree reads them from
+  there.
