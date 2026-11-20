@@ -460,7 +460,7 @@ pub struct Picture {
 /// The names are the **file's** own, and the ranges are the file's
 /// own words — `Sheet1!$B$2:$B$10` — because the file may read the
 /// cells of another sheet.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Chart {
     /// The **kind** of the chart: `column`, `bar`, `line`, `pie`,
     /// `area`, `scatter`, `doughnut`, `bubble`, `radar` or `stock`.
@@ -508,6 +508,42 @@ pub struct Chart {
     /// A series with no colour of its own has no colour here, and the
     /// list is shorter than the series.
     pub colours: Vec<String>,
+    /// The **trendlines** of the chart: the fits of the lines of its
+    /// series.
+    pub trendlines: Vec<Trendline>,
+}
+
+/// A **trendline** of a chart: a fit of the line of a series.
+///
+/// The file says of what **kind** the fit is, and of the series it is
+/// a fit of.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Trendline {
+    /// The **series** the fit is of: the place of the series in the
+    /// chart's series, counted from zero.
+    pub series: u32,
+    /// The **kind** of the fit: `linear`, `exponential`, `logarithmic`,
+    /// `power`, `polynomial` or `movingAverage`.
+    pub kind: String,
+    /// The **order** of the polynomial, when the fit is a polynomial.
+    pub order: Option<u32>,
+    /// The **period** of the moving average, when the fit is one.
+    pub period: Option<u32>,
+    /// The **name** the fit is shown under, when it has one of its own.
+    pub name: Option<String>,
+    /// How far the fit is carried **forward**, in the units of the
+    /// axis. A fit that is not carried forward is zero.
+    pub forward: f64,
+    /// How far the fit is carried **backward**, in the units of the
+    /// axis. A fit that is not carried backward is zero.
+    pub backward: f64,
+    /// The **intercept**: the value of the fit at zero, when the file
+    /// says it.
+    pub intercept: Option<f64>,
+    /// Whether the **equation** of the fit is shown.
+    pub equation: bool,
+    /// Whether the **r squared** of the fit is shown.
+    pub r_squared: bool,
 }
 
 /// Read the **charts** of a sheet.
@@ -824,11 +860,27 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
     let mut series: Vec<String> = Vec::new();
     // The **colours** of the series: the colour each one is drawn in.
     let mut colours: Vec<String> = Vec::new();
+    // The **trendlines**: the fits of the lines of the series.
+    let mut trendlines: Vec<Trendline> = Vec::new();
     for serie in element.kids("ser") {
         if categories.is_none() {
             categories = data_ref(serie.child("cat")).or_else(|| data_ref(serie.child("xVal")));
         }
         let values = data_ref(serie.child("val")).or_else(|| data_ref(serie.child("yVal")));
+        // The **trendlines** of this series: a fit of its line, and the
+        // file says of what kind the fit is. A trendline of a series
+        // the tree does not have — a series with no values — is a
+        // trendline of nothing, and it is left out and said.
+        let place = series.len() as u32;
+        for element_of_fit in serie.kids("trendline") {
+            let Some(mut trendline) = read_trendline(element_of_fit, warnings) else { continue };
+            if values.is_some() {
+                trendline.series = place;
+                trendlines.push(trendline);
+            } else {
+                warnings.push("a trendline of a series that is not there was not read".to_string());
+            }
+        }
         if let Some(values) = values {
             series.push(values);
         }
@@ -902,7 +954,65 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
         categories,
         series,
         colours,
+        trendlines,
     })
+}
+
+/// Read a **trendline** of a chart: a fit of the line of a series.
+///
+/// The file says of what **kind** the fit is, and a kind the tree does
+/// not have is a fit the tree cannot draw, and it is left out and
+/// said.
+fn read_trendline(element: &craftkit_xml::El, warnings: &mut Vec<String>) -> Option<Trendline> {
+    let kind = match element.child_val("trendlineType").unwrap_or("linear") {
+        "linear" => "linear",
+        "exp" => "exponential",
+        "log" => "logarithmic",
+        "power" => "power",
+        "poly" => "polynomial",
+        "movingAvg" => "movingAverage",
+        other => {
+            warnings.push(format!("a trendline of a kind this tree does not have was not read: {other}"));
+            return None;
+        }
+    };
+    let order = if kind == "polynomial" {
+        element.child_val("order").and_then(|order| order.trim().parse::<u32>().ok())
+    } else {
+        None
+    };
+    let period = if kind == "movingAverage" {
+        element.child_val("period").and_then(|period| period.trim().parse::<u32>().ok())
+    } else {
+        None
+    };
+    Some(Trendline {
+        series: 0,
+        kind: kind.to_string(),
+        order,
+        period,
+        name: element.child("name").map(|name| name.text.trim().to_string()).filter(|name| !name.is_empty()),
+        // A **forecast** that is not a number, or that is not positive,
+        // is no forecast at all.
+        forward: forecast(element.child_val("forward")),
+        backward: forecast(element.child_val("backward")),
+        intercept: element
+            .child_val("intercept")
+            .and_then(|intercept| intercept.trim().parse::<f64>().ok())
+            .filter(|value| value.is_finite()),
+        equation: matches!(element.child_val("dispEq"), Some("1") | Some("true")),
+        r_squared: matches!(element.child_val("dispRSqr"), Some("1") | Some("true")),
+    })
+}
+
+/// A **forecast** of a trendline: how far the fit is carried on.
+///
+/// A forecast that is not a number, or that is not positive, is no
+/// forecast at all.
+fn forecast(text: Option<&str>) -> f64 {
+    text.and_then(|text| text.trim().parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .unwrap_or(0.0)
 }
 
 /// Read a chart of the kinds **Excel 2016** added: the histogram, the
@@ -1004,6 +1114,7 @@ fn read_chartex(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         categories,
         series,
         colours,
+        trendlines: Vec::new(),
     })
 }
 

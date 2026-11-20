@@ -1149,6 +1149,26 @@ commands! {
                         "smooth": smooth,
                         "markers": chart.markers,
                         "colours": chart.colours.clone(),
+                        // The **trendlines**: the fits of the lines of
+                        // the series.
+                        "trendlines": chart
+                            .trendlines
+                            .iter()
+                            .map(|trendline| {
+                                json!({
+                                    "series": trendline.series,
+                                    "kind": trendline.kind,
+                                    "order": trendline.order,
+                                    "period": trendline.period,
+                                    "name": trendline.name,
+                                    "forward": trendline.forward,
+                                    "backward": trendline.backward,
+                                    "intercept": trendline.intercept,
+                                    "equation": trendline.equation,
+                                    "r_squared": trendline.r_squared,
+                                })
+                            })
+                            .collect::<Vec<Json>>(),
                     });
                     session.document_mut()?.add_node_with_under(Some(sheet_id), name, "grid.chart", None, node);
                     imported_charts += 1;

@@ -2164,6 +2164,110 @@ fn an_anchor_that_is_not_a_box_is_not_read() {
     assert!(comments[0].note_box.is_none(), "the note has no box");
 }
 
+/// The **trendlines** of a chart are read: the fits of the lines of
+/// its series.
+#[test]
+fn the_trendlines_of_a_chart_are_read() {
+    let package = a_package_of(&[
+        (
+            "_rels/.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            br#"<workbook><workbookPr/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            br#"<worksheet><drawing r:id="rId1"/><sheetData/></worksheet>"#,
+        ),
+        (
+            "xl/drawings/drawing1.xml",
+            br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/charts/chart1.xml",
+            br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:plotArea><c:lineChart><c:grouping val="standard"/><c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val><c:trendline><c:trendlineType val="linear"/><c:name>the fit</c:name><c:forward val="3"/><c:backward val="1.5"/><c:intercept val="2.5"/><c:dispEq val="1"/><c:dispRSqr val="1"/></c:trendline></c:ser><c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!$C$2:$C$10</c:f></c:numRef></c:val><c:trendline><c:trendlineType val="poly"/><c:order val="3"/></c:trendline></c:ser></c:lineChart></c:plotArea></c:chart></c:chartSpace>"#,
+        ),
+    ]);
+    let read = read(&package).expect("the workbook is read");
+    let (_, charts) = &read.charts[0];
+    assert_eq!(charts[0].trendlines.len(), 2, "two trendlines");
+    let first = &charts[0].trendlines[0];
+    assert_eq!(first.series, 0, "the first is of the first series");
+    assert_eq!(first.kind, "linear", "and it is a straight fit");
+    assert_eq!(first.name.as_deref(), Some("the fit"), "with a name of its own");
+    assert_eq!(first.forward, 3.0, "carried three forward");
+    assert_eq!(first.backward, 1.5, "and one and a half backward");
+    assert_eq!(first.intercept, Some(2.5), "and it meets the axis at two and a half");
+    assert!(first.equation, "and its equation is shown");
+    assert!(first.r_squared, "and its r squared too");
+    let second = &charts[0].trendlines[1];
+    assert_eq!(second.series, 1, "the second is of the second series");
+    assert_eq!(second.kind, "polynomial", "and it is a curve");
+    assert_eq!(second.order, Some(3), "of the third order");
+}
+
+/// A **trendline of a kind** the tree does not have is not read, and the
+/// tree says so.
+#[test]
+fn a_trendline_of_a_kind_that_is_not_there_is_not_read() {
+    let package = a_package_of(&[
+        (
+            "_rels/.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            br#"<workbook><workbookPr/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            br#"<worksheet><drawing r:id="rId1"/><sheetData/></worksheet>"#,
+        ),
+        (
+            "xl/drawings/drawing1.xml",
+            br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/charts/chart1.xml",
+            br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:plotArea><c:lineChart><c:grouping val="standard"/><c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val><c:trendline><c:trendlineType val="fourier"/></c:trendline></c:ser></c:lineChart></c:plotArea></c:chart></c:chartSpace>"#,
+        ),
+    ]);
+    let read = read(&package).expect("the workbook is read");
+    let (_, charts) = &read.charts[0];
+    assert!(charts[0].trendlines.is_empty(), "the trendline is not read");
+    assert!(
+        read.warnings.iter().any(|warning| warning.contains("trendline")),
+        "and the tree says so: {:?}",
+        read.warnings
+    );
+}
+
 /// The **tables** of a sheet are read: they are in parts of their own
 /// that the sheet names by a relationship.
 #[test]

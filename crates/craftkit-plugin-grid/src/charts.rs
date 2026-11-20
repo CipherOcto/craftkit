@@ -147,6 +147,80 @@ pub fn series_colours(chart: &Node, series: usize) -> Vec<Json> {
         .collect()
 }
 
+/// A **trendline** of a chart: a fit of the line of a series.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Trendline {
+    /// The **series** the fit is of: the place of the series in the
+    /// chart's series, counted from zero.
+    pub series: u32,
+    /// The **kind** of the fit: `linear`, `exponential`,
+    /// `logarithmic`, `power`, `polynomial` or `movingAverage`.
+    pub kind: String,
+    /// The **order** of the polynomial, when the fit is a polynomial.
+    pub order: Option<u32>,
+    /// The **period** of the moving average, when the fit is one.
+    pub period: Option<u32>,
+    /// The **name** the fit is shown under, when it has one of its own.
+    pub name: Option<String>,
+    /// How far the fit is carried **forward**.
+    pub forward: f64,
+    /// How far the fit is carried **backward**.
+    pub backward: f64,
+    /// The **intercept**, when the file says it.
+    pub intercept: Option<f64>,
+    /// Whether the **equation** of the fit is shown.
+    pub equation: bool,
+    /// Whether the **r squared** of the fit is shown.
+    pub r_squared: bool,
+}
+
+/// The **trendlines** of a chart: the fits of the lines of its series.
+pub fn trendlines_of(chart: &Node) -> Vec<Trendline> {
+    let Some(list) = chart.data.get("trendlines").and_then(|trendlines| trendlines.as_array()) else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|trendline| {
+            Some(Trendline {
+                series: trendline.get("series")?.as_u64()? as u32,
+                kind: trendline.get("kind")?.as_str()?.to_string(),
+                order: trendline.get("order").and_then(|order| order.as_u64()).map(|order| order as u32),
+                period: trendline
+                    .get("period")
+                    .and_then(|period| period.as_u64())
+                    .map(|period| period as u32),
+                name: trendline.get("name").and_then(|name| name.as_str()).map(|name| name.to_string()),
+                forward: trendline.get("forward").and_then(|forward| forward.as_f64()).unwrap_or(0.0),
+                backward: trendline.get("backward").and_then(|backward| backward.as_f64()).unwrap_or(0.0),
+                intercept: trendline.get("intercept").and_then(|intercept| intercept.as_f64()),
+                equation: trendline.get("equation").and_then(|equation| equation.as_bool()).unwrap_or(false),
+                r_squared: trendline.get("r_squared").and_then(|value| value.as_bool()).unwrap_or(false),
+            })
+        })
+        .collect()
+}
+
+/// The **trendlines** of a chart, as they are given back.
+pub fn trendlines_json(trendlines: &[Trendline]) -> Vec<Json> {
+    trendlines
+        .iter()
+        .map(|trendline| {
+            json!({
+                "series": trendline.series,
+                "kind": trendline.kind,
+                "order": trendline.order,
+                "period": trendline.period,
+                "name": trendline.name,
+                "forward": trendline.forward,
+                "backward": trendline.backward,
+                "intercept": trendline.intercept,
+                "equation": trendline.equation,
+                "r_squared": trendline.r_squared,
+            })
+        })
+        .collect()
+}
+
 /// The **title** of a chart, if it has one.
 pub fn title_of(chart: &Node) -> Json {
     chart.data.get("title").cloned().unwrap_or(Json::Null)
@@ -456,6 +530,7 @@ commands! {
                 "markers": element_on(&node, "markers"),
                 "colours": colours_of(&node),
                 "seriesColours": series_colours(&node, series_count(&data)),
+                "trendlines": trendlines_json(&trendlines_of(&node)),
                 "data": data,
             })))
 
