@@ -4517,6 +4517,7 @@ so.
 | **a note may be shown** | **built.** The drawing of the notes says whether a note is on its cell or behind a mark, and the tree keeps it (§1070) | §1070 |
 | **the box of a note is read** | **built.** The drawing of the notes says where the box of a note sits and how big it is, and the tree keeps it (§1071) | §1071 |
 | **the trendlines of a chart are read** | **built.** The file says of what kind the fit of a series is, and the tree keeps the fit (§1072) | §1072 |
+| **a pivot says whether it has grand totals** | **built.** The file says of a pivot whether it has the column that totals the rows and the line that totals the columns, and the tree keeps it (§1073) | §1073 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68843,3 +68844,42 @@ series, and the file says of what kind each fit is.
 - **A trendline of a series the tree does not have is not read**: a
   series with no values is not a series here, and a fit over it is
   left out and said.
+
+## 1073. A pivot says whether it has grand totals
+
+A pivot says **whether it has grand totals**: the column at the right
+that totals the rows, and the line at the bottom that totals the
+columns.
+
+### What was built
+
+- The **reader** reads the two flags of the file.
+- The **import** carries them: the tree's pivot says what the file
+  says, and a file that says nothing has both — the way a pivot is
+  made when nothing is said of it.
+
+### What the port found
+
+- **The reference reads the two flags** — `colGrandTotals` for the
+  column at the right, and `rowGrandTotals` for the line at the
+  bottom — and keeps them on the pivot.
+- **The tree said the pivot had both, whatever the file said**: the
+  import wrote the two grand totals as true, so a pivot that had
+  neither came in with both. The tree's rule is that what is read is
+  what is there, and a value that is not read is not invented.
+
+### What it cost
+
+- **No new command**: the grand totals are a part of the pivot.
+- **Two fields** of the pivot of the reader, and two lines of the
+  import.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The names of the file are the other way round**: the file's
+  `colGrandTotals` is the column at the right that totals the rows,
+  and the tree keeps the file's names and the tree's meaning.
+- **The other settings of a pivot are not read**: the subtotals of
+  the groups, the order of the items, the way the value is shown and
+  the filter of the pivot are not read yet.
