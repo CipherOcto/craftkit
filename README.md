@@ -4520,6 +4520,7 @@ so.
 | **a pivot says whether it has grand totals** | **built.** The file says of a pivot whether it has the column that totals the rows and the line that totals the columns, and the tree keeps it (§1073) | §1073 |
 | **the way a pivot shows its value is read** | **built.** The file says of a pivot whether its value is shown as it is, as a share, as a running total or as a rank, and the tree keeps it (§1074) | §1074 |
 | **the subtotals of the groups of a pivot are read** | **built.** The file says of the groups of a pivot whether they have a subtotal and where it is, and the tree keeps it (§1075) | §1075 |
+| **the order of the items of a pivot is read** | **built.** The file says of the field the items of a pivot are ordered by, and of the order, and the tree keeps it (§1076) | §1076 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68882,8 +68883,8 @@ columns.
 - **The names of the file are the other way round**: the file's
   `colGrandTotals` is the column at the right that totals the rows,
   and the tree keeps the file's names and the tree's meaning.
-- **The other settings of a pivot are not read**: the order of the
-  items and the filter of the pivot are not read yet.
+- **The other settings of a pivot are not read**: the filter of the
+  pivot is not read yet.
 
 ## 1074. The way a pivot shows its value is read
 
@@ -68963,3 +68964,41 @@ bottom of it.
   one set of subtotals, and the file may give each field its own. The
   tree reads the field of the first axis, as it reads the first
   value.
+
+## 1076. The order of the items of a pivot is read
+
+The **order** of the items of a pivot is read: the field says of the
+order its items are in.
+
+### What was built
+
+- The **reader** reads the order of the field of the first axis: from
+  the first to the last, or from the last to the first. A field that
+  orders its items by hand says nothing.
+- The **import** carries it: the tree's pivot orders its items the way
+  the file says.
+
+### What the port found
+
+- **The reference reads the order of every field** and keeps it on the
+  field, with the order of the source as the order of a field that
+  says nothing.
+- **The tree ordered the items of every pivot by the source**: the
+  import wrote no order at all, so a pivot whose items were ordered
+  came in in the order of the source.
+
+### What it cost
+
+- **No new command**: the order of the items is a part of the pivot.
+- **One field** of the pivot of the reader, and a few lines of the
+  import.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The tree sorts by one field**: the tree's pivot has one order, and
+  the file may order each field as it likes. The tree reads the field
+  of the first axis, as it reads the first value.
+- **The order of the items themselves is not read**: the file may name
+  the items and the order they are in, and the tree keeps the order of
+  the source and the one order.
