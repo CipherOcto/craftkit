@@ -395,10 +395,27 @@ pub fn secret_key(
 
 /// The **package** of an encrypted workbook: the bytes of the workbook
 /// itself, opened with the password.
+///
+/// The file says which scheme it used: the **agile** one, whose
+/// descriptor is XML, and the **old** one, whose descriptor is a set
+/// of fields.
 pub fn open(compound: &Compound, password: &str) -> Result<Vec<u8>, Error> {
     let Some(info) = compound.read("EncryptionInfo")? else {
         return Err(error("the file is not an encrypted workbook"));
     };
+    if info.len() < 4 {
+        return Err(error("the encryption info of the file is too short"));
+    }
+    let major = u16::from_le_bytes([info[0], info[1]]);
+    let minor = u16::from_le_bytes([info[2], info[3]]);
+    if major != 4 || minor != 4 {
+        // The **old** scheme: the fields of the header, and the
+        // verifier.
+        let Some(package) = compound.read("EncryptedPackage")? else {
+            return Err(error("the file holds no package"));
+        };
+        return crate::standard::open(&info, &package, password);
+    }
     let descriptor = descriptor(&info)?;
     let Some(package) = compound.read("EncryptedPackage")? else {
         return Err(error("the file holds no package"));

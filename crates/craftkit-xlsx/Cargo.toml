@@ -17,6 +17,7 @@ craftkit-xml = { workspace = true }
 aes = { workspace = true }
 cbc = { workspace = true }
 hmac = { workspace = true }
+sha1 = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]
@@ -28,4 +29,5 @@ craftkit-zip = { workspace = true }
 aes = { workspace = true }
 cbc = { workspace = true }
 hmac = { workspace = true }
+sha1 = { workspace = true }
 sha2 = { workspace = true }

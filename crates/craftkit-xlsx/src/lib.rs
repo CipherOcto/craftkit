@@ -63,12 +63,11 @@
 //!   whose header row is off is not read. A table's **filter** and a
 //!   column's **custom total** are the sheet's and the tree's own, and
 //!   they are left out — and every one of them is said.
-//! - It reads a workbook that is **encrypted** in the **agile** way:
-//!   such a file is a compound file and not a package, and the
-//!   password opens it (`crypto`). The **container** is read (`cfb`),
-//!   and the cipher of [MS-OFFCRYPTO] opens what is inside it. A
-//!   workbook of the **old format** is not read: the refusal says
-//!   what the file is.
+//! - It reads a workbook that is **encrypted**: such a file is a
+//!   compound file and not a package, and the password opens it. The
+//!   **container** is read (`cfb`), and the ciphers of [MS-OFFCRYPTO]
+//!   open what is inside it: the **agile** one (`crypto`), and the
+//!   **old** one of Excel 2007 (`standard`).
 
 #![deny(
     clippy::unwrap_used,
@@ -89,6 +88,8 @@ mod theme;
 
 pub mod cfb;
 pub mod crypto;
+pub mod rc4;
+pub mod standard;
 
 pub use calculation::{
     Calculation, DEFAULT_CHANGE, DEFAULT_ITERATIONS, MAX_ITERATIONS, Mode as CalculationMode,
