@@ -631,6 +631,8 @@ commands! {
                         "right_to_left": view.right_to_left,
                         "outline_symbols": view.outline_symbols,
                         "show_formulas": view.show_formulas,
+                        // The **way** the sheet is looked at.
+                        "mode": view.mode.clone(),
                         "freeze": match view.freeze {
                             Some((rows, cols)) => json!([rows, cols]),
                             None => Json::Null,

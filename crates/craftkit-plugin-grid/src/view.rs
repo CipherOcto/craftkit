@@ -49,6 +49,12 @@ pub struct SheetView {
     /// the tree's command puts no freeze where the cell is the first
     /// one, and the two are the same thing here.
     pub freeze: Option<(u32, u32)>,
+    /// The **way** the sheet is looked at: `normal`, `pageLayout` or
+    /// `pageBreakPreview`.
+    ///
+    /// A sheet of the tree is looked at the ordinary way, and a file
+    /// that says another way is read as it says.
+    pub mode: Option<String>,
 }
 
 impl Default for SheetView {
@@ -61,6 +67,7 @@ impl Default for SheetView {
             outline_symbols: true,
             show_formulas: false,
             freeze: None,
+            mode: None,
         }
     }
 }
@@ -79,6 +86,7 @@ impl SheetView {
                 Some((rows, cols)) => json!([rows, cols]),
                 None => json!(null),
             },
+            "mode": self.mode.clone(),
         })
     }
 
@@ -107,6 +115,9 @@ impl SheetView {
             let rows = freeze.first().and_then(|rows| rows.as_u64()).unwrap_or(0) as u32;
             let cols = freeze.get(1).and_then(|cols| cols.as_u64()).unwrap_or(0) as u32;
             view.freeze = if rows == 0 && cols == 0 { None } else { Some((rows, cols)) };
+        }
+        if let Some(mode) = value.get("mode").and_then(|mode| mode.as_str()) {
+            view.mode = Some(mode.to_string());
         }
         view
     }

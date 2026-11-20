@@ -1797,6 +1797,11 @@ pub struct SheetView {
     /// The **frozen panes**: the rows above and the columns to the
     /// left, when the sheet freezes any.
     pub freeze: Option<(u32, u32)>,
+    /// The **way** the sheet is looked at: `normal`, `pageLayout` or
+    /// `pageBreakPreview`.
+    ///
+    /// A file that says nothing is looked at the ordinary way.
+    pub mode: Option<String>,
 }
 
 /// A **row** of a sheet: its height, and whether it is hidden.
@@ -2873,6 +2878,14 @@ fn read_view(root: &craftkit_xml::El) -> Option<SheetView> {
         show_formulas: view.flag("showFormulas", false),
         zoom: view.attr_u32("zoomScale").map(|zoom| zoom.clamp(10, 400)),
         freeze,
+        // The **way** the sheet is looked at: the ordinary way, the
+        // way of the pages, or the way of the breaks between them.
+        mode: match view.attr("view") {
+            None | Some("normal") => None,
+            Some("pageLayout") => Some("pageLayout".to_string()),
+            Some("pageBreakPreview") => Some("pageBreakPreview".to_string()),
+            Some(other) => Some(other.to_string()),
+        },
     })
 }
 

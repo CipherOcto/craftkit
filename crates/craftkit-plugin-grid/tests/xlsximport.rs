@@ -2570,6 +2570,45 @@ fn the_cell_a_chart_is_drawn_in_is_imported() {
     assert_eq!(chart.data["cell"].as_str(), Some("D5"), "the chart is drawn in the cell");
 }
 
+/// The **way** a sheet is looked at is imported, and a flag that is
+/// set afterwards does not take it away.
+#[test]
+fn the_way_a_sheet_is_looked_at_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetViews><sheetView view="pageLayout" showGridLines="1"/></sheetViews><sheetData/></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    let workbook = session.document().nodes().next().expect("the workbook is there").id;
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["view"]["mode"].as_str(), Some("pageLayout"), "the sheet is looked at that way");
+    // A flag of the view that is set afterwards does not take the way
+    // of the sheet away.
+    session
+        .execute("grid.sheet.view", &json!({ "sheet": sheet, "headings": false }))
+        .expect("the view is set");
+    let node = session.document().node(sheet).expect("the sheet is there");
+    assert_eq!(node.data["view"]["mode"].as_str(), Some("pageLayout"), "the way of the sheet stands");
+    assert_eq!(node.data["view"]["headings"].as_bool(), Some(false), "and the flag is set");
+}
+
 /// The **conditional formats** of the extension list are not imported,
 /// and the import says so.
 #[test]

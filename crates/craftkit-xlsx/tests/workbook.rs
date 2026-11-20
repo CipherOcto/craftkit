@@ -2234,6 +2234,44 @@ fn the_cell_a_chart_is_drawn_in_is_read() {
     assert_eq!(charts[0].cell.as_deref(), Some("D5"), "the chart is drawn in the cell");
 }
 
+/// The **way** a sheet is looked at is read: the ordinary way, the
+/// way of the pages, or the way of the breaks between them.
+#[test]
+fn the_way_a_sheet_is_looked_at_is_read() {
+    for (mode, expected) in [
+        (None, None),
+        (Some("normal"), None),
+        (Some("pageLayout"), Some("pageLayout")),
+        (Some("pageBreakPreview"), Some("pageBreakPreview")),
+    ] {
+        let bytes = a_package(&[
+            (
+                "_rels/.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                format!(
+                    r#"<worksheet><sheetViews><sheetView{} showGridLines="1"/></sheetViews><sheetData/></worksheet>"#,
+                    mode.map(|mode| format!(" view=\"{mode}\"")).unwrap_or_default()
+                )
+                .as_str(),
+            ),
+        ]);
+        let workbook = read(&bytes).expect("the workbook is read");
+        let view = workbook.sheets[0].view.as_ref().expect("the sheet has a view");
+        assert_eq!(view.mode.as_deref(), expected, "the way the sheet is looked at");
+    }
+}
+
 /// The **conditional formats** of the extension list are not read,
 /// and the reader says so: they are not comparisons, and the tree's
 /// rule is a comparison.
