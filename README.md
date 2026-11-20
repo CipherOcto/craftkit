@@ -4523,6 +4523,7 @@ so.
 | **the order of the items of a pivot is read** | **built.** The file says of the field the items of a pivot are ordered by, and of the order, and the tree keeps it (§1076) | §1076 |
 | **the grouping of the dates of a field is read** | **built.** The file says of a field that gathers its dates by the year, the quarter, the month or the day, and the tree keeps it (§1077) | §1077 |
 | **the filter of a pivot is read** | **built.** The file says of the field a pivot filters by and of the items it keeps, and the tree keeps it (§1078) | §1078 |
+| **the kinds of pages that have a header of their own are read** | **built.** The file says of a sheet whether the first page and the even pages have a header of their own, and the tree prints the sheet that way (§1079) | §1079 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69082,3 +69083,45 @@ items of that field it keeps.
 - **The items of a field are the labels of the cache**: the file shares
   the items of a field in the cache, and the tree reads them from
   there.
+
+## 1079. The kinds of pages that have a header of their own are read
+
+The file says of a sheet whether the **first page** and the **even
+pages** have a header and a footer of their own, and the tree prints
+the sheet that way.
+
+### What was built
+
+- The **reader** reads the two words of the file: whether the first
+  page has a header of its own, and whether the even pages have one.
+- The **import** carries them, and the **printing** of the sheet
+  follows: a sheet whose file says that the first page has no header
+  of its own prints the header of the odd pages on it.
+
+### What the port found
+
+- **The reference reads the two words** and keeps them with the header
+  and the footer of the sheet.
+- **The tree decided for itself**: the first page was the first when
+  the sheet had a first header, and an even page was even when the
+  sheet had an even header — whatever the file said. A file that says
+  that the first page has no header of its own was printed with the
+  first header of the tree's own making.
+
+### What it cost
+
+- **No new command**: the words are a part of the header and the
+  footer of the sheet.
+- **Two fields** of the header and the footer of the reader, and a
+  few lines of the import and of the printing.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **A file that says nothing keeps the tree's own way**: the tree's
+  rule — a first header that is there is the header of the first page
+  — stands where the file is silent, because a file that says nothing
+  has not said it.
+- **The tree's own sheets have no such words**: the command that sets
+  a header does not say of the pages that have one of their own, and
+  the tree's own way stands there.
