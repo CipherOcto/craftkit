@@ -4521,6 +4521,7 @@ so.
 | **the way a pivot shows its value is read** | **built.** The file says of a pivot whether its value is shown as it is, as a share, as a running total or as a rank, and the tree keeps it (§1074) | §1074 |
 | **the subtotals of the groups of a pivot are read** | **built.** The file says of the groups of a pivot whether they have a subtotal and where it is, and the tree keeps it (§1075) | §1075 |
 | **the order of the items of a pivot is read** | **built.** The file says of the field the items of a pivot are ordered by, and of the order, and the tree keeps it (§1076) | §1076 |
+| **the grouping of the dates of a field is read** | **built.** The file says of a field that gathers its dates by the year, the quarter, the month or the day, and the tree keeps it (§1077) | §1077 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69002,3 +69003,41 @@ order its items are in.
 - **The order of the items themselves is not read**: the file may name
   the items and the order they are in, and the tree keeps the order of
   the source and the one order.
+
+## 1077. The grouping of the dates of a field is read
+
+The **grouping** of the dates of a field is read: the file says of a
+field that gathers its dates by the year, the quarter, the month or
+the day.
+
+### What was built
+
+- The **reader** reads the grouping of the **cache** — the part that
+  says where the cells of the pivot come from — and the first field
+  that is gathered that way.
+- The **import** carries it: the tree's pivot gathers the dates of
+  that column the way the file says.
+
+### What the port found
+
+- **The reference reads the grouping of every field** from the cache,
+  and keeps it on the field.
+- **The tree gathered the dates by the day**: the import wrote no
+  grouping at all, so a pivot that gathered its months by the month
+  came in with its days apart.
+
+### What it cost
+
+- **No new command**: the grouping is a part of the pivot.
+- **One field** of the pivot of the reader, and a few lines of the
+  import.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The tree groups one field**: the tree's pivot has one grouping,
+  and the file may gather each of its date fields its own way. The
+  tree reads the first field that is gathered.
+- **The items of the grouping are not read**: the file names the
+  months or the quarters it made, and the tree gathers the dates
+  itself.
