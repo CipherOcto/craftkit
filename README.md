@@ -4518,6 +4518,7 @@ so.
 | **the box of a note is read** | **built.** The drawing of the notes says where the box of a note sits and how big it is, and the tree keeps it (§1071) | §1071 |
 | **the trendlines of a chart are read** | **built.** The file says of what kind the fit of a series is, and the tree keeps the fit (§1072) | §1072 |
 | **a pivot says whether it has grand totals** | **built.** The file says of a pivot whether it has the column that totals the rows and the line that totals the columns, and the tree keeps it (§1073) | §1073 |
+| **the way a pivot shows its value is read** | **built.** The file says of a pivot whether its value is shown as it is, as a share, as a running total or as a rank, and the tree keeps it (§1074) | §1074 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68881,5 +68882,43 @@ columns.
   `colGrandTotals` is the column at the right that totals the rows,
   and the tree keeps the file's names and the tree's meaning.
 - **The other settings of a pivot are not read**: the subtotals of
-  the groups, the order of the items, the way the value is shown and
-  the filter of the pivot are not read yet.
+  the groups, the order of the items and the filter of the pivot are
+  not read yet.
+
+## 1074. The way a pivot shows its value is read
+
+The way a pivot shows its **value** is read: as it is, as a share of
+the grand total, as a share of the total of its column or of its row,
+as a running total, or as a rank.
+
+### What was built
+
+- The **reader** reads the way of the **data field**, and the rank of
+  the extension list of the field.
+- The **import** carries it: the tree's pivot shows its value the way
+  the file says, and a file that says nothing shows the value as it
+  is.
+- A way the tree does not have is not read, and the tree says so.
+
+### What the port found
+
+- **The reference reads the way of the value** and keeps it on the
+  value, with a warning when the file says a way it does not have.
+- **The tree showed every value as it is**: the import wrote the
+  ordinary way whatever the file said, so a pivot whose values were
+  shown as shares came in with plain numbers.
+
+### What it cost
+
+- **No new command**: the way of the value is a part of the pivot.
+- **One field** of the pivot of the reader, and one line of the
+  import.
+- **Three tests**: two in the reader, and one in the import.
+
+### What it does not settle
+
+- **A pivot may show more than one value**: the tree's pivot has one
+  value field, and the file may have several. The tree reads the
+  first, as it reads the first value.
+- **The number format of the value is not read**: the file says of the
+  value how its numbers are written, and the tree does not say yet.
