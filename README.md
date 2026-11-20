@@ -4524,6 +4524,7 @@ so.
 | **the grouping of the dates of a field is read** | **built.** The file says of a field that gathers its dates by the year, the quarter, the month or the day, and the tree keeps it (§1077) | §1077 |
 | **the filter of a pivot is read** | **built.** The file says of the field a pivot filters by and of the items it keeps, and the tree keeps it (§1078) | §1078 |
 | **the kinds of pages that have a header of their own are read** | **built.** The file says of a sheet whether the first page and the even pages have a header of their own, and the tree prints the sheet that way (§1079) | §1079 |
+| **the cell a chart is drawn in is read** | **built.** The anchor of the drawing says the cell a chart is drawn in, and the tree keeps it (§1080) | §1080 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69125,3 +69126,38 @@ the sheet that way.
 - **The tree's own sheets have no such words**: the command that sets
   a header does not say of the pages that have one of their own, and
   the tree's own way stands there.
+
+## 1080. The cell a chart is drawn in is read
+
+The **cell** a chart is drawn in is read: the anchor of the drawing
+says it.
+
+### What was built
+
+- The **reader** reads the **anchor** of the drawing — the place the
+  objects are drawn in — and the cell the anchor starts at.
+- The **import** carries it: the chart of the tree says the cell it
+  is drawn in, as the picture of the tree has always said.
+
+### What the port found
+
+- **The reference reads the anchor** of every object of a drawing and
+  keeps it on the chart and on the picture.
+- **The tree read the pictures with their cell and left the charts
+  without one**: the chart of a file came in and the tree did not say
+  where it was drawn.
+
+### What it cost
+
+- **No new command**: the cell of the chart is a part of the chart.
+- **One field** of the chart of the reader, and one line of the
+  import.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The tree does not draw the chart there**: the cell is the place
+  the chart starts at, and the size of it and the place it ends at
+  are not read. Where a chart is drawn is the front end's business.
+- **A chart that is drawn in no anchor has no cell**: the tree says
+  nothing rather than guessing a cell.
