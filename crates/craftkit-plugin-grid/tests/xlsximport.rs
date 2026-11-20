@@ -1636,6 +1636,70 @@ fn the_charts_of_a_sheet_are_imported() {
     assert_eq!(chart.data["colours"][0].as_str(), Some("#4472c4"), "and the colour of its series");
 }
 
+/// The **smooth line** of a chart is imported, and a chart whose
+/// series do not all say the same is left out.
+#[test]
+fn the_smooth_line_of_a_chart_is_imported() {
+    for (smooths, imported) in [(vec!["1"], 1u64), (vec!["1", "0"], 0)] {
+        let mut session = session();
+        let series: String = smooths
+            .iter()
+            .enumerate()
+            .map(|(index, smooth)| {
+                let column = (b'B' + index as u8) as char;
+                format!(
+                    r#"<c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!${column}$2:${column}$10</c:f></c:numRef></c:val><c:smooth val="{smooth}"/></c:ser>"#
+                )
+            })
+            .collect();
+        let bytes = a_package(&[
+            (
+                "_rels/.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", r#"<worksheet><drawing r:id="rId1"/><sheetData/></worksheet>"#),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/drawings/drawing1.xml",
+                r#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+            ),
+            (
+                "xl/drawings/_rels/drawing1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/charts/chart1.xml",
+                &format!(
+                    r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:plotArea><c:lineChart><c:grouping val="standard"/>{series}</c:lineChart></c:plotArea></c:chart></c:chartSpace>"#
+                ),
+            ),
+        ]);
+        let path = a_file(bytes);
+        let outcome =
+            session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+        assert_eq!(outcome.data["charts"].as_u64(), Some(imported), "the charts that were imported");
+        assert_eq!(outcome.data["unread_charts"].as_u64(), Some(1 - imported), "and the ones left out");
+        if imported == 1 {
+            let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+            let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+            let node = session.document().node(sheet).expect("the sheet is there");
+            let chart = node.children.first().expect("the sheet holds a chart");
+            assert_eq!(chart.data["smooth"].as_bool(), Some(true), "and that its line is smooth");
+        }
+    }
+}
+
 /// The **stacking** of a chart is imported: a chart of a file may be
 /// stacked, and the tree's chart keeps it.
 #[test]

@@ -471,6 +471,14 @@ pub struct Chart {
     /// A chart that is not stacked has none: the file may say
     /// `clustered`, and that is the way of saying nothing.
     pub stacking: Option<String>,
+    /// The **smooth line** of the chart.
+    ///
+    /// The file says of each of its series whether the line is
+    /// smooth, and the tree's chart has one line for all of them:
+    /// `Some(true)` when every series says so, `Some(false)` when
+    /// none of them does, and **none** when the series do not all say
+    /// the same — a chart the tree cannot draw as it is.
+    pub smooth: Option<bool>,
     /// The **title** of the chart.
     pub title: Option<String>,
     /// The **legend**: where it is — `none`, `bottom`, `top`, `left`
@@ -535,6 +543,12 @@ fn read_drawings(
         let Some(relation) = drawing_rels.iter().find(|relation| relation.id == id) else { continue };
         let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
         let Some(chart) = read_chart(&root, theme) else { continue };
+        if chart.smooth.is_none() {
+            warnings.push(
+                "a chart of the sheet has series that do not all say the same about the smooth line"
+                    .to_string(),
+            );
+        }
         out.push(chart);
     }
     // The **pictures** of the drawing.
@@ -827,6 +841,21 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         categories_axis.and_then(|axis| axis.child("title")).map(all_text).filter(|text| !text.is_empty());
     let y_title =
         values_axis.and_then(|axis| axis.child("title")).map(all_text).filter(|text| !text.is_empty());
+    // The **smooth line**: the file says of each of its series
+    // whether the line is smooth.
+    let smooths: Vec<bool> = element
+        .kids("ser")
+        .map(|serie| matches!(serie.child_val("smooth"), Some("1") | Some("true")))
+        .collect();
+    let smooth = if smooths.is_empty() {
+        Some(false)
+    } else if smooths.iter().all(|smooth| *smooth) {
+        Some(true)
+    } else if smooths.iter().any(|smooth| *smooth) {
+        None
+    } else {
+        Some(false)
+    };
     // The **labels** of the data, and the **gridlines** of the values.
     let data_labels = element.child("dLbls").is_some_and(|labels| labels.child_val("showVal") == Some("1"))
         || element
@@ -836,6 +865,7 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
     Some(Chart {
         kind: kind.to_string(),
         stacking,
+        smooth,
         title,
         legend,
         data_labels,

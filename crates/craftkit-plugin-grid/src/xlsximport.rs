@@ -1111,6 +1111,14 @@ commands! {
                         unread_charts += 1;
                         continue;
                     };
+                    // The **smooth line**: the tree's chart has one
+                    // line for all of its series, and a chart whose
+                    // series do not all say the same is a chart the
+                    // tree cannot draw as it is.
+                    let Some(smooth) = chart.smooth else {
+                        unread_charts += 1;
+                        continue;
+                    };
                     // The tree's own rule: a chart needs a name and
                     // something to show.
                     if area.start.row == area.end.row || area.start.col == area.end.col {
@@ -1138,7 +1146,7 @@ commands! {
                         "gridlines": chart.gridlines,
                         "xTitle": chart.x_title,
                         "yTitle": chart.y_title,
-                        "smooth": false,
+                        "smooth": smooth,
                         "colours": chart.colours.clone(),
                     });
                     session.document_mut()?.add_node_with_under(Some(sheet_id), name, "grid.chart", None, node);
