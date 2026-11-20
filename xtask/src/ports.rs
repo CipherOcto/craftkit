@@ -1960,6 +1960,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§1068",
     },
+    Port {
+        rule: "a comment says when it was written",
+        from: "gridcraft/crates/xlsx/src/sheet_read/parts.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "grid.import.xlsx",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§1069",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

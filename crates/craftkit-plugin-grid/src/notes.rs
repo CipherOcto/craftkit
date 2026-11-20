@@ -288,6 +288,7 @@ commands! {
                         author: note.author.clone(),
                         replies,
                         resolved,
+                        date: None,
                     },
                 );
                 converted.push(address.clone());

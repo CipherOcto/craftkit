@@ -1349,6 +1349,12 @@ fn the_threads_of_a_sheet_are_imported() {
     assert_eq!(note["resolved"].as_bool(), Some(true), "and that the thread is resolved");
     assert_eq!(note["replies"][0]["text"].as_str(), Some("the answer"), "the reply under it");
     assert_eq!(note["replies"][0]["author"].as_str(), Some("bob"), "and who wrote the reply");
+    assert_eq!(note["date"].as_str(), Some("2024-01-01T00:00:00.00"), "and when the note was written");
+    assert_eq!(
+        note["replies"][0]["date"].as_str(),
+        Some("2024-01-02T00:00:00.00"),
+        "and when the reply was written"
+    );
 }
 
 /// The **page setup** of a sheet is imported: the paper, the

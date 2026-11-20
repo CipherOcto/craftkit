@@ -1528,6 +1528,11 @@ pub struct Comment {
     pub replies: Vec<Reply>,
     /// Whether the thread is **resolved**.
     pub resolved: bool,
+    /// The **date** the note was written on, in the file's own words.
+    ///
+    /// A note of the old kind has no date: the file does not say when
+    /// it was written.
+    pub date: Option<String>,
 }
 
 /// A **reply** to a comment: a note written under another note.
@@ -1537,6 +1542,8 @@ pub struct Reply {
     pub author: String,
     /// What it says.
     pub text: String,
+    /// The **date** it was written on, in the file's own words.
+    pub date: Option<String>,
 }
 
 /// A **link** of a sheet: a place a cell goes to.
@@ -3317,7 +3324,15 @@ fn read_comments(
             {
                 text = rest.strip_prefix('\n').unwrap_or(rest).to_string();
             }
-            out.push(Comment { column, row: row as u32, author, text, replies: Vec::new(), resolved: false });
+            out.push(Comment {
+                column,
+                row: row as u32,
+                author,
+                text,
+                replies: Vec::new(),
+                resolved: false,
+                date: None,
+            });
         }
     }
     // The **threads**: the notes of a newer file, with the replies
@@ -3345,6 +3360,7 @@ fn read_comments(
                 text,
                 replies: Vec::new(),
                 resolved: element.flag("done", false),
+                date: element.attr("dT").map(|date| date.to_string()),
             };
             threads.push((id.to_string(), comment));
         }
@@ -3359,7 +3375,11 @@ fn read_comments(
             let author =
                 element.attr("personId").and_then(|person| persons.get(person)).cloned().unwrap_or_default();
             let text = element.child("text").map(thread_text).unwrap_or_default();
-            comment.replies.push(Reply { author, text });
+            comment.replies.push(Reply {
+                author,
+                text,
+                date: element.attr("dT").map(|date| date.to_string()),
+            });
         }
         for (_, comment) in threads {
             // A thread is the truth about its cell: the file writes the

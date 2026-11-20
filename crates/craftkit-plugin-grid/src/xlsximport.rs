@@ -1368,6 +1368,9 @@ commands! {
                         one.insert("author".to_string(), json!(comment.author.clone()));
                     }
                     one.insert("resolved".to_string(), json!(comment.resolved));
+                    if let Some(date) = &comment.date {
+                        one.insert("date".to_string(), json!(date.clone()));
+                    }
                     // The **replies** under the note: a thread of a
                     // newer file.
                     let replies: Vec<Json> = comment
@@ -1378,6 +1381,9 @@ commands! {
                             one.insert("text".to_string(), json!(reply.text.clone()));
                             if !reply.author.is_empty() {
                                 one.insert("author".to_string(), json!(reply.author.clone()));
+                            }
+                            if let Some(date) = &reply.date {
+                                one.insert("date".to_string(), json!(date.clone()));
                             }
                             craftkit_sdk::serde_json::Value::Object(one)
                         })

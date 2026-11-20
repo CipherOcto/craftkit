@@ -1965,6 +1965,47 @@ fn the_threads_of_a_sheet_are_read() {
     assert_eq!(comments[0].replies[0].text, "the answer", "and saying");
 }
 
+/// A comment says **when it was written**: the file dates the note and
+/// every reply under it.
+#[test]
+fn a_comment_says_when_it_was_written() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2017/10/relationships/person" Target="persons/person.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2017/10/relationships/threadedComment" Target="../threadedComments/threadedComment1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/persons/person.xml",
+            r#"<personList><person id="{p1}" displayName="ann"/><person id="{p2}" displayName="bob"/></personList>"#,
+        ),
+        (
+            "xl/threadedComments/threadedComment1.xml",
+            r#"<ThreadedComments><threadedComment ref="B2" dT="2024-01-01T00:00:00.00" personId="{p1}" id="{t1}"><text>the first</text></threadedComment><threadedComment ref="B2" dT="2024-01-02T00:00:00.00" personId="{p2}" id="{t2}" parentId="{t1}"><text>the answer</text></threadedComment></ThreadedComments>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, comments) = &workbook.comments[0];
+    assert_eq!(comments[0].date.as_deref(), Some("2024-01-01T00:00:00.00"), "the date of the note");
+    assert_eq!(
+        comments[0].replies[0].date.as_deref(),
+        Some("2024-01-02T00:00:00.00"),
+        "and the date of the reply"
+    );
+}
+
 /// The **tables** of a sheet are read: they are in parts of their own
 /// that the sheet names by a relationship.
 #[test]

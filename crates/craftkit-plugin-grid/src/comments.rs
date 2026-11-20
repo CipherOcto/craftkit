@@ -44,6 +44,8 @@ pub struct Reply {
     pub text: String,
     /// Who wrote it, when that is known.
     pub author: Option<String>,
+    /// The date it was written on, in the file's own words.
+    pub date: Option<String>,
 }
 
 /// A **comment**: a thread on a cell.
@@ -57,6 +59,8 @@ pub struct Comment {
     pub replies: Vec<Reply>,
     /// Whether the thread is resolved.
     pub resolved: bool,
+    /// The date the comment was written on, in the file's own words.
+    pub date: Option<String>,
 }
 
 /// The **comment** a value holds, if it holds one.
@@ -69,11 +73,13 @@ pub fn comment_from(value: &Json) -> Option<Comment> {
             let Some(text) = reply.get("text").and_then(|text| text.as_str()) else { continue };
             let author =
                 reply.get("author").and_then(|author| author.as_str()).map(|author| author.to_string());
-            replies.push(Reply { text: text.to_string(), author });
+            let date = reply.get("date").and_then(|date| date.as_str()).map(|date| date.to_string());
+            replies.push(Reply { text: text.to_string(), author, date });
         }
     }
     let resolved = value.get("resolved").and_then(|resolved| resolved.as_bool()).unwrap_or(false);
-    Some(Comment { text, author, replies, resolved })
+    let date = value.get("date").and_then(|date| date.as_str()).map(|date| date.to_string());
+    Some(Comment { text, author, replies, resolved, date })
 }
 
 /// The **comments** of a sheet: by the address of the cell they are on.
@@ -99,6 +105,9 @@ pub fn comments_into(comments: &BTreeMap<String, Comment>) -> Json {
             one.insert("author".to_string(), Json::String(author.clone()));
         }
         one.insert("resolved".to_string(), Json::Bool(comment.resolved));
+        if let Some(date) = &comment.date {
+            one.insert("date".to_string(), Json::String(date.clone()));
+        }
         let replies: Vec<Json> = comment
             .replies
             .iter()
@@ -107,6 +116,9 @@ pub fn comments_into(comments: &BTreeMap<String, Comment>) -> Json {
                 one.insert("text".to_string(), Json::String(reply.text.clone()));
                 if let Some(author) = &reply.author {
                     one.insert("author".to_string(), Json::String(author.clone()));
+                }
+                if let Some(date) = &reply.date {
+                    one.insert("date".to_string(), Json::String(date.clone()));
                 }
                 Json::Object(one)
             })
@@ -270,7 +282,10 @@ commands! {
             let held = comments.get(&address);
             let replies = held.map(|comment| comment.replies.clone()).unwrap_or_default();
             let resolved = held.map(|comment| comment.resolved).unwrap_or(false);
-            comments.insert(address.clone(), Comment { text, author: author.clone(), replies, resolved });
+            // The **date** of an edited comment stays as it was: the
+            // tree's own rule is that what is not said stays.
+            let date = held.and_then(|comment| comment.date.clone());
+            comments.insert(address.clone(), Comment { text, author: author.clone(), replies, resolved, date });
             node.data["comments"] = comments_into(&comments);
             // A **note replaces a comment**: the note on the cell goes away.
             let mut notes = crate::notes::notes_of(node);
@@ -335,7 +350,7 @@ commands! {
                     message: format!("there is no comment in {address}"),
                 });
             };
-            comment.replies.push(Reply { text: text.clone(), author: author.clone() });
+            comment.replies.push(Reply { text: text.clone(), author: author.clone(), date: None });
             let replies = comment.replies.len();
             node.data["comments"] = comments_into(&comments);
             Ok(Outcome::changed(format!("replied to the comment on {address}")).with_data(json!({
