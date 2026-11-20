@@ -4514,6 +4514,7 @@ so.
 | **a chart that draws two kinds in one is a combo chart** | **built.** A chart of a column and a line over it is one chart of two kinds, and the tree says so and leaves it out (§1067) | §1067 |
 | **the extended charts are read** | **built.** The kinds Excel 2016 added are in parts of their own, and the tree reads them and says which kind they are (§1068) | §1068 |
 | **a comment says when it was written** | **built.** The file dates the note and every reply under it, and the tree keeps the date (§1069) | §1069 |
+| **a note may be shown** | **built.** The drawing of the notes says whether a note is on its cell or behind a mark, and the tree keeps it (§1070) | §1070 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -60186,9 +60187,10 @@ A cell can carry a note.
 - **The tree's comment has an author and a text, and this one has the
   same two.** The tree's comment has more as well — the replies, the
   dates, whether the thread is resolved, whether the note is shown,
-  and the box it is shown in — and those come from parts this reader
-  does not read: the **threaded comments**, the **persons** and the
-  **shapes**.
+  and the box it is shown in — and those come from parts of their own:
+  the **threaded comments** and the **persons** are read (§923), and
+  the **shapes** are read for the shownness of a note (§1070). The box
+  of a note is not read yet.
 - **A note begins with its author.** A spreadsheet program writes the
   author in bold on the first line of the note, and the tree's reader
   drops that line and keeps the author beside the text — and so does
@@ -68705,5 +68707,48 @@ every reply under it, and the tree keeps the date.
 - **A note of the old kind has no date**: the file does not say when
   it was written, and the tree does not guess.
 - **A note that is hidden is not said to be hidden**: the file keeps
-  the shape of the note in a part of its own, and the tree does not
-  read that part yet.
+  the shape of the note in a part of its own, and the tree did not
+  read that part — it reads it now, and says whether the note is
+  shown (§1070).
+
+## 1070. A note may be shown
+
+A note may be **shown**: a note that is shown is on its cell and not
+behind a mark in the corner of it, and the file says so.
+
+### What was built
+
+- The **reader** reads the drawing of the notes — the **VML** of the
+  sheet — and the shape of a note says whether the note is shown.
+- The **comment** of the reader keeps it, and so does the comment of
+  the document: the **import** carries it.
+- The tree's own rule holds: a comment that is **edited** keeps the
+  note as it was shown, because what is not said stays as it was.
+
+### What the port found
+
+- **The reference reads the drawing of the notes**, and the shape of a
+  note says whether it is shown. A shape that is not a note — a
+  picture, a control — says nothing, and a shape that names no cell
+  is not a note.
+- **The tree did not read that part at all**: the note came in, and
+  the tree did not know whether it was shown or behind a mark in the
+  corner of the cell.
+
+### What it cost
+
+- **No new command**: a note is shown or not, and the tree has no
+  command that shows it.
+- **One field** of the comment of the reader, and one of the comment
+  of the document.
+- **Four tests**: two in the reader, and two in the import.
+
+### What it does not settle
+
+- **Nothing shows or hides a note**: the tree reads what the file
+  says and keeps it, and a note written in the tree is shown.
+- **The box of a note is not read**: the file says where the box sits
+  and how big it is, in the same drawing, and the tree does not read
+  that yet.
+- **A thread is not shown this way**: the drawing of the notes is for
+  the notes of the old kind, and a thread is not one of them.
