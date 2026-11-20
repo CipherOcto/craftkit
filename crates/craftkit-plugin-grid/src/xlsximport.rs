@@ -1371,6 +1371,8 @@ commands! {
                     if let Some(date) = &comment.date {
                         one.insert("date".to_string(), json!(date.clone()));
                     }
+                    // Whether the note is **shown** on its cell.
+                    one.insert("visible".to_string(), json!(comment.visible));
                     // The **replies** under the note: a thread of a
                     // newer file.
                     let replies: Vec<Json> = comment

@@ -289,6 +289,7 @@ commands! {
                         replies,
                         resolved,
                         date: None,
+                        visible: false,
                     },
                 );
                 converted.push(address.clone());

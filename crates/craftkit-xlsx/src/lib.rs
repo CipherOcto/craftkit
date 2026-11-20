@@ -1533,6 +1533,12 @@ pub struct Comment {
     /// A note of the old kind has no date: the file does not say when
     /// it was written.
     pub date: Option<String>,
+    /// Whether the note is **shown**: a note that is shown is on its
+    /// cell and not behind a mark in the corner of it.
+    ///
+    /// The file says so in the drawing of the notes, and a note of a
+    /// newer file — a thread — is not shown this way.
+    pub visible: bool,
 }
 
 /// A **reply** to a comment: a note written under another note.
@@ -3303,6 +3309,8 @@ fn read_comments(
     warnings: &mut Vec<String>,
 ) -> Vec<Comment> {
     let mut out = Vec::new();
+    // The notes that are **shown**: the drawing of the notes says so.
+    let shown = read_shown_notes(package, sheet_rels);
     for relation in sheet_rels.iter().filter(|relation| relation.kind == "comments") {
         let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
         let authors: Vec<String> = root
@@ -3332,6 +3340,7 @@ fn read_comments(
                 replies: Vec::new(),
                 resolved: false,
                 date: None,
+                visible: shown.contains(&(column, row as u32)),
             });
         }
     }
@@ -3361,6 +3370,7 @@ fn read_comments(
                 replies: Vec::new(),
                 resolved: element.flag("done", false),
                 date: element.attr("dT").map(|date| date.to_string()),
+                visible: false,
             };
             threads.push((id.to_string(), comment));
         }
@@ -3392,6 +3402,51 @@ fn read_comments(
         }
     }
     out
+}
+
+/// Read the **notes that are shown** in a sheet.
+///
+/// A note of the old kind has a shape of its own in a part of the
+/// sheet's own — the drawing of the **VML** — and the shape says
+/// whether the note is **shown**: a note that is shown is on its cell
+/// and not behind a mark in the corner of it.
+///
+/// The cells are given as their column and their row, counted from
+/// zero, as the shape says them. A shape that says no cell, or a cell
+/// that is not one, is not a note.
+fn read_shown_notes(
+    package: &mut craftkit_zip::Package<'_>,
+    sheet_rels: &[Rel],
+) -> std::collections::HashSet<(u32, u32)> {
+    let mut out = std::collections::HashSet::new();
+    for relation in sheet_rels.iter().filter(|relation| relation.kind == "vmlDrawing") {
+        let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
+        shown_notes_of(&root, &mut out, 0);
+    }
+    out
+}
+
+/// The **notes that are shown** in a drawing: the shapes of the notes
+/// are looked for, and a shape may sit in a group of shapes.
+fn shown_notes_of(root: &craftkit_xml::El, out: &mut std::collections::HashSet<(u32, u32)>, depth: usize) {
+    if depth > craftkit_xml::MAX_DEPTH {
+        return;
+    }
+    for element in root.children.iter() {
+        if element.name == "shape" {
+            let data = element.child("ClientData").filter(|data| data.attr("ObjectType") == Some("Note"));
+            if let Some(data) = data
+                && data.child("Visible").is_some()
+            {
+                let row = data.child("Row").and_then(|row| row.text.trim().parse::<u32>().ok());
+                let column = data.child("Column").and_then(|column| column.text.trim().parse::<u32>().ok());
+                if let (Some(column), Some(row)) = (column, row) {
+                    out.insert((column, row));
+                }
+            }
+        }
+        shown_notes_of(element, out, depth + 1);
+    }
 }
 
 /// The text of a **thread's** note: the text of the element itself, or

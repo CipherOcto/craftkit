@@ -2006,6 +2006,86 @@ fn a_comment_says_when_it_was_written() {
     );
 }
 
+/// A note may be **shown**: the drawing of the notes says so.
+#[test]
+fn a_note_may_be_shown() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/comments1.xml",
+            r#"<comments><authors><author>ann</author></authors><commentList><comment ref="A1" authorId="0"><text><r><t>the shown one</t></r></text></comment><comment ref="B2" authorId="0"><text><r><t>the hidden one</t></r></text></comment></commentList></comments>"#,
+        ),
+        (
+            "xl/drawings/vmlDrawing1.vml",
+            r##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel"><v:shape id="_x0000_s1025" type="#_x0000_t202"><v:textbox><div>a note</div></v:textbox><x:ClientData ObjectType="Note"><x:Row>0</x:Row><x:Column>0</x:Column><x:Visible/></x:ClientData></v:shape><v:shape id="_x0000_s1026" type="#_x0000_t202"><v:textbox><div>a note</div></v:textbox><x:ClientData ObjectType="Note"><x:Row>1</x:Row><x:Column>1</x:Column></x:ClientData></v:shape></xml>"##,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, comments) = &workbook.comments[0];
+    assert_eq!(comments.len(), 2, "two comments");
+    assert!(comments[0].visible, "the note of the first cell is shown");
+    assert!(!comments[1].visible, "and the note of the second is not");
+}
+
+/// A **thread** is not shown the way a note is: the drawing of the
+/// notes says nothing about it.
+#[test]
+fn a_thread_is_not_shown_the_way_a_note_is() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2017/10/relationships/person" Target="persons/person.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/><Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2017/10/relationships/threadedComment" Target="../threadedComments/threadedComment1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/comments1.xml",
+            r#"<comments><authors><author>ann</author></authors><commentList><comment ref="A1" authorId="0"><text><r><t>the old note</t></r></text></comment></commentList></comments>"#,
+        ),
+        ("xl/persons/person.xml", r#"<personList><person id="{p1}" displayName="ann"/></personList>"#),
+        (
+            "xl/threadedComments/threadedComment1.xml",
+            r#"<ThreadedComments><threadedComment ref="A1" dT="2024-01-01T00:00:00.00" personId="{p1}" id="{t1}"><text>the thread</text></threadedComment></ThreadedComments>"#,
+        ),
+        (
+            "xl/drawings/vmlDrawing1.vml",
+            r##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel"><v:shape id="_x0000_s1025" type="#_x0000_t202"><x:ClientData ObjectType="Note"><x:Row>0</x:Row><x:Column>0</x:Column><x:Visible/></x:ClientData></v:shape></xml>"##,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, comments) = &workbook.comments[0];
+    assert_eq!(comments.len(), 1, "one comment");
+    assert_eq!(comments[0].text, "the thread", "the thread is the truth about its cell");
+    assert!(!comments[0].visible, "and it is not shown the way a note is");
+}
+
 /// The **tables** of a sheet are read: they are in parts of their own
 /// that the sheet names by a relationship.
 #[test]

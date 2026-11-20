@@ -24,6 +24,9 @@
 //! - A **reply** joins the thread of the cell. A cell that has no
 //!   comment has no thread to join, and that is refused by name.
 //! - A thread may be **resolved**, and unresolved again.
+//! - A note may be **shown**: a note that is shown is on its cell and
+//!   not behind a mark in the corner of it. The file says so, and the
+//!   tree keeps what it says.
 //! - The **whole cell cleared** takes the comment with it — the
 //!   tree's *clear all* takes the comment of the cell with it — and
 //!   the *clear contents* does not.
@@ -61,6 +64,9 @@ pub struct Comment {
     pub resolved: bool,
     /// The date the comment was written on, in the file's own words.
     pub date: Option<String>,
+    /// Whether the note is **shown**: a note that is shown is on its
+    /// cell and not behind a mark in the corner of it.
+    pub visible: bool,
 }
 
 /// The **comment** a value holds, if it holds one.
@@ -79,7 +85,8 @@ pub fn comment_from(value: &Json) -> Option<Comment> {
     }
     let resolved = value.get("resolved").and_then(|resolved| resolved.as_bool()).unwrap_or(false);
     let date = value.get("date").and_then(|date| date.as_str()).map(|date| date.to_string());
-    Some(Comment { text, author, replies, resolved, date })
+    let visible = value.get("visible").and_then(|visible| visible.as_bool()).unwrap_or(false);
+    Some(Comment { text, author, replies, resolved, date, visible })
 }
 
 /// The **comments** of a sheet: by the address of the cell they are on.
@@ -108,6 +115,7 @@ pub fn comments_into(comments: &BTreeMap<String, Comment>) -> Json {
         if let Some(date) = &comment.date {
             one.insert("date".to_string(), Json::String(date.clone()));
         }
+        one.insert("visible".to_string(), Json::Bool(comment.visible));
         let replies: Vec<Json> = comment
             .replies
             .iter()
@@ -141,6 +149,7 @@ pub fn comment_of(comment: &Comment) -> Json {
         },
     );
     one.insert("resolved".to_string(), Json::Bool(comment.resolved));
+    one.insert("visible".to_string(), Json::Bool(comment.visible));
     let replies: Vec<Json> = comment
         .replies
         .iter()
@@ -285,7 +294,10 @@ commands! {
             // The **date** of an edited comment stays as it was: the
             // tree's own rule is that what is not said stays.
             let date = held.and_then(|comment| comment.date.clone());
-            comments.insert(address.clone(), Comment { text, author: author.clone(), replies, resolved, date });
+            // The note stays as it was **shown** or not: what is not
+            // said stays as it was. The tree's own rule.
+            let visible = held.map(|comment| comment.visible).unwrap_or(false);
+            comments.insert(address.clone(), Comment { text, author: author.clone(), replies, resolved, date, visible });
             node.data["comments"] = comments_into(&comments);
             // A **note replaces a comment**: the note on the cell goes away.
             let mut notes = crate::notes::notes_of(node);
