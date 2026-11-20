@@ -1163,6 +1163,8 @@ commands! {
                         "smooth": smooth,
                         "markers": chart.markers,
                         "colours": chart.colours.clone(),
+                        // The **cell** the chart is drawn in.
+                        "cell": chart.cell.clone(),
                         // The **trendlines**: the fits of the lines of
                         // the series.
                         "trendlines": chart

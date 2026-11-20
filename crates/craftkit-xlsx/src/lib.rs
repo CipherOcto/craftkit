@@ -547,6 +547,12 @@ pub struct Chart {
     /// The **trendlines** of the chart: the fits of the lines of its
     /// series.
     pub trendlines: Vec<Trendline>,
+    /// The **cell** the chart is drawn in: `D5`.
+    ///
+    /// The chart is drawn in an **anchor**, and the anchor says the
+    /// cell it starts at. A chart that is drawn in no anchor has no
+    /// cell.
+    pub cell: Option<String>,
 }
 
 /// A **trendline** of a chart: a fit of the line of a series.
@@ -606,28 +612,38 @@ fn read_drawings(
         return (out, pictures);
     };
     let drawing_rels = rels_of(package, &relation.target).unwrap_or_default();
-    // The **objects** of the drawing: the frames that hold a chart.
-    let mut frames = Vec::new();
-    collect(&part, "graphicFrame", &mut frames);
-    for frame in frames {
-        let Some(id) = frame
-            .child("graphic")
-            .and_then(|graphic| graphic.child("graphicData"))
-            .and_then(|data| data.child("chart"))
-            .and_then(|chart| chart.attr("id"))
-        else {
-            continue;
-        };
-        let Some(relation) = drawing_rels.iter().find(|relation| relation.id == id) else { continue };
-        let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
-        let Some(chart) = read_chart(&root, theme, warnings) else { continue };
-        if chart.smooth.is_none() {
-            warnings.push(
-                "a chart of the sheet has series that do not all say the same about the smooth line"
-                    .to_string(),
-            );
+    // The **anchors** of the drawing: the places the objects are drawn
+    // in. A chart is drawn in an anchor, and the anchor says the cell
+    // it starts at.
+    let mut anchors = Vec::new();
+    collect(&part, "twoCellAnchor", &mut anchors);
+    collect(&part, "oneCellAnchor", &mut anchors);
+    for anchor in anchors {
+        let cell = cell_of_anchor(anchor);
+        // The **objects** of the anchor: the frames that hold a chart.
+        let mut frames = Vec::new();
+        collect(anchor, "graphicFrame", &mut frames);
+        for frame in frames {
+            let Some(id) = frame
+                .child("graphic")
+                .and_then(|graphic| graphic.child("graphicData"))
+                .and_then(|data| data.child("chart"))
+                .and_then(|chart| chart.attr("id"))
+            else {
+                continue;
+            };
+            let Some(relation) = drawing_rels.iter().find(|relation| relation.id == id) else { continue };
+            let Some(root) = read_xml(package, &relation.target).ok().flatten() else { continue };
+            let Some(mut chart) = read_chart(&root, theme, warnings) else { continue };
+            chart.cell = cell.clone();
+            if chart.smooth.is_none() {
+                warnings.push(
+                    "a chart of the sheet has series that do not all say the same about the smooth line"
+                        .to_string(),
+                );
+            }
+            out.push(chart);
         }
-        out.push(chart);
     }
     // The **pictures** of the drawing.
     let (read, unread) = read_pictures(package, &part, &drawing_rels);
@@ -1187,6 +1203,7 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
         series,
         colours,
         trendlines,
+        cell: None,
     })
 }
 
@@ -1347,6 +1364,7 @@ fn read_chartex(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         series,
         colours,
         trendlines: Vec::new(),
+        cell: None,
     })
 }
 
