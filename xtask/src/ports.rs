@@ -2041,6 +2041,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§1077",
     },
+    Port {
+        rule: "the filter of a pivot is read",
+        from: "gridcraft/crates/xlsx/src/pivot/read.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "grid.import.xlsx",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§1078",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

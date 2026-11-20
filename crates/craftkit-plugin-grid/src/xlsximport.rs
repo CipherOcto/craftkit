@@ -1896,7 +1896,15 @@ fn pivot_of(
         grand_totals_rows: pivot.grand_totals_rows.unwrap_or(true),
         grand_totals_cols: pivot.grand_totals_cols.unwrap_or(true),
 
-        filter: None,
+        // The **filter** of the pivot: the file says of the field it
+        // filters by, and of the items it keeps.
+        filter: match &pivot.filter {
+            None => None,
+            Some((name, items)) => {
+                let field = column_of(cells, &area, name)?;
+                Some(crate::pivots::Filter { field, selected: items.clone() })
+            }
+        },
         // The **order** of the items: the file says of the field they
         // are ordered by, and of the order. A file that orders them
         // by hand says nothing.

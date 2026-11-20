@@ -2088,6 +2088,70 @@ fn the_grouping_of_the_dates_of_a_field_is_read() {
     }
 }
 
+/// The **filter** of a pivot is read: the page field says of the
+/// item it keeps.
+#[test]
+fn the_filter_of_a_pivot_is_read() {
+    for (page, items, expected) in [
+        (
+            r#"<pageFields count="1"><pageField fld="0" item="1"/></pageFields>"#,
+            r#"<items count="4"><item x="0"/><item x="1"/><item x="2"/><item t="default"/></items>"#,
+            Some(("Region".to_string(), vec!["South".to_string()])),
+        ),
+        (
+            "",
+            r#"<items count="4"><item x="0"/><item x="1" h="1"/><item x="2"/><item t="default"/></items>"#,
+            Some(("Region".to_string(), vec!["North".to_string(), "East".to_string()])),
+        ),
+        ("", r#"<items count="4"><item x="0"/><item x="1"/><item x="2"/><item t="default"/></items>"#, None),
+    ] {
+        let bytes = a_package(&[
+            (
+                "_rels/.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+            (
+                "xl/pivotTables/pivotTable1.xml",
+                format!(
+                    r#"<pivotTableDefinition name="The Pivot" cacheId="1"><location ref="A1:B5"/><pivotFields count="3"><pivotField axis="axisRow">{items}</pivotField><pivotField dataField="1"/><pivotField/></pivotFields>{page}<rowFields count="1"><field x="0"/></rowFields><dataFields count="1"><dataField name="Sum of Amount" fld="2"/></dataFields></pivotTableDefinition>"#
+                )
+                .as_str(),
+            ),
+            (
+                "xl/pivotTables/_rels/pivotTable1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/pivotCacheDefinition1.xml",
+                r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Region"><sharedItems count="3"><s v="North"/><s v="South"/><s v="East"/></sharedItems></cacheField><cacheField name="Product"/><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>"#,
+            ),
+        ]);
+        let workbook = read(&bytes).expect("the workbook is read");
+        let filter = workbook.sheets[0].pivots[0].filter.as_ref();
+        match (filter, &expected) {
+            (None, None) => {}
+            (Some((field, kept)), Some((name, items))) => {
+                assert_eq!(field, name, "the field it filters by");
+                assert_eq!(kept, items, "and the items it keeps");
+            }
+            _ => panic!("the filter is not what was expected"),
+        }
+    }
+}
+
 /// The **conditional formats** of the extension list are not read,
 /// and the reader says so: they are not comparisons, and the tree's
 /// rule is a comparison.

@@ -446,6 +446,9 @@ pub struct PivotTable {
     /// way its dates are gathered — `years`, `quarters`, `months` or
     /// `days`.
     pub group: Option<(String, String)>,
+    /// The **filter** of the pivot: the field it keeps the items of,
+    /// and the items it keeps.
+    pub filter: Option<(String, Vec<String>)>,
 }
 
 /// The **parts** of a sheet: the things it holds in parts of their
@@ -865,6 +868,41 @@ fn read_pivots(
             };
             Some((name_of(index), order.to_string()))
         });
+        // The **items** of the fields: the cache says of each field
+        // what its items are, and the pivot says of the items of a
+        // field which of them it keeps.
+        let items: Vec<Vec<String>> = cache
+            .child("cacheFields")
+            .map(|fields| {
+                fields
+                    .kids("cacheField")
+                    .map(|field| {
+                        field
+                            .child("sharedItems")
+                            .map(|shared| shared.children.iter().map(item_label).collect())
+                            .unwrap_or_default()
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        // The **filter** of the pivot: the page field first — the
+        // field the pivot is filtered by — and then the field of the
+        // first axis that keeps only some of its items.
+        let page_filter =
+            root.child("pageFields").and_then(|pages| pages.child("pageField")).and_then(|page| {
+                let index = page.attr_u32("fld")? as usize;
+                let labels = items.get(index)?;
+                let kept = match page.attr_u32("item") {
+                    Some(item) => labels.get(item as usize).map(|label| vec![label.clone()]),
+                    None => kept_items_of(&items, index, &root),
+                };
+                Some((name_of(index), kept?))
+            });
+        let axis_filter = axis.and_then(|index| {
+            let kept = kept_items_of(&items, index, &root)?;
+            Some((name_of(index), kept))
+        });
+        let filter = page_filter.or(axis_filter);
         // The **grouping** of the dates: the first field the cache
         // gathers by the year, the quarter, the month or the day.
         let group = groups
@@ -890,9 +928,46 @@ fn read_pivots(
             subtotals,
             sort,
             group,
+            filter,
         });
     }
     out
+}
+
+/// The **label** of an item of a field, as the file writes it.
+fn item_label(item: &craftkit_xml::El) -> String {
+    let value = item.attr("v").unwrap_or("").trim().to_string();
+    match item.name.as_str() {
+        // A blank item is nothing, and nothing is written as nothing.
+        "m" => String::new(),
+        "b" => match value.as_str() {
+            "1" | "true" => "TRUE".to_string(),
+            _ => "FALSE".to_string(),
+        },
+        _ => value,
+    }
+}
+
+/// The **items** of a field that a pivot keeps, when the pivot keeps
+/// only some of them.
+///
+/// The pivot says of each of its items whether it is hidden, and the
+/// items that are not hidden are the ones that are kept.
+fn kept_items_of(items: &[Vec<String>], index: usize, root: &craftkit_xml::El) -> Option<Vec<String>> {
+    let labels = items.get(index)?;
+    let field = root.child("pivotFields").and_then(|fields| fields.kids("pivotField").nth(index))?;
+    let list = field.child("items")?;
+    let all: Vec<&craftkit_xml::El> = list.children.iter().collect();
+    if !all.iter().any(|item| item.flag("h", false)) {
+        return None;
+    }
+    Some(
+        all.iter()
+            .filter(|item| !item.flag("h", false))
+            .filter_map(|item| item.attr_u32("x"))
+            .filter_map(|item| labels.get(item as usize).cloned())
+            .collect(),
+    )
 }
 
 /// The **subtotals** of the groups of a pivot: `none`, `top` or
