@@ -61,7 +61,8 @@ pub const LEGENDS: [&str; 5] = ["none", "bottom", "top", "left", "right"];
 
 /// The **elements** of a chart that may be turned on and off: the
 /// tree's own.
-pub const ELEMENTS: [&str; 6] = ["title", "legend", "datalabels", "gridlines", "axistitles", "smooth"];
+pub const ELEMENTS: [&str; 7] =
+    ["title", "legend", "datalabels", "gridlines", "axistitles", "smooth", "markers"];
 
 /// The position of the legend, from its name.
 pub fn legend_of(text: &str) -> Option<&'static str> {
@@ -390,6 +391,7 @@ commands! {
                     "xTitle": self.x_title.as_ref().map(|title| title.0.trim().to_string()),
                     "yTitle": self.y_title.as_ref().map(|title| title.0.trim().to_string()),
                     "smooth": false,
+                    "markers": false,
                     "rows": self.switch_row_column.map(|flag| flag.0).unwrap_or(false),
                 }),
             );
@@ -451,6 +453,7 @@ commands! {
                 "xTitle": node.data.get("xTitle").cloned().unwrap_or(Json::Null),
                 "yTitle": node.data.get("yTitle").cloned().unwrap_or(Json::Null),
                 "smooth": element_on(&node, "smooth"),
+                "markers": element_on(&node, "markers"),
                 "colours": colours_of(&node),
                 "seriesColours": series_colours(&node, series_count(&data)),
                 "data": data,
@@ -663,8 +666,8 @@ commands! {
     ///
     /// The tree's own: the elements of a chart are the **title**, the
     /// **legend**, the **data labels**, the **gridlines**, the **titles of
-    /// the axes** and the **smooth** line — and an element that is not one
-    /// of them is refused.
+    /// the axes**, the **smooth** line and the **markers** — and an element
+    /// that is not one of them is refused.
     ///
     /// The rules:
     ///
@@ -686,7 +689,7 @@ commands! {
             /// The chart.
             chart: NodeRef,
             /// The element: `title`, `legend`, `dataLabels`, `gridlines`,
-            /// `axisTitles` or `smooth`.
+            /// `axisTitles`, `smooth` or `markers`.
             element: Text,
             /// Whether the element is on; it is on unless it is said to be
             /// off.
@@ -794,6 +797,9 @@ commands! {
                 }
                 if element == "smooth" {
                     node.data["smooth"] = json!(on);
+                }
+                if element == "markers" {
+                    node.data["markers"] = json!(on);
                 }
                 if element == "axistitles" {
                     node.data["xTitle"] = match &x_title {

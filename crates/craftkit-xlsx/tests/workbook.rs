@@ -1368,6 +1368,61 @@ fn the_charts_of_a_sheet_are_read() {
     assert!(charts[0].colours.is_empty(), "and the series have no colour of their own");
 }
 
+/// The **markers** of a chart are read: the file says of the group
+/// whether it has them, and of each of its series whether it shows
+/// them.
+#[test]
+fn the_markers_of_a_chart_are_read() {
+    for (group, series, expected) in [
+        (None, "", true),
+        (Some(r#"<c:marker val="0"/>"#), "", false),
+        (None, r#"<c:marker><c:symbol val="none"/></c:marker>"#, false),
+        (Some(r#"<c:marker val="1"/>"#), "", true),
+    ] {
+        let group = group.unwrap_or("");
+        let package = a_package_of(&[
+            (
+                "_rels/.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                br#"<workbook><workbookPr/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><drawing r:id="rId1"/><sheetData/></worksheet>"#,
+            ),
+            (
+                "xl/drawings/drawing1.xml",
+                br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+            ),
+            (
+                "xl/drawings/_rels/drawing1.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/charts/chart1.xml",
+                format!(
+                    r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:plotArea><c:lineChart><c:grouping val="standard"/>{group}<c:ser><c:cat><c:strRef><c:f>One!$A$2:$A$10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val>{series}</c:ser></c:lineChart></c:plotArea></c:chart></c:chartSpace>"#
+                )
+                .as_bytes(),
+            ),
+        ]);
+        let read = read(&package).expect("the workbook is read");
+        let (_, charts) = &read.charts[0];
+        assert_eq!(charts[0].markers, expected, "the markers of the chart");
+    }
+}
+
 /// The **smooth line** of a chart is read: the file says of each of
 /// its series whether the line is smooth.
 #[test]

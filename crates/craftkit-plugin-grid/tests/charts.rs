@@ -335,3 +335,23 @@ fn a_stacking_that_is_not_one_of_the_trees_is_refused() {
         .expect_err("that is not a stacking");
     assert!(error.to_string().contains("stacked"), "the refusal says what is one: {error}");
 }
+
+/// The **markers** of a chart may be turned on and off.
+#[test]
+fn the_markers_of_a_chart_may_be_turned_on_and_off() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    let chart = a_chart(&mut session, sheet, "A1:B4");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["markers"].as_bool(), Some(false), "a chart has no markers to begin with");
+    session
+        .execute("grid.chart.element", &json!({ "chart": chart, "element": "markers" }))
+        .expect("the markers are turned on");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["markers"].as_bool(), Some(true), "the markers are on");
+    session
+        .execute("grid.chart.element", &json!({ "chart": chart, "element": "markers", "on": false }))
+        .expect("the markers are turned off");
+    let read = chart_of(&mut session, chart);
+    assert_eq!(read["markers"].as_bool(), Some(false), "the markers are off");
+}

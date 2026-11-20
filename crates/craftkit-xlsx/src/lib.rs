@@ -471,6 +471,12 @@ pub struct Chart {
     /// A chart that is not stacked has none: the file may say
     /// `clustered`, and that is the way of saying nothing.
     pub stacking: Option<String>,
+    /// The **markers** of the chart: whether the points of its line are
+    /// shown.
+    ///
+    /// The file says of the group whether it has them, and of each of
+    /// its series whether it shows them.
+    pub markers: bool,
     /// The **smooth line** of the chart.
     ///
     /// The file says of each of its series whether the line is
@@ -841,6 +847,14 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         categories_axis.and_then(|axis| axis.child("title")).map(all_text).filter(|text| !text.is_empty());
     let y_title =
         values_axis.and_then(|axis| axis.child("title")).map(all_text).filter(|text| !text.is_empty());
+    // The **markers**: the group says whether it has them, and each
+    // of its series may turn its own off.
+    let group_markers = !matches!(element.child_val("marker"), Some("0") | Some("false"));
+    let all_none = element.kids("ser").next().is_some()
+        && element
+            .kids("ser")
+            .all(|serie| serie.child("marker").and_then(|marker| marker.child_val("symbol")) == Some("none"));
+    let markers = group_markers && !all_none;
     // The **smooth line**: the file says of each of its series
     // whether the line is smooth.
     let smooths: Vec<bool> = element
@@ -865,6 +879,7 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
     Some(Chart {
         kind: kind.to_string(),
         stacking,
+        markers,
         smooth,
         title,
         legend,

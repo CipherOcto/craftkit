@@ -1147,6 +1147,7 @@ commands! {
                         "xTitle": chart.x_title,
                         "yTitle": chart.y_title,
                         "smooth": smooth,
+                        "markers": chart.markers,
                         "colours": chart.colours.clone(),
                     });
                     session.document_mut()?.add_node_with_under(Some(sheet_id), name, "grid.chart", None, node);
