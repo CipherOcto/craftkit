@@ -1897,7 +1897,17 @@ fn pivot_of(
         grand_totals_cols: pivot.grand_totals_cols.unwrap_or(true),
 
         filter: None,
-        sort: None,
+        // The **order** of the items: the file says of the field they
+        // are ordered by, and of the order. A file that orders them
+        // by hand says nothing.
+        sort: match &pivot.sort {
+            None => None,
+            Some((name, order)) => {
+                let column = column_of(cells, &area, name)?;
+                let order = crate::pivots::Sort::parse(order)?;
+                Some((column, order))
+            }
+        },
         group: None,
         // The way the pivot **shows its value**: the file says, and a
         // file that says nothing shows the value as it is.

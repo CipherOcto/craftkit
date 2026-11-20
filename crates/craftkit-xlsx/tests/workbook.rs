@@ -1972,6 +1972,63 @@ fn the_subtotals_of_a_pivot_are_read() {
     }
 }
 
+/// The **order** of the items of a pivot is read: the field says of
+/// the order its items are in.
+#[test]
+fn the_order_of_the_items_of_a_pivot_is_read() {
+    for (attribute, expected) in [
+        ("", None),
+        (r#" sortType="manual""#, None),
+        (r#" sortType="ascending""#, Some(("Region".to_string(), "asc".to_string()))),
+        (r#" sortType="descending""#, Some(("Region".to_string(), "desc".to_string()))),
+    ] {
+        let bytes = a_package(&[
+            (
+                "_rels/.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+            (
+                "xl/pivotTables/pivotTable1.xml",
+                format!(
+                    r#"<pivotTableDefinition name="The Pivot" cacheId="1"><location ref="A1:B5"/><pivotFields count="3"><pivotField axis="axisRow"{attribute}><items count="2"><item x="0"/><item t="default"/></items></pivotField><pivotField dataField="1"/><pivotField/></pivotFields><rowFields count="1"><field x="0"/></rowFields><dataFields count="1"><dataField name="Sum of Amount" fld="2"/></dataFields></pivotTableDefinition>"#
+                )
+                .as_str(),
+            ),
+            (
+                "xl/pivotTables/_rels/pivotTable1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/pivotCacheDefinition1.xml",
+                r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Region"/><cacheField name="Product"/><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>"#,
+            ),
+        ]);
+        let workbook = read(&bytes).expect("the workbook is read");
+        let sort = workbook.sheets[0].pivots[0].sort.as_ref();
+        match (sort, &expected) {
+            (None, None) => {}
+            (Some((field, order)), Some((name, way))) => {
+                assert_eq!(field, name, "the field the items are ordered by");
+                assert_eq!(order, way, "and the order");
+            }
+            _ => panic!("the order of the items is not what was expected"),
+        }
+    }
+}
+
 /// The **conditional formats** of the extension list are not read,
 /// and the reader says so: they are not comparisons, and the tree's
 /// rule is a comparison.

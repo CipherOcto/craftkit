@@ -437,6 +437,11 @@ pub struct PivotTable {
     /// A file that says nothing about them says nothing, and the tree
     /// keeps its own way.
     pub subtotals: Option<String>,
+    /// The **order** of the items of the pivot: the field they are
+    /// ordered by, and the order — `asc` or `desc`.
+    ///
+    /// A file that orders its items by hand says nothing.
+    pub sort: Option<(String, String)>,
 }
 
 /// The **parts** of a sheet: the things it holds in parts of their
@@ -816,11 +821,21 @@ fn read_pivots(
         // The **subtotals** of the groups: the field of the first axis
         // says where they are, or that they are not there.
         let axis = row_indexes.first().or(column_indexes.first()).copied();
-        let subtotals = axis
-            .and_then(|index| {
-                root.child("pivotFields").and_then(|fields| fields.kids("pivotField").nth(index))
-            })
-            .and_then(subtotals_of);
+        let axis_field = axis.and_then(|index| {
+            root.child("pivotFields").and_then(|fields| fields.kids("pivotField").nth(index))
+        });
+        let subtotals = axis_field.and_then(subtotals_of);
+        // The **order** of the items: the field says of the order its
+        // items are in. A field that orders its items by hand says
+        // nothing.
+        let sort = axis.and_then(|index| {
+            let order = match axis_field?.attr("sortType") {
+                Some("ascending") => "asc",
+                Some("descending") => "desc",
+                _ => return None,
+            };
+            Some((name_of(index), order.to_string()))
+        });
         let name = root.attr("name").map(|name| name.to_string());
         // The **grand totals**: the column at the right that totals the
         // rows, and the line at the bottom that totals the columns. The
@@ -838,6 +853,7 @@ fn read_pivots(
             grand_totals_cols,
             show_as,
             subtotals,
+            sort,
         });
     }
     out
