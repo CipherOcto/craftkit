@@ -1772,6 +1772,58 @@ fn the_pivot_tables_of_a_sheet_are_read() {
     );
 }
 
+/// The **grand totals** of a pivot are read: the file says whether the
+/// pivot has the column at the right that totals the rows, and the
+/// line at the bottom that totals the columns.
+#[test]
+fn the_grand_totals_of_a_pivot_are_read() {
+    for (attributes, rows, columns) in [
+        ("", None, None),
+        (r#" colGrandTotals="0""#, Some(false), None),
+        (r#" rowGrandTotals="0""#, None, Some(false)),
+        (r#" colGrandTotals="1" rowGrandTotals="1""#, Some(true), Some(true)),
+    ] {
+        let bytes = a_package(&[
+            (
+                "_rels/.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+            (
+                "xl/pivotTables/pivotTable1.xml",
+                format!(
+                    r#"<pivotTableDefinition name="The Pivot" cacheId="1"{attributes}><location ref="A1:B5"/><rowFields count="1"><field x="0"/></rowFields><dataFields count="1"><dataField name="Sum of Amount" fld="2"/></dataFields></pivotTableDefinition>"#
+                )
+                .as_str(),
+            ),
+            (
+                "xl/pivotTables/_rels/pivotTable1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/pivotCacheDefinition1.xml",
+                r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Region"/><cacheField name="Product"/><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>"#,
+            ),
+        ]);
+        let workbook = read(&bytes).expect("the workbook is read");
+        let pivots = &workbook.sheets[0].pivots;
+        assert_eq!(pivots[0].grand_totals_rows, rows, "the grand total of the rows");
+        assert_eq!(pivots[0].grand_totals_cols, columns, "and the grand total of the columns");
+    }
+}
+
 /// The **conditional formats** of the extension list are not read,
 /// and the reader says so: they are not comparisons, and the tree's
 /// rule is a comparison.

@@ -413,6 +413,18 @@ pub struct PivotTable {
     /// The **value**: the field that is put together, and the way of
     /// putting it together.
     pub value: Option<(String, String)>,
+    /// Whether the pivot has the **grand total of the rows**: the
+    /// column at the right that totals the rows.
+    ///
+    /// The file says so in `colGrandTotals`, and a file that says
+    /// nothing has one.
+    pub grand_totals_rows: Option<bool>,
+    /// Whether the pivot has the **grand total of the columns**: the
+    /// line at the bottom that totals the columns.
+    ///
+    /// The file says so in `rowGrandTotals`, and a file that says
+    /// nothing has one.
+    pub grand_totals_cols: Option<bool>,
 }
 
 /// The **parts** of a sheet: the things it holds in parts of their
@@ -786,7 +798,21 @@ fn read_pivots(
             (name_of(index), field.attr("subtotal").unwrap_or("sum").to_string())
         });
         let name = root.attr("name").map(|name| name.to_string());
-        out.push(PivotTable { name, source, row_fields, column_fields, value });
+        // The **grand totals**: the column at the right that totals the
+        // rows, and the line at the bottom that totals the columns. The
+        // file names them the other way round — `colGrandTotals` is the
+        // column — and the tree keeps the file's names.
+        let grand_totals_rows = root.attr_bool("colGrandTotals");
+        let grand_totals_cols = root.attr_bool("rowGrandTotals");
+        out.push(PivotTable {
+            name,
+            source,
+            row_fields,
+            column_fields,
+            value,
+            grand_totals_rows,
+            grand_totals_cols,
+        });
     }
     out
 }

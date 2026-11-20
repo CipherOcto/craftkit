@@ -1889,8 +1889,12 @@ fn pivot_of(
         column_field,
         value_field,
         aggregate,
-        grand_totals_rows: true,
-        grand_totals_cols: true,
+        // The **grand totals**: the file says whether the pivot has
+        // the column at the right that totals the rows, and the line
+        // at the bottom that totals the columns. A file that says
+        // nothing has both.
+        grand_totals_rows: pivot.grand_totals_rows.unwrap_or(true),
+        grand_totals_cols: pivot.grand_totals_cols.unwrap_or(true),
         filter: None,
         sort: None,
         group: None,
