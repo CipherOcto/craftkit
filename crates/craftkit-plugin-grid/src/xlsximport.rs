@@ -1895,10 +1895,17 @@ fn pivot_of(
         // nothing has both.
         grand_totals_rows: pivot.grand_totals_rows.unwrap_or(true),
         grand_totals_cols: pivot.grand_totals_cols.unwrap_or(true),
+
         filter: None,
         sort: None,
         group: None,
-        show_as: crate::pivots::ShowAs::Normal,
+        // The way the pivot **shows its value**: the file says, and a
+        // file that says nothing shows the value as it is.
+        show_as: pivot
+            .show_as
+            .as_deref()
+            .and_then(crate::pivots::ShowAs::parse)
+            .unwrap_or(crate::pivots::ShowAs::Normal),
         subtotals: crate::pivots::Subtotals::None,
     })
 }

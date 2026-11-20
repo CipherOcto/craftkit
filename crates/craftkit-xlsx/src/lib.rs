@@ -425,6 +425,12 @@ pub struct PivotTable {
     /// The file says so in `rowGrandTotals`, and a file that says
     /// nothing has one.
     pub grand_totals_cols: Option<bool>,
+    /// The way the pivot shows its **value**: `normal`,
+    /// `percentOfGrandTotal`, `percentOfColumnTotal`,
+    /// `percentOfRowTotal`, `runningTotal` or `rank`.
+    ///
+    /// A file that says nothing shows the value as it is.
+    pub show_as: Option<String>,
 }
 
 /// The **parts** of a sheet: the things it holds in parts of their
@@ -793,10 +799,14 @@ fn read_pivots(
             indexes(root.child("colFields")).iter().map(|index| name_of(*index)).collect();
         // The **value**: the field that is put together, and the way
         // of putting it together.
-        let value = root.child("dataFields").and_then(|fields| fields.child("dataField")).map(|field| {
+        let data_field = root.child("dataFields").and_then(|fields| fields.child("dataField"));
+        let value = data_field.map(|field| {
             let index = field.attr_u32("fld").unwrap_or(0) as usize;
             (name_of(index), field.attr("subtotal").unwrap_or("sum").to_string())
         });
+        // The way the pivot **shows** its value: as it is, as a share
+        // of a total, as a running total or as a rank.
+        let show_as = data_field.and_then(|field| show_as_of(field, warnings));
         let name = root.attr("name").map(|name| name.to_string());
         // The **grand totals**: the column at the right that totals the
         // rows, and the line at the bottom that totals the columns. The
@@ -812,9 +822,46 @@ fn read_pivots(
             value,
             grand_totals_rows,
             grand_totals_cols,
+            show_as,
         });
     }
     out
+}
+
+/// The way a pivot **shows its value**: as it is, as a share of the
+/// grand total, as a share of the total of its column or of its row,
+/// as a running total, or as a rank.
+///
+/// The file says it in the data field, and a rank is said in the
+/// extension list of the field. A way the tree does not have is not
+/// read, and it is said.
+fn show_as_of(field: &craftkit_xml::El, warnings: &mut Vec<String>) -> Option<String> {
+    let rank = field
+        .child("extLst")
+        .into_iter()
+        .flat_map(|list| list.kids("ext"))
+        .filter_map(|extension| extension.child("dataField"))
+        .find_map(|extension| extension.attr("pivotShowAs").map(|show| show.to_string()));
+    if let Some(rank) = rank {
+        return match rank.as_str() {
+            "rankDescending" => Some("rank".to_string()),
+            other => {
+                warnings.push(format!("the way a pivot shows its values is not one this tree has: {other}"));
+                None
+            }
+        };
+    }
+    match field.attr("showDataAs") {
+        None | Some("normal") => Some("normal".to_string()),
+        Some("percentOfTotal") => Some("percentOfGrandTotal".to_string()),
+        Some("percentOfCol") => Some("percentOfColumnTotal".to_string()),
+        Some("percentOfRow") => Some("percentOfRowTotal".to_string()),
+        Some("runTotal") => Some("runningTotal".to_string()),
+        Some(other) => {
+            warnings.push(format!("the way a pivot shows its values is not one this tree has: {other}"));
+            None
+        }
+    }
 }
 
 /// Read **one** chart of a file.

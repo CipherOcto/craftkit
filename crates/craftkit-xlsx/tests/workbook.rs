@@ -1824,6 +1824,104 @@ fn the_grand_totals_of_a_pivot_are_read() {
     }
 }
 
+/// The way a pivot **shows its value** is read: as it is, as a share
+/// of a total, as a running total or as a rank.
+#[test]
+fn the_way_a_pivot_shows_its_value_is_read() {
+    for (field, expected) in [
+        (r#"<dataField name="Sum of Amount" fld="2"/>"#, Some("normal")),
+        (r#"<dataField name="Share" fld="2" showDataAs="percentOfTotal"/>"#, Some("percentOfGrandTotal")),
+        (r#"<dataField name="Share" fld="2" showDataAs="percentOfCol"/>"#, Some("percentOfColumnTotal")),
+        (r#"<dataField name="Share" fld="2" showDataAs="percentOfRow"/>"#, Some("percentOfRowTotal")),
+        (r#"<dataField name="Running" fld="2" showDataAs="runTotal"/>"#, Some("runningTotal")),
+        (
+            r#"<dataField name="Rank" fld="2"><extLst><ext uri="{a}"><dataField pivotShowAs="rankDescending"/></ext></extLst></dataField>"#,
+            Some("rank"),
+        ),
+    ] {
+        let bytes = a_package(&[
+            (
+                "_rels/.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+            ),
+            ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+            (
+                "xl/pivotTables/pivotTable1.xml",
+                format!(
+                    r#"<pivotTableDefinition name="The Pivot" cacheId="1"><location ref="A1:B5"/><rowFields count="1"><field x="0"/></rowFields><dataFields count="1">{field}</dataFields></pivotTableDefinition>"#
+                )
+                .as_str(),
+            ),
+            (
+                "xl/pivotTables/_rels/pivotTable1.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/pivotCacheDefinition1.xml",
+                r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Region"/><cacheField name="Product"/><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>"#,
+            ),
+        ]);
+        let workbook = read(&bytes).expect("the workbook is read");
+        assert_eq!(workbook.sheets[0].pivots[0].show_as.as_deref(), expected, "the way it is shown");
+    }
+}
+
+/// A way a pivot shows its values **that the tree does not have** is
+/// not read, and the tree says so.
+#[test]
+fn a_way_that_is_not_there_is_not_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/></worksheet>"#),
+        (
+            "xl/pivotTables/pivotTable1.xml",
+            r#"<pivotTableDefinition name="The Pivot" cacheId="1"><location ref="A1:B5"/><rowFields count="1"><field x="0"/></rowFields><dataFields count="1"><dataField name="Odd" fld="2" showDataAs="percentDiff"/></dataFields></pivotTableDefinition>"#,
+        ),
+        (
+            "xl/pivotTables/_rels/pivotTable1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/pivotCacheDefinition1.xml",
+            r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Region"/><cacheField name="Product"/><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    assert!(workbook.sheets[0].pivots[0].show_as.is_none(), "the way is not read");
+    assert!(
+        workbook.warnings.iter().any(|warning| warning.contains("shows its values")),
+        "and the tree says so: {:?}",
+        workbook.warnings
+    );
+}
+
 /// The **conditional formats** of the extension list are not read,
 /// and the reader says so: they are not comparisons, and the tree's
 /// rule is a comparison.
