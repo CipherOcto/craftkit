@@ -4515,6 +4515,7 @@ so.
 | **the extended charts are read** | **built.** The kinds Excel 2016 added are in parts of their own, and the tree reads them and says which kind they are (§1068) | §1068 |
 | **a comment says when it was written** | **built.** The file dates the note and every reply under it, and the tree keeps the date (§1069) | §1069 |
 | **a note may be shown** | **built.** The drawing of the notes says whether a note is on its cell or behind a mark, and the tree keeps it (§1070) | §1070 |
+| **the box of a note is read** | **built.** The drawing of the notes says where the box of a note sits and how big it is, and the tree keeps it (§1071) | §1071 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -60189,8 +60190,8 @@ A cell can carry a note.
   dates, whether the thread is resolved, whether the note is shown,
   and the box it is shown in — and those come from parts of their own:
   the **threaded comments** and the **persons** are read (§923), and
-  the **shapes** are read for the shownness of a note (§1070). The box
-  of a note is not read yet.
+  the **shapes** are read for the shownness of a note (§1070) and for
+  the box it is shown in (§1071).
 - **A note begins with its author.** A spreadsheet program writes the
   author in bold on the first line of the note, and the tree's reader
   drops that line and keeps the author beside the text — and so does
@@ -68748,7 +68749,51 @@ behind a mark in the corner of it, and the file says so.
 - **Nothing shows or hides a note**: the tree reads what the file
   says and keeps it, and a note written in the tree is shown.
 - **The box of a note is not read**: the file says where the box sits
-  and how big it is, in the same drawing, and the tree does not read
-  that yet.
+  and how big it is, in the same drawing, and the tree did not read
+  that — it reads it now (§1071).
 - **A thread is not shown this way**: the drawing of the notes is for
   the notes of the old kind, and a thread is not one of them.
+
+## 1071. The box of a note is read
+
+A note is shown in a **box**: the file says where the box sits and how
+big it is, and the tree keeps it.
+
+### What was built
+
+- The **reader** reads the **anchor** of the shape of a note — the
+  corners of its box, counted from the cell of the note — and the
+  **style** of the shape, which says how wide and how tall the box is,
+  in points.
+- The **box** is a part of the comment: the reader keeps it, and so
+  does the document — the **import** carries it.
+- An **anchor** that is not eight numbers, or that names a cell that
+  is not one, is not a box: the note has none, and the tree does not
+  guess one.
+
+### What the port found
+
+- **The reference reads the anchor and the style of the shape** and
+  keeps the box of the note, with its corners counted from the cell of
+  the note: a box to the left of that cell has a negative column.
+- **The tree kept the text of the note and lost the box**: the file
+  says where the note is shown, and the tree did not say.
+
+### What it cost
+
+- **No new command**: the box of a note is a part of the note.
+- **Two kinds** in the reader — the box and its corner — and one field
+  of the comment of the reader, and one of the comment of the
+  document.
+- **Three tests**: two in the reader, and one in the import.
+
+### What it does not settle
+
+- **The tree draws no box**: the box is kept as the file says it, and
+  where a note is shown is the front end's business.
+- **The reference drops a box that is the default one** — the box a
+  note gets when the file says nothing — because it writes that box
+  back. The tree has no writer, and keeps what the file says.
+- **The corners are in pixels and the size is in points**: the file
+  measures the corners in the pixels of a screen and the box in the
+  points of a printer, and the tree does not reconcile the two.
