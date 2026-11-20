@@ -4512,6 +4512,7 @@ so.
 | **the smooth line of a chart is read** | **built.** The file says of each of its series whether the line is smooth, and the tree's chart keeps the smooth line it can draw (§1065) | §1065 |
 | **the markers of a chart are read** | **built.** The file says of the group whether it has markers, and of each of its series whether it shows them (§1066) | §1066 |
 | **a chart that draws two kinds in one is a combo chart** | **built.** A chart of a column and a line over it is one chart of two kinds, and the tree says so and leaves it out (§1067) | §1067 |
+| **the extended charts are read** | **built.** The kinds Excel 2016 added are in parts of their own, and the tree reads them and says which kind they are (§1068) | §1068 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68628,3 +68629,45 @@ over it — is a chart of two kinds, and the tree says so.
   the histogram, the box and whisker, the waterfall, the funnel, the
   treemap and the sunburst — are in parts of their own, and the tree
   does not read those parts yet.
+## 1068. The extended charts are read
+
+The **extended charts** are read: the kinds **Excel 2016** added — the
+histogram, the box and whisker, the waterfall, the funnel, the treemap
+and the sunburst — are in parts of their own, and the tree reads them.
+
+### What was built
+
+- The **reader** reads those parts: a chart of them is a **region** of
+  series, and the **data** of the chart stands beside it, and the
+  series point at the data by name.
+- The **kind** of such a chart is read: `histogram`, `boxWhisker`,
+  `waterfall`, `funnel`, `treemap` or `sunburst`.
+- The tree has **no chart of those kinds**, and the **import** leaves
+  them out and counts them — as it does for a chart of any other kind
+  the tree does not have.
+
+### What the port found
+
+- **The reference reads those parts** and puts the kinds in the model.
+  The tree reads them and says which kind they are, and does not make
+  a chart of a kind it has not.
+- **The tree dropped those charts without a word**: the part was
+  opened, and nothing in it was a chart the tree knew, and the chart
+  was gone. The tree's rule is that an unread value is counted and
+  reported and never repaired — and a chart that vanishes is neither.
+
+### What it cost
+
+- **No new command**: a chart of a kind the tree does not have is not
+  a chart here.
+- **One reader** in the reader of the workbook, and the kinds of the
+  extended charts.
+- **Two tests**: one in the reader, and one in the import.
+
+### What it does not settle
+
+- **The data of an extended chart is named, not ranged**: the file
+  points at its cells by a hidden name of the workbook, and the tree
+  reads the name and not the range.
+- **The tree has no chart of those kinds**: a front end that draws a
+  treemap has nothing to draw yet.
