@@ -190,12 +190,22 @@ fn kind_of_index(kind: PageKind) -> usize {
 /// The **kind** of page a page number is: the first page is the first
 /// when it has a header of its own, and an even page is even when it
 /// has one of its own.
+///
+/// A file that says of the sheet that the first page, or the even
+/// pages, has **no** header of its own is believed: the odd pages
+/// have the header there. A file that says nothing leaves the tree's
+/// own way.
 pub fn kind_of(node: &Node, page: usize) -> PageKind {
     let (header, footer) = (texts_of(node, "print_header"), texts_of(node, "print_footer"));
-    if page == 1 && (header[2].is_some() || footer[2].is_some()) {
+    let options = node.data.get("print_header_options");
+    let says = |name: &str| options.and_then(|options| options.get(name)).and_then(|flag| flag.as_bool());
+    if page == 1 && says("differentFirst") != Some(false) && (header[2].is_some() || footer[2].is_some()) {
         return PageKind::First;
     }
-    if page.is_multiple_of(2) && (header[1].is_some() || footer[1].is_some()) {
+    if page.is_multiple_of(2)
+        && says("differentOddEven") != Some(false)
+        && (header[1].is_some() || footer[1].is_some())
+    {
         return PageKind::Even;
     }
     PageKind::Odd

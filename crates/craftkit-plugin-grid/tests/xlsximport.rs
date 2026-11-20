@@ -2479,6 +2479,50 @@ fn the_filter_of_a_pivot_is_imported() {
     assert_eq!(kept[1].as_str(), Some("East"), "and the second is East");
 }
 
+/// The file says of a sheet whether the **first page** has a header of
+/// its own, and the tree prints the page as the file says.
+#[test]
+fn the_kinds_of_pages_that_have_a_header_are_imported() {
+    for (attributes, first) in [(r#" differentFirst="0""#, "Odd"), (r#" differentFirst="1""#, "First")] {
+        let mut session = session();
+        let bytes = a_package(&[
+            (
+                "_rels/.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                format!(
+                    r#"<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><headerFooter{attributes}><oddHeader>&amp;LOdd</oddHeader><firstHeader>&amp;LFirst</firstHeader></headerFooter></worksheet>"#
+                )
+                .as_str(),
+            ),
+        ]);
+        let path = a_file(bytes);
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+        let workbook = session.document().nodes().next().expect("the workbook is there").id;
+        let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+        let node = session.document().node(sheet).expect("the sheet is there");
+        assert_eq!(
+            node.data["print_header_options"]["differentFirst"].as_bool(),
+            Some(attributes.contains("1")),
+            "the file's word is kept"
+        );
+        let read =
+            session.execute("grid.print.pages", &json!({ "sheet": sheet })).expect("the pages are read");
+        let pages = read.data["pages"].as_array().expect("the pages are a list");
+        assert_eq!(pages[0]["header"]["left"]["text"].as_str(), Some(first), "and the first page prints it");
+    }
+}
+
 /// The **conditional formats** of the extension list are not imported,
 /// and the import says so.
 #[test]

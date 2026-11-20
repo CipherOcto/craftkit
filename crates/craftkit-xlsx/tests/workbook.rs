@@ -2152,6 +2152,45 @@ fn the_filter_of_a_pivot_is_read() {
     }
 }
 
+/// The file says of a sheet whether the **first page** and the **even
+/// pages** have a header and a footer of their own.
+#[test]
+fn the_kinds_of_pages_that_have_a_header_are_read() {
+    for (attributes, first, odd_even) in [
+        ("", None, None),
+        (r#" differentFirst="1""#, Some(true), None),
+        (r#" differentFirst="0""#, Some(false), None),
+        (r#" differentFirst="1" differentOddEven="1""#, Some(true), Some(true)),
+        (r#" differentOddEven="0""#, None, Some(false)),
+    ] {
+        let bytes = a_package(&[
+            (
+                "_rels/.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                format!(
+                    r#"<worksheet><sheetData/><headerFooter{attributes}><oddHeader>&amp;LOdd</oddHeader><firstHeader>&amp;LFirst</firstHeader></headerFooter></worksheet>"#
+                )
+                .as_str(),
+            ),
+        ]);
+        let workbook = read(&bytes).expect("the workbook is read");
+        let header_footer = workbook.sheets[0].header_footer.as_ref().expect("the sheet has a header");
+        assert_eq!(header_footer.different_first, first, "the first page");
+        assert_eq!(header_footer.different_odd_even, odd_even, "and the even pages");
+    }
+}
+
 /// The **conditional formats** of the extension list are not read,
 /// and the reader says so: they are not comparisons, and the tree's
 /// rule is a comparison.

@@ -824,6 +824,20 @@ commands! {
                     if !footer.is_empty() {
                         data["print_footer"] = Json::Object(footer);
                     }
+                    // The **kinds of pages** the file prints: whether
+                    // the first page and the even pages have a header
+                    // and a footer of their own. A file that says
+                    // nothing leaves the tree's own way.
+                    let mut options = craftkit_sdk::serde_json::Map::new();
+                    if let Some(flag) = header_footer.different_first {
+                        options.insert("differentFirst".to_string(), json!(flag));
+                    }
+                    if let Some(flag) = header_footer.different_odd_even {
+                        options.insert("differentOddEven".to_string(), json!(flag));
+                    }
+                    if !options.is_empty() {
+                        data["print_header_options"] = Json::Object(options);
+                    }
                 }
                 // The **breaks** of the printing: the lines a page
                 // begins at.

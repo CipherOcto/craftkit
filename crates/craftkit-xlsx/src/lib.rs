@@ -1577,6 +1577,18 @@ pub struct HeaderFooter {
     pub first_header: Option<String>,
     /// The footer of the **first** page.
     pub first_footer: Option<String>,
+    /// Whether the **first page** has a header and a footer of its
+    /// own.
+    ///
+    /// The file says so in `differentFirst`, and a file that says
+    /// nothing leaves the tree's own way.
+    pub different_first: Option<bool>,
+    /// Whether the **even pages** have a header and a footer of their
+    /// own.
+    ///
+    /// The file says so in `differentOddEven`, and a file that says
+    /// nothing leaves the tree's own way.
+    pub different_odd_even: Option<bool>,
 }
 
 /// A **validation** of a sheet: a rule on what a cell may hold.
@@ -3484,6 +3496,10 @@ fn read_header_footer(root: &craftkit_xml::El) -> Option<HeaderFooter> {
         even_footer: text("evenFooter"),
         first_header: text("firstHeader"),
         first_footer: text("firstFooter"),
+        // The file says of the first page and of the even pages
+        // whether they have a header and a footer of their own.
+        different_first: element.attr_bool("differentFirst"),
+        different_odd_even: element.attr_bool("differentOddEven"),
     };
     let empty = header_footer.odd_header.is_none()
         && header_footer.odd_footer.is_none()
