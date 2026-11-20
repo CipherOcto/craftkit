@@ -4508,6 +4508,7 @@ so.
 | **a compound file is read** | **built.** The container of an encrypted workbook is opened, and its streams are read (§1061) | §1061 |
 | **an encrypted workbook is read** | **built.** The agile cipher of [MS-OFFCRYPTO] opens the package with the password, and the integrity of the file is checked (§1062) | §1062 |
 | **a workbook of the old encryption is read** | **built.** The Standard cipher of [MS-OFFCRYPTO] opens the package of a workbook of 2007, with AES and with RC4 (§1063) | §1063 |
+| **the stacking of a chart is read** | **built.** A chart of a file may be stacked, and stacked to a hundred percent, and the tree's chart keeps it (§1064) | §1064 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68464,3 +68465,43 @@ encrypts — is opened: the **Standard** scheme of [MS-OFFCRYPTO]
 - **The old scheme has no integrity**: nothing in the file says the
   package was not changed on the way, and the tree does not pretend
   otherwise.
+## 1064. The stacking of a chart is read
+
+A chart of a file may be **stacked** — and stacked to a hundred
+percent — and the tree reads it and keeps it.
+
+### What was built
+
+- The **reader** of a chart reads the **grouping** of its group: a
+  chart that is stacked says so, and a chart that is not says nothing.
+- The **import** carries it: the tree's chart is stacked when the
+  file's chart was.
+- The **command** sets it: `grid.chart.set` takes a `stacking`, and
+  nothing at all means that the chart is not stacked.
+
+### What the port found
+
+- **The reference keeps the stacking in the kind of the chart** — a
+  column chart that is stacked is a kind of its own. The tree keeps
+  the **kind** and the **stacking** apart: the kind is what the chart
+  is, and the stacking is how it is laid out.
+- **The reference reads the stacking of every kind that has one** — the
+  column, the bar, the line and the area. The tree reads it of every
+  chart, and a chart of a kind that is not stacked says nothing.
+
+### What it cost
+
+- **No new command**: the stacking is a parameter of the command that
+  changes a chart.
+- **One field** of the chart of the reader, and one of the chart of
+  the document.
+- **Three tests**: one in the reader, one in the import, and two in
+  the command.
+
+### What it does not settle
+
+- **The smooth line of a chart is not read**: the file says of each
+  of its series whether the line is smooth, and the tree's chart has
+  one flag for the whole chart.
+- **The markers of a line are not read**: the tree's line has no
+  markers of its own.
