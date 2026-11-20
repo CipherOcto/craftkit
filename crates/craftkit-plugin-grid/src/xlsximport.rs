@@ -1908,7 +1908,16 @@ fn pivot_of(
                 Some((column, order))
             }
         },
-        group: None,
+        // The **grouping** of the dates: the file says of the field
+        // and of the way its dates are gathered.
+        group: match &pivot.group {
+            None => None,
+            Some((name, way)) => {
+                let column = column_of(cells, &area, name)?;
+                let way = crate::pivots::DateGroup::parse(way)?;
+                Some((column, way))
+            }
+        },
         // The way the pivot **shows its value**: the file says, and a
         // file that says nothing shows the value as it is.
         show_as: pivot

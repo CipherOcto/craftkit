@@ -442,6 +442,10 @@ pub struct PivotTable {
     ///
     /// A file that orders its items by hand says nothing.
     pub sort: Option<(String, String)>,
+    /// The **grouping** of the values of a field: the field and the
+    /// way its dates are gathered — `years`, `quarters`, `months` or
+    /// `days`.
+    pub group: Option<(String, String)>,
 }
 
 /// The **parts** of a sheet: the things it holds in parts of their
@@ -792,6 +796,31 @@ fn read_pivots(
             })
             .unwrap_or_default();
         let name_of = |index: usize| -> String { names.get(index).cloned().unwrap_or_default() };
+        // The **grouping** of the dates of the fields: the cache says
+        // of a field that gathers its dates by the year, the quarter,
+        // the month or the day.
+        let groups: Vec<Option<String>> = cache
+            .child("cacheFields")
+            .map(|fields| {
+                fields
+                    .kids("cacheField")
+                    .map(|field| {
+                        field
+                            .child("fieldGroup")
+                            .and_then(|group| group.child("rangePr"))
+                            .and_then(|range| range.attr("groupBy"))
+                            .and_then(|by| match by {
+                                "years" => Some("years"),
+                                "quarters" => Some("quarters"),
+                                "months" => Some("months"),
+                                "days" => Some("days"),
+                                _ => None,
+                            })
+                            .map(|group| group.to_string())
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         // The **axes**: the fields the rows are gathered by and the
         // fields the groups are spread over.
         let indexes = |list: Option<&craftkit_xml::El>| -> Vec<usize> {
@@ -836,6 +865,12 @@ fn read_pivots(
             };
             Some((name_of(index), order.to_string()))
         });
+        // The **grouping** of the dates: the first field the cache
+        // gathers by the year, the quarter, the month or the day.
+        let group = groups
+            .iter()
+            .enumerate()
+            .find_map(|(index, group)| group.as_ref().map(|group| (name_of(index), group.clone())));
         let name = root.attr("name").map(|name| name.to_string());
         // The **grand totals**: the column at the right that totals the
         // rows, and the line at the bottom that totals the columns. The
@@ -854,6 +889,7 @@ fn read_pivots(
             show_as,
             subtotals,
             sort,
+            group,
         });
     }
     out

@@ -2374,6 +2374,57 @@ fn the_order_of_the_items_of_a_pivot_is_imported() {
     assert_eq!(pivot["sort"]["order"].as_str(), Some("desc"), "and from the last to the first");
 }
 
+/// The **grouping** of the dates of a field is imported: the file says
+/// of the field and of the way its dates are gathered.
+#[test]
+fn the_grouping_of_the_dates_of_a_field_is_imported() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Date</t></is></c><c r="B1" t="inlineStr"><is><t>Product</t></is></c><c r="C1" t="inlineStr"><is><t>Amount</t></is></c></row></sheetData></worksheet>"#,
+        ),
+        (
+            "xl/pivotTables/pivotTable1.xml",
+            r#"<pivotTableDefinition name="The Pivot" cacheId="1"><location ref="A1:B5"/><rowFields count="1"><field x="0"/></rowFields><dataFields count="1"><dataField name="Sum of Amount" fld="2"/></dataFields></pivotTableDefinition>"#,
+        ),
+        (
+            "xl/pivotTables/_rels/pivotTable1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCacheDefinition1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/pivotCacheDefinition1.xml",
+            r#"<pivotCacheDefinition><cacheSource type="worksheet"><worksheetSource ref="$A$1:$C$10" sheet="One"/></cacheSource><cacheFields count="3"><cacheField name="Date"><fieldGroup base="0"><rangePr groupBy="months" startDate="2024-01-01T00:00:00" endDate="2024-12-31T00:00:00"/><groupItems count="1"><s v="Jan"/></groupItems></fieldGroup></cacheField><cacheField name="Product"/><cacheField name="Amount"/></cacheFields></pivotCacheDefinition>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["pivots"].as_u64(), Some(1), "one pivot was imported");
+    let workbook = outcome.data["id"].as_u64().expect("the workbook has an id");
+    let sheet = session.document().node(workbook).expect("the workbook is there").children[0].id;
+    let node = session.document().node(sheet).expect("the sheet is there");
+    let pivot = &node.data["pivots"][0];
+    assert_eq!(pivot["group"]["field"].as_str(), Some("A"), "the first column is grouped");
+    assert_eq!(pivot["group"]["by"].as_str(), Some("months"), "and its dates by the month");
+}
+
 /// The **conditional formats** of the extension list are not imported,
 /// and the import says so.
 #[test]
