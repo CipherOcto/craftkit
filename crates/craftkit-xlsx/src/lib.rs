@@ -781,6 +781,12 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
             groups.push((element, name));
         }
     }
+    // A chart of the kinds Excel 2016 added is in a part of its own,
+    // and it is drawn another way: a **region** of series, and the
+    // data of the chart beside it.
+    if groups.is_empty() {
+        return read_chartex(root, theme);
+    }
     let (element, name) = groups.first().copied()?;
     // The **stacking**: the way the series of the chart are laid on
     // one another. A chart that is not stacked says nothing, or says
@@ -897,6 +903,141 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
         series,
         colours,
     })
+}
+
+/// Read a chart of the kinds **Excel 2016** added: the histogram, the
+/// box and whisker, the waterfall, the funnel, the treemap and the
+/// sunburst.
+///
+/// Those charts are in parts of their own — `xl/charts/chartExN.xml` —
+/// and they are drawn another way: a **region** of series, and the
+/// **data** of the chart beside it, which the series point at by name.
+fn read_chartex(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
+    let chart = root.child("chart")?;
+    let plot = chart.child("plotArea")?;
+    let region = plot.child("plotAreaRegion")?;
+    // The **data** of the chart: each block says what it holds, and
+    // the series of the chart point at the blocks by name.
+    let mut data: Vec<(String, Option<String>, Option<String>)> = Vec::new();
+    if let Some(chart_data) = root.child("chartData") {
+        for block in chart_data.kids("data") {
+            let id = block.attr("id").unwrap_or("").to_string();
+            let categories = block
+                .kids("strDim")
+                .chain(block.kids("numDim"))
+                .find(|dimension| matches!(dimension.attr("type"), Some("cat") | Some("x")))
+                .and_then(chartex_formula);
+            let values = block
+                .kids("numDim")
+                .find(|dimension| matches!(dimension.attr("type"), Some("val") | Some("size") | Some("y")))
+                .and_then(chartex_formula);
+            data.push((id, categories, values));
+        }
+    }
+    // The **series**: each of them says what kind of drawing it is.
+    let mut kind: Option<&'static str> = None;
+    let mut categories: Option<String> = None;
+    let mut series: Vec<String> = Vec::new();
+    let mut colours: Vec<String> = Vec::new();
+    let mut data_labels = false;
+    for serie in region.kids("series") {
+        let layout = serie.attr("layoutId").unwrap_or("");
+        // The line of a Pareto chart belongs to its histogram.
+        if layout == "paretoLine" {
+            continue;
+        }
+        let Some(series_kind) = kind_of_chartex(layout) else { continue };
+        kind.get_or_insert(series_kind);
+        let id = serie.child_val("dataId").unwrap_or("");
+        let block = data.iter().find(|(block, _, _)| block == id);
+        if categories.is_none() {
+            categories = block.and_then(|(_, categories, _)| categories.clone());
+        }
+        if let Some(values) = block.and_then(|(_, _, values)| values.clone()) {
+            series.push(values);
+        }
+        if let Some(colour) = colour_of_series(serie, theme) {
+            colours.push(colour);
+        }
+        if serie.path(&["dataLabels", "visibility"]).is_some_and(|labels| labels.attr("val") == Some("true"))
+        {
+            data_labels = true;
+        }
+    }
+    let kind = kind?;
+    // The **title** of the chart: a value, or the name of the cells
+    // that hold it.
+    let title = chart.path(&["title", "tx"]).and_then(chartex_text).filter(|title| !title.is_empty());
+    // The **legend**: where it is.
+    let legend = match chart.child("legend") {
+        None => Some("none".to_string()),
+        Some(legend) => Some(
+            match legend.attr("pos").unwrap_or("r") {
+                "b" => "bottom",
+                "t" => "top",
+                "l" => "left",
+                _ => "right",
+            }
+            .to_string(),
+        ),
+    };
+    // The **axes**: the title of the axis of the categories, and the
+    // title of the axis of the values.
+    let axis_title = |id: &str| {
+        plot.kids("axis")
+            .find(|axis| axis.attr("id") == Some(id))
+            .and_then(|axis| axis.path(&["title", "tx"]))
+            .and_then(chartex_text)
+    };
+    let gridlines = plot.kids("axis").any(|axis| axis.child("majorGridlines").is_some());
+    Some(Chart {
+        kind: kind.to_string(),
+        stacking: None,
+        markers: false,
+        smooth: Some(false),
+        title,
+        legend,
+        data_labels,
+        gridlines,
+        x_title: axis_title("0"),
+        y_title: axis_title("1"),
+        categories,
+        series,
+        colours,
+    })
+}
+
+/// The **kind** of drawing a series of an extended chart is.
+fn kind_of_chartex(layout: &str) -> Option<&'static str> {
+    Some(match layout {
+        "clusteredColumn" | "paretoLine" => "histogram",
+        "boxWhisker" => "boxWhisker",
+        "waterfall" => "waterfall",
+        "funnel" => "funnel",
+        "treemap" => "treemap",
+        "sunburst" => "sunburst",
+        _ => return None,
+    })
+}
+
+/// The **formula** of a dimension of the data of a chart.
+fn chartex_formula(element: &craftkit_xml::El) -> Option<String> {
+    let text = element.child("f")?.text.trim().to_string();
+    if text.is_empty() { None } else { Some(text) }
+}
+
+/// The **text** of a title of an extended chart: a value, or the name
+/// of the cells that hold it.
+fn chartex_text(element: &craftkit_xml::El) -> Option<String> {
+    let data = element.child("txData")?;
+    if let Some(formula) = data.child("f") {
+        let text = formula.text.trim().to_string();
+        if !text.is_empty() {
+            return Some(text);
+        }
+    }
+    let value = data.child("v")?.text.trim().to_string();
+    if value.is_empty() { None } else { Some(value) }
 }
 
 /// The **colour** a series is drawn in, when the file names one.

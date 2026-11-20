@@ -1636,6 +1636,49 @@ fn the_charts_of_a_sheet_are_imported() {
     assert_eq!(chart.data["colours"][0].as_str(), Some("#4472c4"), "and the colour of its series");
 }
 
+/// An **extended chart** — a histogram, a waterfall, a treemap — is not
+/// a chart the tree has, and it is left out and counted.
+#[test]
+fn an_extended_chart_is_left_out() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><drawing r:id="rId1"/><sheetData/></worksheet>"#),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/drawings/drawing1.xml",
+            r#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:cx="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2014/relationships/chartEx" Target="../charts/chartEx1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/charts/chartEx1.xml",
+            r#"<cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><cx:chartData><cx:data id="0"><cx:strDim type="cat"><cx:f>_xlchart.v1.0</cx:f></cx:strDim><cx:numDim type="val"><cx:f>_xlchart.v1.1</cx:f></cx:numDim></cx:data></cx:chartData><cx:chart><cx:plotArea><cx:plotAreaRegion><cx:series layoutId="waterfall" uniqueId="{1B0D9F02-A0E7-4C1C-9F45-2E1B5A3A0B4C}"><cx:dataId val="0"/></cx:series></cx:plotAreaRegion></cx:plotArea></cx:chart></cx:chartSpace>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["charts"].as_u64(), Some(0), "no chart was imported");
+    assert_eq!(outcome.data["unread_charts"].as_u64(), Some(1), "and the chart was left out");
+}
+
 /// A chart that draws **two kinds** in one is not a chart the tree has,
 /// and it is left out and counted.
 #[test]

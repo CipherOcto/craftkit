@@ -1368,6 +1368,68 @@ fn the_charts_of_a_sheet_are_read() {
     assert!(charts[0].colours.is_empty(), "and the series have no colour of their own");
 }
 
+/// The **extended charts** are read: the kinds Excel 2016 added are in
+/// parts of their own.
+#[test]
+fn the_extended_charts_are_read() {
+    for (layout, kind) in [
+        ("clusteredColumn", "histogram"),
+        ("boxWhisker", "boxWhisker"),
+        ("waterfall", "waterfall"),
+        ("funnel", "funnel"),
+        ("treemap", "treemap"),
+        ("sunburst", "sunburst"),
+    ] {
+        let package = a_package_of(&[
+            (
+                "_rels/.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/_rels/workbook.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/workbook.xml",
+                br#"<workbook><workbookPr/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            ),
+            (
+                "xl/worksheets/_rels/sheet1.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/worksheets/sheet1.xml",
+                br#"<worksheet><drawing r:id="rId1"/><sheetData/></worksheet>"#,
+            ),
+            (
+                "xl/drawings/drawing1.xml",
+                br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:cx="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2014/chartex"><cx:chart r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+            ),
+            (
+                "xl/drawings/_rels/drawing1.xml.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.microsoft.com/office/2014/relationships/chartEx" Target="../charts/chartEx1.xml"/></Relationships>"#,
+            ),
+            (
+                "xl/charts/chartEx1.xml",
+                format!(
+                    r#"<cx:chartSpace xmlns:cx="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><cx:chartData><cx:data id="0"><cx:strDim type="cat"><cx:f>_xlchart.v1.0</cx:f></cx:strDim><cx:numDim type="val"><cx:f>_xlchart.v1.1</cx:f></cx:numDim></cx:data></cx:chartData><cx:chart><cx:title><cx:tx><cx:txData><cx:v>The Sales</cx:v></cx:txData></cx:tx></cx:title><cx:plotArea><cx:plotAreaRegion><cx:series layoutId="{layout}" uniqueId="{kind}"><cx:tx><cx:txData><cx:f>_xlchart.v1.2</cx:f></cx:txData></cx:tx><cx:dataId val="0"/><cx:spPr><a:solidFill><a:srgbClr val="FF4472C4"/></a:solidFill></cx:spPr></cx:series></cx:plotAreaRegion><cx:axis id="0"><cx:title><cx:tx><cx:txData><cx:v>Months</cx:v></cx:txData></cx:tx></cx:title></cx:axis><cx:axis id="1"><cx:title><cx:tx><cx:txData><cx:v>Money</cx:v></cx:txData></cx:tx></cx:title></cx:axis></cx:plotArea><cx:legend pos="b"/></cx:chart></cx:chartSpace>"#
+                )
+                .as_bytes(),
+            ),
+        ]);
+        let read = read(&package).expect("the workbook is read");
+        let (_, charts) = &read.charts[0];
+        assert_eq!(charts[0].kind, kind, "the kind of the chart");
+        assert_eq!(charts[0].title.as_deref(), Some("The Sales"), "its title");
+        assert_eq!(charts[0].legend.as_deref(), Some("bottom"), "where its legend is");
+        assert_eq!(charts[0].x_title.as_deref(), Some("Months"), "the title of its axis of the categories");
+        assert_eq!(charts[0].y_title.as_deref(), Some("Money"), "and the title of the axis of the values");
+        assert_eq!(charts[0].categories.as_deref(), Some("_xlchart.v1.0"), "the cells of its categories");
+        assert_eq!(charts[0].series, vec!["_xlchart.v1.1".to_string()], "and the cells of its series");
+        assert_eq!(charts[0].colours, vec!["#4472c4".to_string()], "and the colour of its series");
+    }
+}
+
 /// A chart that draws **two kinds** in one is a chart of two kinds,
 /// and the tree says so.
 #[test]
