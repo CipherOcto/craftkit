@@ -4510,6 +4510,7 @@ so.
 | **a workbook of the old encryption is read** | **built.** The Standard cipher of [MS-OFFCRYPTO] opens the package of a workbook of 2007, with AES and with RC4 (§1063) | §1063 |
 | **the stacking of a chart is read** | **built.** A chart of a file may be stacked, and stacked to a hundred percent, and the tree's chart keeps it (§1064) | §1064 |
 | **the smooth line of a chart is read** | **built.** The file says of each of its series whether the line is smooth, and the tree's chart keeps the smooth line it can draw (§1065) | §1065 |
+| **the markers of a chart are read** | **built.** The file says of the group whether it has markers, and of each of its series whether it shows them (§1066) | §1066 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -68546,3 +68547,43 @@ series whether the line is smooth, and the tree's chart keeps it.
 - **The line of a chart of the old kinds is not read**: a scatter
   chart says of its series whether it draws lines at all, and the
   tree's scatter draws them.
+## 1066. The markers of a chart are read
+
+The **markers** of a chart are read: the file says of the group
+whether it has them, and of each of its series whether it shows them.
+
+### What was built
+
+- The **reader** reads the markers of a chart: the group says whether
+  it has them, and a series may turn its own off.
+- The **import** carries them.
+- The **markers** are an **element** of a chart, like the smooth line:
+  `grid.chart.element` turns them on and off.
+
+### What the port found
+
+- **The reference keeps the markers in the kind of the chart** — a
+  line with markers is a kind of its own. The tree keeps the kind and
+  the markers apart: the kind is what the chart is, and the markers
+  are how it is drawn.
+- **The reference's rule is the group's and the series' together**: the
+  group may turn the markers off, and a chart whose every series
+  turns its own off has none, whatever the group says.
+
+### What it cost
+
+- **No new command**: the markers are an element of a chart, and the
+  command that turns the elements on and off was already there.
+- **One field** of the chart of the reader, one element of the chart
+  of the document, and one more word in the list of the elements.
+- **Three tests**: one in the reader, one in the import, and one in
+  the command.
+
+### What it does not settle
+
+- **The shape of a marker is not read**: the file says of each
+  marker whether it is a circle or a square, and the tree's marker is
+  a point.
+- **The colour of a line is not read**: the file says of a series
+  what colour its line is, and the tree's chart has the colours of
+  the series and not the colour of the line.
