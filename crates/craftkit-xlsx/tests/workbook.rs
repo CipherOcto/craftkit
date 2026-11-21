@@ -3853,7 +3853,7 @@ fn the_filter_of_a_table_is_left_out_and_said() {
     assert_eq!(
         workbook.warnings,
         vec![
-            "the table `Table1` has a filter of its own, and the filters of this tree are the sheet's; it was not read"
+            "the table `Table1` has a filter of its own, and the filters of this tree are the sheet's; the filter was not read"
                 .to_string()
         ],
         "and the reader says that the filter was not read"
@@ -3897,7 +3897,120 @@ fn a_way_this_tree_does_not_have_is_said() {
     assert_eq!(
         workbook.warnings,
         vec![
-            "the column `who` of the table `Table1` is totalled in a way this tree does not have; it was not read"
+            "the column `who` of the table `Table1` is totalled in a way this tree does not have; the way was not read"
+                .to_string()
+        ],
+        "and the reader says that the way was not read"
+    );
+}
+
+/// The **columns** of a table are read: the formula of a calculated
+/// column, the unique name of a column, and the XML a column is bound
+/// to.
+#[test]
+fn the_columns_of_a_table_are_read() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:C5" tableType="xml"><tableColumns count="3"><tableColumn id="1" name="who" uniqueName="Table1[who]"><calculatedColumnFormula>Table1[[#This Row],[who]]</calculatedColumnFormula><xmlColumnPr mapId="1" xpath="/root/who" xmlDataType="string" denormalized="1"/></tableColumn><tableColumn id="2" name="amount"/><tableColumn id="3" name="when"/></tableColumns></table>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, tables) = &workbook.tables[0];
+    assert_eq!(tables.len(), 1, "the table is read");
+    let table = &tables[0];
+    assert!(table.xml, "and it is an XML table");
+    assert_eq!(table.columns.len(), 3, "it has three columns");
+    let first = &table.columns[0];
+    assert_eq!(first.column, 0, "the first column");
+    assert_eq!(first.name, "who", "is named `who`");
+    assert_eq!(
+        first.formula.as_deref(),
+        Some("Table1[[#This Row],[who]]"),
+        "and carries the formula of a calculated column"
+    );
+    assert_eq!(first.unique_name.as_deref(), Some("Table1[who]"), "and a unique name");
+    let xml = first.xml.as_ref().expect("and it is bound to XML");
+    assert_eq!(xml.map_id, 1, "the map it is bound to");
+    assert_eq!(xml.xpath, "/root/who", "the path in the XML");
+    assert_eq!(xml.data_type, "string", "the kind of the data");
+    assert!(xml.denormalized, "and it is denormalized");
+    // The second column says nothing of itself.
+    assert!(table.columns[1].formula.is_none(), "the second column has no formula");
+    assert!(table.columns[1].xml.is_none(), "and no XML");
+}
+
+/// A **custom total** carries a formula, and the formula is the label
+/// the total row shows.
+#[test]
+fn a_custom_total_carries_its_formula() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:C5" totalsRowCount="1"><tableColumns count="3"><tableColumn id="1" name="who" totalsRowFunction="custom"><totalsRowFormula>SUBTOTAL(103,Table1[who])</totalsRowFormula></tableColumn><tableColumn id="2" name="amount" totalsRowFunction="sum"/><tableColumn id="3" name="when"/></tableColumns></table>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, tables) = &workbook.tables[0];
+    let table = &tables[0];
+    assert_eq!(
+        table.columns[0].total_formula.as_deref(),
+        Some("SUBTOTAL(103,Table1[who])"),
+        "the custom total carries its formula"
+    );
+    assert_eq!(
+        table.label.as_deref(),
+        Some("SUBTOTAL(103,Table1[who])"),
+        "and the formula is the label the total row shows"
+    );
+    // The **way** of a custom total is not a way this tree has, and the
+    // reader says so — and the column is still a column.
+    assert!(table.ways.iter().all(|(column, _)| *column == 1), "only the way this tree has is kept");
+    assert_eq!(table.columns.len(), 3, "and every column is read");
+    assert_eq!(
+        workbook.warnings,
+        vec![
+            "the column `who` of the table `Table1` is totalled in a way this tree does not have; the way was not read"
                 .to_string()
         ],
         "and the reader says that the way was not read"

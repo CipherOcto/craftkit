@@ -1502,6 +1502,14 @@ commands! {
             // The **tables** of the sheets: the ranges with a name and
             // a way of being totalled.
             let mut imported_tables = 0u64;
+            // The **facts of a table's columns** that the tree's model
+            // has no place for: the formula of a calculated column, the
+            // unique name of a column, and the XML a column is bound
+            // to. They are read, and they are not kept, and the import
+            // says how many of them it left out.
+            let mut unread_column_formulas = 0u64;
+            let mut unread_unique_names = 0u64;
+            let mut unread_xml_columns = 0u64;
             for (sheet_name, tables) in &workbook.tables {
                 let Some(sheet_id) = session
                     .document()
@@ -1526,6 +1534,19 @@ commands! {
                         .iter()
                         .map(|(column, way)| json!({ "column": column, "way": way }))
                         .collect();
+                    // The **facts of the columns** the tree's model
+                    // has no place for.
+                    for column in &table.columns {
+                        if column.formula.is_some() {
+                            unread_column_formulas += 1;
+                        }
+                        if column.unique_name.is_some() {
+                            unread_unique_names += 1;
+                        }
+                        if column.xml.is_some() {
+                            unread_xml_columns += 1;
+                        }
+                    }
                     list.push(json!({
                         "name": table.name,
                         "range": area.to_text(),
@@ -1630,6 +1651,24 @@ commands! {
                      kept: the tree works its own collapsed mark out from the rows"
                 ));
             }
+            if unread_column_formulas > 0 {
+                summary.push_str(&format!(
+                    "; {unread_column_formulas} calculated column formula(s) could not be kept: \
+                     the tree's tables have no place for them"
+                ));
+            }
+            if unread_unique_names > 0 {
+                summary.push_str(&format!(
+                    "; {unread_unique_names} unique name(s) of a column could not be kept: \
+                     the tree's tables have no place for them"
+                ));
+            }
+            if unread_xml_columns > 0 {
+                summary.push_str(&format!(
+                    "; {unread_xml_columns} xml column(s) could not be kept: \
+                     the tree's tables have no place for them"
+                ));
+            }
             if unread_custom_sizes > 0 {
                 summary.push_str(&format!(
                     "; {unread_custom_sizes} size(s) set by the user could not be kept: \
@@ -1691,6 +1730,9 @@ commands! {
                 "dropped_links": dropped_links,
                 "comments": imported_comments,
                 "tables": imported_tables,
+                "unread_column_formulas": unread_column_formulas,
+                "unread_unique_names": unread_unique_names,
+                "unread_xml_columns": unread_xml_columns,
                 "pivots": imported_pivots,
                 "unread_pivots": unread_pivots,
                 "charts": imported_charts,

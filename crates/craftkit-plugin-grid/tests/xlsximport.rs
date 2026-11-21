@@ -3530,6 +3530,54 @@ fn a_table_with_no_header_row_is_not_imported() {
     );
 }
 
+/// The **facts of a table's columns** that the tree's model has no
+/// place for are counted, and the import says how many it left out.
+///
+/// The formula of a calculated column, the unique name of a column and
+/// the XML a column is bound to are read; the tree's tables have no
+/// place for them, so they are not imported — and the import says so.
+#[test]
+fn the_facts_of_a_table_column_the_tree_has_no_place_for_are_counted() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row r="1"><c r="A1" t="str"><v>who</v></c><c r="B1" t="str"><v>amount</v></c></row></sheetData><tableParts count="1"><tablePart r:id="rId1"/></tableParts></worksheet>"#,
+        ),
+        (
+            "xl/tables/table1.xml",
+            r#"<table id="1" name="Table1" displayName="Table1" ref="A1:B2" tableType="xml"><tableColumns count="2"><tableColumn id="1" name="who" uniqueName="Table1[who]"><calculatedColumnFormula>Table1[[#This Row],[who]]</calculatedColumnFormula><xmlColumnPr mapId="1" xpath="/root/who"/></tableColumn><tableColumn id="2" name="amount"/></tableColumns></table>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["unread_column_formulas"].as_u64(), Some(1), "one calculated column");
+    assert_eq!(outcome.data["unread_unique_names"].as_u64(), Some(1), "one unique name");
+    assert_eq!(outcome.data["unread_xml_columns"].as_u64(), Some(1), "one xml column");
+    let message = outcome.message.clone();
+    assert!(
+        message.contains("calculated column formula(s) could not be kept"),
+        "and the import says why: {message}"
+    );
+}
+
 /// The **facts of a row and a column** that the tree's model has no
 /// place for are counted, and the import says how many it left out.
 ///

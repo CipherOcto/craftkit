@@ -2212,6 +2212,24 @@ pub const PORTS: &[Port] = &[
         test: "xtask/src/survey.rs",
         section: "§1095",
     },
+    Port {
+        rule: "a table says more of itself: the columns of a table",
+        from: "gridcraft/crates/xlsx/src/sheet_read/parts.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "craftkit-xlsx::read",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§1096",
+    },
+    Port {
+        rule: "the facts of a table's columns that the tree has no place for are counted",
+        from: "gridcraft/crates/xlsx/src/sheet_read/parts.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/xlsximport.rs",
+        command: "grid.import.xlsx",
+        test: "crates/craftkit-plugin-grid/tests/xlsximport.rs",
+        section: "§1096",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

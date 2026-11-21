@@ -1932,7 +1932,7 @@ pub enum DateSystem {
 
 /// A **table** of a sheet: a range of cells with a name and a way of
 /// being totalled.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Table {
     /// The name of the table.
     pub name: String,
@@ -1949,6 +1949,61 @@ pub struct Table {
     /// The **label** of the total row: the text it shows in its first
     /// cell.
     pub label: Option<String>,
+    /// The **columns** of the table: what the file says of each of
+    /// them.
+    pub columns: Vec<TableColumn>,
+    /// Whether the table is an **XML table**: a table bound to a map of
+    /// XML data.
+    ///
+    /// A file says so with its own `tableType`, and the columns of such
+    /// a table say which map they are bound to.
+    pub xml: bool,
+}
+
+/// A **column** of a table: what the file says of it.
+///
+/// The columns of a table are the table's own fields, and the file says
+/// more of them than their names: a column may carry a **formula** of
+/// its own, a **unique name**, and the **XML** it is bound to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableColumn {
+    /// The **column**, counted from the left of the table, from zero.
+    pub column: u32,
+    /// The **name** of the column, as the file writes it.
+    pub name: String,
+    /// The **formula** of a calculated column: the formula that every
+    /// cell of the column carries.
+    pub formula: Option<String>,
+    /// The **formula of the total** of the column, when the total is a
+    /// custom one.
+    pub total_formula: Option<String>,
+    /// The **unique name** of the column, when the file gives it one.
+    ///
+    /// The unique name is the name the formulas of a workbook use when
+    /// they name a column of a table.
+    pub unique_name: Option<String>,
+    /// The **XML** the column is bound to, when the table is an XML
+    /// table.
+    pub xml: Option<XmlColumn>,
+}
+
+/// The **XML** a column of a table is bound to.
+///
+/// This is the mapping of an old kind of table: a table bound to a map
+/// of XML data, and each of its columns bound to a place in that data.
+#[derive(Debug, Clone, PartialEq)]
+pub struct XmlColumn {
+    /// The **map** the column is bound to: the number the file gives the
+    /// map.
+    pub map_id: u32,
+    /// The **path** of the column in the XML: the file's own words.
+    pub xpath: String,
+    /// The **kind of the data**, as the file writes it — `string`,
+    /// `boolean`, `integer` — and `string` when the file says nothing.
+    pub data_type: String,
+    /// Whether the column is **denormalized**: the data is repeated
+    /// rather than referred to.
+    pub denormalized: bool,
 }
 
 /// A **comment** of a sheet: a note a cell carries.
@@ -3816,10 +3871,11 @@ fn read_tables(
             continue;
         }
         // The **filter** of the table: the filters of this tree are the
-        // sheet's, and so a filter of a table is left out.
+        // sheet's, and so the filter of a table is left out — the table
+        // itself is read.
         if table.child("autoFilter").is_some() {
             warnings.push(format!(
-                "the table `{name}` has a filter of its own, and the filters of this tree are the sheet's; it was not read"
+                "the table `{name}` has a filter of its own, and the filters of this tree are the sheet's; the filter was not read"
             ));
         }
         let totals = table.attr_u32("totalsRowCount").unwrap_or(0) > 0;
@@ -3830,40 +3886,80 @@ fn read_tables(
         let mut way = String::new();
         let mut ways: Vec<(u32, String)> = Vec::new();
         let mut label = None;
-        if let Some(columns) = table.child("tableColumns") {
-            for (index, column) in columns.kids("tableColumn").enumerate() {
+        // The **columns** of the table: what the file says of each of
+        // them, beside the way it is totalled in.
+        let mut columns: Vec<TableColumn> = Vec::new();
+        if let Some(column_elements) = table.child("tableColumns") {
+            for (index, column) in column_elements.kids("tableColumn").enumerate() {
                 let column_name = column.attr("name").unwrap_or("").to_string();
-                let totals_way = totals_way(column.attr("totalsRowFunction"));
-                let Some(totals_way) = totals_way else {
-                    // A way this tree does not have is not a way, and
-                    // the reader says that it left it out.
-                    warnings.push(format!(
-                        "the column `{column_name}` of the table `{name}` is totalled in a way this tree does not have; it was not read"
-                    ));
-                    continue;
-                };
-                if totals_way != "none" {
-                    ways.push((index as u32, totals_way.clone()));
-                    if way.is_empty() {
-                        way = totals_way;
+                // The **formula** of a calculated column, and the
+                // **formula of the total** of a custom one.
+                let formula = column.child("calculatedColumnFormula").map(|f| f.text.trim().to_string());
+                let total_formula = column.child("totalsRowFormula").map(|f| f.text.trim().to_string());
+                // The **unique name** of the column, and the **XML** it
+                // is bound to.
+                let unique_name = column.attr("uniqueName").map(str::to_string);
+                let xml = column.child("xmlColumnPr").and_then(read_xml_column);
+                match totals_way(column.attr("totalsRowFunction")) {
+                    Some(totals_way) => {
+                        if totals_way != "none" {
+                            ways.push((index as u32, totals_way.clone()));
+                            if way.is_empty() {
+                                way = totals_way;
+                            }
+                        }
                     }
+                    // A way this tree does not have is not a way, and
+                    // the reader says that it left it out. The column
+                    // itself is still a column of the table.
+                    None => warnings.push(format!(
+                        "the column `{column_name}` of the table `{name}` is totalled in a way this tree does not have; the way was not read"
+                    )),
                 }
                 // The **label** of the total row is the text in its
                 // first cell: the first column that has a label
-                // gives it.
-                if label.is_none()
-                    && let Some(text) = column.attr("totalsRowLabel")
-                {
-                    label = Some(text.to_string());
+                // gives it. A custom total has no label of its own and
+                // carries a formula instead.
+                if label.is_none() {
+                    if let Some(text) = column.attr("totalsRowLabel") {
+                        label = Some(text.to_string());
+                    } else if let Some(formula) = &total_formula {
+                        label = Some(formula.clone());
+                    }
                 }
+                columns.push(TableColumn {
+                    column: index as u32,
+                    name: column_name,
+                    formula,
+                    total_formula,
+                    unique_name,
+                    xml,
+                });
             }
         }
         if way.is_empty() {
             way = "sum".to_string();
         }
-        out.push(Table { name, range: range.to_string(), totals, way, ways, label });
+        // The **XML table**: a table bound to a map of XML data.
+        let xml = table.attr("tableType") == Some("xml");
+        out.push(Table { name, range: range.to_string(), totals, way, ways, label, columns, xml });
     }
     out
+}
+
+/// Read the **XML** a column of a table is bound to.
+///
+/// A column that is bound to nothing is bound to nothing, and a column
+/// that names a map without a path is a column this tree cannot place.
+fn read_xml_column(element: &craftkit_xml::El) -> Option<XmlColumn> {
+    let map_id = element.attr_u32("mapId")?;
+    let xpath = element.attr("xpath")?.to_string();
+    Some(XmlColumn {
+        map_id,
+        xpath,
+        data_type: element.attr("xmlDataType").unwrap_or("string").to_string(),
+        denormalized: element.flag("denormalized", false),
+    })
 }
 
 /// The **way** a column is totalled in, as this tree writes it.
