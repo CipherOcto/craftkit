@@ -2095,6 +2095,15 @@ pub const PORTS: &[Port] = &[
         test: "xtask/tests/measurement.rs",
         section: "§1083",
     },
+    Port {
+        rule: "the language server, measured",
+        from: "docs/survey-lsp.md",
+        to: "xtask",
+        module: "src/lsp.rs",
+        command: "xtask.lsp",
+        test: "xtask/src/lsp.rs",
+        section: "§1084",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

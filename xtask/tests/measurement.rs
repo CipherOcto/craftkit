@@ -118,3 +118,33 @@ fn a_playbook_without_the_procedure_is_caught() {
     let problems = lists::the_measurement_procedure_is_stated(&directory).expect("the procedure can be read");
     assert!(!problems.is_empty(), "the gate did not catch the missing procedure");
 }
+
+/// The **survey of the language server** holds the numbers it measured.
+#[test]
+fn the_lsp_survey_holds_its_numbers() {
+    let text = std::fs::read_to_string(root().join("docs/survey-lsp.md")).expect("the survey is there");
+    for needle in ["0.005", "rust-analyzer", "batch mode"] {
+        assert!(text.contains(needle), "the survey of the lsp does not hold `{needle}`");
+    }
+}
+
+/// The gate is happy with the tree, the survey of the lsp included.
+#[test]
+fn the_lsp_survey_gate_is_happy_with_the_tree() {
+    let problems = lists::the_lsp_survey_holds_its_numbers(&root()).expect("the survey can be read");
+    assert!(problems.is_empty(), "the gate found: {problems:?}");
+}
+
+/// A survey of the lsp that has lost its numbers is **caught**.
+#[test]
+fn an_lsp_survey_without_its_numbers_is_caught() {
+    let directory = xtask::temp::dir("measurement-lsp").expect("the folder is there");
+    std::fs::create_dir_all(directory.join("docs")).expect("the folder is there");
+    std::fs::write(
+        directory.join("docs/survey-lsp.md"),
+        "# The survey of the language server\n\nthe calls an arc makes 0.005\n",
+    )
+    .expect("the file is written");
+    let problems = lists::the_lsp_survey_holds_its_numbers(&directory).expect("the survey can be read");
+    assert!(!problems.is_empty(), "the gate did not catch the missing numbers");
+}

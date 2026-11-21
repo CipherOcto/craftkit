@@ -740,6 +740,27 @@ pub fn the_second_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, S
     Ok(problems)
 }
 
+/// The **language server** was measured, and the measurement is in the tree.
+///
+/// The house says *ask it before you grep*. The survey says what that costs
+/// and how often it was done, and the gate holds the survey to its numbers —
+/// because a house rule that has been measured is a rule that may be
+/// narrowed, and a narrowing that is not written down is a rule that only
+/// lives in somebody's head.
+pub fn the_lsp_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let survey = root.join("docs/survey-lsp.md");
+    let text = read_text(&survey).map_err(|e| format!("could not read the survey of the lsp: {e}"))?;
+    for needle in ["0.005", "rust-analyzer", "batch mode", "never again"] {
+        if !text.contains(needle) {
+            problems.push(format!(
+                "the survey of the lsp does not hold `{needle}`: the measurement it made is not there"
+            ));
+        }
+    }
+    Ok(problems)
+}
+
 /// The gate itself.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
@@ -775,6 +796,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The second survey is held to the same rule as the first.
     problems.extend(the_second_survey_holds_its_numbers(root)?);
+
+    // The survey of the language server holds its own numbers.
+    problems.extend(the_lsp_survey_holds_its_numbers(root)?);
 
     // Every port of the manifest is still in the tree.
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;
