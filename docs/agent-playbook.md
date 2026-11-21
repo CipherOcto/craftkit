@@ -457,14 +457,43 @@ measurement should be **one number**: the cost of a single arc, end to end.
 
 ### The wave exits
 
-| wave | the number that must move | from | to |
-|---|---|---|---|
-| 1 | workspace test runs | 959 (26.8 h) | < 100 (≈ 4 h) |
-| 1 | calls per arc for verify | ~9 | 1 |
-| 2 | claim and count searches per arc | 1.81 | 0 |
-| 3 | reading and searching per arc | 17.8 | < 4 |
-| 3 | calls per arc | 35.4 | < 12 |
-| all | machine time per arc | 3.9 min | < 1 min |
+| wave | the number that must move | from | to | now |
+|---|---|---|---|---|
+| 1 | workspace test runs | 959 (26.8 h) | < 100 (≈ 4 h) | **11** |
+| 1 | calls per arc for verify | ~9 | 1 | 8.2 |
+| 2 | claim and count searches per arc | 1.81 | 0 | 0.54 |
+| 3 | reading and searching per arc | 17.8 | < 4 | 16.2 |
+| 3 | calls per arc | 35.4 | < 12 | 42.1 |
+| all | machine time per arc | 3.9 min | < 1 min | 10.0 min |
+
+The **now** column is the second survey (2026-11-12 → 2026-11-20). One exit
+was met, and it was met by *stopping* a run rather than by making one
+cheaper: the workspace test is gone, and the whole-tree gate took its place,
+once an arc, and the cost went with it.
+
+### What the second survey moved, and what it did not
+
+The second survey (§1083) named eight changes, and they are in the tree
+(§1086–§1093):
+
+| the change | what it is |
+|---|---|
+| the gate says where its time went | `cargo xtask ci` prints the time of each phase, slowest first (§1086) |
+| the format check is scoped | `cargo xtask fmt` formats the packages a change can break (§1087) |
+| the gate runs once per batch | the rule, written as a rule (§1088) |
+| one call writes an arc's ceremony | `cargo xtask new-arc` (§1089) |
+| the claim table is read against the registry | a stale claim is caught (§1090) |
+| one door for the tree's answers | `cargo xtask ask` (§1091) |
+| the survey is a command | `cargo xtask survey` (§1092) |
+| the tree has one worktree | `cargo xtask worktree`, and the gate runs it (§1093) |
+
+**What they moved:** the price of a question about the tree (the LSP, §1085),
+the ceremony of an arc (one call instead of three files and a search each),
+and the blindness that let the tree be worked in two places for two weeks.
+
+**What they did not move:** the calls an arc makes and the machine time it
+spends. Both are still the numbers the second survey measured, and the
+measurements will say so again at the next survey.
 
 The tree-side baselines — the lines in an arc and the gap between two arcs
 — are in `docs/plan-acceleration.md`, and they are measured by

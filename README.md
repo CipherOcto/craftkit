@@ -4535,6 +4535,8 @@ so.
 | **the gate runs once per batch** | **a rule, and it is now written as one.** The gate is the largest part of an arc's machine time, and running it once per arc is the same mistake wearing a better hat: one whole-tree build to check one battery (§1088) | §1088 |
 | **one call writes an arc's ceremony** | **built.** `cargo xtask new-arc` writes the port row, the claim row and the section of the README, and prints the skeleton of the command and of its test (§1089) | §1089 |
 | **the claim table is checked against the registry** | **built.** A claim that says *built* names a command, and the registry knows every command the tree has: a row that names one the tree does not have is a stale claim, and the gate catches it (§1090) | §1090 |
+| **one door for the tree's answers** | **built.** `cargo xtask ask` answers a question in the tree's own words — the commands, the bounds, the sections and the ports that say them, each with its place (§1091) | §1091 |
+| **the survey is a command** | **built.** `cargo xtask survey` measures the session's half of the cost of an arc — the calls, the machine time, the round trips — from the runtime's own record (§1092) | §1092 |
 | **the tree has one worktree** | **checked.** `cargo xtask worktree` says whether the tree has one, and the gate runs it: the survey found two weeks of work in a second checkout, and no gate had seen it (§1093) | §1093 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
@@ -69596,6 +69598,79 @@ has.
   not the claim itself. What is true today is a person's reading.
 - **A row that says *built* and names no command is not checked**: there is
   nothing to check it against.
+
+## 1091. One door for the tree's answers
+
+`cargo xtask find` answers a question it knows how to ask. An agent that
+does not know which kind of question it has has to **search** — and the
+survey measured that at 16 greps an arc.
+
+### What was built
+
+- **`cargo xtask ask`** — the words, and everything the tree says about
+  them: the commands, the bounds, the sections of the README and the ports
+  of the manifest, each with its place.
+- **The searches are loose and the sections are strict**: a reader who asks
+  for "pivot live" wants everything about pivots, and a section that
+  mentions one word of the question is not an answer to it.
+
+### What the port found
+
+- **The tools existed and were not used**: the tree's own index was asked
+  0.54 times an arc and the tree was grepped 16.2 times an arc. The index
+  is fast; the greps are what the session does.
+- **One call can answer several kinds of question**, and the answer is
+  short enough to read: twelve commands, one bound, one section and nine
+  ports for "pivot live".
+
+### What it cost
+
+- **One command** and six tests, over the tree's own index.
+
+### What it does not settle
+
+- **It does not answer a question about the *meaning* of a rule**: that is
+  the reader's work, and the survey said so.
+- **It does not replace the language server**: a declaration from a use is
+  still the server's question, and it is now cheap (§1085).
+
+## 1092. The survey is a command
+
+Both surveys measured the session's half by hand, with a script written for
+the occasion. A measurement that is a script in somebody's `/tmp` is a
+measurement that is repeated by hand.
+
+### What was built
+
+- **`cargo xtask survey`** — the calls, the machine time, the round trips,
+  the greps, the gates, the test runs and the sub-agents, read from the
+  runtime's own record, beside the tree's own numbers from the census.
+- **The record is read, never written**: the database is opened read-only,
+  and the command says so when it cannot be read.
+- **A machine without the `sqlite3` command is told so**, and gets no
+  half-answer.
+
+### What the port found
+
+- **The command reproduces the survey's numbers**: 34.8 calls an arc, a
+  25.2-second median gap, 13 769 greps and 194 gates over the whole
+  history — the same figures the hand-written script found.
+- **The measured share is a quarter of the calls**: the rest are the
+  instant ones, which the runtime does not track.
+
+### What it cost
+
+- **One command**, six tests, and a dependency on the `sqlite3` command of
+  the machine — which the tree does not add, because it does not add
+  dependencies.
+
+### What it does not settle
+
+- **It reads the runtime's record, and the runtime is not the tree**: a
+  tree that is copied into another project has no record to read, and the
+  command says so.
+- **The window is a flag**: the survey of a window is the survey of that
+  window, and the two are not the same survey.
 
 ## 1093. The tree has one worktree
 

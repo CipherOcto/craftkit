@@ -360,6 +360,28 @@ machine, and the gate takes more of it than anything else in the tree.
 
 ---
 
+## The tree answers
+
+The tree holds its own facts, and it can be **asked**. The commands that
+answer, and what each is for:
+
+```text
+cargo xtask ask <words>       what the tree says about these words — the commands, the
+                              bounds, the sections and the ports, each with its place
+cargo xtask find ...          where a command lives, what an area holds, what a bound is
+cargo xtask brief ...         everything one arc needs: the rule, the landing site, the
+                              conventions, the claims
+cargo xtask new-arc ...       the ceremony of an arc: the port row, the claim row and the
+                              section (--print for the code)
+cargo xtask survey            the session's half of the cost of an arc: the calls, the
+                              machine time, the round trips
+cargo xtask worktree          the tree has one worktree, and this says whether it does
+```
+
+**Asking is cheaper than searching.** The survey measured sixteen greps an
+arc against 0.54 calls to the tree's own index, and the two greps cost the
+session more than the whole index. Search when the tree cannot answer.
+
 ## Delegation
 
 A sub-agent is a round trip that costs money and returns an answer, so the

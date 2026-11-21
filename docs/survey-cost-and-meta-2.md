@@ -207,6 +207,50 @@ One of six. The one that was met was met by *removing* a run rather than by
 making one cheaper, and the run that was removed was replaced by another run
 of the same kind.
 
+## What the survey found that was not about cost
+
+Reading the runtime's record for the **calls** rather than for the time
+turned up a fact about the tree itself: the tree was worked in **two**
+places.
+
+From the 29th of October to the 13th of November, every session that
+touched this tree ran its commands in a **second checkout**,
+`../craftkit-v2`, on the branch `exp/meta-v2` — 1 962 calls and 3.1 hours of
+this survey's own numbers. The house rule says there is one worktree, and
+it is `main`. The rule was broken for two weeks and **no gate saw it**,
+because no gate looked.
+
+The worktree is gone now, and its work is in the tree's history, so no
+number in this survey is wrong. But the finding stands: a rule that is only
+written down is a rule that is a wish, and this one could be checked in a
+second — git knows every worktree of a repository. The gate now does
+(§1093).
+
+## What was built since the survey
+
+The eight changes this survey's numbers asked for are in the tree:
+
+| the change | what it is |
+|---|---|
+| the gate says where its time went | `cargo xtask ci` prints the time of each phase, slowest first (§1086) |
+| the format check is scoped | `cargo xtask fmt` formats the packages a change can break (§1087) |
+| the gate runs once per batch | the rule, written as a rule (§1088) |
+| one call writes an arc's ceremony | `cargo xtask new-arc` (§1089) |
+| the claim table is read against the registry | a stale claim is caught (§1090) |
+| one door for the tree's answers | `cargo xtask ask` (§1091) |
+| the survey is a command | `cargo xtask survey` (§1092) |
+| the tree has one worktree | `cargo xtask worktree`, and the gate runs it (§1093) |
+
+**What they moved:** the price of a question about the tree (the LSP's two
+doors, §1085), the ceremony of an arc (one call instead of three files and
+a search for each), and the blindness that let the tree be worked in two
+places for two weeks.
+
+**What they did not move:** the calls an arc makes and the machine time it
+spends. Those are the numbers this survey measured, and the next survey
+will say whether they have moved — the tools are in the tree, and the
+measurement is now a command (`cargo xtask survey`).
+
 ## What the tree says about itself
 
 `cargo xtask census`, measured by the tree:
