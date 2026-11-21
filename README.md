@@ -4542,6 +4542,7 @@ so.
 | **the format of a row and of a column is the file's own fact** | **built.** The reader reads the format, the collapsed mark and the custom size of a line, and the cells of a line keep their own facts (§1094) | §1094 |
 | **the survey's window is a window, and it reproduces the hand measurement** | **built.** The survey cuts both halves of the cost by two days, and it gives the second survey's own window back: 48.7 h against 49.4 h, 38.4 s against 39.0 s (§1095) | §1095 |
 | **a table says more of itself** | **built.** The reader reads the formula of a calculated column, the unique name of a column and the XML a column is bound to, and the import counts the ones the tree's tables have no place for (§1096) | §1096 |
+| **what of the reference is still not in the tree, and why** | **surveyed.** The reading surface is complete for this tree's model: 240 rules came from the reference, and what is left is a decision, a refusal or something nobody has asked for (§1097) | §1097 |
 
 ### The list of things that are honestly not there: empty
 
@@ -69896,3 +69897,57 @@ a workbook use, and the XML a column is bound to.
   drawing and a drawing is not a fact of the sheet (§454).
 - **The filter of a table** is still not read: the filters of this tree
   are the sheet's.
+
+---
+
+## 1097. What of the reference is still not in this tree
+
+The port has run for a hundred and thirty arcs, and this is the question
+the port exists to answer: **what of the reference tree is still not in
+this tree, and why?**
+
+### What was built
+
+- **The gap survey** (`docs/survey-gap.md`): the reference's own model is
+  the spine, feature by feature, and every row says where the thing
+  landed in this tree — read, refused with a reason, read coarsely on
+  purpose, or out of scope.
+- **The gate holds the survey** to what it found, so that a survey of
+  what is left cannot drift away from the tree it surveyed.
+
+### What the port found
+
+- **The reading surface is complete for this tree's model.** Every
+  feature the reference's model knows is read by this tree's reader, or
+  is refused with a reason, or is a decision that is written down.
+- **The manifest is the proof**: **240** rules, each one from the
+  reference and each one in this tree, with the section that says what it
+  became — 145 in the grid battery, 73 in the reader, 18 in the tree's
+  own gate.
+- **Three things are left, and none of them is a gap a port could
+  close**: the reading this tree has decided to do **coarsely** (the
+  chart kinds, the filter of a table, the look of a table, the pivot),
+  the reading it has **refused** (the regular expressions, the cube
+  functions, the spill, the union, `NOW`, `TODAY`, `INFO`), and the
+  reading **nobody has asked for** (the writer, the other formats, the
+  macros, the drawings, the in-cell images).
+- **Two things the reference does not read are not read here either**:
+  the slicers and the query tables — and the tree has slicers of its
+  own, made by commands.
+
+### What it cost
+
+- **One document**, one gate rule, three tests, and one row of the port
+  manifest.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **"Read" means the reader reads it**, not that the tree's model keeps
+  it: the facts the model has no place for are read, counted and
+  reported.
+- **The tree's commands are the tree's own**: 251 in the grid battery,
+  and the reference's commands are not a target — the tree's rules win
+  over the reference's rules.
+- **The survey is a reading, not a proof.** The manifest is the proof,
+  and the gate checks every row of it.
