@@ -813,6 +813,12 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
         .collect();
     problems.extend(crate::claims::problems(&readme, &port_sections));
 
+    // The claim table names the commands the tree has, and the registry
+    // knows every one of them: a row that names a command the tree does not
+    // have is a stale claim, and it is caught here.
+    let commands: Vec<String> = index.commands.iter().map(|command| command.id.clone()).collect();
+    problems.extend(crate::claims::problems_about_commands(&readme, &commands));
+
     if problems.is_empty() {
         println!("   ok");
         return Ok(crate::Outcome::Ran);

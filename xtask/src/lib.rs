@@ -66,6 +66,7 @@ pub mod index;
 pub mod layers;
 pub mod lists;
 pub mod lsp;
+pub mod newarc;
 pub mod packages;
 pub mod ports;
 pub mod temp;
@@ -196,6 +197,11 @@ pub const COMMANDS: &[Subcommand] = &[
         run: ci::fmt,
     },
     Subcommand {
+        name: "new-arc",
+        what: "the ceremony of an arc: the port row, the claim row and the section (--print for the code)",
+        run: newarc::run,
+    },
+    Subcommand {
         name: "worktree",
         what: "the tree has one worktree, and this says whether it does",
         run: worktree::run,
@@ -269,6 +275,11 @@ pub const NOT_GATES: &[(&str, &str)] = &[
         "fmt",
         "it writes files into the tree; the gate's own `fmt` phase looks at the format and \
          reports it, and this command is the one that fixes it",
+    ),
+    (
+        "new-arc",
+        "it writes files into the tree: the port row, the claim row and the section of an arc. \
+         The gate reads all three, so they are checked without this command being run",
     ),
 ];
 
