@@ -4539,6 +4539,7 @@ so.
 | **the survey is a command** | **built.** `cargo xtask survey` measures the session's half of the cost of an arc — the calls, the machine time, the round trips — from the runtime's own record (§1092) | §1092 |
 | **the tree has one worktree** | **checked.** `cargo xtask worktree` says whether the tree has one, and the gate runs it: the survey found two weeks of work in a second checkout, and no gate had seen it (§1093) | §1093 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
+| **the format of a row and of a column is the file's own fact** | **built.** The reader reads the format, the collapsed mark and the custom size of a line, and the cells of a line keep their own facts (§1094) | §1094 |
 
 ### The list of things that are honestly not there: empty
 
@@ -46696,7 +46697,9 @@ explains.
 - **The tree's set intercept is not here**: a trendline that is told to
   pass through a given point is not a fit that is worked out.
 - **The tree stores the trendline on the chart**; here the chart keeps
-  no trace of it, and the fit is asked for.
+  no trace of it, and the fit is asked for. — **and since §1072 the
+  file's own trendlines are read**: the kind of the fit of every series
+  is the file's own, and the tree keeps it (§1072).
 - **The fit is not drawn**: this tree has no chart renderer, so a
   trendline is a line of numbers and not a line on a picture.
 
@@ -61472,7 +61475,10 @@ over another, and put together by a third.
 
 - **The groupings, the filters, the orders and the ways of showing
   the values are not read**: the tree's pivot has them, and a file's
-  pivot may have them, and they are not carried.
+  pivot may have them, and they are not carried. — **and since §1074
+  they are read**: the groupings, the filters, the orders and the ways
+  of showing the values are the file's own, and the tree keeps them
+  (§1074–§1078).
 - **A pivot that gathers the rows by more than one field, or that
   spreads the groups over more than one, is not imported**: the tree's
   pivot has one of each.
@@ -61714,7 +61720,10 @@ a **footer** below it, and the **headings** of the sheet beside it.
 
 - **The header of the first page and of the even pages** is the tree's
   own (§471): a kind of page that has a text of its own has it, and a
-  kind that has none falls back on the odd pages.
+  kind that has none falls back on the odd pages. — **and since §1079
+  the file says so too**: the kinds of pages that have a header of
+  their own are read, and the sheet prints the way the file says
+  (§1079).
 - **A chart, a picture, a note, a link and a comment are still not on
   the page**: the cells are all that is drawn.
 
@@ -69707,3 +69716,64 @@ for two weeks.
 - **It does not say a branch may not exist**: the rule that every other
   branch is deleted is about the tree's history, and it is the owner's to
   keep.
+
+---
+
+## 1094. The format of a row and of a column
+
+A row and a column are **lines** of the sheet, and a file says things of
+a line of its own: how deep in a group it is, whether that group is
+folded away, and what the line looks like.
+
+### What was built
+
+- The **format** of a row and of a column is read
+  (`craftkit-xlsx::LineFormat`): the **number format**, the **font**,
+  the **fill**, the **alignment**, the **borders** and the
+  **protection** — the same facts the reader reads for a cell.
+- The **collapsed** mark of a group is read, and so is whether the
+  **size** of a line was set by the user (`customHeight` and
+  `customWidth`) rather than fitted to what the line holds.
+- A **size** is carried only when it says something of itself: a
+  height that is the sheet's own default height is the sheet's own, and
+  a width that is the sheet's own default width is the sheet's own.
+- The **cells** of a line are untouched: a cell that names no style of
+  its own does not take the format of its row, and a row's format does
+  not restyle the cells under it.
+- The **import** counts what the tree's spreadsheet model has no place
+  for and says it: `unread_line_formats`, `unread_collapsed_lines` and
+  `unread_custom_sizes`.
+
+### What the port found
+
+- The reference keeps **six** facts of a line — the size, the hidden
+  mark, the outline level, the collapsed mark, the style and the custom
+  size — and this tree kept **three**: the size, the hidden mark and
+  the outline level. The three that were missing were the **format**,
+  the **collapsed** mark and the **custom** size.
+- The reference drops the **default** style of a column; this tree
+  keeps what the file names, because what a file says is a fact of the
+  file.
+- The reference compares the two sizes in **pixels**, and this tree
+  compares them in the file's own units: the **characters** of a width
+  and the **points** of a height.
+- The tree's spreadsheet model has **no place** for the format of a
+  line, for the collapsed mark, or for the hand that set a size. The
+  tree works its own collapsed mark **out of the rows**, and the
+  import counts the facts it left out rather than dropping them in
+  silence.
+
+### What it cost
+
+- **Seven tests** in the reader's own file (`tests/lines.rs`) and
+  **one** in the import's (`tests/xlsximport.rs`).
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The format of a line is not carried into the tree's model**: it is
+  read, counted and reported, and the model has no place for it.
+- **The tree's collapsed mark is its own**: it is worked out from the
+  rows that are hidden, and not from the file's flag.
+- **The workbook is still not written back**: the reader reads, and the
+  tree does not write.
