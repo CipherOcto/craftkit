@@ -10,6 +10,12 @@ read, a list of things it has decided to read coarsely, and a list of
 things nobody has asked for. None of the three is a gap that a port could
 close.
 
+**And the claim was checked, which is the only way a claim of that kind
+is worth anything.** The check found two things: the **flags** of a file
+were read as one spelling each, and a file's other spelling slipped past
+(§1098); and the **quartile method** of a box and a whisker was not read
+at all (§1099).
+
 This is the evidence for that statement, and it is the evidence the *port
 manifest* already holds: 240 rows, each one a rule that came from the
 reference and landed in this tree, with the section that says what it
@@ -56,6 +62,7 @@ the reference's own answer to "what can a spreadsheet hold".
 | the formula of a calculated column, the unique name of a column, the XML a table is bound to | **read**, and the tree's tables have no place for them: they are **counted and said** | the reader (§1096) |
 | the charts: the kinds, the series, the legend, the quartiles, the trendlines | **read** | the reader, the battery (§1072–§1073) |
 | the chart extensions: the waterfall, the funnel, the treemap, the sunburst, the box and whisker, the histogram | **read** | the reader (§1073) |
+| the **quartile method** of a box and a whisker | **not read** | the reference reads it and this tree does not (§1099) |
 | the pictures | **read** | the reader, the battery (§1032) |
 | the sparklines | **read** | the reader, the battery (§940) |
 | the pivots: the fields, the groupings, the filters, the orders, the ways of showing the values, the grand totals | **read** | the reader, the battery (§1074–§1078) |

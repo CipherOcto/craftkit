@@ -4543,6 +4543,7 @@ so.
 | **the survey's window is a window, and it reproduces the hand measurement** | **built.** The survey cuts both halves of the cost by two days, and it gives the second survey's own window back: 48.7 h against 49.4 h, 38.4 s against 39.0 s (§1095) | §1095 |
 | **a table says more of itself** | **built.** The reader reads the formula of a calculated column, the unique name of a column and the XML a column is bound to, and the import counts the ones the tree's tables have no place for (§1096) | §1096 |
 | **what of the reference is still not in the tree, and why** | **surveyed.** The reading surface is complete for this tree's model: 240 rules came from the reference, and what is left is a decision, a refusal or something nobody has asked for (§1097) | §1097 |
+| **a flag is read as the file spells it** | **built.** The reader reads every flag in the spellings the format allows, and `aboveAverage="false"` is no longer read as above the average (§1098) | §1098 |
 
 ### The list of things that are honestly not there: empty
 
@@ -69951,3 +69952,50 @@ this tree, and why?**
   over the reference's rules.
 - **The survey is a reading, not a proof.** The manifest is the proof,
   and the gate checks every row of it.
+
+---
+
+## 1098. A flag is read as the file spells it
+
+A spreadsheet part writes a **boolean** in more than one way — `1` and
+`true` are both true, and so are `on` and `t` — and a flag read as one
+spelling only is a flag that a file's other spelling slips past.
+
+### What was built
+
+- The **flags** of a file are read as the format writes them: the
+  **labels** of the data of a chart (`showVal`), the **visibility** of
+  the labels of an extended chart (`val`), the **markers** of a chart's
+  group, the **smooth** line of a series, the **percent**, the
+  **bottom**, the **equal-average** and the **above-average** of a
+  conditional format, and the **reverse** and the **show-value** of an
+  icon set.
+- The XML crate gained **`child_flag`**: the `val` of a child read as a
+  boolean, with a default.
+
+### What the port found
+
+- **The reader read one spelling of each flag**, and the format allows
+  several. The **labels** of a chart's data were read as `1` and the
+  labels of an extended chart as `true` — so a file that wrote the
+  other way had no labels at all, in either kind of chart.
+- **`aboveAverage="false"` was read as true.** The rule said "the
+  numbers above the average" for a file that said the numbers *below*
+  it: the flag was compared against `0` and everything that was not `0`
+  was above.
+- **A file's other spelling is not the file's silence.** The tree's rule
+  is that what a file does not say is not a fact of the file — and a
+  file that says `true` has said it.
+
+### What it cost
+
+- **Two tests** in the reader's test file, and **one** helper in the XML
+  crate.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The gap survey's claim was checked, and the check found this.** The
+  survey said the reading surface was complete; the check of the claim
+  found the flags read as one spelling each (§1098), and the quartile
+  method of a box and a whisker not read at all (§1099).
