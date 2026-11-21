@@ -4545,6 +4545,7 @@ so.
 | **what of the reference is still not in the tree, and why** | **surveyed.** The reading surface is complete for this tree's model: 240 rules came from the reference, and what is left is a decision, a refusal or something nobody has asked for (§1097) | §1097 |
 | **a flag is read as the file spells it** | **built.** The reader reads every flag in the spellings the format allows, and `aboveAverage="false"` is no longer read as above the average (§1098) | §1098 |
 | **a box and a whisker says of what kind its quartiles are** | **built.** The reader reads the quartile method of a box and a whisker, and the chart that carries it is one the tree counts unread (§1099) | §1099 |
+| **a chart says what style it is** | **built.** The reader reads the style the file gives a chart, and the import counts the ones the tree's charts have no place for (§1100) | §1100 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70039,3 +70040,39 @@ file's own words are read.
 - **The tree's document has no place for the quartile method**: the
   reader keeps it, and the chart that carries it is a chart the tree
   does not draw.
+
+---
+
+## 1100. A chart says what style it is
+
+A **chart** says of what style it is, and the number is the file's own.
+
+### What was built
+
+- The **style** of a chart is read: the number the file gives it, on
+  the **space** of the chart, beside it and not inside it.
+- The tree's charts have no place for it, so the **import counts** the
+  styles it could not keep (`unread_chart_styles`) and says so.
+
+### What the port found
+
+- **The reference keeps the style of a chart and this tree did not** —
+  the last fact of the reference's chart model that the tree was not
+  reading, and the gap survey had named it in the check.
+- **The style is not inside the chart.** It sits on the *space* of the
+  chart, beside it: a reader that looked for it in the chart itself
+  would find nothing, and would say nothing about it.
+
+### What it cost
+
+- **Two tests**: one in the reader's test file and one in the import's.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The tree's charts are drawn by the tree**, and a style that is one
+  of the file's own built-in styles has no place in a document that
+  draws its own charts.
+- **The series' names are derived, not read**: the tree takes the name
+  of a series from the header cell of its range (§1072), and the file's
+  own name of it is a second copy of the same fact.

@@ -14,8 +14,9 @@ close.
 is worth anything.** The check found two things: the **flags** of a file
 were read as one spelling each, and a file's other spelling slipped past
 (§1098); and the **quartile method** of a box and a whisker was not read
-at all (§1099). Both are read now, and the check is the tree's own
-habit: a claim about the tree is worth nothing until it is looked at.
+at all (§1099), nor the **style** of a chart (§1100). All three are read
+now, and the check is the tree's own habit: a claim about the tree is
+worth nothing until it is looked at.
 
 This is the evidence for that statement, and it is the evidence the *port
 manifest* already holds: 240 rows, each one a rule that came from the
@@ -62,6 +63,7 @@ the reference's own answer to "what can a spreadsheet hold".
 | the tables, their fields, their totals row, the way of a total, the label of the total | **read** | the reader (§454, §526–§527) |
 | the formula of a calculated column, the unique name of a column, the XML a table is bound to | **read**, and the tree's tables have no place for them: they are **counted and said** | the reader (§1096) |
 | the charts: the kinds, the series, the legend, the quartiles, the trendlines | **read** | the reader, the battery (§1072–§1073) |
+| the **style** of a chart — the number the file gives it | **read** | the reader (§1100) — and the tree's charts have no place for it |
 | the chart extensions: the waterfall, the funnel, the treemap, the sunburst, the box and whisker, the histogram | **read** | the reader (§1073) |
 | the **quartile method** of a box and a whisker | **read** | the reader (§1099) — and the chart that carries it is one the tree counts unread |
 | the pictures | **read** | the reader, the battery (§1032) |
