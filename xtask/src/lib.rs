@@ -50,6 +50,7 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod ask;
 pub mod assets;
 pub mod brief;
 pub mod census;
@@ -69,6 +70,7 @@ pub mod lsp;
 pub mod newarc;
 pub mod packages;
 pub mod ports;
+pub mod survey;
 pub mod temp;
 pub mod tree;
 pub mod verify;
@@ -202,6 +204,16 @@ pub const COMMANDS: &[Subcommand] = &[
         run: newarc::run,
     },
     Subcommand {
+        name: "survey",
+        what: "the session's half of the cost of an arc: the calls, the machine time, the round trips",
+        run: survey::run,
+    },
+    Subcommand {
+        name: "ask",
+        what: "what the tree says about these words: the commands, the bounds, the sections, the ports",
+        run: ask::run,
+    },
+    Subcommand {
         name: "worktree",
         what: "the tree has one worktree, and this says whether it does",
         run: worktree::run,
@@ -280,6 +292,16 @@ pub const NOT_GATES: &[(&str, &str)] = &[
         "new-arc",
         "it writes files into the tree: the port row, the claim row and the section of an arc. \
          The gate reads all three, so they are checked without this command being run",
+    ),
+    (
+        "survey",
+        "it measures the session that did the work, from the runtime's own record; it changes \
+         nothing, so nothing checks it",
+    ),
+    (
+        "ask",
+        "it answers a question about the tree; it checks nothing, and the tree's own tests check \
+         what it reads",
     ),
 ];
 

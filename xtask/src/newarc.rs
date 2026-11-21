@@ -121,11 +121,7 @@ pub fn parse(args: &[String], next_section: &str) -> Result<Arc, String> {
     let section = if section.is_empty() { next_section.to_string() } else { section };
     let crate_name = if crate_name.is_empty() { format!("craftkit-plugin-{battery}") } else { crate_name };
     let module = if module.is_empty() { "src/lib.rs".to_string() } else { module };
-    let test = if test.is_empty() {
-        format!("crates/{crate_name}/tests/{battery}.rs")
-    } else {
-        test
-    };
+    let test = if test.is_empty() { format!("crates/{crate_name}/tests/{battery}.rs") } else { test };
     Ok(Arc { battery, id, rule, from, label, section, crate_name, module, test })
 }
 
@@ -285,9 +281,8 @@ pub fn insert_port_row(source: &str, row: &str, section: usize) -> Result<String
 /// Put the **claim row** into the claim table, at the end of it.
 pub fn insert_claim_row(readme: &str, row: &str) -> Result<String, String> {
     let header = "| the claim | the truth today | where |";
-    let start = readme
-        .find(header)
-        .ok_or("the README has no claim table: the header is not in it".to_string())?;
+    let start =
+        readme.find(header).ok_or("the README has no claim table: the header is not in it".to_string())?;
     // The first line **after** the header: the header is found by its text,
     // and the text stops in the middle of its line.
     let after = readme[start..]
@@ -444,9 +439,12 @@ mod tests {
     #[test]
     fn a_section_has_the_four_headings_the_house_asks_for() {
         let text = section_text(&an_arc());
-        for heading in
-            ["### What was built", "### What the port found", "### What it cost", "### What it does not settle"]
-        {
+        for heading in [
+            "### What was built",
+            "### What the port found",
+            "### What it cost",
+            "### What it does not settle",
+        ] {
             assert!(text.contains(heading), "the section has no `{heading}`");
         }
         assert!(text.starts_with("\n## 1089. "), "{text}");
@@ -454,9 +452,9 @@ mod tests {
 
     #[test]
     fn a_port_row_goes_in_section_order() {
-        let manifest =
-            "pub const PORTS: &[Port] = &[\n    Port {\n        section: \"§10\",\n    },\n    Port {\n        section: \"§20\",\n    },\n];\n";
-        let out = insert_port_row(manifest, "    Port {\n        section: \"§15\",\n    },\n", 15).expect("the row is placed");
+        let manifest = "pub const PORTS: &[Port] = &[\n    Port {\n        section: \"§10\",\n    },\n    Port {\n        section: \"§20\",\n    },\n];\n";
+        let out = insert_port_row(manifest, "    Port {\n        section: \"§15\",\n    },\n", 15)
+            .expect("the row is placed");
         let ten = out.find("§10").expect("ten is there");
         let fifteen = out.find("§15").expect("fifteen is there");
         let twenty = out.find("§20").expect("twenty is there");
@@ -466,7 +464,8 @@ mod tests {
     #[test]
     fn a_port_row_after_the_last_one_goes_at_the_end() {
         let manifest = "pub const PORTS: &[Port] = &[\n    Port {\n        section: \"§10\",\n    },\n];\n";
-        let out = insert_port_row(manifest, "    Port {\n        section: \"§20\",\n    },\n", 20).expect("the row is placed");
+        let out = insert_port_row(manifest, "    Port {\n        section: \"§20\",\n    },\n", 20)
+            .expect("the row is placed");
         let ten = out.find("§10").expect("ten is there");
         let twenty = out.find("§20").expect("twenty is there");
         assert!(ten < twenty, "{out}");
@@ -489,8 +488,7 @@ mod tests {
         // The failure this catches: the row was written at the end of the
         // last row of the table, on the same line, and the table stopped
         // being a table.
-        let readme =
-            "| the claim | the truth today | where |\n|---|---|---|\n| **one** | built (§1) | §1 |\n\n### After\n";
+        let readme = "| the claim | the truth today | where |\n|---|---|---|\n| **one** | built (§1) | §1 |\n\n### After\n";
         let out = insert_claim_row(readme, "| **two** | built (§2) | §2 |\n").expect("the row is placed");
         assert!(out.contains("| §1 |\n| **two** |"), "the row is on a line of its own: {out}");
     }
