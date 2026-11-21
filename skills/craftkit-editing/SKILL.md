@@ -28,7 +28,7 @@ exact code.
 
 ---
 
-## 2. Ask the language server before you grep
+## 2. Ask the language server when the grep cannot tell you
 
 This is a Rust tree, and the tree has a **language server** that has already
 read all of it. A grep cannot tell a *declaration* from a *use*; the server
@@ -43,7 +43,15 @@ cargo xtask lsp diagnostics <file>                # what the compiler says
 ```
 
 A line and a column are counted **from one**, the column in **characters**.
-The first load of the server takes a minute or two; after that it is seconds.
+
+**Every call loads the tree**: the command starts a **new** server every
+time, so the load is paid on every call — ten to thirty seconds here, a
+minute or two on a cold cache. That is 500 to 1 700 times a grep, so ask
+the server **when the grep cannot tell you** — a declaration from a use, a
+type, the whole list of references — and **grep** for a convention, a
+landing site or a phrase. The tree answers the latter with its own index:
+`cargo xtask find`, `cargo xtask brief`, `cargo xtask example` and
+`cargo xtask digest`. The numbers are in `docs/survey-lsp.md`.
 
 **Use it** to find where a thing is declared, to find every use of a name
 before you change it, to read a type or a signature, and to ask the compiler

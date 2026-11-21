@@ -28,21 +28,28 @@ The repository root is the directory that holds `crates/`, `apps/` and
 
 ---
 
-## 2. Ask the language server
+## 2. Ask the language server when the grep cannot tell you
 
 The tree has a **language server**, and it has already read all of the tree.
-Before you grep for a name, or guess where a thing is declared, ask it:
+When a grep cannot tell you — a *declaration* from a *use*, a type, every
+reference of a name — ask it:
 
 ```bash
 cargo xtask lsp diagnostics <file>                # what the compiler says of it
-cargo xtask lsp definition <file> <line> <col>    # where the thing is declared
+cargo xtask lsp definition <file> <line> <col>    # where it is declared
 cargo xtask lsp references <file> <line> <col>    # every use of it
 cargo xtask lsp hover <file> <line> <col>         # its type and its docs
 cargo xtask lsp symbols <text>                    # what is called that
 ```
 
 A line and a column are counted **from one**, the column in **characters**.
-The first load takes a minute or two; after that it is seconds.
+
+**Every call loads the tree**: the command starts a **new** server every
+time, so the load is paid on every call — ten to thirty seconds here, a
+minute or two on a cold cache, against two hundredths of a second for a
+grep. For a phrase, a convention or a landing site, **grep** — or ask the
+tree's own index (`cargo xtask find`, `cargo xtask brief`). The numbers are
+in `docs/survey-lsp.md`.
 
 **`diagnostics` is the cheap one** when a compile error names a line: it
 answers about one file without building the tree, and it is the compiler's

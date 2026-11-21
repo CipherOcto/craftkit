@@ -69,9 +69,14 @@ component of the toolchain this tree pins — so it is here with
 `rustup component add rust-analyzer`, and the tree's own `rust-toolchain.toml`
 asks for it.
 
-**Ask it before you grep.** A grep cannot tell a *declaration* from a *use*,
-and it cannot tell you what a name *is*. The server can, and it has already
-read the whole tree. The door is `cargo xtask lsp`:
+**Ask it when the grep cannot tell you.** A grep cannot tell a *declaration*
+from a *use*, and it cannot tell you what a name *is*. The server can, and it
+has already read the whole tree — **and it is expensive**: the measurement
+(`docs/survey-lsp.md`) is **five calls in 1 067 arcs**, and ten to thirty
+seconds of machine time for each one, against two hundredths of a second for
+a grep. So the server is the tool for a *declaration from a use*, a *type*,
+and the *whole list of references* — and it is **not** the way to look for a
+convention. The door is `cargo xtask lsp`:
 
 ```text
 cargo xtask lsp definition  <file> <line> <column>   where the thing is declared
@@ -84,9 +89,11 @@ cargo xtask lsp symbols     <text>                    what is called that
 A file is a path in the tree (`crates/craftkit-xlsx/src/lib.rs`), and a line
 and a column are counted **from one**, the column in **characters**.
 
-**The first load is slow** — the server reads the whole tree before it can
-answer, and that is a minute or two the first time and seconds after that.
-The command says so while it waits, and a slow answer is not a hung one.
+**Every call loads the tree** — the server reads the whole tree before it can
+answer, and the command starts a **new** server every time, so every call
+pays for the load: ten to thirty seconds here, a minute or two on a cold
+cache. The command says so while it waits, and a slow answer is not a hung
+one.
 
 **What the server is for:** finding where something is declared, finding
 every use of it, reading a type or a signature, and asking the compiler

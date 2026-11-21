@@ -4528,6 +4528,7 @@ so.
 | **the way a sheet is looked at is read** | **built.** The file says of a sheet whether it is looked at the ordinary way, the way of the pages or the way of the breaks, and the tree keeps it (§1081) | §1081 |
 | **a chart may name its range by a name of the workbook** | **built.** The name says what the range of a chart is, and the tree reads the chart with it (§1082) | §1082 |
 | **the cost of an arc is measured again** | **measured.** The survey was repeated over nine days of work, and the tree's own half and the session's own half were measured against the baseline: one of the six wave exits was met, and it was met by stopping a run rather than by making one cheaper (§1083) | §1083 |
+| **the language server is measured** | **measured.** The language server was asked five questions in 1 067 arcs, and each call costs ten to thirty seconds against two hundredths of a second for a grep — so the house rule was narrowed from *ask it before you grep* to *ask it when the grep cannot tell you* (§1084) | §1084 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69300,3 +69301,50 @@ method, so that the two runs can be compared. The second run is in
 - **Nine days is one window**, of one battery family, on one machine.
 - **The claim table is prose, and prose is the owner's**: the tree checks
   that every claim cites a section that exists, not that the claim is true.
+
+## 1084. The language server is measured
+
+The tree has a language server, and `AGENTS.md` told every agent to **ask it
+before you grep**. The survey in `docs/survey-lsp.md` asked the question that
+was never asked: **did anybody ask it?**
+
+### What was built
+
+- **The survey**: the language server's calls, counted from the runtime's own
+  record, and timed — each query measured against a grep on the same tree.
+- **A gate that holds it**: `cargo xtask lists` says so when the survey
+  loses its numbers.
+- **A row in the port manifest**, because the survey is the source of the
+  tree's own measuring tools, as the first survey is.
+
+### What the port found
+
+- **Five calls in 1 067 arcs** — 0.005 per arc, every one of them on the day
+  the command was built, and **none** in the 143 arcs since.
+- **A call is 500 to 1 700 times a grep**: 10.9 s and 33.4 s against 0.02 s,
+  and the tree starts a **new server on every call**, so the load is paid
+  every time.
+- **The tree got grep-happier**: 18.8 greps per arc before the arc that
+  built the server, 22.0 after it.
+- **The tool works** — the five calls were answered correctly — and the
+  **habit** does not exist. The rule was never followed, and the price is
+  why: it prices every question at the server's rate, including the ninety
+  per cent that a grep answers.
+
+### What it cost
+
+- **One document**, one gate rule, three tests, one row of the port
+  manifest, and one **amendment**: the house rule in `AGENTS.md` now says
+  *ask it when the grep cannot tell you*, which is what the measurement
+  supports, and the playbook says the same with the numbers beside it.
+- **No new command**: the survey measures the command that is already there.
+
+### What it does not settle
+
+- **Five calls are a small sample**, but the zero in the 143 arcs after is
+  the finding, not the five.
+- **The machine was not busy**: the timings were taken at a load average of
+  2.0, so they are a lower bound.
+- **Whether the tool would be used if it were free is untested** — and the
+  two ways to make it cheap (a batch mode, a persistent server) are **not
+  built**: they are the next arc, if the owner wants one.
