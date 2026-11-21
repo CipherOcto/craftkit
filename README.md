@@ -4541,6 +4541,7 @@ so.
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 | **the format of a row and of a column is the file's own fact** | **built.** The reader reads the format, the collapsed mark and the custom size of a line, and the cells of a line keep their own facts (§1094) | §1094 |
 | **the survey's window is a window, and it reproduces the hand measurement** | **built.** The survey cuts both halves of the cost by two days, and it gives the second survey's own window back: 48.7 h against 49.4 h, 38.4 s against 39.0 s (§1095) | §1095 |
+| **a table says more of itself** | **built.** The reader reads the formula of a calculated column, the unique name of a column and the XML a column is bound to, and the import counts the ones the tree's tables have no place for (§1096) | §1096 |
 
 ### The list of things that are honestly not there: empty
 
@@ -69838,3 +69839,60 @@ made it had to be fixed before it could measure anything.
 - **Eight arcs is a small sample**, and the arcs are not a random one.
 - **The machine time is the machine's**: the model's own time is a
   remainder, and it is the bigger half of the cost.
+
+---
+
+## 1096. The table says more of itself
+
+A **table** says of its columns more than their names: how each one is
+totalled in, the formula of a calculated column, the name the formulas of
+a workbook use, and the XML a column is bound to.
+
+### What was built
+
+- The **formula of a calculated column** is read: the formula that every
+  cell of the column carries.
+- The **unique name** of a column is read: the name the formulas of a
+  workbook use when they name a column of a table.
+- The **XML** a table is bound to is read: whether the table is an XML
+  table, and each column's **map**, **path**, **kind of data** and
+  whether it is **denormalized**.
+- A **custom total** carries its **formula**, and the formula is the
+  label the total row shows.
+- **A false note of the reader is corrected**: the reader said that a
+  table with a filter of its own "was not read" — the table *is* read,
+  and it is its *filter* that is not.
+- The **import counts** what the tree's model has no place for:
+  `unread_column_formulas`, `unread_unique_names` and
+  `unread_xml_columns`.
+
+### What the port found
+
+- **The reference reads six facts of a column** — the name, the way it
+  is totalled in, the label of the total, the formula of a calculated
+  column, the unique name and the XML — and this tree read **two**: the
+  name and the way.
+- **A custom total is a way this tree does not have.** The *formula* is
+  read and carried, and the way is left out and said — and the column
+  itself is still a column of the table.
+- **The reference keeps an XML table as an XML table** and does not keep
+  a query table as such, because a query table's definition hangs off
+  the part that is rewritten.
+- **A column is not lost when its way is not read.** The reader used to
+  leave the column out of the table entirely, and a column that is
+  totalled in a way this tree does not have is still a column.
+
+### What it cost
+
+- **Three tests** in the reader's test file and **one** in the import's.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The tree's tables have no place** for the formula, the unique name
+  or the XML: they are read, counted and reported.
+- **The look of a table** — the banded rows, the banded columns, the
+  emphasised first and last column — is still refused: a style is a
+  drawing and a drawing is not a fact of the sheet (§454).
+- **The filter of a table** is still not read: the filters of this tree
+  are the sheet's.
