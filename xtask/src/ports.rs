@@ -2122,6 +2122,24 @@ pub const PORTS: &[Port] = &[
         test: "xtask/src/lsp.rs",
         section: "§1085",
     },
+    Port {
+        rule: "the gate says where its time went",
+        from: "docs/survey-cost-and-meta-2.md",
+        to: "xtask",
+        module: "src/ci.rs",
+        command: "xtask.ci",
+        test: "xtask/src/ci.rs",
+        section: "§1086",
+    },
+    Port {
+        rule: "the format check is scoped to what changed",
+        from: "docs/survey-cost-and-meta-2.md",
+        to: "xtask",
+        module: "src/ci.rs",
+        command: "xtask.fmt",
+        test: "xtask/src/ci.rs",
+        section: "§1087",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

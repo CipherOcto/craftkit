@@ -57,7 +57,7 @@ pub struct Phase {
 /// removing the call and reading the output; the closing line is now built from
 /// the phases that ran, and `the_closing_line_names_what_actually_ran` pins it.
 pub const PHASES: &[Phase] = &[
-    Phase { name: "fmt", run: fmt },
+    Phase { name: "fmt", run: fmt_check },
     Phase { name: "assets", run: assets::run },
     Phase { name: "cleanroom", run: cleanroom::run },
     Phase { name: "lists", run: lists::run },
@@ -69,7 +69,11 @@ pub const PHASES: &[Phase] = &[
     Phase { name: "wasm", run: wasm::run },
 ];
 
-/// `cargo fmt --check`, one package at a time.
+/// `cargo fmt --check`, one package at a time — **the gate's own way**.
+///
+/// The gate looks; [`fmt`] formats. They are the same walk over the same
+/// packages, and the gate is the one that says whether the tree is
+/// formatted.
 ///
 /// **One package at a time, and the reason is Windows.** `cargo fmt --all`
 /// hands rustfmt every file of the workspace in a single command line, and
@@ -81,14 +85,29 @@ pub const PHASES: &[Phase] = &[
 ///
 /// It also says more when it fails: the package name is on the line, so a
 /// file that is not formatted is reported against the crate it belongs to.
-pub fn fmt(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
+pub fn fmt(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
     step("fmt");
+    // `--check` is the gate's way: it looks and says. Without it, the
+    // packages are **formatted**, which is what an agent wants between two
+    // edits and not what a gate wants before a commit.
+    let check = args.iter().any(|a| a == "--check");
     for package in packages_in_scope(root)? {
         println!("   {}", package.name);
-        cargo(&["fmt", "--package", &package.name, "--check"], root)?;
+        if check {
+            cargo(&["fmt", "--package", &package.name, "--check"], root)?;
+        } else {
+            cargo(&["fmt", "--package", &package.name], root)?;
+        }
     }
     println!("   ok");
     Ok(crate::Outcome::Ran)
+}
+
+/// The gate's own way of formatting: it looks, and it does not write.
+fn fmt_check(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
+    let mut check = vec!["--check".to_string()];
+    check.extend(args.iter().cloned());
+    fmt(root, &check)
 }
 
 /// The packages this run checks.
@@ -430,12 +449,24 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 
     let mut ran: Vec<&str> = Vec::with_capacity(PHASES.len());
     let mut skipped: Vec<&str> = Vec::new();
+    // **The time each phase took.** The gate is the largest part of what an
+    // arc costs, and a survey could only say *that*; the gate can say *which
+    // part*, and then the next survey measures instead of guessing.
+    let mut times: Vec<(&str, f64)> = Vec::with_capacity(PHASES.len());
 
     // The first failure. See "What it stops at" above.
     for phase in PHASES {
+        let at = Instant::now();
         match (phase.run)(root, &[]) {
-            Ok(outcome) => record(outcome, phase.name, &mut ran, &mut skipped),
-            Err(e) => return Err(format!("`{}` failed\n\n{e}", phase.name)),
+            Ok(outcome) => {
+                times.push((phase.name, at.elapsed().as_secs_f64()));
+                record(outcome, phase.name, &mut ran, &mut skipped);
+            }
+            Err(e) => {
+                times.push((phase.name, at.elapsed().as_secs_f64()));
+                println!("{}", the_time_table(&times));
+                return Err(format!("`{}` failed\n\n{e}", phase.name));
+            }
         }
     }
 
@@ -446,8 +477,33 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
         println!("{line}");
     }
 
+    println!("{}", the_time_table(&times));
     println!("{}", summary(started.elapsed().as_secs_f64(), &ran, &skipped));
     Ok(())
+}
+
+/// The **table of the time** the gate took, phase by phase.
+///
+/// The gate is the largest part of what an arc costs — the survey measured
+/// sixteen hours of it in nine days — and the survey could only say *that*.
+/// A gate that says *which part* is the difference between a number and a
+/// guess: the next survey reads this table instead of measuring the same
+/// thing twice.
+///
+/// **The slowest phase first**, because that is the one a reader is looking
+/// for, and the phases that were skipped are not in the table at all: a
+/// phase that did not run has no time.
+pub fn the_time_table(times: &[(&str, f64)]) -> String {
+    let mut ordered: Vec<(&str, f64)> = times.to_vec();
+    ordered.sort_by(|a, b| b.1.total_cmp(&a.1));
+    let mut table = String::from("\n\u{2500}\u{2500} the time");
+    let mut total = 0.0;
+    for (name, seconds) in &ordered {
+        total += *seconds;
+        table.push_str(&format!("\n   {name:<12}{seconds:>8.1} s"));
+    }
+    table.push_str(&format!("\n   {:<12}{total:>8.1} s", "the gate"));
+    table
 }
 
 /// Record what a phase did.
@@ -475,7 +531,18 @@ mod tests {
         let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
         assert_eq!(
             names,
-            vec!["fmt", "assets", "cleanroom", "lists", "digest", "layers", "web", "clippy", "tests", "wasm",],
+            vec![
+                "fmt",
+                "assets",
+                "cleanroom",
+                "lists",
+                "digest",
+                "layers",
+                "web",
+                "clippy",
+                "tests",
+                "wasm",
+            ],
             "the order is chosen so the cheapest gates run first, and `tests` and `wasm` must \
              still be in it: they used to be called after the loop, where deleting the call was \
              invisible — `ci` reported them as run on a build that ran neither"
@@ -547,6 +614,31 @@ mod tests {
         for phase in PHASES {
             returns_an_outcome(phase.run);
         }
+    }
+
+    /// The gate says **where its time went**.
+    ///
+    /// The gate is the largest part of what an arc costs, and a survey could
+    /// only say *that*; the gate can say *which part*, and the slowest first,
+    /// because that is the one a reader is looking for.
+    #[test]
+    fn the_gate_says_where_its_time_went() {
+        let table = the_time_table(&[("fmt", 1.0), ("clippy", 120.0), ("tests", 30.0)]);
+        let clippy = table.find("clippy").expect("clippy is there");
+        let tests = table.find("tests").expect("tests is there");
+        let fmt = table.find("fmt").expect("fmt is there");
+        assert!(clippy < tests && tests < fmt, "the slowest phase comes first: {table}");
+        assert!(table.contains("the gate"), "the table says what the whole gate took: {table}");
+        assert!(table.contains("151.0 s"), "the table adds the time up: {table}");
+    }
+
+    /// A phase that did not run has no time, and the table says nothing
+    /// about it.
+    #[test]
+    fn the_time_table_of_an_empty_gate_is_an_empty_table() {
+        let table = the_time_table(&[]);
+        assert!(table.contains("the gate"), "{table}");
+        assert!(!table.contains("wasm"), "{table}");
     }
 
     #[test]

@@ -145,7 +145,7 @@ pub const COMMANDS: &[Subcommand] = &[
     },
     Subcommand {
         name: "ci",
-        what: "fmt --check, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, wasm",
+        what: "fmt --check, assets, cleanroom, lists, worktree, layers, web, clippy -D warnings, tests, wasm",
         run: run_ci,
     },
     Subcommand {
@@ -188,6 +188,11 @@ pub const COMMANDS: &[Subcommand] = &[
         name: "verify",
         what: "fmt, clippy and test the packages a change can break (--package, --changed, --all)",
         run: verify::run,
+    },
+    Subcommand {
+        name: "fmt",
+        what: "format the packages a change can break (--check to only look)",
+        run: ci::fmt,
     },
 ];
 
@@ -253,6 +258,11 @@ pub const NOT_GATES: &[(&str, &str)] = &[
         "verify",
         "it runs the gate's own checks over the packages a change can break; `ci` runs the same \
          checks over the whole tree, so the checks are not left to be remembered",
+    ),
+    (
+        "fmt",
+        "it writes files into the tree; the gate's own `fmt` phase looks at the format and \
+         reports it, and this command is the one that fixes it",
     ),
 ];
 
