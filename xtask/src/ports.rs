@@ -2185,6 +2185,24 @@ pub const PORTS: &[Port] = &[
         test: "xtask/src/worktree.rs",
         section: "§1093",
     },
+    Port {
+        rule: "the format of a row and of a column: the file's own facts",
+        from: "gridcraft/crates/xlsx/src/sheet_read.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "craftkit-xlsx::read",
+        test: "crates/craftkit-xlsx/tests/lines.rs",
+        section: "§1094",
+    },
+    Port {
+        rule: "the facts of a line that the tree's model has no place for are counted",
+        from: "gridcraft/crates/xlsx/src/sheet_read.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/xlsximport.rs",
+        command: "grid.import.xlsx",
+        test: "crates/craftkit-plugin-grid/tests/xlsximport.rs",
+        section: "§1094",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

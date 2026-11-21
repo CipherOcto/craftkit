@@ -662,6 +662,13 @@ const MAX_PICTURE_BYTES: u64 = 40 * 1024 * 1024;
 /// The **most** pictures a sheet may have.
 const MAX_PICTURES: usize = 1_000;
 
+/// The **least** difference between two sizes that is a difference.
+///
+/// A size that is the sheet's own default size is the sheet's own, and
+/// the two are compared with this: a file writes its numbers in
+/// decimals, and two spellings of the same number are the same number.
+const SIZE_EPSILON: f64 = 1e-6;
+
 /// Read the **pictures** of a drawing, and how many were not read.
 ///
 /// A picture is in an **anchor**: the place on the sheet it is drawn in.
@@ -1807,11 +1814,15 @@ pub struct SheetView {
 /// A **row** of a sheet: its height, and whether it is hidden.
 ///
 /// The height is in **points**, as the file writes it.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Row {
     /// The **row**, counted from one.
     pub row: u64,
     /// The **height** of the row, in points, when the file gives one.
+    ///
+    /// A height that is the sheet's own default height is the sheet's
+    /// own, and it is not carried here: what a file does not say of a
+    /// row is not a fact of the row.
     pub height: Option<f64>,
     /// Whether the row is **hidden**.
     pub hidden: bool,
@@ -1819,6 +1830,23 @@ pub struct Row {
     ///
     /// A row that is in no group has the level **zero**.
     pub outline: u8,
+    /// Whether the **group** of the row is **collapsed**.
+    ///
+    /// A collapsed group is a group that is folded away, and the rows
+    /// of it are hidden under it.
+    pub collapsed: bool,
+    /// Whether the **height** was set by the user, and not fitted to
+    /// what the row holds.
+    ///
+    /// A file says so with its own flag, and a file that says nothing
+    /// has a row whose height is fitted.
+    pub custom: bool,
+    /// The **format** of the row, when the row names one.
+    ///
+    /// The format of a row is a fact of the **row**: the cells of the
+    /// row keep their own facts, and a cell that names no style of its
+    /// own does not take the format of its row.
+    pub format: Option<LineFormat>,
 }
 
 /// A **column** of a sheet: its width, and whether it is hidden.
@@ -1828,11 +1856,14 @@ pub struct Row {
 /// own column width is the number of characters of the **cell's** face,
 /// and the two are not the same measure — so the number is carried as
 /// the file gives it.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Column {
     /// The **column**, counted from zero.
     pub column: u32,
     /// The **width** of the column, when the file gives one.
+    ///
+    /// A width that is the sheet's own default width is the sheet's
+    /// own, and it is not carried here.
     pub width: Option<f64>,
     /// Whether the column is **hidden**.
     pub hidden: bool,
@@ -1840,6 +1871,38 @@ pub struct Column {
     ///
     /// A column that is in no group has the level **zero**.
     pub outline: u8,
+    /// Whether the **group** of the column is **collapsed**.
+    pub collapsed: bool,
+    /// Whether the **width** was set by the user, and not fitted to what
+    /// the column holds.
+    pub custom: bool,
+    /// The **format** of the column, when the column names one.
+    ///
+    /// The format of a column is a fact of the **column**, and the
+    /// cells of the column keep their own facts.
+    pub format: Option<LineFormat>,
+}
+
+/// The **format of a line**: what a row or a column says of itself.
+///
+/// The format is the file's own, read the way the tree reads the format
+/// of a cell: the **code** of the number format, the **font**, the
+/// **fill**, the **alignment**, the **borders** and the **protection**.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LineFormat {
+    /// The **number format** of the line, when it has one.
+    pub format: Option<String>,
+    /// The **font** of the line, when the file names one.
+    pub font: Option<Font>,
+    /// The **fill** of the line: the colour behind its text.
+    pub fill: Option<Fill>,
+    /// The **alignment** of the line: how its text lies.
+    pub align: Option<Alignment>,
+    /// The **borders** of the line: the lines on its edges.
+    pub borders: Option<Borders>,
+    /// The **protection** of the line: whether it is locked and whether
+    /// its text is hidden.
+    pub protection: Option<Protection>,
 }
 
 /// The **protection** of a sheet: what may still be done to it.
@@ -2712,7 +2775,7 @@ fn read_sheet(
     // The **columns** of the sheet: their width and whether they are
     // hidden. A file says a span of columns at once, so one span of
     // ten columns is ten columns here.
-    sheet.columns = read_columns(&root);
+    sheet.columns = read_columns(&root, styles, sheet.default_width);
     // The **merges** of the sheet: the ranges that are one cell. A
     // range of one cell is not a merge.
     sheet.merges = read_merges(&root);
@@ -2762,12 +2825,30 @@ fn read_sheet(
         // The **row** itself: its height and whether it is hidden. A
         // row that says nothing of itself is not a row here: the
         // height of a row that says nothing is the sheet's own.
-        let height = row.attr_f64("ht").filter(|height| *height > 0.0);
+        //
+        // The **height** is the file's own, and only when it says
+        // something of itself: a height that is the sheet's own default
+        // height is the sheet's own, and a height the user set is the
+        // user's even when it is the default.
+        let custom = row.flag("customHeight", false);
+        let height = row
+            .attr_f64("ht")
+            .filter(|height| *height > 0.0)
+            .filter(|height| custom || !is_the_default(*height, sheet.default_height));
+        // A height the user set is the user's — but a row with no
+        // height of its own has no height to set.
+        let custom = custom && height.is_some();
         let hidden = row.flag("hidden", false);
         // The **outline level** of the row: how deep in a group it is.
         let outline = row.attr_u32("outlineLevel").unwrap_or(0).min(MAX_OUTLINE) as u8;
-        if height.is_some() || hidden || outline > 0 {
-            rows.push(Row { row: row_index + 1, height, hidden, outline });
+        // Whether the **group** of the row is folded away.
+        let collapsed = row.flag("collapsed", false);
+        // The **format** of the row: the file names one for a row only
+        // when it says the row has a format of its own.
+        let format =
+            if row.flag("customFormat", false) { line_format(styles, row.attr_u32("s")) } else { None };
+        if height.is_some() || hidden || outline > 0 || collapsed || format.is_some() {
+            rows.push(Row { row: row_index + 1, height, hidden, outline, collapsed, custom, format });
         }
 
         for cell in row.kids("c") {
@@ -3455,7 +3536,7 @@ fn read_merges(root: &craftkit_xml::El) -> Vec<String> {
 /// A file says a **span** of columns at once, and a span of ten
 /// columns is ten columns here. A span that is out of the grid is
 /// clipped to it, as the tree's reader clips it.
-fn read_columns(root: &craftkit_xml::El) -> Vec<Column> {
+fn read_columns(root: &craftkit_xml::El, styles: &Styles, default_width: Option<f64>) -> Vec<Column> {
     let mut columns = Vec::new();
     let Some(cols) = root.child("cols") else { return columns };
     for col in cols.kids("col") {
@@ -3467,19 +3548,65 @@ fn read_columns(root: &craftkit_xml::El) -> Vec<Column> {
         if u64::from(min) > MAX_COLS {
             continue;
         }
-        let width = col.attr_f64("width").filter(|width| *width > 0.0);
+        // The **width** of the column: the file's own, and only when it
+        // says something of itself. A width that is the sheet's own
+        // default width is the sheet's own, and a width the user set is
+        // the user's even when it is the default.
+        let custom = col.flag("customWidth", false);
+        let width = col
+            .attr_f64("width")
+            .filter(|width| *width > 0.0)
+            .filter(|width| custom || !is_the_default(*width, default_width));
         let hidden = col.flag("hidden", false);
         // The **outline level** of the columns: how deep in a group they
         // are.
         let outline = col.attr_u32("outlineLevel").unwrap_or(0).min(MAX_OUTLINE) as u8;
-        if width.is_none() && !hidden && outline == 0 {
+        // Whether the **group** of the columns is folded away.
+        let collapsed = col.flag("collapsed", false);
+        // The **format** of the columns: what the file names of them.
+        let format = line_format(styles, col.attr_u32("s"));
+        if width.is_none() && !hidden && outline == 0 && !collapsed && format.is_none() {
             continue;
         }
         for index in (min - 1)..max {
-            columns.push(Column { column: index, width, hidden, outline });
+            columns.push(Column {
+                column: index,
+                width,
+                hidden,
+                outline,
+                collapsed,
+                custom,
+                format: format.clone(),
+            });
         }
     }
     columns
+}
+
+/// Whether a **size** is the sheet's own **default** size.
+///
+/// A file that says no default size has no size to be equal to, and a
+/// size is then a size of its own.
+fn is_the_default(size: f64, default: Option<f64>) -> bool {
+    default.is_some_and(|default| (size - default).abs() <= SIZE_EPSILON)
+}
+
+/// Read the **format** of a line: what a row or a column names of
+/// itself.
+///
+/// A line that names no style has no format: the face of a line that
+/// names nothing is the sheet's own, and the sheet's own face is not
+/// the line's.
+fn line_format(styles: &Styles, style: Option<u32>) -> Option<LineFormat> {
+    let index = style?;
+    Some(LineFormat {
+        format: styles.format(Some(index)).map(str::to_string),
+        font: styles.font(Some(index)).cloned(),
+        fill: styles.fill(Some(index)).cloned(),
+        align: styles.align(Some(index)).cloned(),
+        borders: styles.borders(Some(index)).cloned(),
+        protection: styles.protection(Some(index)).cloned(),
+    })
 }
 
 /// Read the **page setup** of a sheet: the paper, the orientation, the

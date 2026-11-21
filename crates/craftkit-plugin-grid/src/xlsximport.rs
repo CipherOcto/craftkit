@@ -301,6 +301,14 @@ commands! {
             let mut hidden_sheets = 0u64;
             let mut kept_sheets = 0u64;
             let mut tab_colours = 0u64;
+            // The **facts of a row and a column** that the tree's model
+            // has no place for: the format of the line, the group of
+            // the line that is folded away, and the size the user set.
+            // They are read, and they are not kept, and the import says
+            // how many of them it left out.
+            let mut unread_line_formats = 0u64;
+            let mut unread_collapsed_lines = 0u64;
+            let mut unread_custom_sizes = 0u64;
             let mut taken: Vec<String> = Vec::new();
             // The **hidden sheets**: a file may hide a sheet, and the
             // tree hides it too. A workbook must keep **one visible
@@ -510,6 +518,21 @@ commands! {
                     if row.outline > 0 {
                         row_outline.insert(row.row.to_string(), json!(row.outline));
                     }
+                    // The **format** of the row: a fact of the row, and
+                    // the tree's model has no place for it.
+                    if row.format.is_some() {
+                        unread_line_formats += 1;
+                    }
+                    // The **group** of the row, folded away: the tree
+                    // works its own collapsed mark out from the rows.
+                    if row.collapsed {
+                        unread_collapsed_lines += 1;
+                    }
+                    // The **height** the user set: the tree's model has
+                    // the height, and not the hand that set it.
+                    if row.custom {
+                        unread_custom_sizes += 1;
+                    }
                 }
                 // The **columns** of the sheet: the width of each
                 // column that has one, and the columns that are hidden.
@@ -528,6 +551,21 @@ commands! {
                     }
                     if column.outline > 0 {
                         column_outline.insert(letter.clone(), json!(column.outline));
+                    }
+                    // The **format** of the column: a fact of the
+                    // column, and the tree's model has no place for it.
+                    if column.format.is_some() {
+                        unread_line_formats += 1;
+                    }
+                    // The **group** of the column, folded away: the tree
+                    // works its own collapsed mark out from the rows.
+                    if column.collapsed {
+                        unread_collapsed_lines += 1;
+                    }
+                    // The **width** the user set: the tree's model has
+                    // the width, and not the hand that set it.
+                    if column.custom {
+                        unread_custom_sizes += 1;
                     }
                 }
                 // The **merges** of the sheet: the ranges that are one
@@ -1580,6 +1618,24 @@ commands! {
                     "; {unread_headers} header(s) or footer(s) could not be printed and were not imported"
                 ));
             }
+            if unread_line_formats > 0 {
+                summary.push_str(&format!(
+                    "; {unread_line_formats} format(s) of a row or a column could not be kept: \
+                     the tree's model has no place for them"
+                ));
+            }
+            if unread_collapsed_lines > 0 {
+                summary.push_str(&format!(
+                    "; {unread_collapsed_lines} collapsed group(s) of rows or columns could not be \
+                     kept: the tree works its own collapsed mark out from the rows"
+                ));
+            }
+            if unread_custom_sizes > 0 {
+                summary.push_str(&format!(
+                    "; {unread_custom_sizes} size(s) set by the user could not be kept: \
+                     the tree's model has the size and not the hand that set it"
+                ));
+            }
             Ok(Outcome::changed(summary).with_data(json!({
                 "id": workbook_id,
                 "name": name,
@@ -1608,6 +1664,9 @@ commands! {
                 "unread_prints": unread_prints,
                 "unread_headers": unread_headers,
                 "unread_passwords": unread_passwords,
+                "unread_line_formats": unread_line_formats,
+                "unread_collapsed_lines": unread_collapsed_lines,
+                "unread_custom_sizes": unread_custom_sizes,
                 "outlines": outlines,
                 "setups": setups,
                 "centred": centred,

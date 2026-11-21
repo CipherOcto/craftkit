@@ -3529,3 +3529,53 @@ fn a_table_with_no_header_row_is_not_imported() {
         "and the import says why: {warnings:?}"
     );
 }
+
+/// The **facts of a row and a column** that the tree's model has no
+/// place for are counted, and the import says how many it left out.
+///
+/// The file's facts are read: the **format** of a line, the **group**
+/// that is folded away, and the **size** the user set. The tree's
+/// spreadsheet model has none of them, so they are not imported — and
+/// the import says so rather than dropping them in silence.
+#[test]
+fn the_facts_of_a_line_that_the_tree_has_no_place_for_are_counted() {
+    let mut session = session();
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/styles.xml",
+            r#"<styleSheet><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Arial"/></font></fonts><cellXfs><xf fontId="0"/><xf fontId="1"/></cellXfs></styleSheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><cols><col min="1" max="1" width="12" s="1"/><col min="2" max="2" width="12" outlineLevel="1" collapsed="1"/><col min="3" max="3" width="12" customWidth="1"/></cols><sheetData><row r="1" customFormat="1" s="1"><c r="A1" t="str"><v>x</v></c></row><row r="2" outlineLevel="1" collapsed="1"><c r="A2" t="str"><v>x</v></c></row><row r="3" ht="20" customHeight="1"><c r="A3" t="str"><v>x</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
+    let path = a_file(bytes);
+    let outcome =
+        session.execute("grid.import.xlsx", &json!({ "path": path })).expect("the workbook is imported");
+    assert_eq!(outcome.data["unread_line_formats"].as_u64(), Some(2), "two formats of a line");
+    assert_eq!(outcome.data["unread_collapsed_lines"].as_u64(), Some(2), "two collapsed groups");
+    assert_eq!(outcome.data["unread_custom_sizes"].as_u64(), Some(2), "two sizes the user set");
+    let message = outcome.message.clone();
+    assert!(
+        message.contains("format(s) of a row or a column could not be kept"),
+        "and the import says why: {message}"
+    );
+    assert!(
+        message.contains("collapsed group(s) of rows or columns could not be kept"),
+        "and the import says why: {message}"
+    );
+    assert!(message.contains("size(s) set by the user could not be kept"), "and why: {message}");
+}
