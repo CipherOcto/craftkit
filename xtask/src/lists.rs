@@ -711,6 +711,35 @@ pub fn the_measurement_procedure_is_stated(root: &Path) -> Result<Vec<String>, S
     Ok(problems)
 }
 
+/// The **second survey** is held to the same rule as the first.
+///
+/// A survey that is repeated has to keep its numbers, or the repetition is a
+/// story rather than a measurement. So the second survey is in the tree, and
+/// the gate says so when it loses the numbers it measured — the calls an arc
+/// makes, the machine time an arc takes, the arcs a day.
+pub fn the_second_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let survey = root.join("docs/survey-cost-and-meta-2.md");
+    let text = read_text(&survey).map_err(|e| format!("could not read the second survey: {e}"))?;
+    for needle in ["48.3", "12.5 min", "26.4", "cargo xtask census"] {
+        if !text.contains(needle) {
+            problems.push(format!(
+                "the second survey does not hold `{needle}`: the measurement it repeated is not \
+                 there"
+            ));
+        }
+    }
+    // The second survey says what it found, including what it did not meet.
+    if !text.contains("not met") {
+        problems.push(
+            "the second survey does not say which wave exits were not met: a measurement that \
+             reports only the wins is not a measurement"
+                .to_string(),
+        );
+    }
+    Ok(problems)
+}
+
 /// The gate itself.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
@@ -743,6 +772,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The measurement has a procedure, and the procedure is in the prose.
     problems.extend(the_measurement_procedure_is_stated(root)?);
+
+    // The second survey is held to the same rule as the first.
+    problems.extend(the_second_survey_holds_its_numbers(root)?);
 
     // Every port of the manifest is still in the tree.
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;

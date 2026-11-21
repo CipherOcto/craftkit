@@ -397,6 +397,27 @@ The survey that made the plan is the baseline, and its numbers are in
 | the workspace test runs | 959 (26.8 h) |
 | the sub-agents that paid for themselves | 6 of 41 |
 
+### The second survey
+
+The survey is **repeated**, so that the numbers are watched rather than
+remembered. The second run is in `docs/survey-cost-and-meta-2.md`, and it
+covers 2026-11-12 → 2026-11-20. It re-used this section's method, so the two
+runs can be compared, and it reports what it did **not** meet:
+
+| the number | the baseline | the second survey |
+|---|---|---|
+| the calls an arc makes | 35.4 | 48.3 |
+| the machine time an arc takes | 3.9 min | 12.5 min |
+| the workspace test runs | 959 | 11 |
+| the sub-agents | 41 (6 paid off) | 4 |
+
+One of the six wave exits was met, and it was met by **stopping a run**
+rather than by making one cheaper: the workspace test is gone, and the
+whole-tree gate (`cargo xtask ci`) took its place, once per arc. The lesson
+of the repeat is in the exits themselves — they were phrased as **kinds of
+call**, so the tree could satisfy them while the arc got heavier. The next
+measurement should be **one number**: the cost of a single arc, end to end.
+
 ### The rule
 
 - **A shortcut that does not move a number did not happen.** The waves are

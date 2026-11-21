@@ -2086,6 +2086,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-xlsx/tests/workbook.rs",
         section: "§1082",
     },
+    Port {
+        rule: "the cost of the tree, measured again",
+        from: "docs/survey-cost-and-meta-2.md",
+        to: "xtask",
+        module: "src/census.rs",
+        command: "xtask.census",
+        test: "xtask/tests/measurement.rs",
+        section: "§1083",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
