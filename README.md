@@ -4544,6 +4544,7 @@ so.
 | **a table says more of itself** | **built.** The reader reads the formula of a calculated column, the unique name of a column and the XML a column is bound to, and the import counts the ones the tree's tables have no place for (§1096) | §1096 |
 | **what of the reference is still not in the tree, and why** | **surveyed.** The reading surface is complete for this tree's model: 240 rules came from the reference, and what is left is a decision, a refusal or something nobody has asked for (§1097) | §1097 |
 | **a flag is read as the file spells it** | **built.** The reader reads every flag in the spellings the format allows, and `aboveAverage="false"` is no longer read as above the average (§1098) | §1098 |
+| **a box and a whisker says of what kind its quartiles are** | **built.** The reader reads the quartile method of a box and a whisker, and the chart that carries it is one the tree counts unread (§1099) | §1099 |
 
 ### The list of things that are honestly not there: empty
 
@@ -69999,3 +70000,42 @@ spelling only is a flag that a file's other spelling slips past.
   survey said the reading surface was complete; the check of the claim
   found the flags read as one spelling each (§1098), and the quartile
   method of a box and a whisker not read at all (§1099).
+
+---
+
+## 1099. A box and a whisker says of what kind its quartiles are
+
+A **box and a whisker** says of what kind its quartiles are, and the
+file's own words are read.
+
+### What was built
+
+- The **quartile method** is read: `inclusive` or `exclusive`, in the
+  file's own words — and a chart that says nothing of its quartiles has
+  none.
+- The tree's charts have **four kinds**, so a box and a whisker is
+  **counted unread as a chart**; the quartile method travels with it,
+  and nothing is counted twice.
+
+### What the port found
+
+- **The gap survey named this as the one thing not read**, and the
+  survey was right: the reference reads the quartile method of every box
+  and a whisker, and this tree read nothing of it.
+- **The reader already named the chart it could not draw.** A box and a
+  whisker is read, named and counted unread — the kind was there, and
+  the fact under the kind was not.
+
+### What it cost
+
+- **Two tests** in the reader's test file.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The tree's charts still have four kinds**: a waterfall, a funnel, a
+  treemap, a sunburst and a box and a whisker are read, named and
+  **counted unread**.
+- **The tree's document has no place for the quartile method**: the
+  reader keeps it, and the chart that carries it is a chart the tree
+  does not draw.
