@@ -4546,6 +4546,7 @@ so.
 | **a flag is read as the file spells it** | **built.** The reader reads every flag in the spellings the format allows, and `aboveAverage="false"` is no longer read as above the average (§1098) | §1098 |
 | **a box and a whisker says of what kind its quartiles are** | **built.** The reader reads the quartile method of a box and a whisker, and the chart that carries it is one the tree counts unread (§1099) | §1099 |
 | **a chart says what style it is** | **built.** The reader reads the style the file gives a chart, and the import counts the ones the tree's charts have no place for (§1100) | §1100 |
+| **what of each family tree is still not in this tree** | **surveyed.** The nine batteries were measured against their own family trees, and what is left is a decision, a refusal, a scope, or a row on the owner's list (§1101) | §1101 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70076,3 +70077,60 @@ A **chart** says of what style it is, and the number is the file's own.
 - **The series' names are derived, not read**: the tree takes the name
   of a series from the header cell of its range (§1072), and the file's
   own name of it is a second copy of the same fact.
+
+---
+
+## 1101. What of each family tree is still not in this tree
+
+The grid port was surveyed and closed (§1097), and the owner's question
+was the obvious next one: **what is left on all the other batteries?**
+
+### What was built
+
+- **The survey of the batteries** (`docs/survey-batteries.md`): nine
+  batteries, each measured against its own family tree — pdfcraft,
+  wordcraft, filmcraft, effectcraft, cadcraft, vectorcraft, soundcraft,
+  artcraft and designcraft.
+- **One contract per battery**, read-only, with a **fixed vocabulary** of
+  verdicts: read, refused with a reason, coarse on purpose, out of
+  scope, and **to judge**.
+- **The gate holds the survey** to what it found: every battery has a
+  row, the four lists are there, and the survey says what it does not
+  settle.
+
+### What the port found
+
+- **The remaining port work is in the batteries' *models*.** The
+  applications' analysis (tracking, roto, OCR, rasterisation), their
+  rendering (the render queue, the media encoders) and their UI (zoom,
+  help, shortcuts) are not a battery's business — and the batteries that
+  have a place for them say so in their own prose.
+- **The largest single model gap is the cad battery's entity kinds**:
+  thirty in the reference, **eight** in this tree, and the tree says why
+  it is open — "a new entity is a **new kind**".
+- **The art battery can add an element and cannot change one**: the
+  reference's element mutation, the track's mute and visibility, the
+  scene's rename and delete are all **to judge**.
+- **Five batteries read and write no file format of their own** — and
+  that is not an oversight: the kit has its own format crates, and the
+  tree says so where it matters.
+- **The tree's own numbers are not all true.** The art battery declares
+  twelve of its commands through a macro, and the index cannot see a
+  macro: it says **eleven** where the runtime has **twenty-three**.
+
+### What it cost
+
+- **One document**, one gate rule, three tests, and one row of the port
+  manifest.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The verdicts that say "to judge" are the owner's list**, not the
+  survey's: reading what a rule means stays with the reader (§8), so
+  the survey points at a difference and does not decide what it means.
+- **The counts are not one-to-one comparable**: the references are
+  applications and the batteries are models, so the counts are the frame
+  and the feature table is the substance.
+- **The file formats are a project and not an arc** (§899): a
+  half-ported format is worse than no format.
