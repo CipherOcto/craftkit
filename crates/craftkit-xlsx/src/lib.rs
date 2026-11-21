@@ -559,6 +559,11 @@ pub struct Chart {
     /// A box and a whisker says of what kind its quartiles are, and a
     /// chart that is not a box and a whisker says nothing about them.
     pub quartiles: Option<String>,
+    /// The **style** of the chart: the number the file gives it.
+    ///
+    /// The style of a chart is one of the styles the file itself knows,
+    /// and the number is the file's own.
+    pub style: Option<u32>,
 }
 
 /// A **trendline** of a chart: a fit of the line of a series.
@@ -1059,6 +1064,10 @@ fn show_as_of(field: &craftkit_xml::El, warnings: &mut Vec<String>) -> Option<St
 fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>) -> Option<Chart> {
     let chart = root.child("chart")?;
     let plot = chart.child("plotArea")?;
+    // The **style** of the chart: the number the file gives it. The
+    // style is on the **space** of the chart, beside it and not inside
+    // it.
+    let style = root.child_val("style").and_then(|style| style.trim().parse::<u32>().ok());
     // The **groups**: the kinds of drawing and their series. A chart
     // may hold more than one — a column chart and a line over it — and
     // that is a chart of two kinds.
@@ -1216,6 +1225,7 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
         cell: None,
         // A chart of the ordinary kind has no quartiles.
         quartiles: None,
+        style,
     })
 }
 
@@ -1387,6 +1397,8 @@ fn read_chartex(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         trendlines: Vec::new(),
         cell: None,
         quartiles,
+        // An extended chart says of no style of its own.
+        style: None,
     })
 }
 

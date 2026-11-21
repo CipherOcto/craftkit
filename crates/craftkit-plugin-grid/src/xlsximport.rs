@@ -309,6 +309,10 @@ commands! {
             let mut unread_line_formats = 0u64;
             let mut unread_collapsed_lines = 0u64;
             let mut unread_custom_sizes = 0u64;
+            // The **style** of a chart: the tree's charts have no place
+            // for the number the file gives them, so it is read, counted
+            // and reported.
+            let mut unread_chart_styles = 0u64;
             let mut taken: Vec<String> = Vec::new();
             // The **hidden sheets**: a file may hide a sheet, and the
             // tree hides it too. A workbook must keep **one visible
@@ -1187,6 +1191,9 @@ commands! {
                         }
                     });
                     let name = chart.title.clone().unwrap_or_else(|| "the chart".to_string());
+                    if chart.style.is_some() {
+                        unread_chart_styles += 1;
+                    }
                     let node = json!({
                         "range": area.to_text(),
                         "kind": kind,
@@ -1651,6 +1658,12 @@ commands! {
                      kept: the tree works its own collapsed mark out from the rows"
                 ));
             }
+            if unread_chart_styles > 0 {
+                summary.push_str(&format!(
+                    "; {unread_chart_styles} style(s) of a chart could not be kept: \
+                     the tree's charts have no place for them"
+                ));
+            }
             if unread_column_formulas > 0 {
                 summary.push_str(&format!(
                     "; {unread_column_formulas} calculated column formula(s) could not be kept: \
@@ -1706,6 +1719,7 @@ commands! {
                 "unread_line_formats": unread_line_formats,
                 "unread_collapsed_lines": unread_collapsed_lines,
                 "unread_custom_sizes": unread_custom_sizes,
+                "unread_chart_styles": unread_chart_styles,
                 "outlines": outlines,
                 "setups": setups,
                 "centred": centred,
