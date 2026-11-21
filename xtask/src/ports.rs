@@ -2140,6 +2140,15 @@ pub const PORTS: &[Port] = &[
         test: "xtask/src/ci.rs",
         section: "§1087",
     },
+    Port {
+        rule: "the tree has one worktree, and the gate says so",
+        from: "docs/survey-cost-and-meta-2.md",
+        to: "xtask",
+        module: "src/worktree.rs",
+        command: "xtask.worktree",
+        test: "xtask/src/worktree.rs",
+        section: "§1093",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

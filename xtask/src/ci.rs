@@ -38,7 +38,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::packages::{Package, workspace_packages};
-use crate::{assets, cargo, cleanroom, digest, doctor, layers, lists, step, wasm, web};
+use crate::{assets, cargo, cleanroom, digest, doctor, layers, lists, step, wasm, web, worktree};
 
 /// One step of the gate.
 pub struct Phase {
@@ -61,6 +61,7 @@ pub const PHASES: &[Phase] = &[
     Phase { name: "assets", run: assets::run },
     Phase { name: "cleanroom", run: cleanroom::run },
     Phase { name: "lists", run: lists::run },
+    Phase { name: "worktree", run: worktree::run },
     Phase { name: "digest", run: digest::run },
     Phase { name: "layers", run: layers::run },
     Phase { name: "web", run: web::run },
@@ -536,6 +537,7 @@ mod tests {
                 "assets",
                 "cleanroom",
                 "lists",
+                "worktree",
                 "digest",
                 "layers",
                 "web",

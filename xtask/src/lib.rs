@@ -73,6 +73,7 @@ pub mod tree;
 pub mod verify;
 pub mod wasm;
 pub mod web;
+pub mod worktree;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -193,6 +194,11 @@ pub const COMMANDS: &[Subcommand] = &[
         name: "fmt",
         what: "format the packages a change can break (--check to only look)",
         run: ci::fmt,
+    },
+    Subcommand {
+        name: "worktree",
+        what: "the tree has one worktree, and this says whether it does",
+        run: worktree::run,
     },
 ];
 
