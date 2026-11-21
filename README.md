@@ -4530,6 +4530,8 @@ so.
 | **the cost of an arc is measured again** | **measured.** The survey was repeated over nine days of work, and the tree's own half and the session's own half were measured against the baseline: one of the six wave exits was met, and it was met by stopping a run rather than by making one cheaper (§1083) | §1083 |
 | **the language server is measured** | **measured.** The language server was asked five questions in 1 067 arcs, and each call costs ten to thirty seconds against two hundredths of a second for a grep — so the house rule was narrowed from *ask it before you grep* to *ask it when the grep cannot tell you* (§1084) | §1084 |
 | **the language server is asked once, not once a question** | **built.** The tree is loaded once: a batch asks many questions in one load, and the server that stays holds the picture of the tree and answers the next question in 0.11 s — so a question costs a round trip and a hundredth of a second (§1085) | §1085 |
+| **the gate says where its time went** | **built.** `cargo xtask ci` prints the time each of its phases took, slowest first: the gate was 65 % of an arc's machine time, and now the tree says which part it was (§1086) | §1086 |
+| **the format check is scoped** | **built.** `cargo xtask fmt` formats the packages a change can break, and the whole-tree `cargo fmt --all` — twenty seconds a run, for a file or two — is not what an arc wants between two edits (§1087) | §1087 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69404,3 +69406,79 @@ named are the two doors of `cargo xtask lsp` now.
   socket is told so, and gets the batch only.
 - **The memory is the owner's**: 3.1 GB is a lot on a shared machine, and
   the bound is a flag rather than a promise.
+
+## 1086. The gate says where its time went
+
+The survey measured the gate: **sixteen hours in nine days**, 182 runs, a
+median of 289 seconds — and it could say *that* and not *which part*. A gate
+that reports its own phases is the difference between a number and a guess.
+
+### What was built
+
+- **The gate prints the time each phase took**, slowest first, and the time
+  the whole gate took. It is printed when the gate is green and when it
+  fails, because a slow failing gate is exactly the one a reader wants to
+  know about.
+- **The table is a function of its own**, so a test can pin the rule: the
+  slowest phase comes first, and a phase that did not run has no time.
+
+### What the port found
+
+- **The gate is 65 % of what an arc costs**: 16.1 h of the 39.8 h the nine
+  days took, 8.1 minutes of the 12.5 an arc. The survey could only say the
+  gate was expensive; the gate now says that its clippy is 120 seconds and
+  its tests are 90.
+- **The measurements the survey took by hand are now the gate's own
+  report**, so the next survey reads a table instead of measuring the same
+  thing twice.
+
+### What it cost
+
+- **One clock per phase**, and one function that prints them.
+- **One test**: the table names the slowest phase first, and an empty gate
+  has no phases in it.
+
+### What it does not settle
+
+- **The gate does not decide what to do with the time**: a phase that takes
+  120 seconds may be the price of a correct tree, and only the owner knows
+  which.
+- **The times are of this machine**: a build machine is a different machine,
+  and the table says what this one spent.
+
+## 1087. The format check is scoped
+
+`cargo fmt --all` hands rustfmt every file of the workspace: about twenty
+seconds, for a change of one file. The survey measured it: **715 runs, 4.3
+hours** in nine days — the second largest thing an arc spent.
+
+### What was built
+
+- **`cargo xtask fmt`** — the format of the packages a change can break, and
+  not of the whole tree. With `--check` it looks, and without it it fixes.
+  The gate's own `fmt` phase is the same walk, in its checking way.
+- The house's cheap checks now say `cargo xtask fmt` and not
+  `cargo fmt --all`.
+
+### What the port found
+
+- **The gate was already scoped** — it formats a package at a time, and
+  only the packages a change can break. The twenty seconds were the
+  *agents'* habit, not the gate's rule: the tree's own text said
+  `cargo fmt --all`, and the text is what was followed.
+- **The rule was in two places** — `AGENTS.md` and the two skills — and the
+  tree's rule is that a rule is written once. The command is now the one
+  place, and the text points at it.
+
+### What it cost
+
+- **One command**, and the gate's phase and the command are one function.
+- **No new test**: the phase's behaviour is the gate's, and the gate's
+  tests cover it.
+
+### What it does not settle
+
+- **A package with a hundred files still takes a second**, and the tree's
+  biggest batteries are that size.
+- **`cargo fmt --all` is still the right thing on a build machine**, where
+  the whole tree is checked anyway.

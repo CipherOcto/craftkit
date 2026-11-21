@@ -316,6 +316,7 @@ goes there — and only there. Before every commit:
 ```text
 cargo xtask ci          # fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm
                         # — over the packages the change can break; it says which it left out
+                        # — and it says where its time went: the table of the phases, slowest first
 cargo test -p craftkit-gates
 ```
 
@@ -331,10 +332,13 @@ machine, and the gate takes more of it than anything else in the tree.
   of them, and run the gate **once** for the batch. Do not run it after every
   small step, and do not run it several times a day to feel safer — the
   second run of the same tree says nothing the first did not.
-- **While you work, use the cheap checks.** `cargo fmt`, `cargo clippy -p
-  <crate>`, `cargo test -p <crate>` and `cargo test -p craftkit-gates` are
-  seconds. The whole-tree gate is what runs before a commit and before a
-  push, and it is run when there is a batch to put through it.
+- **While you work, use the cheap checks.** `cargo xtask fmt`, `cargo clippy
+  -p <crate>`, `cargo test -p <crate>` and `cargo test -p craftkit-gates`
+  are seconds. `cargo xtask fmt` formats **the packages a change can
+  break** — `cargo fmt --all` is twenty seconds for a file or two, and the
+  survey measured it at 715 runs and 4.3 hours in nine days. The whole-tree
+  gate is what runs before a commit and before a push, and it is run when
+  there is a batch to put through it.
 - **A green gate is a fact about a commit, not a running state.** It says
   *this* tree is green; it does not stay green while the tree keeps moving.
 
@@ -346,8 +350,7 @@ machine, and the gate takes more of it than anything else in the tree.
   did not ask for, sitting somewhere the owner is not looking.
 - **There is one worktree on disk, and it is `main`.** The tree is checked out
   once. A second checkout is a second place where the tree can be changed, and
-  the second place is where a change goes that nobody reviews.
-- **Every other branch is deleted**, local and remote, as soon as its work is
+  the second place is where a change goes that nobody reviews. - **Every other branch is deleted**, local and remote, as soon as its work is
   on `main`. A merged branch is a pointer into the history and nothing else,
   and an unmerged one is work that is not in the tree yet.
 

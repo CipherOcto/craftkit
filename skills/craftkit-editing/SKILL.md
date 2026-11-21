@@ -104,13 +104,16 @@ about a file without building the tree. **Do not** use it as the gate:
 
 ```bash
 cargo test -p <the crate you changed>
-cargo clippy --workspace -- -D warnings
-cargo fmt --check
+cargo clippy -p <the crate you changed> --all-targets -- -D warnings
+cargo xtask fmt            # the packages a change can break, not the whole tree
 cargo test -p craftkit-gates
-cargo xtask ci
+cargo xtask ci             # once, at the end of the batch
 ```
 
-`cargo xtask ci` is the whole outer gate and is the last thing you run.
+`cargo xtask ci` is the whole outer gate and is the last thing you run —
+**once for the batch**, not once an arc: the survey measured it at 182 runs
+and 16 hours in nine days, and it is the largest thing an arc costs. It
+prints where its time went, so a slow run says which phase was slow.
 `KNOWN-GAPS.md` §1 says what is true of it in this tree today.
 
 **The machine is shared.** Check the load before a big build
