@@ -553,6 +553,12 @@ pub struct Chart {
     /// cell it starts at. A chart that is drawn in no anchor has no
     /// cell.
     pub cell: Option<String>,
+    /// The **quartile method** of a box and a whisker: `inclusive` or
+    /// `exclusive`, in the file's own words.
+    ///
+    /// A box and a whisker says of what kind its quartiles are, and a
+    /// chart that is not a box and a whisker says nothing about them.
+    pub quartiles: Option<String>,
 }
 
 /// A **trendline** of a chart: a fit of the line of a series.
@@ -1208,6 +1214,8 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
         colours,
         trendlines,
         cell: None,
+        // A chart of the ordinary kind has no quartiles.
+        quartiles: None,
     })
 }
 
@@ -1303,6 +1311,9 @@ fn read_chartex(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
     let mut series: Vec<String> = Vec::new();
     let mut colours: Vec<String> = Vec::new();
     let mut data_labels = false;
+    // The **quartile method** of a box and a whisker: the file says of
+    // what kind its quartiles are.
+    let mut quartiles: Option<String> = None;
     for serie in region.kids("series") {
         let layout = serie.attr("layoutId").unwrap_or("");
         // The line of a Pareto chart belongs to its histogram.
@@ -1324,6 +1335,13 @@ fn read_chartex(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         }
         if serie.path(&["dataLabels", "visibility"]).is_some_and(|labels| labels.flag("val", false)) {
             data_labels = true;
+        }
+        if quartiles.is_none()
+            && let Some(method) = serie
+                .path(&["layoutPr", "statistics"])
+                .and_then(|statistics| statistics.attr("quartileMethod"))
+        {
+            quartiles = Some(method.to_string());
         }
     }
     let kind = kind?;
@@ -1368,6 +1386,7 @@ fn read_chartex(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         colours,
         trendlines: Vec::new(),
         cell: None,
+        quartiles,
     })
 }
 
