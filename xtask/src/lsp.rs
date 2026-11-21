@@ -1,10 +1,10 @@
 //! The **language server**: `rust-analyzer`, asked about the tree.
 //!
 //! The tree is a Rust tree, and a Rust tree has a language server: a
-//! program that knows what every name means, where every item was
-//! declared, and what the compiler thinks of every line. An agent that
-//! greps for a name is asking a question the server has already
-//! answered — and a grep cannot tell a *declaration* from a *use*.
+//! program that knows what every name means, where every item was declared,
+//! and what the compiler thinks of every line. An agent that greps for a
+//! name is asking a question the server has already answered — and a grep
+//! cannot tell a *declaration* from a *use*.
 //!
 //! This command is the door to that server. It speaks the **language
 //! server protocol** over the server's standard input and output, and
@@ -18,11 +18,22 @@
 //! and one about the tree as a whole (**what is called this**, in
 //! `symbols`).
 //!
+//! # The two doors
+//!
+//! The **survey** (`docs/survey-lsp.md`) measured what a question used to
+//! cost: the server was loaded **again for every question**, ten to thirty
+//! seconds and a whole round trip, against two hundredths of a second for
+//! a grep. Two doors close that gap, and they are the same idea twice:
+//!
+//! - **a batch**: many questions in **one** load of the tree. The questions
+//!   are written one after another, and the tree is read once.
+//! - **a server that stays**: the tree is loaded once, and the server keeps
+//!   the picture of it while it is being asked. The next question is
+//!   answered in **milliseconds**, and the server stops itself when it is
+//!   left alone.
+//!
 //! # The rules
 //!
-//! - The server is **not run twice**: one server answers every
-//!   question of one invocation, and it is shut down when the command
-//!   is done.
 //! - A question about a **place** takes a file, a line and a column,
 //!   counted from **one**, and the column is counted in
 //!   **characters** — not bytes, and not UTF-16 units: the file is
@@ -30,11 +41,13 @@
 //!   it.
 //! - A file is named by its path **in the tree**: `crates/craftkit-xlsx/src/lib.rs`.
 //! - The **first load is slow**: the server reads the whole tree and
-//!   builds its picture of it, and that is minutes the first time and
-//!   seconds after that. The command says so, so that a reader does
+//!   builds its picture of it. The command says so, so that a reader does
 //!   not think it has hung.
 //! - A server that is **not there** is an error with the command that
 //!   installs it, and not a crash: `rustup component add rust-analyzer`.
+//! - The server that **stays** is a **unix** thing: it listens on a socket,
+//!   and a machine without a unix socket is told so, and not given a
+//!   half-answer.
 //!
 //! # What this does not do
 //!
@@ -42,6 +55,8 @@
 //!   is `cargo xtask ci`.
 //! - It does not **edit** anything: the server is asked, and the answer
 //!   is printed.
+//! - It does not **keep** anything: the server that stays holds the tree
+//!   in memory, and it lets go of it when it is left alone.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -61,74 +76,37 @@ const TIMEOUT: u64 = 600;
 /// The **queries** this command answers.
 const QUERIES: [&str; 5] = ["definition", "references", "hover", "diagnostics", "symbols"];
 
+/// The queries that ask about a **place**: a file, a line and a column.
+const PLACE_QUERIES: [&str; 3] = ["definition", "references", "hover"];
+
+/// How long the server that **stays** waits before it stops itself, in
+/// seconds.
+const DEFAULT_IDLE: u64 = 600;
+
 /// Run the command.
 pub fn run(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
     let Some(query) = args.first().map(String::as_str) else {
         return Err(usage());
     };
+    match query {
+        "batch" => return the_batch(root, &args[1..]),
+        "serve" => return the_server(root, &args[1..]),
+        "stop" => return the_stop(root),
+        _ => {}
+    }
     if !QUERIES.contains(&query) {
         return Err(usage());
     }
-    let rest = &args[1..];
-    match query {
-        "symbols" => {
-            let Some(text) = rest.first() else { return Err(usage()) };
-            let query = text.trim();
-            if query.is_empty() {
-                return Err("a symbol search needs something to search for".to_string());
-            }
-            let mut session = Session::start(root)?;
-            let answer = session.request("workspace/symbol", json!({ "query": query }))?;
-            session.finish()?;
-            print_symbols(&answer);
-        }
-        "diagnostics" => {
-            let Some(file) = rest.first() else { return Err(usage()) };
-            let path = the_file(root, file)?;
-            let mut session = Session::start(root)?;
-            let answer = session
-                .request("textDocument/diagnostic", json!({ "textDocument": { "uri": uri_of(&path) } }))?;
-            session.finish()?;
-            print_diagnostics(&answer);
-        }
-        _ => {
-            let (Some(file), Some(line), Some(column)) = (rest.first(), rest.get(1), rest.get(2)) else {
-                return Err(usage());
-            };
-            let path = the_file(root, file)?;
-            let line = number_of(line, "a line")?;
-            let column = number_of(column, "a column")?;
-            let (line, column) = position_of(&path, line, column)?;
-            let mut session = Session::start(root)?;
-            let answer = match query {
-                "definition" => session.request(
-                    "textDocument/definition",
-                    json!({ "textDocument": { "uri": uri_of(&path) }, "position": { "line": line, "character": column } }),
-                )?,
-                "references" => session.request(
-                    "textDocument/references",
-                    json!({
-                        "textDocument": { "uri": uri_of(&path) },
-                        "position": { "line": line, "character": column },
-                        "context": { "includeDeclaration": true },
-                    }),
-                )?,
-                _ => session.request(
-                    "textDocument/hover",
-                    json!({ "textDocument": { "uri": uri_of(&path) }, "position": { "line": line, "character": column } }),
-                )?,
-            };
-            session.finish()?;
-            match query {
-                "hover" => print_hover(&answer),
-                _ => print_places(&answer),
-            }
-        }
-    }
+    let request = the_request(root, query, &args[1..])?;
+    let answers = ask_many(root, std::slice::from_ref(&request))?;
+    let Some(answer) = answers.into_iter().next() else {
+        return Err("the server gave no answer".to_string());
+    };
+    print_answer(query, &answer);
     Ok(crate::Outcome::Ran)
 }
 
-/// The usage of this command.
+/// The **usage** of this command.
 fn usage() -> String {
     format!(
         "usage: cargo xtask lsp <query>\n\n\
@@ -139,12 +117,142 @@ fn usage() -> String {
          hover       <file> <line> <column>   what it is\n  \
          diagnostics <file>                    what the compiler says about the file\n  \
          symbols     <text>                    what is called that\n\n\
+         The batch, and the server that stays:\n  \
+         batch <question>...                  many questions in one load of the tree\n  \
+         serve [--idle-seconds <n>]           the server that stays; it stops itself when alone\n  \
+         stop                                  stop the server that stays\n\n\
          A file is a path in the tree; a line and a column are counted from one.\n\
          The server is `{SERVER}`; it is installed with `rustup component add {SERVER}`."
     )
 }
 
-/// The file a name says, and the path it is at.
+/// The **questions** of a batch, written one after another.
+///
+/// A question is named by its first word, and it takes as many arguments as
+/// it needs: three for a place, one for a file or a text. The words are
+/// read off the list, so a path with a colon in it is still a path.
+fn the_questions(args: &[String]) -> Result<Vec<(String, Vec<String>)>, String> {
+    let mut questions = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        let query = args[index].clone();
+        if !QUERIES.contains(&query.as_str()) {
+            return Err(format!("`{query}` is not a question the server answers"));
+        }
+        let arity = if PLACE_QUERIES.contains(&query.as_str()) { 3 } else { 1 };
+        let end = index + 1 + arity;
+        if end > args.len() {
+            return Err(format!("the question `{query}` needs {arity} argument(s)"));
+        }
+        questions.push((query, args[index + 1..end].to_vec()));
+        index = end;
+    }
+    Ok(questions)
+}
+
+/// The **request** a question is: the method of the protocol, and its
+/// parameters.
+///
+/// Every question is turned into a request **here**, so that the batch, the
+/// one-shot answer and the server that stays all ask the server the same
+/// question, and a bad place is refused before anything is loaded.
+fn the_request(root: &Path, query: &str, args: &[String]) -> Result<(String, Value), String> {
+    match query {
+        "symbols" => {
+            let Some(text) = args.first() else { return Err(usage()) };
+            let text = text.trim();
+            if text.is_empty() {
+                return Err("a symbol search needs something to search for".to_string());
+            }
+            Ok(("workspace/symbol".to_string(), json!({ "query": text })))
+        }
+        "diagnostics" => {
+            let Some(file) = args.first() else { return Err(usage()) };
+            let path = the_file(root, file)?;
+            Ok(("textDocument/diagnostic".to_string(), json!({ "textDocument": { "uri": uri_of(&path) } })))
+        }
+        "definition" | "references" | "hover" => {
+            let (Some(file), Some(line), Some(column)) = (args.first(), args.get(1), args.get(2)) else {
+                return Err(usage());
+            };
+            let path = the_file(root, file)?;
+            let line = number_of(line, "a line")?;
+            let column = number_of(column, "a column")?;
+            let (line, column) = position_of(&path, line, column)?;
+            let method = match query {
+                "definition" => "textDocument/definition",
+                "references" => "textDocument/references",
+                _ => "textDocument/hover",
+            };
+            let mut params = json!({ "textDocument": { "uri": uri_of(&path) }, "position": { "line": line, "character": column } });
+            if query == "references" {
+                params["context"] = json!({ "includeDeclaration": true });
+            }
+            Ok((method.to_string(), params))
+        }
+        _ => Err(usage()),
+    }
+}
+
+/// The **batch**: many questions, one load of the tree.
+fn the_batch(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
+    let questions = the_questions(args)?;
+    if questions.is_empty() {
+        return Err("a batch needs at least one question".to_string());
+    }
+    let mut requests = Vec::new();
+    let mut labels = Vec::new();
+    for (query, question_args) in &questions {
+        requests.push(the_request(root, query, question_args)?);
+        labels.push((query.clone(), the_label(query, question_args)));
+    }
+    let answers = ask_many(root, &requests)?;
+    for ((query, label), answer) in labels.iter().zip(answers.iter()) {
+        println!("=== {label}");
+        print_answer(query, answer);
+    }
+    Ok(crate::Outcome::Ran)
+}
+
+/// The **label** of a question: what it says, so that the answers of a
+/// batch can be read one under another.
+fn the_label(query: &str, args: &[String]) -> String {
+    match query {
+        "symbols" => format!("symbols {}", args.first().map(String::as_str).unwrap_or_default()),
+        "diagnostics" => format!("diagnostics {}", args.first().map(String::as_str).unwrap_or_default()),
+        _ => format!(
+            "{query} {} {} {}",
+            args.first().map(String::as_str).unwrap_or_default(),
+            args.get(1).map(String::as_str).unwrap_or_default(),
+            args.get(2).map(String::as_str).unwrap_or_default()
+        ),
+    }
+}
+
+/// Ask the questions, and get the answers.
+///
+/// The server that **stays** is asked first, if there is one: it holds the
+/// picture of the tree already, and the answer comes in milliseconds. If
+/// there is none, one is started, and if that does not work the questions
+/// are asked of a server of this command's own — which is the old way, and
+/// the slow one, and the answer is the same.
+fn ask_many(root: &Path, requests: &[(String, Value)]) -> Result<Vec<Value>, String> {
+    #[cfg(unix)]
+    {
+        if let Some(answers) = daemon::ask(root, requests)? {
+            return Ok(answers);
+        }
+    }
+    let mut session = Session::start(root)?;
+    let mut answers = Vec::new();
+    for (method, params) in requests {
+        answers.push(session.ask(method, params.clone())?);
+    }
+    session.finish()?;
+    Ok(answers)
+}
+
+/// The **file** a name says, and the path it is at.
 ///
 /// The path is inside the tree: a name that is not a path in the tree
 /// is refused, so that a typo is an error and not a file somewhere
@@ -199,6 +307,15 @@ fn uri_of(path: &Path) -> String {
     format!("file://{text}")
 }
 
+/// Something that can **answer** a question of the server.
+///
+/// The server of the tree answers for real; the tests answer with a
+/// table, so that the shape of the door can be tested without a server.
+trait Asker {
+    /// Ask the server something, and wait for the answer.
+    fn ask(&mut self, method: &str, params: Value) -> Result<Value, String>;
+}
+
 /// The **server**: the process that answers.
 struct Session {
     child: Child,
@@ -207,6 +324,12 @@ struct Session {
     /// The **watchdog**: the thread that stops a server that does not
     /// answer. It is told when the answer has come.
     watchdog: Option<(std::sync::mpsc::Sender<()>, std::thread::JoinHandle<()>)>,
+}
+
+impl Asker for Session {
+    fn ask(&mut self, method: &str, params: Value) -> Result<Value, String> {
+        self.request(method, params)
+    }
 }
 
 impl Session {
@@ -451,6 +574,16 @@ fn answer_to(method: &str, message: &Value) -> Value {
     }
 }
 
+/// Print the **answer** of a question.
+fn print_answer(query: &str, answer: &Value) {
+    match query {
+        "hover" => print_hover(answer),
+        "diagnostics" => print_diagnostics(answer),
+        "symbols" => print_symbols(answer),
+        _ => print_places(answer),
+    }
+}
+
 /// The **places** of an answer: where the thing is, or where it is
 /// mentioned.
 fn print_places(answer: &Value) {
@@ -478,7 +611,7 @@ fn print_places(answer: &Value) {
     }
 }
 
-/// The **text** of an answer about a thing.
+/// The **hover** of an answer: what the thing is.
 fn print_hover(answer: &Value) {
     let text = answer
         .pointer("/contents/value")
@@ -511,7 +644,7 @@ fn print_symbols(answer: &Value) {
     }
 }
 
-/// The **diagnostics** of an answer: what the compiler says.
+/// The **complaints** of an answer: what the compiler says about a file.
 fn print_diagnostics(answer: &Value) {
     let items = answer.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
     if items.is_empty() {
@@ -534,56 +667,451 @@ fn print_diagnostics(answer: &Value) {
     }
 }
 
+/// The **server that stays**: the tree is loaded once, and the picture of
+/// it is kept while the server is asked.
+///
+/// It is a unix thing: the server listens on a socket in the tree's own
+/// build directory, and a machine without a unix socket is told so.
+#[cfg(unix)]
+mod daemon {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
+    use std::path::{Path, PathBuf};
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    use serde_json::{Value, json};
+
+    use super::{Asker, DEFAULT_IDLE, TIMEOUT};
+
+    /// The **socket** the server listens on: in the tree's own build
+    /// directory, which nobody commits and everybody cleans.
+    pub fn socket_path(root: &Path) -> PathBuf {
+        root.join("target").join("xtask-lsp.sock")
+    }
+
+    /// The **log** of the server: what it did, and what it said.
+    fn log_path(root: &Path) -> PathBuf {
+        root.join("target").join("xtask-lsp.log")
+    }
+
+    /// Ask the questions **through the server that stays**.
+    ///
+    /// `None` when there is no server and none could be started: the
+    /// caller answers the questions itself, the old way, and the answer
+    /// is the same.
+    pub fn ask(root: &Path, requests: &[(String, Value)]) -> Result<Option<Vec<Value>>, String> {
+        let path = socket_path(root);
+        if let Some(answers) = ask_the_one_there(&path, requests)? {
+            return Ok(Some(answers));
+        }
+        let mut server = start(root)?;
+        let deadline = Instant::now() + Duration::from_secs(TIMEOUT);
+        while Instant::now() < deadline {
+            // The server that was started has died: the questions are
+            // answered here, the old way, and the answer is the same.
+            if server
+                .try_wait()
+                .map_err(|error| format!("the server could not be watched: {error}"))?
+                .is_some()
+            {
+                return Ok(None);
+            }
+            if let Some(answers) = ask_the_one_there(&path, requests)? {
+                return Ok(Some(answers));
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        Ok(None)
+    }
+
+    /// Ask the server that is **already there**, if there is one.
+    fn ask_the_one_there(path: &Path, requests: &[(String, Value)]) -> Result<Option<Vec<Value>>, String> {
+        let Ok(mut stream) = UnixStream::connect(path) else { return Ok(None) };
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(TIMEOUT)));
+        match exchange(&mut stream, requests) {
+            Ok(answers) => Ok(Some(answers)),
+            // The server went away between the connection and the answer:
+            // the caller answers the questions itself.
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// Send the questions, and read the answers: one **line** each.
+    pub(super) fn exchange(
+        stream: &mut UnixStream,
+        requests: &[(String, Value)],
+    ) -> Result<Vec<Value>, String> {
+        let mut writer = stream.try_clone().map_err(|error| format!("the connection was lost: {error}"))?;
+        let mut reader = BufReader::new(stream);
+        let mut answers = Vec::new();
+        for (method, params) in requests {
+            let line = serde_json::to_string(&json!({ "method": method, "params": params }))
+                .map_err(|error| format!("the question is not JSON: {error}"))?;
+            writer
+                .write_all(line.as_bytes())
+                .map_err(|error| format!("the question could not be sent: {error}"))?;
+            writer.write_all(b"\n").map_err(|error| format!("the question could not be sent: {error}"))?;
+            writer.flush().map_err(|error| format!("the question could not be sent: {error}"))?;
+            let mut response = String::new();
+            let read = reader
+                .read_line(&mut response)
+                .map_err(|error| format!("the answer could not be read: {error}"))?;
+            if read == 0 {
+                return Err("the server closed before answering".to_string());
+            }
+            let answer: Value = serde_json::from_str(response.trim())
+                .map_err(|error| format!("the answer is not JSON: {error}"))?;
+            if let Some(error) = answer.get("error").and_then(Value::as_str) {
+                return Err(error.to_string());
+            }
+            answers.push(answer.get("answer").cloned().unwrap_or(Value::Null));
+        }
+        Ok(answers)
+    }
+
+    /// Start the server that stays, **detached**: it must outlive the
+    /// command that started it.
+    fn start(root: &Path) -> Result<std::process::Child, String> {
+        let program =
+            std::env::current_exe().map_err(|error| format!("the xtask could not be found: {error}"))?;
+        if let Some(parent) = log_path(root).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_path(root))
+            .map_err(|error| format!("the log of the server could not be opened: {error}"))?;
+        let errors =
+            log.try_clone().map_err(|error| format!("the log of the server could not be copied: {error}"))?;
+        // A session of its own, where there is one: the server must not
+        // die with the shell that started it.
+        let mut command = if setsid_is_there() {
+            let mut command = Command::new("setsid");
+            command.arg(&program);
+            command
+        } else {
+            Command::new(&program)
+        };
+        command
+            .args(["lsp", "serve", "--idle-seconds", &DEFAULT_IDLE.to_string()])
+            .current_dir(root)
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(log))
+            .stderr(Stdio::from(errors))
+            .spawn()
+            .map_err(|error| format!("the server could not be started: {error}"))
+    }
+
+    /// Whether this machine has the command that gives a process a
+    /// session of its own.
+    fn setsid_is_there() -> bool {
+        let Some(path) = std::env::var_os("PATH") else { return false };
+        std::env::split_paths(&path).any(|directory| directory.join("setsid").is_file())
+    }
+
+    /// **Run** the server that stays: it loads the tree once, and it is
+    /// asked until it is left alone.
+    pub fn serve(root: &Path, idle_seconds: u64) -> Result<(), String> {
+        let path = socket_path(root);
+        // Another server may already be serving: then this one has
+        // nothing to do.
+        if path.exists() {
+            if UnixStream::connect(&path).is_ok() {
+                return Ok(());
+            }
+            // A socket with nobody behind it: the server that died left
+            // it behind.
+            let _ = std::fs::remove_file(&path);
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("the build directory could not be made: {error}"))?;
+        }
+        let listener = UnixListener::bind(&path)
+            .map_err(|error| format!("the server could not listen on {}: {error}", path.display()))?;
+        println!("the server is listening on {}", path.display());
+        let outcome = serve_with(root, &listener, idle_seconds);
+        let _ = std::fs::remove_file(&path);
+        outcome
+    }
+
+    /// The **loop** of the server that stays.
+    fn serve_with(root: &Path, listener: &UnixListener, idle_seconds: u64) -> Result<(), String> {
+        let mut session = super::Session::start(root)?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|error| format!("the server could not wait for a question: {error}"))?;
+        let mut last = Instant::now();
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    last = Instant::now();
+                    if serve_one(&mut session, stream)? {
+                        return Ok(());
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(100));
+                    if last.elapsed() > Duration::from_secs(idle_seconds) {
+                        return Ok(());
+                    }
+                }
+                Err(error) => return Err(format!("the server could not accept a question: {error}")),
+            }
+        }
+    }
+
+    /// Answer the questions of **one** connection.
+    ///
+    /// `true` when the connection asked the server to stop.
+    pub(super) fn serve_one(session: &mut dyn Asker, stream: UnixStream) -> Result<bool, String> {
+        let mut writer = stream.try_clone().map_err(|error| format!("the connection was lost: {error}"))?;
+        let reader = BufReader::new(stream);
+        for line in reader.lines() {
+            let line = line.map_err(|error| format!("the question could not be read: {error}"))?;
+            if line.trim().is_empty() {
+                continue;
+            }
+            let request: Value = serde_json::from_str(line.trim())
+                .map_err(|error| format!("the question is not JSON: {error}"))?;
+            if request.get("stop").is_some() {
+                let _ = writeln!(writer, "{}", json!({ "answer": "stopped" }));
+                let _ = writer.flush();
+                return Ok(true);
+            }
+            let method = request.get("method").and_then(Value::as_str).unwrap_or_default();
+            let params = request.get("params").cloned().unwrap_or(Value::Null);
+            let response = match session.ask(method, params) {
+                Ok(answer) => json!({ "answer": answer }),
+                Err(error) => json!({ "error": error }),
+            };
+            writeln!(writer, "{response}")
+                .map_err(|error| format!("the answer could not be sent: {error}"))?;
+            writer.flush().map_err(|error| format!("the answer could not be sent: {error}"))?;
+        }
+        Ok(false)
+    }
+
+    /// **Stop** the server that stays.
+    pub fn stop(root: &Path) -> Result<bool, String> {
+        let path = socket_path(root);
+        let Ok(mut stream) = UnixStream::connect(&path) else { return Ok(false) };
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
+        writeln!(stream, "{}", json!({ "stop": true }))
+            .map_err(|error| format!("the server could not be stopped: {error}"))?;
+        stream.flush().map_err(|error| format!("the server could not be stopped: {error}"))?;
+        let mut answer = String::new();
+        let _ = BufReader::new(stream).read_line(&mut answer);
+        Ok(true)
+    }
+}
+
+/// The **server that stays**, on a machine without a unix socket.
+///
+/// The tree is read once per batch there, which is the old way, and the
+/// answer is the same.
+#[cfg(not(unix))]
+fn the_server(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
+    Err("not supported yet: the server that stays needs a unix socket, and this machine has none".to_string())
+}
+
+/// The **server that stays**, on a machine with a unix socket.
+#[cfg(unix)]
+fn the_server(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
+    let idle = the_idle(args)?;
+    daemon::serve(root, idle)?;
+    Ok(crate::Outcome::Ran)
+}
+
+/// How long the server waits before it stops itself.
+#[cfg(unix)]
+fn the_idle(args: &[String]) -> Result<u64, String> {
+    let mut idle = DEFAULT_IDLE;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--idle-seconds" => {
+                let Some(value) = args.get(index + 1) else {
+                    return Err("--idle-seconds needs a number".to_string());
+                };
+                idle = number_of(value, "the idle time")?;
+                index += 2;
+            }
+            other => return Err(format!("`{other}` is not a flag of the server")),
+        }
+    }
+    Ok(idle)
+}
+
+/// **Stop** the server that stays.
+#[cfg(unix)]
+fn the_stop(root: &Path) -> Result<crate::Outcome, String> {
+    if daemon::stop(root)? {
+        println!("the server is stopping");
+    } else {
+        println!("there was no server");
+    }
+    Ok(crate::Outcome::Ran)
+}
+
+/// **Stop** the server that stays, on a machine without a unix socket.
+#[cfg(not(unix))]
+fn the_stop(_root: &Path) -> Result<crate::Outcome, String> {
+    Err("not supported yet: the server that stays needs a unix socket, and this machine has none".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_message_is_framed() {
-        let framed = frame("{\"a\":1}");
-        let text = String::from_utf8_lossy(&framed).to_string();
-        assert!(text.starts_with("Content-Length: 7\r\n\r\n"), "{text}");
-        assert!(text.ends_with("{\"a\":1}"), "{text}");
+    /// A tree of its own, with a file in it.
+    fn a_tree() -> PathBuf {
+        let directory = crate::temp::dir("lsp").expect("the folder is there");
+        std::fs::create_dir_all(directory.join("src")).expect("the folder is there");
+        std::fs::write(directory.join("src/lib.rs"), "fn one() {}\nfn two() {}\n")
+            .expect("the file is written");
+        directory
+    }
+
+    /// The arguments of a question.
+    fn args_of(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|part| part.to_string()).collect()
     }
 
     #[test]
-    fn a_framed_message_is_read() {
-        let framed = frame("{\"a\":1}");
-        let mut bytes = framed.as_slice();
-        let read = read_frame(&mut bytes).expect("the message is read");
-        assert_eq!(read.as_deref(), Some("{\"a\":1}"));
+    fn a_place_becomes_a_request() {
+        let root = a_tree();
+        let (method, params) =
+            the_request(&root, "hover", &args_of(&["src/lib.rs", "1", "3"])).expect("the request");
+        assert_eq!(method, "textDocument/hover");
+        assert_eq!(params.pointer("/position/line").and_then(Value::as_u64), Some(0));
+        assert_eq!(params.pointer("/position/character").and_then(Value::as_u64), Some(2));
     }
 
     #[test]
-    fn the_end_of_the_output_is_nothing() {
-        let mut bytes: &[u8] = b"";
-        assert!(read_frame(&mut bytes).expect("the end is read").is_none());
-    }
-
-    #[test]
-    fn a_place_is_counted_in_characters() {
-        // A line with a character outside the basic plane: the protocol
-        // counts it as two units, and the command counts it as one
-        // character.
-        let folder = crate::temp::dir("lsp").expect("the folder is made");
-        let file = folder.join("place.rs");
-        std::fs::write(&file, "let a = \"\u{1F600}\";\nlet b = 1;\n").expect("the file is written");
-        let (line, column) = position_of(&file, 1, 10).expect("the place is found");
-        assert_eq!(line, 0, "the line is counted from zero");
-        assert_eq!(column, 9, "and the column is in UTF-16 units");
-        // After the character outside the basic plane: it is one
-        // character and two units.
-        let (line, column) = position_of(&file, 1, 11).expect("the place is found");
-        assert_eq!(line, 0, "the line is counted from zero");
-        assert_eq!(column, 11, "and the character is two units");
+    fn a_reference_asks_for_the_declaration_too() {
+        let root = a_tree();
+        let (_, params) =
+            the_request(&root, "references", &args_of(&["src/lib.rs", "1", "3"])).expect("the request");
+        assert_eq!(params.pointer("/context/includeDeclaration").and_then(Value::as_bool), Some(true));
     }
 
     #[test]
     fn a_place_outside_the_file_is_refused() {
-        let folder = crate::temp::dir("lsp").expect("the folder is made");
-        let file = folder.join("small.rs");
-        std::fs::write(&file, "let a = 1;\n").expect("the file is written");
-        assert!(position_of(&file, 9, 1).is_err(), "a line that is not there is refused");
-        assert!(position_of(&file, 1, 99).is_err(), "a column that is not there is refused");
+        let root = a_tree();
+        let error =
+            the_request(&root, "hover", &args_of(&["src/lib.rs", "1", "99"])).expect_err("it is refused");
+        assert!(error.contains("not in the line"), "{error}");
+    }
+
+    #[test]
+    fn a_file_outside_the_tree_is_refused() {
+        let root = a_tree();
+        let error = the_request(&root, "diagnostics", &args_of(&["Cargo.toml"])).expect_err("it is refused");
+        assert!(error.contains("not a file of the tree"), "{error}");
+    }
+
+    #[test]
+    fn a_batch_is_read_by_the_arity_of_its_questions() {
+        let questions = the_questions(&args_of(&[
+            "hover",
+            "src/lib.rs",
+            "1",
+            "3",
+            "diagnostics",
+            "src/lib.rs",
+            "symbols",
+            "two",
+        ]))
+        .expect("the questions");
+        assert_eq!(questions.len(), 3);
+        assert_eq!(questions[0].0, "hover");
+        assert_eq!(questions[0].1.len(), 3);
+        assert_eq!(questions[1].0, "diagnostics");
+        assert_eq!(questions[1].1.len(), 1);
+        assert_eq!(questions[2].0, "symbols");
+        assert_eq!(questions[2].1, vec!["two".to_string()]);
+    }
+
+    #[test]
+    fn a_question_that_is_not_a_question_is_refused() {
+        let error = the_questions(&args_of(&["nonsense", "x"])).expect_err("it is refused");
+        assert!(error.contains("not a question"), "{error}");
+    }
+
+    #[test]
+    fn a_question_without_its_arguments_is_refused() {
+        let error = the_questions(&args_of(&["hover", "src/lib.rs"])).expect_err("it is refused");
+        assert!(error.contains("needs 3 argument"), "{error}");
+    }
+
+    #[cfg(unix)]
+    mod unix {
+        use super::*;
+        use serde_json::{Value, json};
+        use std::os::unix::net::UnixStream;
+
+        /// An asker that answers from a **table**, so that the door can
+        /// be tested without a language server.
+        struct Table {
+            answers: Vec<(String, Value)>,
+        }
+
+        impl Asker for Table {
+            fn ask(&mut self, method: &str, _params: Value) -> Result<Value, String> {
+                for (name, answer) in &self.answers {
+                    if name == method {
+                        return Ok(answer.clone());
+                    }
+                }
+                Err(format!("the table has no answer for `{method}`"))
+            }
+        }
+
+        #[test]
+        fn the_socket_is_in_the_build_directory_of_the_tree() {
+            let root = a_tree();
+            let path = daemon::socket_path(&root);
+            assert_eq!(path, root.join("target/xtask-lsp.sock"));
+        }
+
+        #[test]
+        fn a_whole_exchange_answers_every_question() {
+            let (mut mine, theirs) = UnixStream::pair().expect("the pair is there");
+            let table =
+                Table { answers: vec![("textDocument/hover".to_string(), json!({ "contents": "a type" }))] };
+            let handle = std::thread::spawn(move || {
+                let mut server = table;
+                daemon::serve_one(&mut server, theirs).expect("the connection is answered")
+            });
+            let requests = vec![
+                ("textDocument/hover".to_string(), json!({ "position": { "line": 1, "character": 2 } })),
+                ("textDocument/hover".to_string(), json!({ "position": { "line": 3, "character": 4 } })),
+            ];
+            let answers = daemon::exchange(&mut mine, &requests).expect("the answers");
+            assert_eq!(answers.len(), 2);
+            assert_eq!(answers[0].pointer("/contents").and_then(Value::as_str), Some("a type"));
+            // The connection is closed before the thread is joined: the
+            // server reads until the other end is gone.
+            drop(mine);
+            assert!(!handle.join().expect("the thread"));
+        }
+
+        #[test]
+        fn a_question_the_server_refuses_is_an_error() {
+            let (mut mine, theirs) = UnixStream::pair().expect("the pair is there");
+            let table = Table { answers: Vec::new() };
+            let handle = std::thread::spawn(move || {
+                let mut server = table;
+                daemon::serve_one(&mut server, theirs).expect("the connection is answered")
+            });
+            let requests = vec![("textDocument/hover".to_string(), json!({}))];
+            let error = daemon::exchange(&mut mine, &requests).expect_err("it is refused");
+            assert!(error.contains("no answer for"), "{error}");
+            drop(mine);
+            let _ = handle.join();
+        }
     }
 }
