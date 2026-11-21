@@ -4360,7 +4360,7 @@ so.
 | the **styles** of a cell: the font, the fill, the alignment and the borders | **built.** The styles a cell carries are read and imported — the font, the colour behind the text, how the text lies and the lines on the edges (§912) | §912 |
 | the **protection** of a sheet, and the **lock** of a cell | **built.** The protection of a sheet is read and imported — what may still be done to it — and a cell says of itself whether it is locked (§913) | §913 |
 | the **rows** and the **columns** of a sheet | **built.** The heights, the widths and the hiding of the rows and the columns of a sheet are read and imported (§914) | §914 |
-| the **language server** of the tree | **built.** `rust-analyzer` is part of the pinned toolchain, `cargo xtask lsp` asks it where a thing is declared and what uses it, and the agents are told to ask before they grep (§915) | §915 |
+| the **language server** of the tree | **built.** `rust-analyzer` is part of the pinned toolchain, `cargo xtask lsp` asks it where a thing is declared and what uses it. The agents are told to ask it **when the grep cannot tell them** — the survey narrowed the rule (§1084) — and the tree is loaded once, so a question is cheap (§1085) | §915, §1084, §1085 |
 | the **merges** of a sheet | **built.** The ranges that are one cell are read and imported, and a merge with a value under it is left out rather than losing the value (§916) | §916 |
 | the **view** of a sheet | **built.** The gridlines, the headings, the zeros, the right-to-left, the formulas shown, the zoom and the frozen panes of a sheet are read and imported (§917) | §917 |
 | the **conditional formats** of a sheet | **built.** The rules that are about a range of cells are read and imported — the comparison, the look and the priority — and a rule this tree does not have is left out (§918) | §918 |
@@ -4529,6 +4529,7 @@ so.
 | **a chart may name its range by a name of the workbook** | **built.** The name says what the range of a chart is, and the tree reads the chart with it (§1082) | §1082 |
 | **the cost of an arc is measured again** | **measured.** The survey was repeated over nine days of work, and the tree's own half and the session's own half were measured against the baseline: one of the six wave exits was met, and it was met by stopping a run rather than by making one cheaper (§1083) | §1083 |
 | **the language server is measured** | **measured.** The language server was asked five questions in 1 067 arcs, and each call costs ten to thirty seconds against two hundredths of a second for a grep — so the house rule was narrowed from *ask it before you grep* to *ask it when the grep cannot tell you* (§1084) | §1084 |
+| **the language server is asked once, not once a question** | **built.** The tree is loaded once: a batch asks many questions in one load, and the server that stays holds the picture of the tree and answers the next question in 0.11 s — so a question costs a round trip and a hundredth of a second (§1085) | §1085 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -60506,7 +60507,9 @@ the compiler thinks of every line.
   - **diagnostics**: what the compiler says about a file,
   - **symbols**: what is called that, in the tree as a whole.
 - **The agents are told to use it**: `AGENTS.md`, the two skills and the
-  agent playbook all say to ask the server before they grep.
+  agent playbook say to ask the server when the grep cannot tell them —
+  the rule as it was first written was narrowed by the measurement
+  (§1084), and the tree is loaded once now (§1085).
 
 ### What the port found
 
@@ -69348,3 +69351,56 @@ was never asked: **did anybody ask it?**
 - **Whether the tool would be used if it were free is untested** — and the
   two ways to make it cheap (a batch mode, a persistent server) are **not
   built**: they are the next arc, if the owner wants one.
+
+## 1085. The language server is asked once, not once a question
+
+The survey of the language server (§1084) found that a question cost ten to
+thirty seconds — the tree was loaded **again for every question** — and
+that the tool was used five times in 1 067 arcs. The two ways the survey
+named are the two doors of `cargo xtask lsp` now.
+
+### What was built
+
+- **The batch**: `cargo xtask lsp batch <question>...` — the questions are
+  written one after another, the tree is read **once**, and each answer
+  comes out under a heading of its own.
+- **The server that stays**: `cargo xtask lsp serve` — the tree is loaded
+  once and the picture of it is kept, so the next question is answered in
+  **0.11 s**. It listens on a socket in the tree's own build directory, it
+  stops itself when it is left alone, and `cargo xtask lsp stop` stops it
+  now. A question that finds no server starts one; if that fails, the
+  question is answered the old way, and the answer is the same.
+- **Two rows in the port manifest**, because the survey is where both
+  rules come from.
+
+### What the port found
+
+- **The price of a question fell by a hundred**: 10.9 s → **0.11 s** for
+  the second question of a session, and a batch of three questions costs
+  **13.1 s** against **40.9 s** for three separate calls.
+- **The load is paid once**, by the first question of a session — the same
+  ten to thirty seconds, and then it is paid for.
+- **The server that stays holds 3.1 GB** of memory for this tree, which is
+  why the idle time is bounded and the stop is a command. On a shared
+  machine that is the owner's decision, and `--idle-seconds` is how it is
+  made.
+
+### What it cost
+
+- **Two doors in one command**: the batch and the server, and the questions
+  of both are turned into a request in the same place, so a bad place is
+  refused before anything is loaded.
+- **Ten tests**: the questions of a batch, the request a question is, the
+  refusals, and the exchange over the socket, with an asker that answers
+  from a table — so the shape of the door is tested without a server.
+- **No new command**: the door is the door that was there.
+
+### What it does not settle
+
+- **Whether the tree's greps fall**: the survey found that they rose after
+  the server arrived, and a cheaper door does not make a door used. Only the
+  next survey of the calls will say.
+- **The server that stays is a unix thing**: a machine without a unix
+  socket is told so, and gets the batch only.
+- **The memory is the owner's**: 3.1 GB is a lot on a shared machine, and
+  the bound is a flag rather than a promise.

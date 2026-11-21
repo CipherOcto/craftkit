@@ -71,11 +71,10 @@ asks for it.
 
 **Ask it when the grep cannot tell you.** A grep cannot tell a *declaration*
 from a *use*, and it cannot tell you what a name *is*. The server can, and it
-has already read the whole tree — **and it is expensive**: the measurement
-(`docs/survey-lsp.md`) is **five calls in 1 067 arcs**, and ten to thirty
-seconds of machine time for each one, against two hundredths of a second for
-a grep. So the server is the tool for a *declaration from a use*, a *type*,
-and the *whole list of references* — and it is **not** the way to look for a
+has already read the whole tree. The measurement (`docs/survey-lsp.md`) says
+the server was asked **five times in 1 067 arcs**, so the rule is the narrow
+one: the server is the tool for a *declaration from a use*, a *type*, and the
+*whole list of references* — and it is **not** the way to look for a
 convention. The door is `cargo xtask lsp`:
 
 ```text
@@ -89,11 +88,20 @@ cargo xtask lsp symbols     <text>                    what is called that
 A file is a path in the tree (`crates/craftkit-xlsx/src/lib.rs`), and a line
 and a column are counted **from one**, the column in **characters**.
 
-**Every call loads the tree** — the server reads the whole tree before it can
-answer, and the command starts a **new** server every time, so every call
-pays for the load: ten to thirty seconds here, a minute or two on a cold
-cache. The command says so while it waits, and a slow answer is not a hung
-one.
+**The tree is loaded once, not once a question.** Two doors make that so:
+
+```text
+cargo xtask lsp batch <question>...    many questions in one load of the tree
+cargo xtask lsp serve                  the server that stays; it stops itself when alone
+cargo xtask lsp stop                   stop the server that stays
+```
+
+The **first** question of a session pays for the load: ten to thirty seconds
+here, a minute or two on a cold cache. The questions after it are answered in
+**0.11 s** — the server keeps the picture of the tree. The command says so
+while it waits, and a slow answer is not a hung one. The server that stays
+holds about **3.1 GB** of memory, so it is stopped by itself when it is left
+alone, and `cargo xtask lsp stop` stops it now.
 
 **What the server is for:** finding where something is declared, finding
 every use of it, reading a type or a signature, and asking the compiler

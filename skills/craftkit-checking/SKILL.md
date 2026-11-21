@@ -44,12 +44,17 @@ cargo xtask lsp symbols <text>                    # what is called that
 
 A line and a column are counted **from one**, the column in **characters**.
 
-**Every call loads the tree**: the command starts a **new** server every
-time, so the load is paid on every call — ten to thirty seconds here, a
-minute or two on a cold cache, against two hundredths of a second for a
-grep. For a phrase, a convention or a landing site, **grep** — or ask the
-tree's own index (`cargo xtask find`, `cargo xtask brief`). The numbers are
-in `docs/survey-lsp.md`.
+**The tree is loaded once, not once a question.** The first question of a
+session pays for the load (ten to thirty seconds); the questions after it
+are answered in **0.11 s**. Several questions in one go, with one load:
+
+```bash
+cargo xtask lsp batch diagnostics crates/craftkit-xlsx/src/lib.rs hover crates/craftkit-xlsx/src/lib.rs 223 12
+```
+
+For a phrase, a convention or a landing site, **grep** — or ask the tree's
+own index (`cargo xtask find`, `cargo xtask brief`). The numbers are in
+`docs/survey-lsp.md`.
 
 **`diagnostics` is the cheap one** when a compile error names a line: it
 answers about one file without building the tree, and it is the compiler's

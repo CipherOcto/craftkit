@@ -308,24 +308,34 @@ cargo xtask lsp diagnostics <file>                # what the compiler says
 A file is a path in the tree, and a line and a column are counted **from
 one**, the column in **characters**.
 
-**Every call loads the tree.** The command starts a **new** server every
-time, so the load is paid on every call: ten to thirty seconds here, a
-minute or two on a cold cache. The command says so while it waits, and a
-slow answer is not a hung one.
+**Every call loads the tree** — unless the server that stays is up. The
+first question of a session pays for the load (ten to thirty seconds here,
+a minute or two on a cold cache); the questions after it are answered in
+milliseconds. The command says so while it waits, and a slow answer is not
+a hung one.
 
 **Why it matters:** a grep cannot tell a declaration from a use, and it
 cannot tell you what a name is. `references` before a rename is the whole
 list of places to touch; `hover` is the type and the docs of the thing; and
 `diagnostics` is the compiler's word on one file without building the tree.
 
-**And when it does not:** a call is **500 to 1 700 times** a grep, and the
-survey measured it — five calls in 1 067 arcs, all of them on the day the
-command was built (`docs/survey-lsp.md`). So ask the server **when the grep
-cannot tell you** — a declaration from a use, a type, the whole list of
-references — and **grep** for a convention, a landing site or a phrase. The
-tree answers the latter with its own index: `cargo xtask find`,
-`cargo xtask brief`, `cargo xtask example` and `cargo xtask digest`, which
-cost a second or two rather than a round trip.
+**And when it does not:** the survey measured it — five calls in 1 067 arcs,
+all of them on the day the command was built (`docs/survey-lsp.md`). So ask
+the server **when the grep cannot tell you** — a declaration from a use, a
+type, the whole list of references — and **grep** for a convention, a
+landing site or a phrase. The tree answers the latter with its own index:
+`cargo xtask find`, `cargo xtask brief`, `cargo xtask example` and
+`cargo xtask digest`, which cost a second or two rather than a round trip.
+
+**The two doors that make it cheap** (the survey's answer, built in §1085):
+
+- **A batch**: `cargo xtask lsp batch <question>...` — several questions,
+  **one** load of the tree, one round trip.
+- **The server that stays**: it holds the picture of the tree, so the next
+  question is answered in **0.11 s**. It is started by the first question
+  and stops itself when it is left alone; `cargo xtask lsp stop` stops it
+  now. It holds about **3.1 GB** of memory, so it is the owner's call how
+  long it stays (`--idle-seconds`).
 
 **What it is not:** the gate. `cargo xtask ci` is the word on the tree, and
 the server's word on a file is the compiler's — a check of the file, and not

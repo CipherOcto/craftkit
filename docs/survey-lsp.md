@@ -122,19 +122,39 @@ Three reasons, and the third is the one that matters.
    value, the difference between a declaration and a use — are asked in
    **refactors**, not in ports. This tree's last six days have been ports.
 
-## What would make it pay
+## What was built since the survey
 
-Two changes, in the order they would be worth trying.
+The two ways this survey named were built, and they are the two doors of
+`cargo xtask lsp` now. The numbers below were measured on this machine on
+2026-11-21, at a load average of 2.0.
 
-- **A batch mode.** Several questions in **one** load. Five questions would
-  cost one tree load (~35–40 s) and **one** round trip, instead of five loads
-  and five round trips. That is the cheapest possible change: it is the
-  existing client, asked more than once before it is shut down.
-- **A persistent server.** The tree would hold the `rust-analyzer` process
-  across the calls of a session, so the load is paid once per session
-  rather than once per question. That is a bigger change — it is a daemon,
-  a lock, a way to stop it and a way for it to go stale — and it should be
-  built only if the batch mode shows the questions are worth asking.
+| | before | after |
+|---|---|---|
+| one question | 10.9 s | **0.11 s** (with the server that stays) |
+| three questions | 10.9 + 19.9 + 10.1 = **40.9 s**, three loads | **13.1 s**, one load (`lsp batch`) |
+| the load of the tree | paid on every question | paid **once**, by the first question of the session |
+
+- **The batch**: `cargo xtask lsp batch <question>...` — the questions are
+  written one after another, the tree is read once, and the answers come
+  out under a heading each.
+- **The server that stays**: `cargo xtask lsp serve` — the tree is loaded
+  once and the picture of it is kept; the next question is answered in
+  **0.11 s**. It listens on a socket in the tree's own build directory, it
+  stops itself when it is left alone (`--idle-seconds`, ten minutes by
+  default), and `cargo xtask lsp stop` stops it now. A question that finds
+  no server starts one; if that fails, the question is answered the old
+  way, and the answer is the same.
+
+**What it costs:** the server that stays holds the tree in memory, and the
+measurement is honest about it — **3.1 GB** of resident memory for this
+tree's server, and it is the reason the idle time is bounded and the stop
+is a command. On a shared machine that is a real cost, and the owner
+decides it: `--idle-seconds 60` keeps it for a minute.
+
+**What this does not change:** the survey's finding. The server was asked
+**five questions in 1 067 arcs**, and the tree's greps went **up** by 3.2
+per arc afterwards. A cheaper door does not make the door used: the rule
+was narrowed in §1084, and the narrowing is what the measurement supports.
 
 And the **rule** should be narrowed either way. The house rule that says
 *ask it before you grep* should say what the measurement supports: **ask the
@@ -157,9 +177,10 @@ the whole list of references — and grep otherwise.
    `hover` gave the type and the doc comment, `diagnostics` said "no
    complaints". The **tool works**; the **habit** does not exist.
 
-4. **Whether an agent would use the tool if it were free is untested.** The
-   rule in `AGENTS.md` was never followed even at 0.005 calls per arc, so
-   the rule as written is not the thing that makes it work.
+4. **Whether an agent would use the tool now that it is cheap is
+   untested.** The rule in `AGENTS.md` was never followed even at 0.005 calls
+   per arc, so the rule as written is not the thing that makes it work — and
+   the price was only one of the reasons.
 
 ## One paragraph, for the record
 
@@ -171,8 +192,12 @@ seconds and a whole round trip, against two hundredths of a second for the
 grep, paid **on every call**, because the tree starts a new server each
 time. The tool answers a narrow question well — what a name *is*, and where
 it is *declared* — and that question belongs to a refactor, not to a port.
-The next arc, if there is one, is not another language-server feature: it is
-a **batch mode** that asks several questions in one load, and a rule that
-says *ask the server when the grep cannot tell you* — which is a smaller
-claim than the one the tree makes today, and the one the measurement
-supports.
+The two ways this survey named have since been built: a **batch mode** that
+asks several questions in one load, and a **server that stays** that holds
+the picture of the tree and answers the next question in 0.11 s. The price
+of a question is now a round trip and a hundredth of a second. What this
+survey cannot answer is whether that changes the habit: the rule in
+`AGENTS.md` was narrowed to *ask the server when the grep cannot tell you*,
+and the narrowing is what the measurement supports — but a cheap door is
+still a door nobody walks through, and only the next survey of the calls
+will say whether it is used.
