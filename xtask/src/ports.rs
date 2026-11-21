@@ -2230,6 +2230,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/xlsximport.rs",
         section: "§1096",
     },
+    Port {
+        rule: "what of the reference is still not in the tree, and why",
+        from: "docs/survey-gap.md",
+        to: "xtask",
+        module: "src/lists.rs",
+        command: "xtask.lists",
+        test: "xtask/tests/measurement.rs",
+        section: "§1097",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -528,3 +528,17 @@ now expensive in the model's own time rather than in the machine's.
 The tree-side baselines — the lines in an arc and the gap between two arcs
 — are in `docs/plan-acceleration.md`, and they are measured by
 `cargo xtask census`.
+
+### What of the reference is still not in the tree
+
+That question has an answer, and the answer is written down:
+`docs/survey-gap.md` walks the reference's own model — every table,
+chart, pivot, comment, condition, validation, protection and print
+setting it knows — and says where each thing landed in this tree: read,
+refused with a reason, read coarsely on purpose, or out of scope. The
+**manifest** is the proof: 241 rules, each one from the reference and each
+one in this tree, with the section that says what it became.
+
+The survey of the cost of an arc is `docs/survey-cost-and-meta-3.md`; the
+survey of the language server is `docs/survey-lsp.md`; the first one is
+`docs/survey-cost-and-meta.md`.

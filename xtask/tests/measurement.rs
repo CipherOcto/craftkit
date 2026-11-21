@@ -150,6 +150,33 @@ fn a_third_survey_without_its_numbers_is_caught() {
     assert!(!problems.is_empty(), "the gate did not catch the missing numbers");
 }
 
+/// The **gap survey** holds what it found.
+#[test]
+fn the_gap_survey_holds_its_numbers() {
+    let text = std::fs::read_to_string(root().join("docs/survey-gap.md")).expect("the gap survey is there");
+    for needle in ["240", "out of scope", "not read"] {
+        assert!(text.contains(needle), "the gap survey does not hold `{needle}`");
+    }
+}
+
+/// The gate is happy with the tree, the gap survey included.
+#[test]
+fn the_gap_survey_gate_is_happy_with_the_tree() {
+    let problems = lists::the_gap_survey_holds_its_numbers(&root()).expect("the survey can be read");
+    assert!(problems.is_empty(), "the gate found: {problems:?}");
+}
+
+/// A gap survey that has lost what it found is **caught**.
+#[test]
+fn a_gap_survey_without_what_it_found_is_caught() {
+    let directory = xtask::temp::dir("measurement-gap").expect("the folder is there");
+    std::fs::create_dir_all(directory.join("docs")).expect("the folder is there");
+    std::fs::write(directory.join("docs/survey-gap.md"), "# The gap survey\n\nnothing.\n")
+        .expect("the file is written");
+    let problems = lists::the_gap_survey_holds_its_numbers(&directory).expect("the survey can be read");
+    assert!(!problems.is_empty(), "the gate did not catch the missing numbers");
+}
+
 /// The **survey of the language server** holds the numbers it measured.
 #[test]
 fn the_lsp_survey_holds_its_numbers() {

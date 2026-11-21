@@ -789,6 +789,23 @@ pub fn the_third_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, St
     Ok(problems)
 }
 
+/// The **gap survey** holds what it found.
+///
+/// A survey of what is left is a claim about the tree, and a claim that
+/// is not held to its numbers is a claim that drifts: the manifest grows
+/// and the survey still says what it said.
+pub fn the_gap_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let survey = root.join("docs/survey-gap.md");
+    let text = read_text(&survey).map_err(|e| format!("could not read the gap survey: {e}"))?;
+    for needle in ["240", "out of scope", "not read"] {
+        if !text.contains(needle) {
+            problems.push(format!("the gap survey does not hold `{needle}`: what it found is not there"));
+        }
+    }
+    Ok(problems)
+}
+
 /// The gate itself.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
@@ -830,6 +847,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The third survey holds its own numbers.
     problems.extend(the_third_survey_holds_its_numbers(root)?);
+
+    // The gap survey holds what it found.
+    problems.extend(the_gap_survey_holds_its_numbers(root)?);
 
     // Every port of the manifest is still in the tree.
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;
