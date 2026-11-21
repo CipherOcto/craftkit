@@ -4540,6 +4540,7 @@ so.
 | **the tree has one worktree** | **checked.** `cargo xtask worktree` says whether the tree has one, and the gate runs it: the survey found two weeks of work in a second checkout, and no gate had seen it (§1093) | §1093 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 | **the format of a row and of a column is the file's own fact** | **built.** The reader reads the format, the collapsed mark and the custom size of a line, and the cells of a line keep their own facts (§1094) | §1094 |
+| **the survey's window is a window, and it reproduces the hand measurement** | **built.** The survey cuts both halves of the cost by two days, and it gives the second survey's own window back: 48.7 h against 49.4 h, 38.4 s against 39.0 s (§1095) | §1095 |
 
 ### The list of things that are honestly not there: empty
 
@@ -69293,7 +69294,9 @@ method, so that the two runs can be compared. The second run is in
 - **The arc got heavier, not lighter**: 48.3 calls against 35.4, and 12.5
   minutes of machine time against 3.9. The cost did not go away — it moved
   into `cargo xtask ci`, which ran 210 times, once per arc, and took 18
-  hours.
+  hours. — **and since §1095 the machine time is back down to 5.1 minutes
+  an arc**: the eight improvements took the machine out of the arc, and
+  what is left is the model's own time (§1095).
 - **The exits were phrased as kinds of call**, not as cost per arc, so the
   tree could satisfy them while the arc got more expensive. That is the
   lesson of the repeat.
@@ -69777,3 +69780,61 @@ folded away, and what the line looks like.
   rows that are hidden, and not from the file's flag.
 - **The workbook is still not written back**: the reader reads, and the
   tree does not write.
+
+---
+
+## 1095. The survey's window is a window, and it reproduces the hand measurement
+
+The second survey promised that the next measurement would be **one number**:
+the cost of an arc, end to end. This is that measurement — and the tool that
+made it had to be fixed before it could measure anything.
+
+### What was built
+
+- **The window is a window**: `cargo xtask survey --since <day> --until
+  <day>` cuts both halves by it — the calls of the session and the arcs of
+  the tree — and the report says which window it measured. A window with
+  one end is the whole record, and a whole record is not a measurement.
+- **The survey reproduces the hand measurement.** Measured over the second
+  survey's own window, the command gives 48.7 h of machine time against the
+  hand measurement's 49.4 h, a median gap of 38.4 s against 39.0 s, and a
+  median gate run of 269 s against 266 s.
+- **The third survey** is in `docs/survey-cost-and-meta-3.md`, and it holds
+  the tree's gate to its numbers.
+- **The machine time is the machine's**: a sub-agent's wall time is the
+  model's time and the round trips inside it, and it is not the machine's.
+- **A mention is not a run**: the gate's and the tests' counters count the
+  commands that *run* them, and not the commands that talk about them.
+
+### What the port found
+
+- **The window was not a window.** The `--since` flag subtracted the epoch
+  of the day from the clock, and the result was a number no call was ever
+  after: `--since 2030-01-01` measured every call of the session.
+- **A command broke its own row.** The fields of a call were joined with a
+  `|`, and a command with a pipe or a new line in it lost the task that
+  says how long it took: the measured share was **28 %** where the hand
+  measurement found **99 %**.
+- **A sub-agent was the machine.** Its wall time was counted as machine
+  time, and the machine's hours were **three times** the hours the hand
+  measurement gave for the same window.
+- **The counters counted mentions**: a search for `xtask ci` and a script
+  that writes the words were counted as runs of the gate.
+- **The cost of an arc is now the model's own time**: 5.1 minutes of
+  machine against 58.5 calls at a median gap of 47 seconds.
+
+### What it cost
+
+- **Six tests** in the survey's own file, **three** in the measurement
+  test file, and **one** gate rule that holds the third survey to its
+  numbers.
+- **No new command**: the survey was a command already, and it was fixed.
+
+### What it does not settle
+
+- **The window of today is open**: its session half grows while the work
+  goes on, and the numbers in the survey are the numbers at the hour it
+  names.
+- **Eight arcs is a small sample**, and the arcs are not a random one.
+- **The machine time is the machine's**: the model's own time is a
+  remainder, and it is the bigger half of the cost.
