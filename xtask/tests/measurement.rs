@@ -177,6 +177,36 @@ fn a_gap_survey_without_what_it_found_is_caught() {
     assert!(!problems.is_empty(), "the gate did not catch the missing numbers");
 }
 
+/// The **survey of the batteries** holds what it found.
+#[test]
+fn the_battery_survey_holds_its_numbers() {
+    let text = std::fs::read_to_string(root().join("docs/survey-batteries.md")).expect("the survey is there");
+    for battery in ["pdf", "prose", "film", "fx", "cad", "vector", "sound", "art", "layout"] {
+        assert!(
+            text.contains(&format!("| **{battery}** |")),
+            "the survey of the batteries does not have a row for the `{battery}` battery"
+        );
+    }
+}
+
+/// The gate is happy with the tree, the survey of the batteries included.
+#[test]
+fn the_battery_survey_gate_is_happy_with_the_tree() {
+    let problems = lists::the_battery_survey_holds_its_numbers(&root()).expect("the survey can be read");
+    assert!(problems.is_empty(), "the gate found: {problems:?}");
+}
+
+/// A survey of the batteries that has lost a battery is **caught**.
+#[test]
+fn a_battery_survey_without_what_it_found_is_caught() {
+    let directory = xtask::temp::dir("measurement-batteries").expect("the folder is there");
+    std::fs::create_dir_all(directory.join("docs")).expect("the folder is there");
+    std::fs::write(directory.join("docs/survey-batteries.md"), "# The survey\n\nnothing.\n")
+        .expect("the file is written");
+    let problems = lists::the_battery_survey_holds_its_numbers(&directory).expect("the survey can be read");
+    assert!(!problems.is_empty(), "the gate did not catch the missing numbers");
+}
+
 /// The **survey of the language server** holds the numbers it measured.
 #[test]
 fn the_lsp_survey_holds_its_numbers() {

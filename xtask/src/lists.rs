@@ -806,6 +806,47 @@ pub fn the_gap_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, Stri
     Ok(problems)
 }
 
+/// The **survey of the batteries** holds what it found.
+///
+/// The survey of the batteries is a claim about the whole tree: it names
+/// every battery, every battery's family tree, and what is left of each.
+/// A survey that loses a battery is a survey that says less than it
+/// measured, and the gate says so.
+pub fn the_battery_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let survey = root.join("docs/survey-batteries.md");
+    let text = read_text(&survey).map_err(|e| format!("could not read the survey of the batteries: {e}"))?;
+    // **Every battery has a row.** The survey is of the batteries, and a
+    // battery it does not mention is a battery it did not read.
+    for battery in ["pdf", "prose", "film", "fx", "cad", "vector", "sound", "art", "layout"] {
+        if !text.contains(&format!("| **{battery}** |")) {
+            problems
+                .push(format!("the survey of the batteries does not have a row for the `{battery}` battery"));
+        }
+    }
+    // The four lists are the survey's own shape: what is coarse, what is
+    // refused, what is out of scope, and what is to judge.
+    for needle in
+        ["deliberately coarse", "refused, with a reason", "out of scope", "to judge — the owner's list"]
+    {
+        if !text.contains(needle) {
+            problems.push(format!(
+                "the survey of the batteries does not hold `{needle}`: one of its four lists is not \
+                 there"
+            ));
+        }
+    }
+    // And it says what it does not settle.
+    if !text.contains("What this survey does not settle") {
+        problems.push(
+            "the survey of the batteries does not say what it does not settle: a measurement that \
+             reports only the wins is not a measurement"
+                .to_string(),
+        );
+    }
+    Ok(problems)
+}
+
 /// The gate itself.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
@@ -850,6 +891,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The gap survey holds what it found.
     problems.extend(the_gap_survey_holds_its_numbers(root)?);
+
+    // The survey of the batteries holds what it found.
+    problems.extend(the_battery_survey_holds_its_numbers(root)?);
 
     // Every port of the manifest is still in the tree.
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;
