@@ -4533,6 +4533,8 @@ so.
 | **the gate says where its time went** | **built.** `cargo xtask ci` prints the time each of its phases took, slowest first: the gate was 65 % of an arc's machine time, and now the tree says which part it was (§1086) | §1086 |
 | **the format check is scoped** | **built.** `cargo xtask fmt` formats the packages a change can break, and the whole-tree `cargo fmt --all` — twenty seconds a run, for a file or two — is not what an arc wants between two edits (§1087) | §1087 |
 | **the gate runs once per batch** | **a rule, and it is now written as one.** The gate is the largest part of an arc's machine time, and running it once per arc is the same mistake wearing a better hat: one whole-tree build to check one battery (§1088) | §1088 |
+| **one call writes an arc's ceremony** | **built.** `cargo xtask new-arc` writes the port row, the claim row and the section of the README, and prints the skeleton of the command and of its test (§1089) | §1089 |
+| **the claim table is checked against the registry** | **built.** A claim that says *built* names a command, and the registry knows every command the tree has: a row that names one the tree does not have is a stale claim, and the gate catches it (§1090) | §1090 |
 | **the tree has one worktree** | **checked.** `cargo xtask worktree` says whether the tree has one, and the gate runs it: the survey found two weeks of work in a second checkout, and no gate had seen it (§1093) | §1093 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
@@ -69519,6 +69521,81 @@ work that was committed in batches of one.
   a batch is.
 - **Whether the gate is cheaper when it runs twice in a row**: the tree
   does not measure that, and the gate is the tree's own.
+
+## 1089. One call writes an arc's ceremony
+
+An arc ends with three things that are not the code: a row in the port
+manifest, a row in the claim table, and a section of the README. Each was
+**searched for** and written by hand.
+
+### What was built
+
+- **`cargo xtask new-arc`** — one call that writes all three: the port row
+  in section order, the claim row at the end of the claim table, and the
+  section with the four headings the house asks for.
+- **The skeletons are printed, not written**: the command and its test are
+  the author's, because the file a command lands in is a decision about the
+  tree's shape.
+- **The command must already be there.** The claim table says what is
+  *true today*, and a row written before the code lands is a claim that is
+  false; so the call refuses an id the registry does not hold.
+
+### What the port found
+
+- **The ceremony was three files an author has to find again** — the
+  manifest, the claim table and the end of the README — and the finding of
+  those places was a search each time.
+- **The claim row can be written from the registry**: the truth column says
+  what is true today, and the registry knows what the tree has.
+
+### What it cost
+
+- **One command**, and nine tests: the rows, the section, the order of the
+  manifest, the end of the table, and the refusals.
+
+### What it does not settle
+
+- **The code is still the author's**: the generator prints the skeleton of a
+  command and of a test, and the author writes the rule into them.
+- **The prose of the section is still the author's**: the generator writes
+  the headings and the shape, and the four "TODO"s are the author's to
+  fill.
+
+## 1090. The claim table is checked against the registry
+
+The claim table is prose, and prose stays prose. But a row that says
+**built** names a command — and the registry knows every command the tree
+has.
+
+### What was built
+
+- **The gate reads the claim table against the registry**: a row that says
+  *built* and names a command the tree does not have is a **stale claim**,
+  and it is caught.
+- **Only the rows that say *built*** are checked: a row about something that
+  is *not* built may name a command that does not exist — that is what the
+  row is for.
+- **A path is not a command**: the shape of `docs/survey-cost-and-meta.md`
+  is the shape of an id, and what tells them apart is the area.
+
+### What the port found
+
+- **No claim was stale today**: the table is true, which is the first thing
+  the check says and the only thing it can be asked at the start.
+- **The rule bites in the direction that matters**: a command that is
+  renamed, and a claim that still names the old name, is a table that says
+  something that is not there.
+
+### What it cost
+
+- **One function** over the rows of the table, and four tests.
+
+### What it does not settle
+
+- **The truth column is still prose**: the gate checks the command it names,
+  not the claim itself. What is true today is a person's reading.
+- **A row that says *built* and names no command is not checked**: there is
+  nothing to check it against.
 
 ## 1093. The tree has one worktree
 
