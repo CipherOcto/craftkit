@@ -4532,6 +4532,8 @@ so.
 | **the language server is asked once, not once a question** | **built.** The tree is loaded once: a batch asks many questions in one load, and the server that stays holds the picture of the tree and answers the next question in 0.11 s — so a question costs a round trip and a hundredth of a second (§1085) | §1085 |
 | **the gate says where its time went** | **built.** `cargo xtask ci` prints the time each of its phases took, slowest first: the gate was 65 % of an arc's machine time, and now the tree says which part it was (§1086) | §1086 |
 | **the format check is scoped** | **built.** `cargo xtask fmt` formats the packages a change can break, and the whole-tree `cargo fmt --all` — twenty seconds a run, for a file or two — is not what an arc wants between two edits (§1087) | §1087 |
+| **the gate runs once per batch** | **a rule, and it is now written as one.** The gate is the largest part of an arc's machine time, and running it once per arc is the same mistake wearing a better hat: one whole-tree build to check one battery (§1088) | §1088 |
+| **the tree has one worktree** | **checked.** `cargo xtask worktree` says whether the tree has one, and the gate runs it: the survey found two weeks of work in a second checkout, and no gate had seen it (§1093) | §1093 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69482,3 +69484,74 @@ hours** in nine days — the second largest thing an arc spent.
   biggest batteries are that size.
 - **`cargo fmt --all` is still the right thing on a build machine**, where
   the whole tree is checked anyway.
+
+## 1088. The gate runs once per batch
+
+The house rule says **batch the work, then gate it once**. The practice was
+one gate per arc: 182 runs in nine days, at a median of 289 seconds, for
+work that was committed in batches of one.
+
+### What was built
+
+- **The rule, written as a rule**: the cheap checks during an arc, the gate
+  at the end of the batch, and the whole tree on CI — which is where a
+  whole-tree gate belongs, because a build machine's time is not the
+  owner's.
+- The **survey's finding, quoted where it belongs**: the exit was met by
+  *stopping* the workspace test, and the cost came back as the gate.
+
+### What the port found
+
+- **The wave exit was phrased as a kind of call** — "workspace test runs:
+  959 → < 100" — and it was met exactly: 11 runs. The number it meant to
+  move, the machine time of an arc, went the other way.
+- **The gate and the workspace test are the same mistake**: a whole-tree
+  build to check one battery. One was renamed and the other was kept.
+
+### What it cost
+
+- **No code**: a rule is prose, and the prose is in the places that say it.
+- **The survey, amended forward**, so that the numbers and the rule agree.
+
+### What it does not settle
+
+- **How big a batch is**: the rule says "a batch", and the owner says what
+  a batch is.
+- **Whether the gate is cheaper when it runs twice in a row**: the tree
+  does not measure that, and the gate is the tree's own.
+
+## 1093. The tree has one worktree
+
+The house rule says there is one worktree on disk, and it is `main`. The
+survey of the cost of the tree found the tree being worked in **two** places
+for two weeks.
+
+### What was built
+
+- **`cargo xtask worktree`** — it says what the worktrees are, and it fails
+  when there is more than one. The gate runs it: a second checkout is a
+  second place where the tree can be changed, and the second place is where
+  a change goes that nobody reviews.
+- **The rule is checked, and not only written down**: git knows every
+  worktree of the repository, and the check takes a second.
+
+### What the port found
+
+- **The tree was worked in `../craftkit-v2` on the branch `exp/meta-v2`**
+  from the 29th of October to the 13th of November — 1 962 calls and 3.1
+  hours of the survey's own numbers — with no gate, and no notice. The
+  worktree is gone now; the rule was broken for two weeks.
+- **The rule was in `AGENTS.md` the whole time.** A rule that is only
+  written down is a rule that is a wish.
+
+### What it cost
+
+- **One command**, four tests, and one phase of the gate.
+
+### What it does not settle
+
+- **It does not check the branches**: a branch that is not `main` is the
+  owner's business, and a checkout on a build machine is often detached.
+- **It does not say a branch may not exist**: the rule that every other
+  branch is deleted is about the tree's history, and it is the owner's to
+  keep.

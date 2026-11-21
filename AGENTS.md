@@ -314,7 +314,7 @@ history, and the remote `git@github.com:CipherOcto/craftkit.git`. `git push`
 goes there — and only there. Before every commit:
 
 ```text
-cargo xtask ci          # fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm
+cargo xtask ci          # fmt, assets, cleanroom, lists, worktree, layers, web, clippy, tests, wasm
                         # — over the packages the change can break; it says which it left out
                         # — and it says where its time went: the table of the phases, slowest first
 cargo test -p craftkit-gates
@@ -350,7 +350,11 @@ machine, and the gate takes more of it than anything else in the tree.
   did not ask for, sitting somewhere the owner is not looking.
 - **There is one worktree on disk, and it is `main`.** The tree is checked out
   once. A second checkout is a second place where the tree can be changed, and
-  the second place is where a change goes that nobody reviews. - **Every other branch is deleted**, local and remote, as soon as its work is
+  the second place is where a change goes that nobody reviews. **The gate
+  checks it**: `cargo xtask worktree` is a phase of `cargo xtask ci`, and it
+  fails when there is a second checkout. The rule was broken for two weeks
+  before anything checked it (§1093).
+- **Every other branch is deleted**, local and remote, as soon as its work is
   on `main`. A merged branch is a pointer into the history and nothing else,
   and an unmerged one is work that is not in the tree yet.
 

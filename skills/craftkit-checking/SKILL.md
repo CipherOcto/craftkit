@@ -73,8 +73,10 @@ own word.
 3. **The tree's own gate.** `cargo test -p craftkit-gates`. It is fast, and
    it is the gate that knows this tree.
 4. **The whole gate.** `cargo xtask ci` — fmt, assets, cleanroom, lists,
-   layers, web, clippy, tests, wasm. `KNOWN-GAPS.md` §1 says what this gate
-   does in this tree today; read it before you believe a failure of it.
+   worktree, layers, web, clippy, tests, wasm. `KNOWN-GAPS.md` §1 says what
+   this gate does in this tree today; read it before you believe a failure of
+   it. It prints where its time went, so a slow run says which phase was
+   slow.
 
 **The machine is shared.** Check the load before a big build
 (`cut -d' ' -f1 /proc/loadavg`), build with `nice -n 15`, and do not run a
