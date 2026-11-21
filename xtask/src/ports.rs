@@ -2239,6 +2239,15 @@ pub const PORTS: &[Port] = &[
         test: "xtask/tests/measurement.rs",
         section: "§1097",
     },
+    Port {
+        rule: "a flag is read as the file spells it",
+        from: "gridcraft/crates/xlsx/src/chart.rs",
+        to: "craftkit-xlsx",
+        module: "src/lib.rs",
+        command: "craftkit-xlsx::read",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§1098",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

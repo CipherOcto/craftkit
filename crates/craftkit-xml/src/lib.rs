@@ -148,6 +148,16 @@ impl El {
     pub fn child_val(&self, name: &str) -> Option<&str> {
         self.child(name).and_then(|child| child.attr("val"))
     }
+
+    /// The `val` attribute of a child, read as a **boolean**.
+    ///
+    /// A spreadsheet part writes a flag in more than one way — `1` and
+    /// `true` are both true, and so are `on` and `t` — and a flag read
+    /// as one spelling only is a flag that a file's other spelling
+    /// slips past.
+    pub fn child_flag(&self, name: &str, default: bool) -> bool {
+        self.child(name).map(|child| child.flag("val", default)).unwrap_or(default)
+    }
 }
 
 /// Read an XML part, and give back its **root**.

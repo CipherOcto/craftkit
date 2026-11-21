@@ -1168,7 +1168,7 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
         values_axis.and_then(|axis| axis.child("title")).map(all_text).filter(|text| !text.is_empty());
     // The **markers**: the group says whether it has them, and each
     // of its series may turn its own off.
-    let group_markers = !matches!(element.child_val("marker"), Some("0") | Some("false"));
+    let group_markers = element.child_flag("marker", true);
     let all_none = element.kids("ser").next().is_some()
         && element
             .kids("ser")
@@ -1176,10 +1176,7 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
     let markers = group_markers && !all_none;
     // The **smooth line**: the file says of each of its series
     // whether the line is smooth.
-    let smooths: Vec<bool> = element
-        .kids("ser")
-        .map(|serie| matches!(serie.child_val("smooth"), Some("1") | Some("true")))
-        .collect();
+    let smooths: Vec<bool> = element.kids("ser").map(|serie| serie.child_flag("smooth", false)).collect();
     let smooth = if smooths.is_empty() {
         Some(false)
     } else if smooths.iter().all(|smooth| *smooth) {
@@ -1190,10 +1187,10 @@ fn read_chart(root: &craftkit_xml::El, theme: &Theme, warnings: &mut Vec<String>
         Some(false)
     };
     // The **labels** of the data, and the **gridlines** of the values.
-    let data_labels = element.child("dLbls").is_some_and(|labels| labels.child_val("showVal") == Some("1"))
+    let data_labels = element.child("dLbls").is_some_and(|labels| labels.child_flag("showVal", false))
         || element
             .kids("ser")
-            .any(|serie| serie.child("dLbls").is_some_and(|labels| labels.child_val("showVal") == Some("1")));
+            .any(|serie| serie.child("dLbls").is_some_and(|labels| labels.child_flag("showVal", false)));
     let gridlines = values_axis.is_some_and(|axis| axis.child("majorGridlines").is_some());
     Some(Chart {
         kind: kind.to_string(),
@@ -1325,8 +1322,7 @@ fn read_chartex(root: &craftkit_xml::El, theme: &Theme) -> Option<Chart> {
         if let Some(colour) = colour_of_series(serie, theme) {
             colours.push(colour);
         }
-        if serie.path(&["dataLabels", "visibility"]).is_some_and(|labels| labels.attr("val") == Some("true"))
-        {
+        if serie.path(&["dataLabels", "visibility"]).is_some_and(|labels| labels.flag("val", false)) {
             data_labels = true;
         }
     }
@@ -3229,13 +3225,13 @@ fn read_conditionals(
                     let percent = stop
                         .and_then(|stop| stop.attr("type"))
                         .map(|kind| kind == "percent")
-                        .unwrap_or_else(|| rule.attr("percent") == Some("1"));
+                        .unwrap_or_else(|| rule.flag("percent", false));
                     let count = stop
                         .and_then(|stop| stop.attr("val"))
                         .and_then(|val| val.parse::<u32>().ok())
                         .or_else(|| rule.attr("rank").and_then(|rank| rank.parse::<u32>().ok()))
                         .unwrap_or(10);
-                    let bottom = rule.attr("bottom") == Some("1");
+                    let bottom = rule.flag("bottom", false);
                     (
                         String::new(),
                         String::new(),
@@ -3252,12 +3248,12 @@ fn read_conditionals(
                     // standard deviation and it does not count the
                     // numbers that are equal to the average.
                     let standard = rule.attr("stdDev").and_then(|dev| dev.parse::<f64>().ok()).unwrap_or(0.0);
-                    let equal = rule.attr("equalAverage") == Some("1");
+                    let equal = rule.flag("equalAverage", false);
                     if standard != 0.0 || equal {
                         unread += 1;
                         continue;
                     }
-                    let above = rule.attr("aboveAverage") != Some("0");
+                    let above = rule.flag("aboveAverage", true);
                     (String::new(), String::new(), None, None, None, Some(Average { above }), None, None)
                 }
                 "duplicateValues" => (
@@ -3421,7 +3417,7 @@ fn read_conditionals(
 /// one this tree does not have.
 fn read_icon_set(rule: &craftkit_xml::El) -> Option<IconSet> {
     let set = rule.child("iconSet")?;
-    if set.attr("reverse") == Some("1") || set.attr("showValue") == Some("0") {
+    if set.flag("reverse", false) || !set.flag("showValue", true) {
         return None;
     }
     if let Some(name) = set.attr("iconSet")

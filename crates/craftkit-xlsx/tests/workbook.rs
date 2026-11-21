@@ -4016,3 +4016,85 @@ fn a_custom_total_carries_its_formula() {
         "and the reader says that the way was not read"
     );
 }
+
+/// A **flag** is read as the file spells it: the format writes a
+/// boolean in more than one way, and a flag read as one spelling only
+/// is a flag that the other spelling slips past.
+#[test]
+fn a_flag_is_read_as_the_file_spells_it() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        ("xl/styles.xml", r##"<styleSheet/>"##),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData/><conditionalFormatting sqref="A1:A5"><cfRule type="aboveAverage" priority="1" aboveAverage="false"/></conditionalFormatting><conditionalFormatting sqref="B1:B5"><cfRule type="aboveAverage" priority="2" aboveAverage="0"/></conditionalFormatting><conditionalFormatting sqref="C1:C5"><cfRule type="top10" priority="3" bottom="true"><cfvo type="num" val="3"/></cfRule></conditionalFormatting></worksheet>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let rules = &workbook.sheets[0].conditionals;
+    assert_eq!(rules.len(), 3, "the three rules are read");
+    // **Above the average**: the file says *below* it, in the spelling
+    // `false` — and the rule is the numbers below the average.
+    let below = rules[0].average.as_ref().expect("the first is an average");
+    assert!(!below.above, "and it is the numbers below the average");
+    // The same, in the other spelling.
+    let below = rules[1].average.as_ref().expect("the second is an average");
+    assert!(!below.above, "and it is the numbers below the average");
+    // **The lowest**: the flag is `true`, and the tree used to read
+    // only `1`.
+    let lowest = rules[2].top.as_ref().expect("the third is a top ten");
+    assert!(lowest.bottom, "and it is the lowest");
+}
+
+/// The **labels** of the data of a chart are read as the file spells
+/// them: the tree read `1` in one place and `true` in another, and a
+/// file writes whichever.
+#[test]
+fn the_labels_of_a_chart_are_read_as_the_file_spells_them() {
+    let bytes = a_package(&[
+        (
+            "_rels/.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/workbook.xml",
+            r#"<workbook><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        ),
+        (
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#,
+        ),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData/><drawing r:id="rId1"/></worksheet>"#),
+        (
+            "xl/drawings/drawing1.xml",
+            r#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:twoCellAnchor><xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/></xdr:nvGraphicFramePr><xdr:xfrm/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        ),
+        (
+            "xl/drawings/_rels/drawing1.xml.rels",
+            r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>"#,
+        ),
+        (
+            "xl/charts/chart1.xml",
+            r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:val><c:numRef><c:f>One!$B$2:$B$10</c:f></c:numRef></c:val></c:ser><c:dLbls><c:showVal val="true"/></c:dLbls></c:barChart></c:plotArea></c:chart></c:chartSpace>"#,
+        ),
+    ]);
+    let workbook = read(&bytes).expect("the workbook is read");
+    let (_, charts) = &workbook.charts[0];
+    assert_eq!(charts.len(), 1, "one chart");
+    assert!(charts[0].data_labels, "and its data labels are shown");
+}
