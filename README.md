@@ -4527,6 +4527,7 @@ so.
 | **the cell a chart is drawn in is read** | **built.** The anchor of the drawing says the cell a chart is drawn in, and the tree keeps it (§1080) | §1080 |
 | **the way a sheet is looked at is read** | **built.** The file says of a sheet whether it is looked at the ordinary way, the way of the pages or the way of the breaks, and the tree keeps it (§1081) | §1081 |
 | **a chart may name its range by a name of the workbook** | **built.** The name says what the range of a chart is, and the tree reads the chart with it (§1082) | §1082 |
+| **the cost of an arc is measured again** | **measured.** The survey was repeated over nine days of work, and the tree's own half and the session's own half were measured against the baseline: one of the six wave exits was met, and it was met by stopping a run rather than by making one cheaper (§1083) | §1083 |
 | a **pasted range may link to the cells it came from** | **built.** The pasted cells hold a formula that reads the cells they came from, anchored so it does not move (§996) | §996 |
 
 ### The list of things that are honestly not there: empty
@@ -69241,3 +69242,61 @@ says what the range is.
 - **The names of the charts are the file's own**: the tree does not
   write them back, and it does not keep them as names of the
   workbook.
+
+## 1083. The cost of an arc is measured again
+
+The survey that made the plan is in `docs/survey-cost-and-meta.md`, and it is
+the **baseline**: the numbers the waves have to move. A baseline that is
+never read again is a number remembered, and remembered numbers drift. So the
+survey was **repeated**, over the nine days that followed it, with the same
+method, so that the two runs can be compared. The second run is in
+`docs/survey-cost-and-meta-2.md`.
+
+### What was built
+
+- **The second survey** — the same three sources: the tree's own history,
+  the runtime's own record of every tool call and of the measured duration
+  of every command, and the tree's own `cargo xtask census`.
+- **A gate that holds it**: `cargo xtask lists` says so when the second
+  survey loses the numbers it measured, and when it stops saying which wave
+  exits were **not** met. A measurement that reports only the wins is not a
+  measurement.
+- **A row in the port manifest**, because the survey is the source of the
+  tree's own measuring tools, exactly as the first survey is.
+
+### What the port found
+
+- **One of the six wave exits was met**: the whole workspace is now tested
+  eleven times in nine days, against 1 089 times in the fourteen days
+  before. The workspace run is gone.
+- **The arc got heavier, not lighter**: 48.3 calls against 35.4, and 12.5
+  minutes of machine time against 3.9. The cost did not go away — it moved
+  into `cargo xtask ci`, which ran 210 times, once per arc, and took 18
+  hours.
+- **The exits were phrased as kinds of call**, not as cost per arc, so the
+  tree could satisfy them while the arc got more expensive. That is the
+  lesson of the repeat.
+- **The reference-tree lookups fell** — 3.81 searches per arc against 5.07 —
+  because the manifest and the language server answer "where is this"
+  without a search. The searches that took their place did not.
+
+### What it cost
+
+- **One document**, one gate rule, three tests, and one row of the port
+  manifest.
+- **No new command**: the census already measures the tree's own half.
+- **One number that did not reproduce**: the baseline's mean gap between arcs
+  was 21.7 min and re-measures as 37.6 min; the median and the p90
+  reproduce. The second survey says so, and reports the median.
+
+### What it does not settle
+
+- **The model-time share is still a remainder**: the machine times are
+  measured, the round trip is a median applied to a call count.
+- **The gate is not the workspace run**: `cargo xtask ci` checks the packages
+  a change can break and names the ones it left out — but it is still a
+  whole-tree build when it runs, and this survey cannot say per arc whether
+  its blast radius was wide.
+- **Nine days is one window**, of one battery family, on one machine.
+- **The claim table is prose, and prose is the owner's**: the tree checks
+  that every claim cites a section that exists, not that the claim is true.
