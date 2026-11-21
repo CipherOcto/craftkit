@@ -2203,6 +2203,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/xlsximport.rs",
         section: "§1094",
     },
+    Port {
+        rule: "the survey's window is a window, and it reproduces the hand measurement",
+        from: "docs/survey-cost-and-meta-2.md",
+        to: "xtask",
+        module: "src/survey.rs",
+        command: "xtask.survey",
+        test: "xtask/src/survey.rs",
+        section: "§1095",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

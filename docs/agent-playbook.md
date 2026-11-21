@@ -441,6 +441,31 @@ of the repeat is in the exits themselves — they were phrased as **kinds of
 call**, so the tree could satisfy them while the arc got heavier. The next
 measurement should be **one number**: the cost of a single arc, end to end.
 
+### The third survey
+
+The third survey is that one number, and it is in
+`docs/survey-cost-and-meta-3.md`. It was made by the tree's **own
+command**, and the command had to be fixed before it could measure
+anything: the window it cut was not a window, a command with a pipe in it
+broke its own row and lost its duration, a sub-agent's wall time was
+counted as the machine's, and the gate's counter counted the commands that
+*mention* the gate as runs of it.
+
+The fix is the point: **a measurement that cannot reproduce the hand
+measurement of the same window is not a measurement**. Measured over the
+second survey's own window, the command gives 48.7 h of machine time
+against the hand measurement's 49.4 h, a median gap of 38.4 s against
+39.0 s, and a median gate run of 269 s against 266 s.
+
+| the number | before the eight | after the eight |
+|---|---|---|
+| the **machine time** an arc takes | 13.3 min | **5.1 min** |
+| the **calls** an arc makes | 50.6 | **58.5** |
+
+The machine half of an arc fell by **two thirds**. The round trips did not
+move: **the cost of an arc is now the model's own time**, and the machine
+is a small part of it.
+
 ### The rule
 
 - **A shortcut that does not move a number did not happen.** The waves are
@@ -457,19 +482,22 @@ measurement should be **one number**: the cost of a single arc, end to end.
 
 ### The wave exits
 
-| wave | the number that must move | from | to | now |
-|---|---|---|---|---|
-| 1 | workspace test runs | 959 (26.8 h) | < 100 (≈ 4 h) | **11** |
-| 1 | calls per arc for verify | ~9 | 1 | 8.2 |
-| 2 | claim and count searches per arc | 1.81 | 0 | 0.54 |
-| 3 | reading and searching per arc | 17.8 | < 4 | 16.2 |
-| 3 | calls per arc | 35.4 | < 12 | 42.1 |
-| all | machine time per arc | 3.9 min | < 1 min | 10.0 min |
+| wave | the number that must move | from | to | now | now again |
+|---|---|---|---|---|---|
+| 1 | workspace test runs | 959 (26.8 h) | < 100 (≈ 4 h) | **11** | **11** |
+| 1 | calls per arc for verify | ~9 | 1 | 8.2 | 8.2 |
+| 2 | claim and count searches per arc | 1.81 | 0 | 0.54 | 0.54 |
+| 3 | reading and searching per arc | 17.8 | < 4 | 16.2 | 16.2 |
+| 3 | calls per arc | 35.4 | < 12 | 42.1 | **58.5 — not met** |
+| all | machine time per arc | 3.9 min | < 1 min | 10.0 min | **5.1 min — not met, and a third of it** |
 
-The **now** column is the second survey (2026-11-12 → 2026-11-20). One exit
-was met, and it was met by *stopping* a run rather than by making one
-cheaper: the workspace test is gone, and the whole-tree gate took its place,
-once an arc, and the cost went with it.
+The **now** column is the second survey (2026-11-12 → 2026-11-20), and
+**now again** is the third survey (the arcs of 2026-11-21, the ones that
+carried the eight improvements). One exit was met, and it was met by
+*stopping* a run rather than by making one cheaper: the workspace test is
+gone, and the whole-tree gate took its place, once an arc, and the cost went
+with it. The machine time is the one that moved after that: 13.3 min to
+5.1 min against an exit of < 1 min.
 
 ### What the second survey moved, and what it did not
 
@@ -491,9 +519,11 @@ The second survey (§1083) named eight changes, and they are in the tree
 the ceremony of an arc (one call instead of three files and a search each),
 and the blindness that let the tree be worked in two places for two weeks.
 
-**What they did not move:** the calls an arc makes and the machine time it
-spends. Both are still the numbers the second survey measured, and the
-measurements will say so again at the next survey.
+**What they did not move:** the calls an arc makes. The **machine time** they
+did: the third survey puts it at 5.1 min an arc against the second survey's
+13.3, and the calls at 58.5 against 50.6. The eight improvements are all
+*cheaper* or *safer*; none of them made an arc **shorter**, and the arc is
+now expensive in the model's own time rather than in the machine's.
 
 The tree-side baselines — the lines in an arc and the gap between two arcs
 — are in `docs/plan-acceleration.md`, and they are measured by

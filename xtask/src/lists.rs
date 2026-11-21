@@ -761,6 +761,34 @@ pub fn the_lsp_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, Stri
     Ok(problems)
 }
 
+/// The **third survey** holds the numbers it measured.
+///
+/// The second survey promised that the next measurement would be **one
+/// number** — the cost of an arc, end to end — and the third survey is
+/// that measurement. A survey that has lost its numbers is a survey that
+/// says nothing, and the gate says so.
+pub fn the_third_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let survey = root.join("docs/survey-cost-and-meta-3.md");
+    let text = read_text(&survey).map_err(|e| format!("could not read the third survey: {e}"))?;
+    for needle in ["58.5", "5.1 min", "50.6", "13.3 min", "cargo xtask survey"] {
+        if !text.contains(needle) {
+            problems.push(format!(
+                "the third survey does not hold `{needle}`: the measurement it made is not there"
+            ));
+        }
+    }
+    // The third survey says what it found, including what it did not meet.
+    if !text.contains("not met") {
+        problems.push(
+            "the third survey does not say which wave exits were not met: a measurement that \
+             reports only the wins is not a measurement"
+                .to_string(),
+        );
+    }
+    Ok(problems)
+}
+
 /// The gate itself.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
@@ -799,6 +827,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The survey of the language server holds its own numbers.
     problems.extend(the_lsp_survey_holds_its_numbers(root)?);
+
+    // The third survey holds its own numbers.
+    problems.extend(the_third_survey_holds_its_numbers(root)?);
 
     // Every port of the manifest is still in the tree.
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;
