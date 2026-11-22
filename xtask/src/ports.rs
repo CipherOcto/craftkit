@@ -2338,6 +2338,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-art/tests/remove.rs",
         section: "§1104",
     },
+    Port {
+        rule: "a node may be renamed",
+        from: "artcraft/frontend/libs/components/video-editor/src/lib/commands/scene/rename-scene.ts",
+        to: "craftkit-sdk",
+        module: "src/name.rs",
+        command: "craftkit-sdk::name::SetName",
+        test: "crates/craftkit-sdk/tests/name.rs",
+        section: "§1105",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

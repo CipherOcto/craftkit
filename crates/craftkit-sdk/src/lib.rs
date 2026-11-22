@@ -80,6 +80,7 @@ pub mod journal;
 pub mod layer;
 pub mod lines;
 pub mod link;
+pub mod name;
 pub mod params;
 pub mod picture;
 pub mod plan;

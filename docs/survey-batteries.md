@@ -274,7 +274,8 @@ not the shell.
 | the app's preferences and platform (`…/app_preferences/get_app_preferences_command.rs:48`) | none | out of scope |
 | export to mp4 and webm (`video-editor/src/lib/export/index.ts:11`) | none | to judge |
 | track mute, visibility and removal (`…/toggle-track-mute.ts:7`, `…/remove-track.ts:5`) | none — `art.track.*` has no payload | to judge |
-| scene rename, delete and bookmarks (`…/scene/rename-scene.ts:6`, `…/toggle-bookmark.ts:11`) | `art.scene.add` only (`src/lib.rs:286`) | to judge |
+| scene rename (`…/scene/rename-scene.ts:6`) | the kit's own `node.name.set` (§1105) | read |
+| scene delete and bookmarks (`…/scene/delete-scene.ts:6`, `…/toggle-bookmark.ts:11`) | `art.scene.add` only (`src/lib.rs:286`) | to judge |
 | the canvas presets and the background (`video-editor/src/lib/canvas/sizes.ts:3`, `project/types.ts:5`) | none | to judge |
 | the clipboard (`…/timeline/clipboard/paste.ts:24`) | none | to judge |
 | the cost estimate (`…/cost_estimate/estimate_image_cost_command.rs:21`) | none | to judge |
@@ -386,7 +387,7 @@ honest answer to the question the owner asked.
 | **cad** | the twenty-two missing entity kinds, the style tables, layouts and paper space, the modify commands, DWG and the other formats |
 | **vector** | the live families, patterns and tiling fills, artboards and slices, effects and masks, symbols and libraries |
 | **sound** | session interchange, MIDI device input and output, the track's output routing, automation lane copy and paste, click and count-off |
-| **art** | element mutation and removal, export, track mute and visibility, scene rename, delete and bookmarks, canvas presets, backgrounds, the clipboard, cost estimation, guides, thumbnails, media mastering |
+| **art** | export, track mute and visibility, scene delete and bookmarks, canvas presets, backgrounds, the clipboard, cost estimation, guides, thumbnails, media mastering |
 | **layout** | the table model, the export family, CJK typography, text frames and threading, IDML and XML tagging, sections and numbering, find and replace, data merge, variables, index and contents |
 
 ---
