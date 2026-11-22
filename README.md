@@ -4548,6 +4548,7 @@ so.
 | **a chart says what style it is** | **built.** The reader reads the style the file gives a chart, and the import counts the ones the tree's charts have no place for (§1100) | §1100 |
 | **what of each family tree is still not in this tree** | **surveyed.** The nine batteries were measured against their own family trees, and what is left is a decision, a refusal, a scope, or a row on the owner's list (§1101) | §1101 |
 | **the index sees the commands a macro declares** | **built.** The tree's own index reads a `macro_rules!` declaration and the call that fills it, and the art battery's twelve macro commands are counted at last (§1102) | §1102 |
+| **an element may be moved** | **built.** The place of an element on the timeline and the track it is on are the element's own, and a move that crosses a track keeps the element whole (§1103) | §1103 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70185,3 +70186,56 @@ that is said and is not true.
   by a path that is not a literal.
 - **The count a battery states is the count the index finds**, and the
   index is a reading: the registry is still the truth (§848).
+
+---
+
+## 1103. An element may be moved
+
+The survey of the batteries found the art battery's own gap: **it can
+add an element and it cannot change one**. The reference's editor moves
+an element across the timeline and across tracks; this tree could only
+add one, trim it and retime it.
+
+### What was built
+
+- **`art.element.move`**: where an element starts, in ticks, and — when
+  a track is named — the track it goes on. The track is **optional**,
+  and an absent track is not an empty one: an element given no track
+  stays on the track it is on.
+- **`Document::move_node_under`**, in the SDK: a node goes under
+  another one and comes **whole** — its id, its name, its payload and
+  whatever is in it. A node may not go under itself, nor under what is
+  in it, and a move that changes nothing changes nothing.
+
+### What the port found
+
+- **The reference's move crosses tracks, and so does this one.** The
+  reference keeps a scene's tracks in a structure of its own and moves
+  an element between them; here the **containment** is the truth: the
+  element is on the track it is under, and a move that crosses a track
+  moves the element itself.
+- **The length of an element is derived, so a move cannot change it.**
+  The element's room on the timeline follows from its span and its rate,
+  and the move changes only where it starts.
+- **The kit had no way to move a node between parents.** The tree's
+  document is containment and relations, and the one thing it could not
+  do was put a node somewhere else — a gap in the core that a port
+  found, and the first thing this battery has cost the core since the
+  task handle (§33).
+
+### What it cost
+
+- **Three tests** in the SDK's own test file, **five** in the art
+  battery's new one.
+- **No new dependency**, and **no new crate**: the move is a method on
+  the document the kit already had.
+
+### What it does not settle
+
+- **A move does not drag the elements after it.** The reference's
+  editor keeps a ripple setting and moves the rest of the track with
+  the element; here the **ripple** is its own command (§36), and a move
+  moves one element.
+- **An element does not change its kind.** The reference's move may
+  carry an element to a track of another kind; here the track is a
+  track, and what an element plays is the element's own payload.
