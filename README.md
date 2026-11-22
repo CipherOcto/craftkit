@@ -4549,6 +4549,7 @@ so.
 | **what of each family tree is still not in this tree** | **surveyed.** The nine batteries were measured against their own family trees, and what is left is a decision, a refusal, a scope, or a row on the owner's list (§1101) | §1101 |
 | **the index sees the commands a macro declares** | **built.** The tree's own index reads a `macro_rules!` declaration and the call that fills it, and the art battery's twelve macro commands are counted at last (§1102) | §1102 |
 | **an element may be moved** | **built.** The place of an element on the timeline and the track it is on are the element's own, and a move that crosses a track keeps the element whole (§1103) | §1103 |
+| **an element may be taken away** | **built.** The element goes and its edges go with it, because an edge to an element that is not there is an edge to nothing (§1104) | §1104 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70239,3 +70240,47 @@ add one, trim it and retime it.
 - **An element does not change its kind.** The reference's move may
   carry an element to a track of another kind; here the track is a
   track, and what an element plays is the element's own payload.
+
+---
+
+## 1104. An element may be taken away
+
+§1103 moved an element; the gap the survey found was wider than that:
+the art battery could **add** an element and could not **change** one or
+**take** one away. A document that only grows is not an editor.
+
+### What was built
+
+- **`art.element.remove`**: the element goes, and it is an element —
+  something that is not an element is refused by name.
+- The **edges go with it**: an edge to an element that is not there is
+  an edge to nothing, and the kit's own `remove_node` takes them away
+  in both directions.
+
+### What the port found
+
+- **The reference deletes elements with a command of their own**, and
+  this tree had no way to: every battery that removes something — the
+  PDF's pages, the CAD's entities — had to reach for the document
+  itself, and the art battery had no such door.
+- **The length of a track is derived, and a removal shortens it**: the
+  track is as long as what is on it, and nothing is left behind saying
+  how long it was.
+- **A removal is not a move.** The reference's editor undoes a
+  deletion by taking the element back; here the removal is a command
+  like any other, and the kit's own history is what undoes it.
+
+### What it cost
+
+- **Three tests** in the art battery's own new test file.
+- **No new command in the SDK**, **no new dependency** and **no new
+  crate**.
+
+### What it does not settle
+
+- **Nothing is brought back by the removal itself**: undo is the kit's
+  own history, and a document that is written to disk has the element
+  gone.
+- **The elements of a track are not packed together**: a removal leaves
+  a gap where the element was, and the ripple (§36) is the command
+  that takes the space in.
