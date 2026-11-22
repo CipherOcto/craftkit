@@ -45,12 +45,12 @@ fn the_commands_of_a_macro_carry_their_own_label() {
     }
 }
 
-/// The battery carries **twenty-three** commands: eleven written out and
-/// twelve written by a macro.
+/// The battery carries **twenty-four** commands: eleven written out,
+/// twelve written by a macro, and the move of §1103.
 #[test]
-fn the_battery_carries_twenty_three_commands() {
+fn the_battery_carries_twenty_four_commands() {
     let ecosystem = ecosystem();
     let commands: Vec<&craftkit_sdk::command::CommandSpec> =
         ecosystem.commands.all().iter().filter(|command| command.id.starts_with("art.")).collect();
-    assert_eq!(commands.len(), 23, "the art battery carries 23 commands");
+    assert_eq!(commands.len(), 24, "the art battery carries 24 commands");
 }

@@ -2154,6 +2154,69 @@ impl Document {
         found
     }
 
+    /// Move a node **under** another one, and say whether it was found.
+    ///
+    /// The node comes whole: its **id**, its name, its payload and
+    /// whatever is in it. It goes where it is told to go, and a node
+    /// that is told to go under itself, or under something that is in
+    /// it, is **refused** — a node cannot be in itself.
+    ///
+    /// Its **edges** go with it: a relation is between two nodes, and
+    /// both of them are still in the document, so the edge is still an
+    /// edge.
+    ///
+    /// A node that is told to go where it already is stays where it is,
+    /// and the order of the brothers is not changed: a move that changes
+    /// nothing changes nothing.
+    pub fn move_node_under(&mut self, id: u64, parent: Option<u64>) -> bool {
+        // A node may not go under itself, nor under what is in it.
+        if parent == Some(id) {
+            return false;
+        }
+        if let Some(parent) = parent {
+            let Some(node) = self.node(id) else { return false };
+            if holds(node, parent) {
+                return false;
+            }
+            // The place it is going to has to be there: a node that is
+            // moved where there is nothing is a node that is lost.
+            if self.node(parent).is_none() {
+                return false;
+            }
+        }
+        // Where it is now, and where it is going.
+        let Some(current) = self.parent_of(id) else { return false };
+        if current == parent {
+            return true;
+        }
+        // The node is taken out whole and put where it is told to go.
+        let Some(node) = self.take_node(id) else { return false };
+        match parent.and_then(|parent| self.node_mut(parent)) {
+            Some(parent) => parent.children.push(Arc::new(node)),
+            None => self.nodes.push(Arc::new(node)),
+        }
+        true
+    }
+
+    /// The node a node is **under**, if it is under one.
+    ///
+    /// The node at the top level is under nothing, and `None` is what
+    /// that is.
+    pub fn parent_of(&self, id: u64) -> Option<Option<u64>> {
+        fn find(nodes: &[Arc<Node>], id: u64, parent: Option<u64>) -> Option<Option<u64>> {
+            for node in nodes {
+                if node.id == id {
+                    return Some(parent);
+                }
+                if let Some(found) = find(&node.children, id, Some(node.id)) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        find(&self.nodes, id, None)
+    }
+
     /// The node with an id, wherever it is, to change.
     pub fn node_mut(&mut self, id: u64) -> Option<&mut Node> {
         // The node is **made mutable** on the way: a node that is shared
@@ -2318,6 +2381,12 @@ fn ids_of(node: &Node) -> Vec<u64> {
         ids.extend(ids_of(child));
     }
     ids
+}
+
+/// Whether a node **holds** another one: whether it is in it, or in
+/// something that is in it.
+fn holds(node: &Node, id: u64) -> bool {
+    node.children.iter().any(|child| child.id == id || holds(child, id))
 }
 
 fn unwrap(node: Arc<Node>) -> Node {

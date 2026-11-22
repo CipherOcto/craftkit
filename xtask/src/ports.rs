@@ -2311,6 +2311,24 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-art/tests/commands.rs",
         section: "§1102",
     },
+    Port {
+        rule: "a node may be moved under another one",
+        from: "artcraft/frontend/libs/components/video-editor/src/lib/commands/timeline/element/move-elements.ts",
+        to: "craftkit-sdk",
+        module: "src/document.rs",
+        command: "craftkit-sdk::Document::move_node_under",
+        test: "crates/craftkit-sdk/tests/document.rs",
+        section: "§1103",
+    },
+    Port {
+        rule: "an element may be moved",
+        from: "artcraft/frontend/libs/components/video-editor/src/lib/commands/timeline/element/move-elements.ts",
+        to: "craftkit-plugin-art",
+        module: "src/lib.rs",
+        command: "art.element.move",
+        test: "crates/craftkit-plugin-art/tests/move.rs",
+        section: "§1103",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

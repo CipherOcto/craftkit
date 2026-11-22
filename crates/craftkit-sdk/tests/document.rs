@@ -138,3 +138,54 @@ fn a_node_may_be_moved_wherever_it_is() {
     assert!(document.send_to_back(first), "and sent to the back");
     assert_eq!(order(&document), vec![first, second], "which is the first of them");
 }
+
+/// A node may be **moved under** another one, and it comes whole.
+///
+/// The node keeps its **id**, its name and its payload, and everything
+/// that was in it goes with it.
+#[test]
+fn a_node_may_be_moved_under_another_one() {
+    let mut document = Document::new("move");
+    let first = document.add_node("first", "shape.group", None);
+    let second = document.add_node("second", "shape.group", None);
+    let rect = document.add_node_with_under(Some(first), "rect", "shape.rect", None, json!({ "at": 1 }));
+    assert!(document.move_node_under(rect, Some(second)), "the node may be moved");
+    assert_eq!(document.node(rect).expect("the rect is there").name, "rect");
+    assert_eq!(
+        document.node(rect).expect("the rect is there").data["at"],
+        json!(1),
+        "the payload comes with it"
+    );
+    let children: Vec<u64> =
+        document.node(second).expect("the second group is there").children.iter().map(|c| c.id).collect();
+    assert_eq!(children, vec![rect], "the rect is under the second group");
+    let children: Vec<u64> =
+        document.node(first).expect("the first group is there").children.iter().map(|c| c.id).collect();
+    assert!(children.is_empty(), "and it is not under the first one any more");
+}
+
+/// A node may not be moved **under itself**, nor under what is in it.
+#[test]
+fn a_node_may_not_be_moved_into_itself() {
+    let mut document = Document::new("cycle");
+    let outer = document.add_node("outer", "shape.group", None);
+    let inner = document.add_node_with_under(Some(outer), "inner", "shape.group", None, json!({}));
+    assert!(!document.move_node_under(outer, Some(outer)), "a node is not in itself");
+    assert!(!document.move_node_under(outer, Some(inner)), "and it is not in what is in it either");
+    assert!(document.move_node_under(inner, Some(outer)), "but it may go where it was");
+}
+
+/// A node that is moved where it already is **stays**, and the order of
+/// its brothers is not changed.
+#[test]
+fn a_node_moved_where_it_already_is_stays() {
+    let mut document = Document::new("same");
+    let group = document.add_node("group", "shape.group", None);
+    let first = document.add_node_with_under(Some(group), "first", "shape.rect", None, json!({}));
+    let second = document.add_node_with_under(Some(group), "second", "shape.rect", None, json!({}));
+    assert!(document.move_node_under(first, Some(group)), "the move is a move");
+    let order: Vec<u64> =
+        document.node(group).expect("the group is there").children.iter().map(|c| c.id).collect();
+    assert_eq!(order, vec![first, second], "and it changes nothing");
+    assert!(!document.move_node_under(first, Some(9999)), "a node that is not there is not moved");
+}

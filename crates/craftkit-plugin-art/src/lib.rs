@@ -851,6 +851,88 @@ impl JobFail {
     }
 }
 
+/// **Move** an element: where it starts, and the track it is on.
+///
+/// The place of an element on the timeline is a **number in its
+/// payload**, and the track it is on is **where it is**: a move that
+/// crosses a track moves the element itself, and the element keeps its
+/// id, its name, its media and everything else it carries.
+///
+/// The track is **optional**, and an absent track is not an empty one:
+/// an element that is given no track stays on the track it is on.
+#[derive(Command)]
+#[command(id = "art.element.move", area = "art", layer = "art", icon = "move", mutates, undoable)]
+pub struct MoveElement {
+    /// The element to move.
+    pub element: NodeRef,
+    /// Where it starts now, in ticks.
+    pub to: Number,
+    /// The track it goes on. When it is not given, the element stays on
+    /// the track it is on.
+    pub track: Option<NodeRef>,
+}
+
+impl MoveElement {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.element.0;
+        let to = whole(self.to, "art.element.move", "a place")?;
+        // The element is an element, and the track is a track.
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "art.element.move".to_string(),
+                message: format!("there is no element `{id}`"),
+            });
+        };
+        if !node.kind.starts_with("art.element.") {
+            return Err(EngineError::Failed {
+                id: "art.element.move".to_string(),
+                message: format!("`{id}` is not an element"),
+            });
+        }
+        let track = match self.track {
+            None => None,
+            Some(track) => {
+                let track = track.0;
+                let Some(node) = session.document().node(track) else {
+                    return Err(EngineError::Failed {
+                        id: "art.element.move".to_string(),
+                        message: format!("there is no track `{track}`"),
+                    });
+                };
+                if !node.kind.starts_with("art.track.") {
+                    return Err(EngineError::Failed {
+                        id: "art.element.move".to_string(),
+                        message: format!("`{track}` is not a track"),
+                    });
+                }
+                Some(track)
+            }
+        };
+        // The element goes where it is told to go, and it keeps its id.
+        if let Some(track) = track
+            && !session.document_mut()?.move_node_under(id, Some(track))
+        {
+            return Err(EngineError::Failed {
+                id: "art.element.move".to_string(),
+                message: format!("the element `{id}` could not go on the track `{track}`"),
+            });
+        }
+        let Some(node) = session.document_mut()?.node_mut(id) else {
+            return Err(EngineError::Failed {
+                id: "art.element.move".to_string(),
+                message: format!("there is no element `{id}`"),
+            });
+        };
+        node.data["start"] = serde_json::json!(to);
+        let duration = timeline_duration(node);
+        // The track the element is on, after the move.
+        let track = session.document().parent_of(id).flatten();
+        Ok(Outcome::changed(format!("moved the element {id} to {to}")).with_data(
+            serde_json::json!({ "element": id, "track": track, "start": to, "duration": duration }),
+        ))
+    }
+}
+
 /// **Trim** an element: choose the part of the media it plays.
 ///
 /// A trim is about a **range**, and not about a node: the element keeps
@@ -1097,6 +1179,7 @@ craftkit_sdk::plugin_anchor!(
     AddElementEffect,
     AddStage,
     TrimElement,
+    MoveElement,
     RetimeElement,
     RippleTrack,
     ReadTimeline,

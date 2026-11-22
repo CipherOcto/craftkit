@@ -250,9 +250,9 @@ fn the_index_covers_every_battery_the_readme_counts() {
 /// A **macro** declares a command, and the index sees it.
 ///
 /// **The art battery declares twelve of its commands through a macro**,
-/// and a reader that reads only string literals sees eleven of the
-/// battery's twenty-three. The id is `$id` in the macro and a literal in
-/// the call, and the index reads both.
+/// and a reader that reads only string literals sees none of them. The
+/// id is `$id` in the macro and a literal in the call, and the index
+/// reads both.
 #[test]
 fn the_index_sees_the_commands_a_macro_declares() {
     let source = r#"
@@ -283,7 +283,7 @@ track_command!(AddTrackVideo, "art.track.video.add", "Video");
 fn the_index_and_the_registry_agree_on_the_art_battery() {
     let index = index::build(&root()).expect("the index is built");
     let commands = index::commands_of(&index, "art");
-    assert_eq!(commands.len(), 23, "the art battery carries 23 commands");
+    assert_eq!(commands.len(), 24, "the art battery carries 24 commands");
     for id in ["art.track.video.add", "art.element.video.add", "art.element.effect.add"] {
         assert!(commands.iter().any(|command| command.id == id), "the index does not see {id}");
     }
