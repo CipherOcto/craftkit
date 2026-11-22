@@ -54,9 +54,10 @@ Where the tree has an index, the battery's side of the count is the
 tree's own number, not the survey's estimate: `cargo xtask census` says
 **pdf 119**, **prose 110**, **film 113**, **fx 47**, **cad 55**,
 **vector 67**, **layout 73**, **sound 144**, and **art 11** — and the art
-number is **wrong**: the art battery declares twelve of its commands
-through a macro, and the index cannot see a macro (§1102 names the
-defect). The runtime has twenty-three.
+number was **wrong**: the art battery declares twelve of its commands
+through a macro, and the index could not see a macro. §1102 fixed the
+reader, and the census says **art 23** now, and **1036** commands in all
+— the number the README has been saying all along.
 
 ---
 
@@ -435,8 +436,8 @@ So the arcs that are worth doing, largest first:
 - **The counts are static.** They come from the registries as they are
   written, not from a run: a command registered by a path that is not a
   literal would be missed. The art battery's twelve macro-declared
-  commands are exactly such a case, and the index cannot see them yet
-  (§1102).
+  commands were exactly such a case, and §1102 made the index read
+  them.
 - **Each survey read one battery against one family tree.** A battery may
   have more than one family tree's worth of behaviour in it, and a family
   tree may have grown since it was surveyed.

@@ -847,6 +847,112 @@ pub fn the_battery_survey_holds_its_numbers(root: &Path) -> Result<Vec<String>, 
     Ok(problems)
 }
 
+/// The **counts a battery states in its own words** are the tree's counts.
+///
+/// A battery that says how many commands it carries is making a claim
+/// about the tree, and a claim that is not held to the tree drifts. The
+/// sound battery said a hundred and thirty-six; the tree has a hundred
+/// and forty-four.
+///
+/// **The number may be spelled out.** "a hundred and forty-four" is a
+/// number, and the tree's prose writes its numbers in words.
+pub fn the_batteries_counts_are_true(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;
+    for battery in crate::index::battery_names(root) {
+        let file = root.join("crates").join(format!("craftkit-plugin-{battery}")).join("src/lib.rs");
+        let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Everything) else {
+            continue;
+        };
+        let count = crate::index::commands_of(&index, &battery).len();
+        for stated in stated_counts(&text) {
+            if stated != count {
+                problems.push(format!(
+                    "the `{battery}` battery says it carries **{stated} commands**, and the tree's \
+                     index finds {count}"
+                ));
+            }
+        }
+    }
+    Ok(problems)
+}
+
+/// The counts a file states in its own words.
+///
+/// **A bullet, and only a bullet.** A line that begins with a bullet and
+/// whose bold words are a number and the word *commands* is a count; a
+/// sentence that happens to say "twelve commands" is not one.
+pub fn stated_counts(text: &str) -> Vec<usize> {
+    let mut found = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        // **The comment's own mark is not the bullet.** The prose of a
+        // crate is written as `//! - **…**`.
+        let trimmed =
+            trimmed.strip_prefix("//!").or_else(|| trimmed.strip_prefix("//")).unwrap_or(trimmed).trim();
+        let Some(rest) = trimmed.strip_prefix("- **") else { continue };
+        let Some(end) = rest.find("**") else { continue };
+        let words = &rest[..end];
+        let Some(number) = words.strip_suffix(" commands") else { continue };
+        if let Some(count) = number_in_words(number) {
+            found.push(count);
+        }
+    }
+    found
+}
+
+/// A number in words: "one", "sixty-seven", "a hundred and forty-four".
+pub fn number_in_words(words: &str) -> Option<usize> {
+    let words = words.trim().to_ascii_lowercase();
+    if words.is_empty() {
+        return None;
+    }
+    // A number written in digits is a number too.
+    if let Ok(number) = words.parse::<usize>() {
+        return Some(number);
+    }
+    let mut total = 0usize;
+    let mut part = 0usize;
+    for word in words.split(['-', ' ']) {
+        if word.is_empty() || word == "and" || word == "a" {
+            continue;
+        }
+        match word {
+            "one" => part += 1,
+            "two" => part += 2,
+            "three" => part += 3,
+            "four" => part += 4,
+            "five" => part += 5,
+            "six" => part += 6,
+            "seven" => part += 7,
+            "eight" => part += 8,
+            "nine" => part += 9,
+            "ten" => part += 10,
+            "eleven" => part += 11,
+            "twelve" => part += 12,
+            "thirteen" => part += 13,
+            "fourteen" => part += 14,
+            "fifteen" => part += 15,
+            "sixteen" => part += 16,
+            "seventeen" => part += 17,
+            "eighteen" => part += 18,
+            "nineteen" => part += 19,
+            "twenty" => part += 20,
+            "thirty" => part += 30,
+            "forty" => part += 40,
+            "fifty" => part += 50,
+            "sixty" => part += 60,
+            "seventy" => part += 70,
+            "eighty" => part += 80,
+            "ninety" => part += 90,
+            "hundred" => part = (part.max(1)) * 100,
+            "thousand" => total += part.max(1) * 1000,
+            _ => return None,
+        }
+    }
+    Some(total + part)
+}
+
 /// The gate itself.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
@@ -894,6 +1000,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The survey of the batteries holds what it found.
     problems.extend(the_battery_survey_holds_its_numbers(root)?);
+
+    // The counts a battery states in its own words are the tree's counts.
+    problems.extend(the_batteries_counts_are_true(root)?);
 
     // Every port of the manifest is still in the tree.
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;

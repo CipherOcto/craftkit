@@ -207,7 +207,37 @@ fn a_battery_survey_without_what_it_found_is_caught() {
     assert!(!problems.is_empty(), "the gate did not catch the missing numbers");
 }
 
-/// The **survey of the language server** holds the numbers it measured.
+/// The **counts a battery states in its own words** are the tree's counts.
+#[test]
+fn the_batteries_counts_are_true() {
+    let problems = lists::the_batteries_counts_are_true(&root()).expect("the counts can be read");
+    assert!(problems.is_empty(), "the gate found: {problems:?}");
+}
+
+/// A number in words is a number: "a hundred and forty-four" is 144.
+#[test]
+fn a_number_in_words_is_a_number() {
+    assert_eq!(lists::number_in_words("a hundred and forty-four"), Some(144));
+    assert_eq!(lists::number_in_words("sixty-seven"), Some(67));
+    assert_eq!(lists::number_in_words("twelve"), Some(12));
+    assert_eq!(lists::number_in_words("one hundred"), Some(100));
+    assert_eq!(lists::number_in_words("251"), Some(251));
+    assert_eq!(lists::number_in_words("many"), None);
+}
+
+/// A battery that states a count that is not the tree's count is **caught**.
+#[test]
+fn a_battery_that_states_a_count_that_is_not_the_trees_is_caught() {
+    // The sound battery's own prose: a count is a bullet, and only a
+    // bullet. A sentence that happens to say "twelve commands" is not a
+    // count, and the reader does not mistake it for one.
+    let stated = lists::stated_counts(
+        "//! - **a hundred and thirty-six commands**, one for each thing.\n\
+         //!   The price was **twelve commands** instead of one.\n",
+    );
+    assert_eq!(stated, vec![136], "only the bullet is a count");
+}
+
 #[test]
 fn the_lsp_survey_holds_its_numbers() {
     let text = std::fs::read_to_string(root().join("docs/survey-lsp.md")).expect("the survey is there");

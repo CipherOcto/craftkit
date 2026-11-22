@@ -2284,6 +2284,33 @@ pub const PORTS: &[Port] = &[
         test: "xtask/tests/measurement.rs",
         section: "§1101",
     },
+    Port {
+        rule: "the index sees the commands a macro declares",
+        from: "craftkit-plugin-art/src/lib.rs",
+        to: "xtask",
+        module: "src/index.rs",
+        command: "xtask.find",
+        test: "xtask/tests/find.rs",
+        section: "§1102",
+    },
+    Port {
+        rule: "a battery's own count is the tree's count",
+        from: "craftkit-plugin-sound/src/lib.rs",
+        to: "xtask",
+        module: "src/lists.rs",
+        command: "xtask.lists",
+        test: "xtask/tests/measurement.rs",
+        section: "§1102",
+    },
+    Port {
+        rule: "a macro's label is the button's label",
+        from: "craftkit-plugin-art/src/lib.rs",
+        to: "craftkit-plugin-art",
+        module: "src/lib.rs",
+        command: "art.track.video.add",
+        test: "crates/craftkit-plugin-art/tests/commands.rs",
+        section: "§1102",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

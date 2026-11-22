@@ -327,7 +327,7 @@ macro_rules! track_command {
     ($struct:ident, $id:literal, $label:literal, $kind:literal) => {
         /// Put a track in a scene.
         #[derive(Command)]
-        #[command(id = $id, area = "art", layer = "art", icon = "plus", mutates, undoable)]
+        #[command(id = $id, label = $label, area = "art", layer = "art", icon = "plus", mutates, undoable)]
         pub struct $struct {
             /// The scene it goes in.
             pub scene: NodeRef,
@@ -378,7 +378,7 @@ macro_rules! element_command {
     ) => {
         /// Put an element on a track.
         #[derive(Command)]
-        #[command(id = $id, area = "art", layer = "art", icon = "plus", mutates, undoable)]
+        #[command(id = $id, label = $label, area = "art", layer = "art", icon = "plus", mutates, undoable)]
         pub struct $struct {
             /// The track it goes on.
             pub track: NodeRef,

@@ -135,12 +135,22 @@ pub fn build(root: &Path) -> Result<Index, String> {
         index.modules.insert(battery.clone(), files.clone());
         let tests = rust_files(&crate_directory.join("tests"));
         index.tests.insert(battery.clone(), tests);
-        for file in files {
-            let text = crate::tree::read_rust(&file, crate::tree::Subject::Everything)
+        // **The macros of the battery are read first.** A macro may be
+        // called in a file other than the one it is written in, so the
+        // definitions are gathered before the calls are read.
+        let mut macros = Vec::new();
+        let mut texts = Vec::new();
+        for file in &files {
+            let text = crate::tree::read_rust(file, crate::tree::Subject::Everything)
                 .map_err(|e| format!("could not read {}: {e}", file.display()))?;
-            let relative = relative_to(root, &file);
+            let relative = relative_to(root, file);
+            macros.extend(macro_definitions_in(&text, &relative));
+            texts.push((text, relative));
+        }
+        for (text, relative) in texts {
             index.commands.extend(commands_in(&text, &relative, &battery));
             index.commands.extend(table_commands_in(&text, &relative, &battery));
+            index.commands.extend(macro_commands_in(&text, &relative, &battery, &macros));
             index.bounds.extend(bounds_in(&text, &relative, &battery));
         }
     }
@@ -181,6 +191,268 @@ pub fn commands_in(text: &str, file: &Path, battery: &str) -> Vec<Command> {
         offset = end;
     }
     found
+}
+
+/// A **macro** that declares a command.
+///
+/// A battery may declare a family of commands through a `macro_rules!`
+/// macro: the macro holds the declaration and each call holds the
+/// arguments. The attribute inside the macro says `id = $id` — and a
+/// reader that reads only string literals sees no command at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MacroDef {
+    /// The macro's name.
+    pub name: String,
+    /// The position of each argument of the pattern, by the variable's name.
+    pub arguments: BTreeMap<String, usize>,
+    /// The position of the argument the command's **id** comes from.
+    pub id: Option<usize>,
+    /// The position of the argument the command's **label** comes from.
+    pub label: Option<usize>,
+    /// The documentation of the command the macro declares.
+    pub doc: Option<String>,
+    /// Whether the command the macro declares is the battery's example.
+    pub example: bool,
+    /// The file the macro is written in.
+    pub file: PathBuf,
+    /// The line the macro is written on.
+    pub line: usize,
+}
+
+/// The macros of a file that declare a command.
+///
+/// **The pattern is read, and so is the body.** The pattern says which
+/// argument is which — `$id:literal` is the second argument — and the
+/// body says which argument the command's id comes from: `id = $id`.
+pub fn macro_definitions_in(text: &str, file: &Path) -> Vec<MacroDef> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find("macro_rules!") {
+        let start = offset + at;
+        let after = start + "macro_rules!".len();
+        let Some((name, after_name)) = name_after(text, after) else { break };
+        let Some(open) = text[after_name..].find('{') else { break };
+        let body_start = after_name + open + 1;
+        let Some((body, end)) = braces_of(text, body_start) else { break };
+        if let Some(definition) = macro_definition_of(&name, &body, text, body_start, file) {
+            found.push(definition);
+        }
+        offset = end;
+    }
+    found
+}
+
+/// The macro of a name, if it declares a command.
+fn macro_definition_of(
+    name: &str,
+    body: &str,
+    text: &str,
+    body_start: usize,
+    file: &Path,
+) -> Option<MacroDef> {
+    // The pattern is the first parenthesised run of the body.
+    let open = body.find('(')?;
+    let (pattern, _after_pattern) = parens_of(body, open + 1)?;
+    // The arguments of the pattern, by the variable's name.
+    let mut arguments = BTreeMap::new();
+    for (position, (fragment, _)) in split_arguments(&pattern).iter().enumerate() {
+        let fragment = fragment.trim();
+        let Some(rest) = fragment.strip_prefix('$') else { continue };
+        let variable: String = rest.chars().take_while(|c| *c != ':').collect();
+        if variable.is_empty() {
+            continue;
+        }
+        arguments.insert(variable, position);
+    }
+    // The command the macro declares: its attribute and its documentation.
+    let command_at = body.find("#[command(")?;
+    let (block, _) = block_of(body, command_at + "#[command(".len())?;
+    let id_variable = metavariable_of(&block, "id")?;
+    let label_variable = metavariable_of(&block, "label");
+    let id = arguments.get(&id_variable).copied();
+    let label = label_variable.and_then(|variable| arguments.get(&variable).copied());
+    // The documentation is above the derive, inside the macro's body.
+    let derive_at = body.find("#[derive(Command)]").unwrap_or(command_at);
+    let doc = doc_above(body, derive_at);
+    let line = text[..body_start].lines().count().max(1);
+    Some(MacroDef {
+        name: name.to_string(),
+        arguments,
+        id,
+        label,
+        doc,
+        example: has_flag(&block, "example"),
+        file: file.to_path_buf(),
+        line,
+    })
+}
+
+/// The commands the macros of a battery declare, in one file.
+///
+/// **The call is read as the pattern says.** The macro's pattern says
+/// which argument is the id, and the call says what the id is.
+pub fn macro_commands_in(text: &str, file: &Path, battery: &str, macros: &[MacroDef]) -> Vec<Command> {
+    let mut found = Vec::new();
+    for definition in macros {
+        let needle = format!("{}!(", definition.name);
+        let mut offset = 0usize;
+        while let Some(at) = text[offset..].find(&needle) {
+            let start = offset + at;
+            let args_start = start + needle.len();
+            let Some((body, end)) = parens_of(text, args_start) else { break };
+            let arguments = split_arguments(&body);
+            if let Some(id) = literal_at(&arguments, definition.id) {
+                let label = literal_at(&arguments, definition.label);
+                // The id's own place: the call may write it on a line of
+                // its own, and the line is where the command is named.
+                let at = definition
+                    .id
+                    .and_then(|position| arguments.get(position))
+                    .map(|(_, offset)| args_start + offset)
+                    .unwrap_or(start);
+                let line = text[..at].lines().count().max(1);
+                found.push(Command {
+                    id,
+                    label,
+                    doc: definition.doc.clone(),
+                    file: file.to_path_buf(),
+                    line,
+                    battery: battery.to_string(),
+                    example: definition.example,
+                });
+            }
+            offset = end;
+        }
+    }
+    found
+}
+
+/// A name after a place in the text: the characters up to the first that
+/// is not a name.
+///
+/// **The space is skipped.** `macro_rules! name { … }` writes a space
+/// between the word and the name, and a reader that stopped at the space
+/// would read no name at all.
+fn name_after(text: &str, at: usize) -> Option<(String, usize)> {
+    let rest = &text[at..];
+    let trimmed = rest.trim_start();
+    let skipped = rest.len() - trimmed.len();
+    let end = trimmed.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(trimmed.len());
+    if end == 0 {
+        return None;
+    }
+    Some((trimmed[..end].to_string(), at + skipped + end))
+}
+
+/// A metavariable of a field: `id = $id` is the variable `id`.
+fn metavariable_of(block: &str, name: &str) -> Option<String> {
+    let needle = format!("{name} = $");
+    let at = block.find(&needle)?;
+    let rest = &block[at + needle.len()..];
+    let end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(rest.len());
+    if end == 0 {
+        return None;
+    }
+    Some(rest[..end].to_string())
+}
+
+/// The arguments of a call or a pattern, and where each one is.
+///
+/// **The commas that are inside a bracket do not count.** A pattern may
+/// hold a type with a comma in it, and a reader that split on every
+/// comma would count one argument as two.
+pub fn split_arguments(text: &str) -> Vec<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut found = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    let mut at = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    while at < bytes.len() {
+        let c = bytes[at] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            at += 1;
+            continue;
+        }
+        if c == '"' {
+            in_string = true;
+        } else if c == '\'' {
+            if let Some(step) = the_character(bytes, at) {
+                at += step;
+                continue;
+            }
+        } else if c == '(' || c == '[' || c == '{' {
+            depth += 1;
+        } else if c == ')' || c == ']' || c == '}' {
+            depth -= 1;
+        } else if c == ',' && depth == 0 {
+            found.push((text[start..at].trim().to_string(), start));
+            start = at + 1;
+        }
+        at += 1;
+    }
+    found.push((text[start..].trim().to_string(), start));
+    found
+}
+
+/// The literal at a position of a list of arguments.
+fn literal_at(arguments: &[(String, usize)], position: Option<usize>) -> Option<String> {
+    let position = position?;
+    let (argument, _) = arguments.get(position)?;
+    let trimmed = argument.trim();
+    if !trimmed.starts_with('"') || !trimmed.ends_with('"') || trimmed.len() < 2 {
+        return None;
+    }
+    Some(trimmed[1..trimmed.len() - 1].to_string())
+}
+
+/// The body of a run of parentheses, and where it ends.
+fn parens_of(text: &str, body_start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut depth = 1usize;
+    let mut at = body_start;
+    let mut in_string = false;
+    let mut escaped = false;
+    while at < bytes.len() {
+        let c = bytes[at] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                '"' => in_string = true,
+                '\'' => {
+                    if let Some(step) = the_character(bytes, at) {
+                        at += step;
+                        continue;
+                    }
+                }
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some((text[body_start..at].to_string(), at + 1));
+                    }
+                }
+                _ => {}
+            }
+        }
+        at += 1;
+    }
+    None
 }
 
 /// The commands in a **table** of commands.

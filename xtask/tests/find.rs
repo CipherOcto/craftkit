@@ -246,3 +246,45 @@ fn the_index_covers_every_battery_the_readme_counts() {
         assert_eq!(commands, count, "the {battery} battery carries {count} commands");
     }
 }
+
+/// A **macro** declares a command, and the index sees it.
+///
+/// **The art battery declares twelve of its commands through a macro**,
+/// and a reader that reads only string literals sees eleven of the
+/// battery's twenty-three. The id is `$id` in the macro and a literal in
+/// the call, and the index reads both.
+#[test]
+fn the_index_sees_the_commands_a_macro_declares() {
+    let source = r#"
+macro_rules! track_command {
+    ($struct:ident, $id:literal, $label:literal) => {
+        /// Put a track in a scene.
+        #[derive(Command)]
+        #[command(id = $id, label = $label, area = "art", layer = "art")]
+        pub struct $struct;
+    };
+}
+
+track_command!(AddTrackVideo, "art.track.video.add", "Video");
+"#;
+    let file = Path::new("crates/x/src/lib.rs");
+    let macros = index::macro_definitions_in(source, file);
+    assert_eq!(macros.len(), 1, "the macro is found");
+    assert_eq!(macros[0].name, "track_command");
+    let commands = index::macro_commands_in(source, file, "art", &macros);
+    assert_eq!(commands.len(), 1, "the call is found: {commands:?}");
+    assert_eq!(commands[0].id, "art.track.video.add");
+    assert_eq!(commands[0].label.as_deref(), Some("Video"));
+    assert_eq!(commands[0].doc.as_deref(), Some("Put a track in a scene."));
+}
+
+/// The tree's own index sees **the art battery's macro commands**.
+#[test]
+fn the_index_and_the_registry_agree_on_the_art_battery() {
+    let index = index::build(&root()).expect("the index is built");
+    let commands = index::commands_of(&index, "art");
+    assert_eq!(commands.len(), 23, "the art battery carries 23 commands");
+    for id in ["art.track.video.add", "art.element.video.add", "art.element.effect.add"] {
+        assert!(commands.iter().any(|command| command.id == id), "the index does not see {id}");
+    }
+}
