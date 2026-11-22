@@ -4550,6 +4550,7 @@ so.
 | **the index sees the commands a macro declares** | **built.** The tree's own index reads a `macro_rules!` declaration and the call that fills it, and the art battery's twelve macro commands are counted at last (§1102) | §1102 |
 | **an element may be moved** | **built.** The place of an element on the timeline and the track it is on are the element's own, and a move that crosses a track keeps the element whole (§1103) | §1103 |
 | **an element may be taken away** | **built.** The element goes and its edges go with it, because an edge to an element that is not there is an edge to nothing (§1104) | §1104 |
+| **a node may be renamed** | **built.** The name is the node's own, so one command renames a track, a scene and a clip alike, and an empty name is refused (§1105) | §1105 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70284,3 +70285,50 @@ the art battery could **add** an element and could not **change** one or
 - **The elements of a track are not packed together**: a removal leaves
   a gap where the element was, and the ripple (§36) is the command
   that takes the space in.
+
+---
+
+## 1105. A node may be renamed
+
+The survey of the batteries asked for the art battery's **scene
+rename**, and the question it asked by accident was bigger: **the kit
+could not rename anything at all**.
+
+### What was built
+
+- **`node.name.set`**, in the SDK: this node is called this.
+- The name is **the node's own**, so one command renames a track, a
+  scene, a clip and a layer alike — a battery with a command of its own
+  for every kind of name would have a second path for one behaviour.
+- An **empty name is refused**: an empty name is not a name, and a
+  document of nameless nodes cannot be asked what anything is called.
+
+### What the port found
+
+- **Nothing in the tree could rename a node.** The batteries wrote
+  names at the moment they made a node and never after: a track that
+  was called "V1" could not be called anything else for the whole life
+  of the document. The reference's editor renames a scene, a track and
+  a clip with a command each.
+- **The name is the only handle a node has that a person uses.** The
+  kind says what a node **is** and the id says what the program calls
+  it; the name says what **the person** calls it, and the kit could
+  find a node by it (`node_by_name`) but never change it.
+- **The kit's own rule made the gap visible.** The document is changed
+  by a command and by nothing else — so a battery that wanted a rename
+  had to reach past the door, and none of them did.
+
+### What it cost
+
+- **One module** in the SDK and **four tests** in the SDK's own test
+  file.
+- **No new dependency** and **no new crate**.
+
+### What it does not settle
+
+- **A name is not an identifier.** The id of a node never changes, and
+  a rename does not move anything: a clip that plays a source is still
+  the clip that played it.
+- **The name is not unique.** Two nodes may be called the same thing,
+  and a lookup by name finds the first of them — the tree's rule is
+  that an unknown name is an error, not that a name is a key.
