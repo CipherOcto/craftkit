@@ -57,7 +57,9 @@ tree's own number, not the survey's estimate: `cargo xtask census` says
 number was **wrong**: the art battery declares twelve of its commands
 through a macro, and the index could not see a macro. §1102 fixed the
 reader, and the census says **art 23** now, and **1036** commands in all
-— the number the README has been saying all along.
+— the number the README has been saying all along. The battery has
+grown since: §1103 added the move of an element and §1104 the removal
+of one, so the art battery carries **25** and the tree **1038**.
 
 ---
 
@@ -72,7 +74,7 @@ reader, and the census says **art 23** now, and **1036** commands in all
 | **cad** | cadcraft | 426 → **55** | 30 entity kinds → **8** | 4 → **2** | 6 → **2** |
 | **vector** | vectorcraft | 806 → **67** | 13 kinds → **1** | 22 → **1** | 20 → **2** |
 | **sound** | soundcraft | 483 → **144** | 38 types → **16 kinds** + 18 payloads | 9 → **1** (WAV) | 0 → **0** |
-| **art** | artcraft | 67 Tauri + 39 TS → **23** | 7 element kinds + 5 track kinds | 0 → **0** | 0 → **0** |
+| **art** | artcraft | 67 Tauri + 39 TS → **25** | 7 element kinds + 5 track kinds | 0 → **0** | 0 → **0** |
 | **layout** | designcraft | 542 → **73** | 217 types → **13 kinds** | 12 → **0** | 9 → **0** |
 
 The **formats** row is the one that stands out: **five batteries read and
@@ -255,7 +257,7 @@ are written out one by one (`src/lib.rs:87-160`).
 
 The reference is a video editor written as a desktop application: **67**
 Tauri commands, **39** more in the editor's own TypeScript layer, and a
-Rust command surface of **63**. The battery has **23** commands over
+Rust command surface of **63**. The battery has **25** commands over
 seven element kinds and five track kinds, and it ports the **document**,
 not the shell.
 

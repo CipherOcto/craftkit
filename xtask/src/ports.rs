@@ -2329,6 +2329,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-art/tests/move.rs",
         section: "§1103",
     },
+    Port {
+        rule: "an element may be taken away",
+        from: "artcraft/frontend/libs/components/video-editor/src/lib/commands/timeline/element/delete-elements.ts",
+        to: "craftkit-plugin-art",
+        module: "src/lib.rs",
+        command: "art.element.remove",
+        test: "crates/craftkit-plugin-art/tests/remove.rs",
+        section: "§1104",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

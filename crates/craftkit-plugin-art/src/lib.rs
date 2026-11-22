@@ -933,6 +933,46 @@ impl MoveElement {
     }
 }
 
+/// **Take** an element away.
+///
+/// The element goes, and its **edges** go with it: an edge to an
+/// element that is not there is an edge to nothing, and a document that
+/// keeps them is a document that says something is there when it is
+/// not.
+#[derive(Command)]
+#[command(id = "art.element.remove", area = "art", layer = "art", icon = "minus", mutates, undoable)]
+pub struct RemoveElement {
+    /// The element to take away.
+    pub element: NodeRef,
+}
+
+impl RemoveElement {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.element.0;
+        // The element is an element.
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "art.element.remove".to_string(),
+                message: format!("there is no element `{id}`"),
+            });
+        };
+        if !node.kind.starts_with("art.element.") {
+            return Err(EngineError::Failed {
+                id: "art.element.remove".to_string(),
+                message: format!("`{id}` is not an element"),
+            });
+        }
+        if !session.document_mut()?.remove_node(id) {
+            return Err(EngineError::Failed {
+                id: "art.element.remove".to_string(),
+                message: format!("there is no element `{id}`"),
+            });
+        }
+        Ok(Outcome::changed(format!("took the element {id} away"))
+            .with_data(serde_json::json!({ "element": id })))
+    }
+}
+
 /// **Trim** an element: choose the part of the media it plays.
 ///
 /// A trim is about a **range**, and not about a node: the element keeps
@@ -1180,6 +1220,7 @@ craftkit_sdk::plugin_anchor!(
     AddStage,
     TrimElement,
     MoveElement,
+    RemoveElement,
     RetimeElement,
     RippleTrack,
     ReadTimeline,
