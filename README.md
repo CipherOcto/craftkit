@@ -4547,6 +4547,7 @@ so.
 | **a box and a whisker says of what kind its quartiles are** | **built.** The reader reads the quartile method of a box and a whisker, and the chart that carries it is one the tree counts unread (§1099) | §1099 |
 | **a chart says what style it is** | **built.** The reader reads the style the file gives a chart, and the import counts the ones the tree's charts have no place for (§1100) | §1100 |
 | **what of each family tree is still not in this tree** | **surveyed.** The nine batteries were measured against their own family trees, and what is left is a decision, a refusal, a scope, or a row on the owner's list (§1101) | §1101 |
+| **the index sees the commands a macro declares** | **built.** The tree's own index reads a `macro_rules!` declaration and the call that fills it, and the art battery's twelve macro commands are counted at last (§1102) | §1102 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70134,3 +70135,53 @@ was the obvious next one: **what is left on all the other batteries?**
   and the feature table is the substance.
 - **The file formats are a project and not an arc** (§899): a
   half-ported format is worse than no format.
+
+---
+
+## 1102. The tree's own numbers are true again
+
+The survey of the batteries found a fault in the tree's **own** words, and
+the fault is of the same class as a false note in a document: a number
+that is said and is not true.
+
+### What was built
+
+- The **index reads a macro**: a `macro_rules!` declaration, its pattern,
+  and the calls that fill it. The id is `$id` in the macro and a literal
+  in the call, and the reader reads both.
+- The **count a battery states in its own words** is held to the tree's
+  count — and the number may be spelled out, because the tree's prose
+  writes its numbers in words.
+- The **label a macro takes** is the button's label: the art battery's
+  two macros took a label and dropped it, and every one of the twelve
+  commands had the same button, saying "Add".
+
+### What the port found
+
+- **The index was blind to a macro.** The art battery declares twelve of
+  its commands through `track_command!` and `element_command!`, and the
+  reader — which reads the attribute as text — saw none of them: the
+  census said **eleven** where the runtime has **twenty-three**.
+- **The README was right and the index was wrong.** The tree says the MCP
+  server has **1036** commands, and it does: the index said **1024**.
+  Two readings of one truth, and they disagreed — and the tree's rule is
+  that a reader that cannot read a declaration is not a reader.
+- **The sound battery's own count was stale**: it said a hundred and
+  thirty-six, and the tree has a hundred and forty-four.
+- **A macro took a label and dropped it.** The twelve commands had the
+  label the derive makes from the id — "Add" — and now each one says
+  what it adds.
+
+### What it cost
+
+- **Two tests** in the index's test file, **three** in the gate's, and
+  **two** in the art battery's own new test file.
+- **No new command** and **no new dependency**.
+
+### What it does not settle
+
+- **The index reads the source, not the registry.** It sees a macro it
+  can expand from the text; it does not see a command that is registered
+  by a path that is not a literal.
+- **The count a battery states is the count the index finds**, and the
+  index is a reading: the registry is still the truth (§848).
