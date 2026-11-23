@@ -70546,6 +70546,14 @@ that nothing is copied from another project, so the shapes had to be
 - **The five narrowings are declared in it**: the 59-name icon enum, the
   `ChildList` template, the reserved `@index` function, the `@checks`
   property and the `TextField`'s literal value.
+- **The catalogue is a catalogue a2ui's own schema accepts.** The
+  keyword that refuses an unknown property belongs to a *schema*, and a
+  declaration is an *instance* — so the args carry it and the
+  declaration does not, and a review round's validation against a2ui's
+  own `catalog_definition` went from nineteen errors to none.
+- **The fourteen agent-side functions carry their arguments**, the ones
+  a2ui's own catalogue names and the ones it requires — so an agent
+  that follows a2ui's catalogue can call one.
 - **Every declared function says who may call it** — `rendererOnly` for
   both kinds — because a function that does not say is the renderer's
   alone, and the protocol says a declared function carries its own
@@ -70671,6 +70679,13 @@ nothing else.
   the same undo, the same refusals and the same journal apply to an a2ui
   agent as to a person.
 - **An unknown component is refused**, and not drawn as a placeholder.
+- **A tree that is a loop is refused**: a component that is reached
+  twice is a cycle, and a cycle is not a tree that can be drawn — and
+  without the check it was a stack overflow, which is not a panic and
+  aborts the process.
+- **The tree keeps what it publishes**: a component that is missing a
+  prop the published schema says it must have is refused, and not drawn
+  as nothing.
 - **A tree that does not fit is refused**: a component with no id, an id
   two components share, a child that names nothing, a component no
   parent holds, a weight that is not a weight, a binding to a path that
