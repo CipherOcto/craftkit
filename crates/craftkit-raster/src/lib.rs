@@ -45,7 +45,11 @@
 #![forbid(unsafe_code)]
 
 mod image;
-mod png;
+/// The **PNG** writer: a picture of the document, as a file's bytes.
+///
+/// It is public because a **headless** front end — one with no window —
+/// still has to show a picture, and the bytes it shows are a PNG.
+pub mod png;
 mod raster;
 
 pub use image::Image;

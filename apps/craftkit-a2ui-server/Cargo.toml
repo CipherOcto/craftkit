@@ -1,0 +1,27 @@
+[package]
+name = "craftkit-a2ui-server"
+description = "The a2ui door: an agent speaks a2ui over JSON-RPC, and craftkit draws it."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+craftkit-sdk = { workspace = true }
+# The **layer**: the protocol's types, the data model, the bindings and
+# the box layout.
+craftkit-a2ui = { path = "../../crates/craftkit-a2ui", version = "0.2.0" }
+# The **plugin**: the eleven components and the five commands. It is
+# linked in for the same reason every plugin is: a plugin has to be
+# *linked in*.
+craftkit-plugin-a2ui = { path = "../../crates/craftkit-plugin-a2ui", version = "0.2.0" }
+# The **software rasteriser**: the headless picture.
+craftkit-raster = { path = "../../crates/craftkit-raster", version = "0.2.0" }
+
+[dev-dependencies]
+# The scratch: a test that needs a file asks the scratch, and the scratch
+# takes it back when the test ends.
+craftkit-scratch = { path = "../../crates/craftkit-scratch", version = "0.2.0" }
+
+[build-dependencies]
+craftkit-link = { path = "../../crates/craftkit-link", version = "0.2.0" }

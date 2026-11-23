@@ -48,7 +48,7 @@ layering mistake has been made in a library.
 | **L2** | `craftkit-sdk`, `craftkit-xlsx` | L0, L1 — the whole surface a plugin needs, and the workbook reader above the package and the XML |
 | **L3** | `craftkit-a2ui`, `craftkit-control`, `craftkit-mcp`, `craftkit-numeric`, `craftkit-raster`, `craftkit-vector-geom` | L0–L2 — the things above the SDK that are not plugins |
 | **L4** | `craftkit-plugin-a2ui`, `craftkit-plugin-art`, `craftkit-plugin-cad`, `craftkit-plugin-clap`, `craftkit-plugin-film`, `craftkit-plugin-fx`, `craftkit-plugin-grid`, `craftkit-plugin-hello`, `craftkit-plugin-image`, `craftkit-plugin-layout`, `craftkit-plugin-numeric`, `craftkit-plugin-pdf`, `craftkit-plugin-prose`, `craftkit-plugin-shapes`, `craftkit-plugin-shared`, `craftkit-plugin-sound`, `craftkit-plugin-text`, `craftkit-plugin-vector`, `craftkit-plugin-vst3` | L0–L3 — the batteries, each one a document model of its own |
-| **L5** | `craftkit-bridge`, `craftkit-hello-server`, `craftkit-mcp-server`, `craftkit-repl`, `craftkit-studio`, `craftkit-window`, `craftkit-wasm` | anything — the applications |
+| **L5** | `craftkit-a2ui-server`, `craftkit-bridge`, `craftkit-hello-server`, `craftkit-mcp-server`, `craftkit-repl`, `craftkit-studio`, `craftkit-window`, `craftkit-wasm` | anything — the applications |
 
 Two rules on top of the table:
 
@@ -293,6 +293,7 @@ Token-authenticated JSON lines over loopback, for driving a **running** program
 | `apps/craftkit-studio` | the studio: the ecosystem every front end builds |
 | `apps/craftkit-repl` | the terminal door |
 | `apps/craftkit-mcp-server` | the agent door |
+| `apps/craftkit-a2ui-server` | the a2ui door: an agent speaks a2ui over JSON-RPC |
 | `apps/craftkit-bridge` | the bridge: JSON-RPC over stdio |
 | `apps/craftkit-wasm` | the browser door |
 | `apps/craftkit-hello-server` | a small server, used as a fixture |

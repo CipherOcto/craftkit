@@ -190,6 +190,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-plugin-a2ui", Class::Layer(4)),
     // L5 — the applications. They depend on everything, and the layering rule
     // does not apply to them.
+    ("craftkit-a2ui-server", Class::Layer(5)),
     ("craftkit-bridge", Class::Layer(5)),
     ("craftkit-hello-server", Class::Layer(5)),
     ("craftkit-mcp-server", Class::Layer(5)),

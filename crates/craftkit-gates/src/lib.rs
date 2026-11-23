@@ -259,6 +259,7 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-plugin-a2ui", 4),
     // L5 — the applications. They depend on everything, and the layering
     // rule does not apply to them.
+    ("craftkit-a2ui-server", 5),
     ("craftkit-bridge", 5),
     ("craftkit-hello-server", 5),
     ("craftkit-mcp-server", 5),
@@ -280,7 +281,7 @@ const PLUGIN_PREFIX: &str = "craftkit-plugin-";
 ///
 /// A front end reads the engine's state and acts through the registry,
 /// and the rule is that it has no second path into the design.
-pub const FRONT_ENDS: &[&str] = &["craftkit-window"];
+pub const FRONT_ENDS: &[&str] = &["craftkit-a2ui-server", "craftkit-window"];
 
 /// The names a front end may **not** use.
 ///
