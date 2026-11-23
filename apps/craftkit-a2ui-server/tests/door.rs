@@ -267,3 +267,21 @@ fn the_channel_serves_the_doors_own_session() {
     assert!(action["timestamp"].is_string(), "{action}");
     assert!(action["context"].is_object(), "{action}");
 }
+
+/// The door speaks **one** version of the protocol, and refuses the
+/// others.
+///
+/// The protocol is versioned, and craftkit's rule is that an unknown
+/// name is refused — so a request that names another version is refused
+/// rather than adapted to.
+#[test]
+fn a_request_that_names_another_version_is_refused() {
+    let mut server = server();
+    let answer = server.handle(&request("createSurface", json!({ "version": "0.8", "surfaceId": "s9" })));
+    assert!(answer.get("error").is_some(), "{answer}");
+    assert!(answer["error"]["message"].as_str().unwrap_or_default().contains("0.8"), "{answer}");
+    // And the door's own version is taken.
+    let answer = server.handle(&request("createSurface", json!({ "version": "1.0", "surfaceId": "s10" })));
+    assert!(answer.get("error").is_none(), "{answer}");
+    assert_eq!(answer["result"]["surfaceId"], json!("s10"), "{answer}");
+}

@@ -246,19 +246,16 @@ impl Server {
     /// A method that is not there is an error, and the error says which
     /// methods are.
     pub fn handle(&mut self, request: &Request) -> Json {
-        let result = match request.method.as_str() {
-            "initialize" => Ok(self.initialize(request)),
-            "createSurface" => self.create_surface(request),
-            "updateComponents" => self.update_components(request),
-            "updateDataModel" => self.update_data_model(request),
-            "deleteSurface" => self.delete_surface(request),
-            "callRendererFunction" => self.call_renderer_function(request),
-            "agentFunctionResponse" => Ok(json!({})),
-            other => Err(format!(
-                "there is no method `{other}`: the methods are initialize, createSurface, \
-                 updateComponents, updateDataModel, deleteSurface, callRendererFunction and \
-                 agentFunctionResponse"
+        let result = match self.version_of(request) {
+            // The door speaks **one** version of the protocol, and a
+            // request that names another is refused — craftkit's rule,
+            // and not a2ui's adapter chain.
+            Some(version) => Err(format!(
+                "the request names the protocol version `{version}`, and the door speaks only \
+                 `{}`",
+                craftkit_a2ui::catalog::PROTOCOL_VERSION
             )),
+            None => self.dispatch(request),
         };
         match result {
             Ok(result) => json!({
@@ -271,6 +268,42 @@ impl Server {
                 "id": request.id.clone().unwrap_or(Json::Null),
                 "error": { "code": -32601, "message": message },
             }),
+        }
+    }
+
+    /// The **version** the request names, if it names one that is not
+    /// the door's.
+    ///
+    /// The version may be in the message's own body — a2ui's envelope
+    /// puts it there — or beside the method, and a request that names no
+    /// version at all is the door's own.
+    fn version_of(&self, request: &Request) -> Option<String> {
+        let named = request
+            .params
+            .get("version")
+            .and_then(Json::as_str)
+            .or_else(|| request.params.get("messageVersion").and_then(Json::as_str));
+        match named {
+            Some(version) if version != craftkit_a2ui::catalog::PROTOCOL_VERSION => Some(version.to_string()),
+            _ => None,
+        }
+    }
+
+    /// Answer one request, once the version is known to be the door's.
+    fn dispatch(&mut self, request: &Request) -> Result<Json, String> {
+        match request.method.as_str() {
+            "initialize" => Ok(self.initialize(request)),
+            "createSurface" => self.create_surface(request),
+            "updateComponents" => self.update_components(request),
+            "updateDataModel" => self.update_data_model(request),
+            "deleteSurface" => self.delete_surface(request),
+            "callRendererFunction" => self.call_renderer_function(request),
+            "agentFunctionResponse" => Ok(json!({})),
+            other => Err(format!(
+                "there is no method `{other}`: the methods are initialize, createSurface, \
+                 updateComponents, updateDataModel, deleteSurface, callRendererFunction and \
+                 agentFunctionResponse"
+            )),
         }
     }
 
