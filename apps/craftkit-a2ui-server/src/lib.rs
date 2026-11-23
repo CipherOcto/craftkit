@@ -79,6 +79,14 @@
 //! `createSurface` that makes it: the model is applied **first**, so
 //! that a component binds against it on its first resolution.
 //!
+//! # The answer to a **call** is not used, and says so
+//!
+//! The door forwards a call to an agent-side function, and the agent
+//! answers it. The answer would resolve the prop that made the call —
+//! and the tree does not resolve that yet. So the answer is **refused**
+//! and not swallowed: the agent is told that its answer was not used,
+//! and why.
+//!
 //! # What the door **refuses**, on purpose
 //!
 //! - a **surface** that names a catalogue the door does not serve;
@@ -453,7 +461,7 @@ impl Server {
             "updateDataModel" => self.update_data_model(request),
             "deleteSurface" => self.delete_surface(request),
             "callRendererFunction" => self.call_renderer_function(request),
-            "agentFunctionResponse" => Ok(json!({})),
+            "agentFunctionResponse" => self.agent_function_response(request),
             other => Err(Fault::Method(format!(
                 "there is no method `{other}`: the methods are initialize, createSurface, \
                  updateComponents, updateDataModel, deleteSurface, callRendererFunction and \
@@ -490,6 +498,33 @@ impl Server {
             "serverInfo": { "name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
             "a2uiRendererCapabilities": renderer,
         }))
+    }
+
+    /// **`agentFunctionResponse`**: the agent's answer to a call the
+    /// door made.
+    ///
+    /// The door **forwards** a call to an agent-side function, and the
+    /// agent answers it — and the answer is a value the tree cannot
+    /// yet put anywhere: a call's answer resolves the prop that made
+    /// the call, and the tree does not resolve that yet.
+    ///
+    /// So the answer is **refused**, and not swallowed: the agent is
+    /// told that its answer was not used, and why. A message that is
+    /// dropped is a hole, and a hole that is named is a narrowing.
+    fn agent_function_response(&mut self, request: &Request) -> Result<Json, Fault> {
+        let response = request
+            .params
+            .get("agentFunctionResponse")
+            .or_else(|| request.params.get("response"))
+            .cloned()
+            .ok_or_else(|| Fault::Params("there is no `agentFunctionResponse`".to_string()))?;
+        let call_id = response
+            .get("functionCallId")
+            .and_then(Json::as_str)
+            .ok_or_else(|| Fault::Params("there is no `functionCallId`".to_string()))?;
+        Err(Fault::Refused(format!(
+            "the answer to the call `{call_id}` is not used: the tree does not resolve the answer of              a call yet"
+        )))
     }
 
     /// The **catalogue file**: the door writes it, and says where, **on

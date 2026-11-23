@@ -230,6 +230,25 @@ fn a_surface_that_carries_extensions_is_refused() {
     assert!(message.contains("extensions"), "{message}");
 }
 
+/// The agent's **answer** to a call the door made is refused, and not
+/// swallowed: the agent is told that its answer was not used, and why.
+#[test]
+fn the_agents_answer_is_refused_and_not_swallowed() {
+    let mut server = server();
+    let answer = server.handle(&request(
+        "agentFunctionResponse",
+        json!({ "agentFunctionResponse": { "functionCallId": "call-0", "value": 1 } }),
+    ));
+    assert!(answer.get("error").is_some(), "{answer}");
+    let message = answer["error"]["message"].as_str().unwrap_or_default();
+    assert!(message.contains("call-0"), "{message}");
+    assert!(message.contains("not used"), "{message}");
+    // And an answer with **no** id is a wrong request.
+    let answer = server.handle(&request("agentFunctionResponse", json!({ "agentFunctionResponse": {} })));
+    assert!(answer.get("error").is_some(), "{answer}");
+    assert_eq!(answer["error"]["code"], json!(-32602), "{answer}");
+}
+
 /// A **reserved** function is refused.
 #[test]
 fn a_reserved_function_is_refused() {

@@ -70746,3 +70746,8 @@ drives the kit on the other.
   derived and a person cannot drag a derived value about.
 - **The first cut has no keyboard** and **no surface that is not a
   component tree**.
+- **The answer to a call is not used.** The door forwards a call to an
+  agent-side function and the agent answers it — and the answer would
+  resolve the prop that made the call, which the tree does not do yet.
+  So the answer is **refused**, and not swallowed: the agent is told
+  that its answer was not used, and why.
