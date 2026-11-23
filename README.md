@@ -70586,6 +70586,14 @@ gap.
   a2ui catalogue as a component.
 - **Each one paints itself**, in craftkit's own terms: `node.rect`,
   `canvas.text`, `Rect::contains`.
+- **The props are resolved**: a dynamic value is a literal **or** a
+  binding to the data model, and the component holds the **resolved**
+  value — so a bound text is the text in the model, and not an empty
+  picture because the reader refused to guess.
+- **An image is a file**, not a URL to fetch: the tree's own PNG reader
+  reads it at paint time, the read is **bounded**, and the picture is
+  not stored — the node carries the path, and the width and height are
+  **derived**.
 
 ### What the port found
 
