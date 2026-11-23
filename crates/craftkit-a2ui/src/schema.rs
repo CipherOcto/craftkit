@@ -158,6 +158,14 @@ pub fn inline(component: &str, prop: &str) -> Option<Json> {
                 { "$ref": "#/$defs/DataBinding" }
             ]
         })),
+        // The **url** is a path to a file, and the schema says so: a
+        // narrowing the catalogue does not say is a narrowing an agent
+        // cannot see.
+        ("Image", "url") => Some(json!({
+            "description": "The path to a PNG file to draw. The tree fetches nothing over a \
+                            network: the path names a file on this machine.",
+            "allOf": [{ "$ref": "#/$defs/DynamicString" }],
+        })),
         ("Image", "fit") => Some(json!({
             "type": "string",
             "description": "How the image is resized to fit its box.",

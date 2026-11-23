@@ -13,3 +13,10 @@ craftkit-sdk = { workspace = true }
 craftkit-a2ui = { path = "../craftkit-a2ui", version = "0.2.0" }
 # The macros: the components' table and the commands' table.
 craftkit-derive = { workspace = true }
+# The **PNG reader**: the tree's own decoder, so an image is a file the
+# agent names and not a promise to fetch.
+craftkit-png = { workspace = true }
+
+[dev-dependencies]
+# The **scratch**: a path a test may write in, and the removal of it.
+craftkit-scratch = { workspace = true }
