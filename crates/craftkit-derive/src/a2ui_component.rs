@@ -549,7 +549,20 @@ pub fn expand_component(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
     // The row's own **optionality**: a prop declared as `Option<T>` is
     // optional, and the published schema says so — the layer knows the
     // names and the shapes, and the row knows this.
-    let prop_optionals: Vec<bool> = props.iter().map(|prop| prop.inner.is_some()).collect();
+    let prop_optionals: Vec<bool> =
+        props.iter().map(|prop| prop.inner.is_some() || prop.left.is_some()).collect();
+    // And the **other spelling** of a prop written two ways: the schema
+    // must name it, or the schema forbids half the prop.
+    let prop_alternatives: Vec<TokenStream2> = props
+        .iter()
+        .map(|prop| match &prop.alternative {
+            Some(value) => {
+                let literal = LitStr::new(value, Span::call_site());
+                quote!(::core::option::Option::Some(#literal))
+            }
+            None => quote!(::core::option::Option::None),
+        })
+        .collect();
 
     // The **byte-array** names, for the compile-time check against the
     // layer's table. A `const` cannot compare `&str`, so the table holds
@@ -610,6 +623,7 @@ pub fn expand_component(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
                     &[#(#prop_names),*],
                     &[#(#prop_definitions),*],
                     &[#(#prop_optionals),*],
+                    &[#(#prop_alternatives),*],
                 )
             }
 

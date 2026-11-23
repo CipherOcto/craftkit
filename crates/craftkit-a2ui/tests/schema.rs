@@ -57,8 +57,13 @@ fn the_discriminator_is_stamped() {
 fn the_row_decides_what_is_required() {
     // The row says `variant` is optional — and the published schema
     // says so.
-    let published =
-        schema::published_with("Text", &["text", "variant"], &[Some("DynamicString"), None], &[false, true]);
+    let published = schema::published_with(
+        "Text",
+        &["text", "variant"],
+        &[Some("DynamicString"), None],
+        &[false, true],
+        &[None, None],
+    );
     let required = published["required"].as_array().expect("there is a required list");
     assert!(required.contains(&json!("text")), "{required:?}");
     assert!(!required.contains(&json!("variant")), "{required:?}");
@@ -68,7 +73,8 @@ fn the_row_decides_what_is_required() {
 /// optional is optional whatever the row says.
 #[test]
 fn the_layers_own_rule_still_holds() {
-    let published = schema::published_with("Text", &["text", "weight"], &[None, None], &[true, true]);
+    let published =
+        schema::published_with("Text", &["text", "weight"], &[None, None], &[true, true], &[None, None]);
     let required = published["required"].as_array().expect("there is a required list");
     assert!(!required.contains(&json!("weight")), "the weight is optional: {required:?}");
 }

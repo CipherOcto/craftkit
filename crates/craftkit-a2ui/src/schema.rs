@@ -258,7 +258,7 @@ pub fn inline(component: &str, prop: &str) -> Option<Json> {
 /// **no properties**, because the layer evaluates no check rule and a
 /// rule it cannot run must not be published. The `allOf` itself stays.
 pub fn published(name: &str, names: &[&str], definitions: &[Option<&str>]) -> Json {
-    published_with(name, names, definitions, &[])
+    published_with(name, names, definitions, &[], &[])
 }
 
 /// The **published** schema, with the **row's** own optionality.
@@ -271,7 +271,13 @@ pub fn published(name: &str, names: &[&str], definitions: &[Option<&str>]) -> Js
 ///
 /// A row that says nothing — the layer's own tests — leaves the layer's
 /// rule alone.
-pub fn published_with(name: &str, names: &[&str], definitions: &[Option<&str>], optionals: &[bool]) -> Json {
+pub fn published_with(
+    name: &str,
+    names: &[&str],
+    definitions: &[Option<&str>],
+    optionals: &[bool],
+    alternatives: &[Option<&str>],
+) -> Json {
     let mut properties = Map::new();
     properties.insert("component".to_string(), json!({ "const": name }));
     // Every component carries an **id**: a2ui's `ComponentCommon` says so,
@@ -281,9 +287,17 @@ pub fn published_with(name: &str, names: &[&str], definitions: &[Option<&str>], 
 
     for (index, prop) in names.iter().enumerate() {
         let definition = definitions.get(index).copied().flatten();
-        properties.insert((*prop).to_string(), prop_shape(name, prop, definition));
+        let shape = prop_shape(name, prop, definition);
+        properties.insert((*prop).to_string(), shape.clone());
+        // A prop written **two ways** — an `Either` — has another
+        // spelling, and the schema must name it: a schema that forbids
+        // the other spelling is a schema that forbids half the prop.
+        let alternative = alternatives.get(index).copied().flatten();
+        if let Some(alternative) = alternative {
+            properties.insert(alternative.to_string(), shape);
+        }
         let row_says_optional = optionals.get(index).copied().unwrap_or(false);
-        if !optional(name, prop) && !row_says_optional {
+        if !optional(name, prop) && !row_says_optional && alternative.is_none() {
             required.push(prop);
         }
     }

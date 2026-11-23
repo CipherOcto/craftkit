@@ -319,7 +319,7 @@ pub fn read_path(data: &str) -> Result<Path, String> {
                 } else {
                     (point(x1, y1)?, point(x, y)?)
                 };
-                let (c1, c2) = quadratic_as_cubic(pen, control, to);
+                let (c1, c2) = quadratic_as_cubic(pen, control, to)?;
                 push_cubic(&mut current, &mut pen, c1, c2, to);
                 last_quad = Some(control);
                 last_cubic = None;
@@ -332,7 +332,7 @@ pub fn read_path(data: &str) -> Result<Path, String> {
                     Some(previous) => point(2.0 * pen.x - previous.x, 2.0 * pen.y - previous.y)?,
                     None => pen,
                 };
-                let (c1, c2) = quadratic_as_cubic(pen, control, to);
+                let (c1, c2) = quadratic_as_cubic(pen, control, to)?;
                 push_cubic(&mut current, &mut pen, c1, c2, to);
                 last_quad = Some(control);
                 last_cubic = None;
@@ -404,10 +404,16 @@ fn push_cubic(current: &mut Option<SubPath>, pen: &mut Point, c1: Point, c2: Poi
 }
 
 /// A **quadratic curve** as the cubic it is.
-fn quadratic_as_cubic(from: Point, control: Point, to: Point) -> (Point, Point) {
-    let c1 = Point::new(from.x + 2.0 / 3.0 * (control.x - from.x), from.y + 2.0 / 3.0 * (control.y - from.y));
-    let c2 = Point::new(to.x + 2.0 / 3.0 * (control.x - to.x), to.y + 2.0 / 3.0 * (control.y - to.y));
-    (c1, c2)
+///
+/// # Errors
+///
+/// The control points are **computed**, and a computed point can
+/// overflow where the numbers it came from did not: so they are
+/// checked like every other point.
+fn quadratic_as_cubic(from: Point, control: Point, to: Point) -> Result<(Point, Point), String> {
+    let c1 = point(from.x + 2.0 / 3.0 * (control.x - from.x), from.y + 2.0 / 3.0 * (control.y - from.y))?;
+    let c2 = point(to.x + 2.0 / 3.0 * (control.x - to.x), to.y + 2.0 / 3.0 * (control.y - to.y))?;
+    Ok((c1, c2))
 }
 
 /// An **elliptical arc** as the cubics it is.

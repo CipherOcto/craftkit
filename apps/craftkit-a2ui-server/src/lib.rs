@@ -736,6 +736,14 @@ pub fn translate(name: &str, args: &Json) -> Result<Json, String> {
         };
         out.insert((*craftkit_name).to_string(), value.clone());
     }
+    // And the arguments the function **must** be given: a call that
+    // leaves one out is a wrong request, and the door says so before
+    // it runs anything.
+    for required in craftkit_a2ui::functions::required_of(name).unwrap_or(&[]) {
+        if !object.contains_key(*required) {
+            return Err(format!("`{required}` is an argument of `{name}` and it is not there"));
+        }
+    }
     Ok(Json::Object(out))
 }
 
@@ -745,7 +753,7 @@ pub fn translate(name: &str, args: &Json) -> Result<Json, String> {
 /// function is the agent's too — and the two are different messages on
 /// the wire, because the protocol says they are.
 pub fn message_of(outcome: &Outcome, call_id: &str, metadata: Option<Json>) -> Option<Json> {
-    let (method, mut params) = match outcome.data.get("action") {
+    let (method, params) = match outcome.data.get("action") {
         Some(action) => {
             let mut action = action.as_object()?.clone();
             action.insert("timestamp".to_string(), json!(timestamp()));
@@ -758,13 +766,15 @@ pub fn message_of(outcome: &Outcome, call_id: &str, metadata: Option<Json>) -> O
             ("callAgentFunction", json!({ "version": "1.0", "callAgentFunction": call }))
         }
     };
-    // The **metadata** goes with the message: the protocol says the data
-    // model rides in the transport's metadata, and the transport here is
-    // JSON-RPC — so the metadata is a member of the message's params.
+    // The **metadata** goes with the message and not inside it: the
+    // protocol's own message holds the version and the one payload, and
+    // nothing else — so the data model rides **beside** the params, in
+    // the transport's own envelope.
+    let mut message = json!({ "jsonrpc": "2.0", "method": method, "params": params });
     if let Some(metadata) = metadata {
-        params["metadata"] = metadata;
+        message["metadata"] = metadata;
     }
-    Some(json!({ "jsonrpc": "2.0", "method": method, "params": params }))
+    Some(message)
 }
 
 /// The **metadata** of a message: the data models of the surfaces that

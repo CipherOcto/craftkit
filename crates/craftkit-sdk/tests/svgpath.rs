@@ -246,3 +246,14 @@ fn an_arcs_flags_are_single_characters() {
     let error = read_path("M 0 0 A 10 10 0 2 1 10 10").expect_err("the flag is refused");
     assert!(error.contains("flag"), "{error}");
 }
+
+/// A **computed** point that overflows is refused: the numbers in the
+/// path data are finite, and the curve's control points are sums of
+/// them — and a sum can be bigger than both.
+#[test]
+fn a_computed_point_that_overflows_is_refused() {
+    let error = read_path("M -1e308 0 Q 1e308 0 -1e308 0").expect_err("the point is refused");
+    assert!(error.contains("does not stay in numbers"), "{error}");
+    let error = read_path("M -1e308 0 T 1e308 0").expect_err("the point is refused");
+    assert!(error.contains("does not stay in numbers"), "{error}");
+}

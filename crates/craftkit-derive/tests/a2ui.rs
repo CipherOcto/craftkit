@@ -98,6 +98,7 @@ mod layer {
             names: &[&str],
             definitions: &[Option<&str>],
             optionals: &[bool],
+            alternatives: &[Option<&str>],
         ) -> Json {
             let mut properties = craftkit_sdk::serde_json::Map::new();
             let mut required: Vec<Json> = Vec::new();
@@ -106,8 +107,13 @@ mod layer {
                     Some(definition) => json!({ "$ref": format!("#/$defs/{definition}") }),
                     None => json!({ "type": "string" }),
                 };
-                properties.insert((*prop).to_string(), shape);
-                if !optionals.get(index).copied().unwrap_or(false) {
+                properties.insert((*prop).to_string(), shape.clone());
+                if let Some(alternative) = alternatives.get(index).copied().flatten() {
+                    properties.insert(alternative.to_string(), shape);
+                }
+                if !optionals.get(index).copied().unwrap_or(false)
+                    && alternatives.get(index).copied().flatten().is_none()
+                {
                     required.push(Json::String((*prop).to_string()));
                 }
             }

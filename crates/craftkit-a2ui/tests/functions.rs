@@ -47,9 +47,13 @@ fn the_declaration_carries_the_envelope() {
     let function = functions::by_name("surfaceApply").expect("the function is there");
     let declaration = functions::declaration(&function);
     assert_eq!(declaration["properties"]["@call"], json!({ "const": "surfaceApply" }));
-    assert_eq!(declaration["required"], json!(["@call"]));
+    assert_eq!(declaration["required"], json!(["@call", "args"]));
     assert!(declaration["returnType"].is_string(), "and it says what it returns");
-    assert_eq!(declaration["unevaluatedProperties"], json!(false));
+    // The keyword that refuses an unknown property belongs to a
+    // **schema**: the `args` are a schema and carry it, and the
+    // declaration — an instance — carries none.
+    assert_eq!(declaration["properties"]["args"]["unevaluatedProperties"], json!(false));
+    assert!(declaration.get("unevaluatedProperties").is_none(), "and the instance carries none");
 }
 
 /// Every declared function says **who may call it**.
@@ -86,4 +90,45 @@ fn the_arguments_are_written_down() {
     let declared = functions::declaration(&functions::LOCAL[1]);
     assert_eq!(declared["properties"]["args"]["properties"]["surfaceId"], json!({}));
     assert_eq!(declared["properties"]["args"]["properties"]["components"], json!({}));
+}
+
+/// Every **declaration** is a catalogue entry a2ui's own schema
+/// accepts.
+///
+/// The keyword that refuses an unknown property belongs to a **schema**,
+/// and a declaration is an **instance** — so the keyword is inside the
+/// `args`, which are a schema, and nowhere else. An instance that
+/// carries it is an entry the catalogue's own validator refuses.
+#[test]
+fn every_declaration_is_a_catalogue_entry_a2ui_accepts() {
+    for function in functions::all() {
+        let declaration = functions::declaration(&function);
+        let name = function.name;
+        // The **instance** carries no keyword.
+        assert!(
+            declaration.get("unevaluatedProperties").is_none(),
+            "{name} carries a schema keyword in the instance"
+        );
+        // The **args** are a schema, and carry it.
+        let args = &declaration["properties"]["args"];
+        assert_eq!(args["unevaluatedProperties"], json!(false), "{name}");
+        // The envelope is there: the `@call` const, and the required
+        // list holding it.
+        assert_eq!(declaration["properties"]["@call"]["const"], json!(name), "{name}");
+        let required = declaration["required"].as_array().expect("there is a required list");
+        assert!(required.contains(&json!("@call")), "{name}: {required:?}");
+        // And every argument the table names is a property, and every
+        // required argument is one of them.
+        let properties = args["properties"].as_object().expect("there are properties");
+        for (argument, _) in function.args {
+            assert!(properties.contains_key(*argument), "{name} does not name `{argument}`");
+        }
+        let args_required = args.get("required").and_then(craftkit_a2ui::serde_json::Value::as_array);
+        for argument in function.required {
+            assert!(properties.contains_key(*argument), "{name} requires `{argument}`");
+            if let Some(list) = args_required {
+                assert!(list.contains(&json!(argument)), "{name} requires `{argument}`: {list:?}");
+            }
+        }
+    }
 }

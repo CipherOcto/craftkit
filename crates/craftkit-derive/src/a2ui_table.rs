@@ -274,8 +274,17 @@ fn fields_of(input: ParseStream) -> Result<Vec<Field>> {
 /// The struct's name, from the a2ui name.
 ///
 /// `Text` is `TextComponent`: the name, and `Component` after it.
-fn struct_name(name: &str) -> Ident {
-    Ident::new(&format!("{name}Component"), Span::call_site())
+fn struct_name(name: &str) -> Result<Ident> {
+    // The name is **checked**, and not formatted: a name that is not a
+    // name a struct can be called is refused with a message that says
+    // so — and not a panic in the compiler's middle.
+    let candidate = format!("{name}Component");
+    syn::parse_str::<Ident>(&candidate).map_err(|_| {
+        Error::new(
+            Span::call_site(),
+            format!("the a2ui name `{name}` is not a name a component's struct can be called"),
+        )
+    })
 }
 
 /// Write the table.
@@ -319,7 +328,7 @@ pub fn expand(input: TokenStream2) -> Result<TokenStream2> {
 
 /// Write one row: the struct, the bodies, and everything the derive writes.
 fn expand_row(sdk: &TokenStream2, table: &Table, row: &Row) -> Result<TokenStream2> {
-    let name = struct_name(&row.name);
+    let name = struct_name(&row.name)?;
 
     // The props, as the derive reads them: the fields, with their
     // attributes, and the doc comments.
@@ -352,9 +361,16 @@ fn expand_row(sdk: &TokenStream2, table: &Table, row: &Row) -> Result<TokenStrea
     // The **layer** comes first: the kind's prefix is the layer's own
     // id, and not a name the table hard-codes.
     let layer = row.layer.clone().unwrap_or_else(|| "a2ui".to_string());
+    // The **layer's** id is a word in lower case, and the registry
+    // refuses one that is not.
+    if !layer.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) || layer.is_empty() {
+        return Err(Error::new(Span::call_site(), format!("the layer `{layer}` is one word, in lower case")));
+    }
     // And the **kind** is checked: the registry refuses an id that is not
     // dotted and lower case, and the table says so while the reader is
-    // still looking at it.
+    // still looking at it. The **default** kind is checked too — a
+    // compile error is better than a refusal when the ecosystem is
+    // built.
     let kind = match &row.kind {
         Some(kind) => {
             check_id_text(kind, Span::call_site())?;
@@ -362,6 +378,7 @@ fn expand_row(sdk: &TokenStream2, table: &Table, row: &Row) -> Result<TokenStrea
         }
         None => format!("{layer}.{}", row.name.to_lowercase()),
     };
+    check_id_text(&kind, Span::call_site())?;
     let doc = crate::common::doc_of(&row.docs);
 
     // The **bodies**: the painter and the hit test, hand-written.

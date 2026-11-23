@@ -174,7 +174,10 @@ fn a_surface_that_asks_for_its_data_model_gets_it_in_the_metadata() {
     assert!(!answer["clicked"].is_null(), "the button was clicked: {answer}");
     let messages = server.take_outbound();
     assert_eq!(messages.len(), 1, "one message is not a reply: {messages:?}");
-    let metadata = &messages[0]["params"]["metadata"]["a2uiRendererDataModel"];
+    // The metadata rides **beside** the params: the protocol's own
+    // message holds the version and the one payload, and nothing else.
+    let metadata = &messages[0]["metadata"]["a2uiRendererDataModel"];
+    assert!(messages[0]["params"].get("metadata").is_none(), "and not inside the message");
     assert_eq!(metadata["version"], json!("1.0"), "{metadata}");
     assert_eq!(metadata["surfaces"]["s13"]["title"], json!("hello"), "{metadata}");
 }
@@ -205,7 +208,7 @@ fn a_surface_that_did_not_ask_gets_no_metadata() {
     render.click(Point::new(1.0, 1.0)).expect("the click is answered");
     let messages = server.take_outbound();
     assert_eq!(messages.len(), 1, "one message is not a reply: {messages:?}");
-    assert!(messages[0]["params"].get("metadata").is_none(), "{messages:?}");
+    assert!(messages[0].get("metadata").is_none(), "{messages:?}");
 }
 
 /// A surface that omits the catalogue gets the door's own.

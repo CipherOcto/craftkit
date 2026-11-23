@@ -90,6 +90,14 @@ pub struct Function {
     /// runs the command. An agent that follows the catalogue can call
     /// a function, and the layer does not guess at an argument's name.
     pub args: &'static [(&'static str, &'static str)],
+    /// The arguments the function **must** be given: their a2ui names.
+    ///
+    /// The catalogue says which arguments a call cannot leave out, and a
+    /// call that leaves one out is a **wrong request** — and the door
+    /// says so before it runs anything. An argument that is not in this
+    /// list is optional, and one that is not in `args` at all is
+    /// **refused**.
+    pub required: &'static [&'static str],
 }
 
 /// The **local** functions: the layer's own commands.
@@ -106,6 +114,7 @@ pub const LOCAL: &[Function] = &[
         return_type: "string",
         allowed_callers: "rendererOnly",
         args: &[("surfaceId", "surface_id")],
+        required: &["surfaceId"],
     },
     Function {
         name: "surfaceApply",
@@ -114,6 +123,7 @@ pub const LOCAL: &[Function] = &[
         return_type: "string",
         allowed_callers: "rendererOnly",
         args: &[("surfaceId", "surface_id"), ("components", "components")],
+        required: &["surfaceId", "components"],
     },
     Function {
         name: "surfaceDelete",
@@ -122,6 +132,7 @@ pub const LOCAL: &[Function] = &[
         return_type: "string",
         allowed_callers: "rendererOnly",
         args: &[("surfaceId", "surface_id")],
+        required: &["surfaceId"],
     },
     Function {
         name: "dataSet",
@@ -130,6 +141,7 @@ pub const LOCAL: &[Function] = &[
         return_type: "string",
         allowed_callers: "rendererOnly",
         args: &[("surfaceId", "surface_id"), ("path", "path"), ("value", "value")],
+        required: &["surfaceId", "path", "value"],
     },
     Function {
         name: "componentInvoke",
@@ -138,6 +150,7 @@ pub const LOCAL: &[Function] = &[
         return_type: "string",
         allowed_callers: "rendererOnly",
         args: &[("surfaceId", "surface_id"), ("componentId", "component_id"), ("action", "action")],
+        required: &["surfaceId", "componentId", "action"],
     },
 ];
 
@@ -157,7 +170,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value")],
+        required: &["value"],
     },
     Function {
         name: "regex",
@@ -165,7 +179,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value"), ("pattern", "pattern")],
+        required: &["value", "pattern"],
     },
     Function {
         name: "length",
@@ -173,7 +188,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value"), ("min", "min"), ("max", "max")],
+        required: &["value"],
     },
     Function {
         name: "numeric",
@@ -181,7 +197,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value"), ("min", "min"), ("max", "max")],
+        required: &["value"],
     },
     Function {
         name: "email",
@@ -189,7 +206,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value")],
+        required: &["value"],
     },
     Function {
         name: "formatString",
@@ -197,7 +215,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value")],
+        required: &["value"],
     },
     Function {
         name: "formatNumber",
@@ -205,7 +224,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value"), ("decimals", "decimals"), ("grouping", "grouping")],
+        required: &["value"],
     },
     Function {
         name: "formatCurrency",
@@ -213,7 +233,13 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[
+            ("value", "value"),
+            ("currency", "currency"),
+            ("decimals", "decimals"),
+            ("grouping", "grouping"),
+        ],
+        required: &["value", "currency"],
     },
     Function {
         name: "formatDate",
@@ -221,7 +247,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value"), ("format", "format")],
+        required: &["value", "format"],
     },
     Function {
         name: "pluralize",
@@ -229,7 +256,16 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[
+            ("value", "value"),
+            ("zero", "zero"),
+            ("one", "one"),
+            ("two", "two"),
+            ("few", "few"),
+            ("many", "many"),
+            ("other", "other"),
+        ],
+        required: &["value", "other"],
     },
     Function {
         name: "openUrl",
@@ -237,7 +273,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "void",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("url", "url")],
+        required: &["url"],
     },
     Function {
         name: "and",
@@ -245,7 +282,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "boolean",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("values", "values")],
+        required: &["values"],
     },
     Function {
         name: "or",
@@ -253,7 +291,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "boolean",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("values", "values")],
+        required: &["values"],
     },
     Function {
         name: "not",
@@ -261,7 +300,8 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "boolean",
         allowed_callers: "rendererOnly",
-        args: &[],
+        args: &[("value", "value")],
+        required: &["value"],
     },
 ];
 
@@ -305,8 +345,14 @@ pub fn is_reserved(name: &str) -> bool {
 ///
 /// a2ui validates this shape: a `FunctionDefinition` requires a **`@call`**
 /// envelope — `type`, `properties` with a `"@call"` `const`, and a
-/// `required` holding `"@call"` — plus a **`returnType`**, with
-/// `unevaluatedProperties: false`.
+/// `required` holding `"@call"` — plus a **`returnType`**, and the
+/// definition **refuses** a property it does not name.
+///
+/// And that last part is the reason the declaration carries no
+/// `unevaluatedProperties` of its own: the keyword belongs to a
+/// **schema**, and the declaration is an **instance**. The keyword is
+/// inside the `args` — which is a schema — and nowhere else, so the
+/// catalogue a2ui's own schema checks is a catalogue that passes.
 pub fn declaration(function: &Function) -> craftkit_sdk::serde_json::Value {
     use craftkit_sdk::serde_json::json;
     // The **arguments** the function takes: the a2ui names, and the
@@ -316,6 +362,16 @@ pub fn declaration(function: &Function) -> craftkit_sdk::serde_json::Value {
     for (name, _) in function.args {
         properties.insert((*name).to_string(), json!({}));
     }
+    // And the ones it **must** be given.
+    let required: Vec<craftkit_sdk::serde_json::Value> =
+        function.required.iter().map(|name| json!(name)).collect();
+    let mut args = craftkit_sdk::serde_json::Map::new();
+    args.insert("type".to_string(), json!("object"));
+    args.insert("properties".to_string(), craftkit_sdk::serde_json::Value::Object(properties));
+    if !required.is_empty() {
+        args.insert("required".to_string(), craftkit_sdk::serde_json::Value::Array(required));
+    }
+    args.insert("unevaluatedProperties".to_string(), json!(false));
     json!({
         "type": "object",
         "description": function.doc,
@@ -323,14 +379,9 @@ pub fn declaration(function: &Function) -> craftkit_sdk::serde_json::Value {
         "allowedCallers": function.allowed_callers,
         "properties": {
             "@call": { "const": function.name },
-            "args": {
-                "type": "object",
-                "properties": properties,
-                "unevaluatedProperties": false,
-            },
+            "args": craftkit_sdk::serde_json::Value::Object(args),
         },
-        "required": ["@call"],
-        "unevaluatedProperties": false,
+        "required": ["@call", "args"],
     })
 }
 
@@ -341,6 +392,15 @@ pub fn declaration(function: &Function) -> craftkit_sdk::serde_json::Value {
 /// spelling is the one that is written down.
 pub fn arguments_of(name: &str) -> Option<&'static [(&'static str, &'static str)]> {
     all().iter().find(|function| function.name == name).map(|function| function.args)
+}
+
+/// The arguments a function **must** be given, by their a2ui names.
+///
+/// A call that leaves one of these out is a **wrong request**: the
+/// catalogue says which they are, and the door says so before it runs
+/// anything.
+pub fn required_of(name: &str) -> Option<&'static [&'static str]> {
+    all().iter().find(|function| function.name == name).map(|function| function.required)
 }
 
 #[cfg(test)]
@@ -393,9 +453,32 @@ mod tests {
         let function = by_name("surfaceApply").expect("the function is there");
         let declaration = declaration(&function);
         assert_eq!(declaration["properties"]["@call"], crate::serde_json::json!({ "const": "surfaceApply" }));
-        assert_eq!(declaration["required"], crate::serde_json::json!(["@call"]));
+        assert_eq!(declaration["required"], crate::serde_json::json!(["@call", "args"]));
         assert!(declaration["returnType"].is_string(), "and it says what it returns");
-        assert_eq!(declaration["unevaluatedProperties"], crate::serde_json::json!(false));
+        // And the **arguments** it takes, and the ones it must be given.
+        let args = &declaration["properties"]["args"];
+        assert!(args["properties"]["surfaceId"].is_object(), "the argument is named");
+        assert_eq!(args["required"], crate::serde_json::json!(["surfaceId", "components"]));
+        // The keyword belongs to a **schema**: the `args` are a schema
+        // and carry it, and the declaration — an instance — does not.
+        assert_eq!(args["unevaluatedProperties"], crate::serde_json::json!(false));
+        assert!(declaration.get("unevaluatedProperties").is_none(), "and the instance carries none");
+    }
+
+    /// The **agent-side** functions carry the arguments a2ui's own
+    /// catalogue names, and the ones it requires.
+    ///
+    /// An agent that follows a2ui's catalogue sends `args.value` — and a
+    /// declaration that forbids it would forbid the agent's own call.
+    #[test]
+    fn the_agent_side_functions_carry_their_arguments() {
+        let function = by_name("required").expect("the function is there");
+        let declaration = declaration(&function);
+        let args = &declaration["properties"]["args"];
+        assert!(args["properties"]["value"].is_object(), "the argument is named");
+        assert_eq!(args["required"], crate::serde_json::json!(["value"]));
+        // And the layer's own table says the same.
+        assert_eq!(required_of("required"), Some(&["value"][..]));
     }
 
     /// The two kinds of entry do not overlap.

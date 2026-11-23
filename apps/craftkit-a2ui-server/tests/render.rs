@@ -87,11 +87,15 @@ fn a_click_on_a_component_runs_its_action() {
 }
 
 /// The click is a **command**, and the command's answer is the answer.
+///
+/// And a button whose action names a function in **neither** table is
+/// refused when the tree is drawn: a button that does nothing is a
+/// button the tree does not show.
 #[test]
 fn the_click_is_a_command() {
     let mut session = plain();
     session.execute("a2ui.surface.create", &json!({ "surface_id": "s2" })).expect("the surface is made");
-    session
+    let error = session
         .execute(
             "a2ui.surface.apply",
             &json!({
@@ -108,10 +112,6 @@ fn the_click_is_a_command() {
                 ],
             }),
         )
-        .expect("the button is drawn");
-    let mut render = Headless::new(Arc::new(Mutex::new(session)), queue());
-    // The action names a function in neither table, so the command
-    // **refuses** it — and the refusal is the answer.
-    let error = render.click(Point::new(1.0, 1.0)).expect_err("the action is refused");
-    assert!(error.contains("neither"), "{error}");
+        .expect_err("the button is refused");
+    assert!(error.to_string().contains("neither"), "{error}");
 }

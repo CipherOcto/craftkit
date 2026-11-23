@@ -165,7 +165,9 @@ impl Headless {
         let mut current = Some(id);
         while let Some(id) = current {
             let node = document.node(id)?;
-            if node.data.get("action").is_some() {
+            // A node with an **action** is a target: an action that is
+            // not there is no action, and a null is no action.
+            if node.data.get("action").is_some_and(|action| action.is_object()) {
                 return Some(id);
             }
             if node.kind == "a2ui.surface" {
