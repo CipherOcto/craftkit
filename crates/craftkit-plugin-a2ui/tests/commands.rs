@@ -581,6 +581,162 @@ fn a_child_that_names_nothing_is_refused() {
     assert!(error.to_string().contains("nope"), "{error}");
 }
 
+/// A tree that is a **cycle** is refused: a component that is reached
+/// twice is a loop, and a loop is not a tree that can be drawn.
+///
+/// This is the one that matters most: the root held by its own
+/// descendant would make the walk that draws the tree go round for
+/// ever — and a stack overflow is not a panic, and it aborts the
+/// process.
+#[test]
+fn a_tree_that_is_a_cycle_is_refused() {
+    let mut session = session();
+    surface(&mut session, "s14");
+    let outcome = session.execute(
+        "a2ui.surface.apply",
+        &json!({
+            "surface_id": "s14",
+            "components": [
+                { "component": "Column", "id": "root", "children": ["b1"] },
+                { "component": "Column", "id": "b1", "children": ["root"] },
+            ],
+        }),
+    );
+    let error = outcome.expect_err("the cycle is refused");
+    assert!(error.to_string().contains("cycle"), "{error}");
+    // And the surface holds nothing: the tree was refused before
+    // anything was made.
+    let kinds: Vec<&str> = session.document().walk().map(|node| node.kind.as_str()).collect();
+    assert!(!kinds.contains(&"a2ui.column"), "and nothing was drawn: {kinds:?}");
+}
+
+/// A component that is **missing** a prop the published schema says it
+/// must have is refused: the tree keeps what it publishes, and a
+/// component that does not fit is not drawn as nothing.
+#[test]
+fn a_component_that_is_missing_a_required_prop_is_refused() {
+    let mut session = session();
+    surface(&mut session, "s14");
+    for (component, expected) in [
+        (json!({ "component": "Text", "id": "root" }), "text"),
+        (json!({ "component": "Image", "id": "root" }), "url"),
+        (json!({ "component": "Icon", "id": "root" }), "name"),
+        (json!({ "component": "CheckBox", "id": "root" }), "label"),
+    ] {
+        let outcome =
+            session.execute("a2ui.surface.apply", &json!({ "surface_id": "s14", "components": [component] }));
+        let error = outcome.expect_err("the component is refused");
+        assert!(error.to_string().contains(expected), "{error}");
+    }
+}
+
+/// An icon's name is a **path**, and not one of the fifty-nine names
+/// the tree does not have: a name the tree cannot draw would be drawn
+/// as nothing.
+#[test]
+fn an_icons_name_must_be_a_path() {
+    let mut session = session();
+    surface(&mut session, "s14");
+    let outcome = session.execute(
+        "a2ui.surface.apply",
+        &json!({
+            "surface_id": "s14",
+            "components": [{ "component": "Icon", "id": "root", "name": "check" }],
+        }),
+    );
+    let error = outcome.expect_err("the name is refused");
+    assert!(error.to_string().contains("path"), "{error}");
+}
+
+/// And a **shape** that is not a path is refused as well.
+#[test]
+fn an_icons_shape_must_be_a_path() {
+    let mut session = session();
+    surface(&mut session, "s14");
+    let outcome = session.execute(
+        "a2ui.surface.apply",
+        &json!({
+            "surface_id": "s14",
+            "components": [{ "component": "Icon", "id": "root", "name": { "svgPath": "not a path" } }],
+        }),
+    );
+    let error = outcome.expect_err("the shape is refused");
+    assert!(error.to_string().contains("path"), "{error}");
+}
+
+/// An action that names **nothing** is refused when the tree is
+/// applied, and not only when it is invoked.
+#[test]
+fn an_action_that_names_nothing_is_refused_at_apply_time() {
+    let mut session = session();
+    surface(&mut session, "s14");
+    for action in [
+        json!({ "event": { "userMessage": "hello" } }),
+        json!({ "functionCall": { "@call": "somethingElse" } }),
+        json!({ "functionCall": { "args": {} } }),
+    ] {
+        let outcome = session.execute(
+            "a2ui.surface.apply",
+            &json!({
+                "surface_id": "s14",
+                "components": [{
+                    "component": "Button",
+                    "id": "root",
+                    "child": "t1",
+                    "action": action,
+                }, {
+                    "component": "Text",
+                    "id": "t1",
+                    "text": "press",
+                }],
+            }),
+        );
+        assert!(outcome.is_err(), "the action is refused: {outcome:?}");
+    }
+}
+
+/// An action that is **both** an event and a function call is refused:
+/// it says two things, and one of them would be swallowed.
+#[test]
+fn an_action_that_is_both_is_refused() {
+    let mut session = session();
+    surface(&mut session, "s15");
+    tree(&mut session, "s15");
+    let outcome = session.execute(
+        "a2ui.component.invoke",
+        &json!({
+            "surface_id": "s15",
+            "component_id": "t1",
+            "action": {
+                "event": { "name": "pressed" },
+                "functionCall": { "@call": "dataSet" },
+            },
+        }),
+    );
+    let error = outcome.expect_err("the action is refused");
+    assert!(error.to_string().contains("both"), "{error}");
+}
+
+/// A weight of **nothing** is refused: a child with no share is a
+/// child that is not drawn.
+#[test]
+fn a_weight_of_nothing_is_refused() {
+    let mut session = session();
+    surface(&mut session, "s14");
+    let outcome = session.execute(
+        "a2ui.surface.apply",
+        &json!({
+            "surface_id": "s14",
+            "components": [
+                { "component": "Column", "id": "root", "children": ["t1"] },
+                { "component": "Text", "id": "t1", "text": "hello", "weight": 0 },
+            ],
+        }),
+    );
+    let error = outcome.expect_err("the weight is refused");
+    assert!(error.to_string().contains("weight"), "{error}");
+}
+
 /// A **malformed weight** is refused, and not ignored.
 #[test]
 fn a_malformed_weight_is_refused() {

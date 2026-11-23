@@ -195,7 +195,7 @@ impl Tree {
             _ => None,
         };
         match number {
-            Some(number) if number.is_finite() && number >= 0.0 => Ok(number),
+            Some(number) if number.is_finite() && number > 0.0 => Ok(number),
             _ => Err(format!("the weight of the component `{}` is not a weight", component.id)),
         }
     }
@@ -234,8 +234,17 @@ impl Tree {
         })
     }
 
-    /// The **links** of the tree: every child is there, and every
-    /// component is in the tree.
+    /// The **links** of the tree: every child is there, every component
+    /// is in the tree, and the tree is a tree.
+    ///
+    /// The last one is the one that matters most: a component that is
+    /// reached **twice** is a **cycle**, and a cycle is not a tree that
+    /// can be drawn — it is a loop that never ends. So the walk from
+    /// the root carries the components it has seen, and a component
+    /// that is seen again is refused.
+    ///
+    /// Without this the root could be held by its own descendant, and
+    /// the walk that draws the tree would go round for ever.
     fn check_links(&self) -> Result<(), String> {
         if !self.components.iter().any(|component| component.id == ROOT_ID) {
             return Err(format!("the tree has no component with the id `{ROOT_ID}`"));
@@ -257,6 +266,30 @@ impl Tree {
             if !held.contains(&component.id.as_str()) {
                 return Err(format!("the component `{}` is in no parent", component.id));
             }
+        }
+        // And the tree is a **tree**: the walk from the root reaches
+        // every component once and once only.
+        let mut seen: Vec<String> = Vec::new();
+        let root = self.root();
+        self.walk(root, &mut seen)?;
+        Ok(())
+    }
+
+    /// Walk the tree from a component, refusing a **cycle**.
+    ///
+    /// The components seen are carried along, and a component that is
+    /// seen twice is a cycle — and a cycle is refused, because a tree
+    /// that is not a tree cannot be drawn and must not be walked.
+    fn walk(&self, component: &Component, seen: &mut Vec<String>) -> Result<(), String> {
+        if seen.iter().any(|id| id == &component.id) {
+            return Err(format!(
+                "the component `{}` is in a cycle: a tree is a tree and not a loop",
+                component.id
+            ));
+        }
+        seen.push(component.id.clone());
+        for child in self.children_of(component)? {
+            self.walk(child, seen)?;
         }
         Ok(())
     }
@@ -394,6 +427,26 @@ const PROPS: &[(&str, &[(&str, Prop)])] = &[
 /// id are not props.
 const OWN: &[&str] = &["component", "id"];
 
+/// The props a component **must** be given.
+///
+/// The published schema says which they are, and the tree keeps what
+/// it publishes: a component that is missing one is **refused**, and
+/// not drawn as nothing. The list here is the row's own — and the
+/// plugin's own test says that it agrees with the published schema.
+const REQUIRED: &[(&str, &[&str])] = &[
+    ("Text", &["text"]),
+    ("Image", &["url"]),
+    ("Icon", &["name"]),
+    ("Row", &["children"]),
+    ("Column", &["children"]),
+    ("List", &["children"]),
+    ("Card", &["child"]),
+    ("Button", &["child"]),
+    ("Divider", &[]),
+    ("CheckBox", &["label"]),
+    ("TextField", &["label"]),
+];
+
 /// Check the **props** of a component.
 ///
 /// Every prop is checked against what the catalogue says it is, and a
@@ -405,6 +458,20 @@ fn check_props(component: &Component) -> Result<(), String> {
     let Some(object) = component.json.as_object() else {
         return Err(format!("the component `{}` is not a tree of its own", component.id));
     };
+    // The props it **must** be given: the tree keeps what it publishes.
+    let required = REQUIRED
+        .iter()
+        .find(|(kind, _)| *kind == component.kind)
+        .map(|(_, required)| *required)
+        .unwrap_or(&[]);
+    for prop in required {
+        if !object.contains_key(*prop) {
+            return Err(format!(
+                "the component `{}` has no `{prop}`, and the published schema says it must",
+                component.id
+            ));
+        }
+    }
     for (name, value) in object {
         if OWN.contains(&name.as_str()) {
             continue;
@@ -424,14 +491,28 @@ fn check_prop(component: &Component, name: &str, prop: Prop, value: &Json) -> Re
         Prop::Dynamic | Prop::DynamicBool | Prop::IconName => {
             let object = match value {
                 Json::Object(object) => object,
-                Json::String(_) if !matches!(prop, Prop::DynamicBool) => return Ok(()),
+                Json::String(text) if !matches!(prop, Prop::DynamicBool) => {
+                    // An icon's name is a **path** and not a name: the
+                    // fifty-nine built-in names are a narrowing, and a
+                    // name the tree cannot draw is drawn as nothing.
+                    if matches!(prop, Prop::IconName) && craftkit_sdk::svgpath::read_path(text).is_err() {
+                        return Err(refused("a name that is not a path"));
+                    }
+                    return Ok(());
+                }
                 Json::Bool(_) if matches!(prop, Prop::DynamicBool) => return Ok(()),
                 _ => return Err(refused("not a dynamic value")),
             };
             // An icon's name may be a **shape**: an object with an
             // `svgPath` in it, which is what a2ui's catalogue
-            // publishes.
+            // publishes — and the shape must be a path, because a name
+            // the tree cannot draw is a name that would be drawn as
+            // nothing.
             if matches!(prop, Prop::IconName) && object.contains_key("svgPath") {
+                let path = object.get("svgPath").and_then(Json::as_str).unwrap_or_default();
+                if craftkit_sdk::svgpath::read_path(path).is_err() {
+                    return Err(refused("a shape that is not a path"));
+                }
                 return Ok(());
             }
             let has_path = object.contains_key("@path");
@@ -473,11 +554,14 @@ fn check_prop(component: &Component, name: &str, prop: Prop, value: &Json) -> Re
         }
         Prop::Number => match value {
             Json::Number(number) => match number.as_f64() {
-                Some(number) if number.is_finite() && number >= 0.0 => Ok(()),
+                // A weight of **nothing** is a child that is not drawn:
+                // and a child that is not drawn is a child the tree
+                // does not show and does not say.
+                Some(number) if number.is_finite() && number > 0.0 => Ok(()),
                 _ => Err(refused("not a weight")),
             },
             Json::String(text) => match text.parse::<f64>() {
-                Ok(number) if number.is_finite() && number >= 0.0 => Ok(()),
+                Ok(number) if number.is_finite() && number > 0.0 => Ok(()),
                 _ => Err(refused("not a weight")),
             },
             _ => Err(refused("not a weight")),
@@ -505,8 +589,28 @@ fn check_prop(component: &Component, name: &str, prop: Prop, value: &Json) -> Re
             let event = object.get("event");
             let call = object.get("functionCall");
             match (event, call) {
-                (Some(_), None) => Ok(()),
-                (None, Some(_)) => Ok(()),
+                (Some(event), None) => {
+                    // An **event** names what happened.
+                    let name = event
+                        .get("name")
+                        .and_then(Json::as_str)
+                        .filter(|name| !name.is_empty())
+                        .ok_or_else(|| refused("an event that names nothing"))?;
+                    let _ = name;
+                    Ok(())
+                }
+                (None, Some(call)) => {
+                    // A **call** names a function in the layer's table.
+                    let name = call
+                        .get("@call")
+                        .and_then(Json::as_str)
+                        .filter(|name| !name.is_empty())
+                        .ok_or_else(|| refused("a call that names no function"))?;
+                    if craftkit_a2ui::functions::by_name(name).is_none() {
+                        return Err(refused("a call to a function that is in neither table"));
+                    }
+                    Ok(())
+                }
                 _ => Err(refused("neither an event nor a function call")),
             }
         }
@@ -553,6 +657,18 @@ fn cross_of(direction: Direction, kind: &str, cross: f64) -> f64 {
         (Direction::Horizontal, "Divider") => 1.0_f64.min(cross),
         _ => cross,
     }
+}
+
+/// The props a component **must** be given, by their a2ui names.
+///
+/// The list the tree refuses a component without — and the plugin's own
+/// test says that it agrees with the published schema.
+pub fn required_of(component: &str) -> Vec<String> {
+    REQUIRED
+        .iter()
+        .find(|(kind, _)| *kind == component)
+        .map(|(_, required)| required.iter().map(|prop| prop.to_string()).collect())
+        .unwrap_or_default()
 }
 
 /// The **places** of a container's children, inside the container's own

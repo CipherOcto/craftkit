@@ -55,6 +55,21 @@ fn colour_of(node: &Node, document: &Document) -> Colour {
     }
 }
 
+/// The **fill** a container is drawn with.
+///
+/// A container draws its own place, and a container with **no**
+/// appearance draws nothing at all: a box that is not there is not a
+/// white box.
+fn container_fill_of(node: &Node, document: &Document) -> Fill {
+    if node.muted {
+        return Fill::Solid(Colour::NONE);
+    }
+    match document.appearance_of(node) {
+        Some(appearance) => appearance.fill,
+        None => Fill::Solid(Colour::NONE),
+    }
+}
+
 /// The **fill** a box is drawn with.
 ///
 /// A box is a box: a card, a button, a field. Its own appearance says
@@ -196,7 +211,7 @@ craftkit_derive::components! {
             // The children are **nodes of their own**, and they paint
             // themselves: a row draws its place and nothing else.
             let Some(rect) = rect_of(node) else { return };
-            canvas.rect(rect, Fill::Solid(Colour::NONE), BlendMode::Normal);
+            canvas.rect(rect, container_fill_of(node, document), BlendMode::Normal);
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))
@@ -220,7 +235,7 @@ craftkit_derive::components! {
         },
         paint: {
             let Some(rect) = rect_of(node) else { return };
-            canvas.rect(rect, Fill::Solid(Colour::NONE), BlendMode::Normal);
+            canvas.rect(rect, container_fill_of(node, document), BlendMode::Normal);
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))
@@ -244,7 +259,7 @@ craftkit_derive::components! {
         },
         paint: {
             let Some(rect) = rect_of(node) else { return };
-            canvas.rect(rect, Fill::Solid(Colour::NONE), BlendMode::Normal);
+            canvas.rect(rect, container_fill_of(node, document), BlendMode::Normal);
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))

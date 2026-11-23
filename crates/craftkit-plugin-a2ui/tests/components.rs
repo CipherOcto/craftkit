@@ -104,6 +104,46 @@ fn each_published_schema_carries_exactly_the_tables_props() {
     }
 }
 
+/// The tree keeps what it **publishes**: the props the published
+/// schema says are required are the props the tree refuses a component
+/// without.
+///
+/// The two lists live in two places — the published schema is the
+/// layer's, and the tree's own list is the plugin's — and this test is
+/// what holds them together.
+#[test]
+fn the_required_props_are_the_ones_the_tree_refuses() {
+    let ecosystem = ecosystem();
+    for (name, _, _) in COMPONENTS {
+        let entry = ecosystem
+            .catalog
+            .all()
+            .iter()
+            .find(|entry| entry.name == *name)
+            .unwrap_or_else(|| panic!("{name} is a catalogue entry"));
+        let published = (entry.schema)();
+        // A **checkable** component's schema is an `allOf`, and the
+        // required list is in its own part.
+        let required = published["required"]
+            .as_array()
+            .cloned()
+            .or_else(|| {
+                published["allOf"]
+                    .as_array()
+                    .and_then(|parts| parts.iter().find_map(|part| part["required"].as_array().cloned()))
+            })
+            .expect("there is a required list");
+        let published: Vec<String> = required
+            .iter()
+            .filter_map(|prop| prop.as_str())
+            .filter(|prop| *prop != "component" && *prop != "id")
+            .map(|prop| prop.to_string())
+            .collect();
+        let tree = craftkit_plugin_a2ui::tree::required_of(name);
+        assert_eq!(published, tree, "{name}: the published list and the tree's list");
+    }
+}
+
 /// The **discriminator** is stamped on every one of them.
 #[test]
 fn every_component_carries_the_discriminator() {

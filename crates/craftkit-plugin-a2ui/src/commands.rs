@@ -307,6 +307,12 @@ enum Action {
 
 /// Read an **action**, in a2ui's own shape.
 fn action_of(action: &Json) -> Result<Action, craftkit_sdk::EngineError> {
+    // An action is **one** of the two: an event or a function call. An
+    // action that is both says two things, and the one that is read
+    // first would swallow the other — so it is refused.
+    if action.get("event").is_some() && action.get("functionCall").is_some() {
+        return Err(failed("the action is both an event and a function call".to_string()));
+    }
     if let Some(event) = action.get("event") {
         let name = event
             .get("name")
