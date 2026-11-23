@@ -250,9 +250,9 @@ fn a_front_end_that_keeps_the_plan_is_caught() {
 
 /// A front end that is **thin** is not caught.
 ///
-/// The rule bites on the doors and the plan, and on nothing else: a
-/// front end may read the plan and copy what it shows into its own
-/// rows.
+/// The rule bites on the doors and on the plan, and on nothing else: a
+/// front end may ask the `doc.plan` **command** for the plan and show
+/// what it says.
 #[test]
 fn a_thin_front_end_is_not_caught() {
     let tree = Tree::new("frontend-thin");
@@ -260,14 +260,33 @@ fn a_thin_front_end_is_not_caught() {
     let root = tree.root.join("crates").join("craftkit-window").join("src").join("lib.rs");
     let mut code = std::fs::read_to_string(&root).expect("the root is there");
     code.push_str(
-        "\npub struct Row { pub value: String }\n\
-         pub fn read(session: &Session) -> Vec<Row> {\n\
-         \x20   session.evaluate().items.iter().map(|item| Row { value: item.value.to_string() }).collect()\n\
+        "\npub fn read(session: &mut Session) -> Vec<String> {\n\
+         \x20   let outcome = session.execute(\"doc.plan\", &json!({})).unwrap_or_default();\n\
+         \x20   outcome.data.get(\"items\").map(|items| items.to_string()).into_iter().collect()\n\
          }\n",
     );
     std::fs::write(&root, code).expect("the root is written");
     let findings = check(&tree.root);
     assert!(findings_of(&findings, "front-end").is_empty(), "the gate caught it: {findings:?}");
+}
+
+/// A front end that **evaluates the document itself** is caught.
+///
+/// The plan is a **command** — `doc.plan` — and every door asks it the
+/// same way. A front end that asks the session for the plan itself has
+/// a second path to the same answer, and two answers drift apart.
+#[test]
+fn a_front_end_that_evaluates_itself_is_caught() {
+    let tree = Tree::new("frontend-evaluate");
+    tree.crate_("crates", "craftkit-window", &[], None);
+    let root = tree.root.join("crates").join("craftkit-window").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub fn read(session: &Session) -> usize { session.evaluate().items.len() }\n");
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    let front = findings_of(&findings, "front-end");
+    assert_eq!(front.len(), 1, "the gate caught it: {findings:?}");
+    assert!(front[0].message.contains("evaluate"), "{}", front[0].message);
 }
 
 /// A front end that **mentions** a door is not caught.
@@ -307,4 +326,37 @@ fn a_front_end_that_undoes_itself_is_caught() {
     let front = findings_of(&findings, "front-end");
     assert_eq!(front.len(), 1, "the gate caught it: {findings:?}");
     assert!(front[0].message.contains("undo"), "{}", front[0].message);
+}
+
+/// The entry point of a **host** that undoes itself is caught.
+///
+/// The studio is a host: its library holds the commands it defines, and
+/// a command's body may open the document. Its **entry point** is a
+/// front end all the same, and the gate reads that file.
+#[test]
+fn a_host_that_undoes_itself_is_caught() {
+    let tree = Tree::new("host-undo");
+    tree.crate_("apps", "craftkit-studio", &[], None);
+    let main = tree.root.join("apps").join("craftkit-studio").join("src").join("main.rs");
+    std::fs::write(&main, "fn main() { let _ = session.undo(); }\n").expect("the entry is written");
+    let findings = check(&tree.root);
+    let front = findings_of(&findings, "front-end");
+    assert_eq!(front.len(), 1, "the gate caught it: {findings:?}");
+    assert!(front[0].message.contains("undo"), "{}", front[0].message);
+}
+
+/// The **library** of a host is not a front end, and is not caught.
+///
+/// The commands a host defines live in its library, and a command's
+/// body is allowed to open the document: that is what a command is.
+#[test]
+fn a_hosts_library_is_not_a_front_end() {
+    let tree = Tree::new("host-library");
+    tree.crate_("apps", "craftkit-studio", &[], None);
+    let root = tree.root.join("apps").join("craftkit-studio").join("src").join("lib.rs");
+    let mut code = std::fs::read_to_string(&root).expect("the root is there");
+    code.push_str("\npub fn command(session: &mut Session) { let _ = session.document_mut(); }\n");
+    std::fs::write(&root, code).expect("the root is written");
+    let findings = check(&tree.root);
+    assert!(findings_of(&findings, "front-end").is_empty(), "the gate caught it: {findings:?}");
 }

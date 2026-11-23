@@ -16,10 +16,17 @@
 //!
 //! - never writes the document: everything goes through
 //!   [`Session::execute`];
-//! - never evaluates the document itself: it asks the session for the
-//!   plan;
+//! - never evaluates the document itself: it asks the **command**
+//!   `doc.plan` for the plan, the way every other door does;
 //! - keeps no value the plan computes: the plan is read when it is
 //!   drawn.
+//!
+//! The third one is a matter of **shape**, and the window's shape says
+//! it: there is no row type of the window's own, and no list of them.
+//! The plan is asked for when it is drawn, and what is drawn is text. A
+//! window that had rows of its own would have two answers to every
+//! question — the command's and its own — and one of them would be the
+//! day before.
 //!
 //! The gate in `craftkit-gates` checks the first two, because a front
 //! end that grows a second path is a front end nobody can reason
@@ -196,15 +203,26 @@ impl Window {
 
     /// The **plan**: what the document means, as the kinds say it.
     ///
-    /// It is read from the session and not worked out here: a front end
-    /// that evaluated the document itself would have two answers to
-    /// every question.
-    pub fn plan(&self) -> Vec<PlanRow> {
-        self.session()
-            .evaluate()
-            .items
+    /// It is a **command**: the window asks `doc.plan` for it, the way
+    /// the terminal door and the bridge do, so every door says the same
+    /// thing about the same document. What comes back is **text** — one
+    /// line per item — and the window keeps nothing: the plan is read
+    /// when it is drawn.
+    pub fn plan(&self) -> Vec<String> {
+        let Ok(outcome) = self.session().execute("doc.plan", &json!({})) else {
+            return vec!["the plan could not be made".to_string()];
+        };
+        let Some(items) = outcome.data.get("items").and_then(|items| items.as_array()) else {
+            return vec![outcome.message];
+        };
+        items
             .iter()
-            .map(|item| PlanRow { node: item.node, kind: item.kind.clone(), value: item.value.clone() })
+            .map(|item| {
+                let node = item.get("node").and_then(|node| node.as_u64()).unwrap_or_default();
+                let kind = item.get("kind").and_then(|kind| kind.as_str()).unwrap_or("?");
+                let value = item.get("value").map(|value| value.to_string()).unwrap_or_default();
+                format!("{node}  {kind}  {value}")
+            })
             .collect()
     }
 
@@ -619,17 +637,6 @@ pub struct NodeRow {
     /// A hidden node is in the document and not on the screen, and the
     /// tree says so: a row that is not drawn says nothing about why.
     pub hidden: bool,
-}
-
-/// One **item** of the plan, as the window shows it.
-#[derive(Debug, Clone, PartialEq)]
-pub struct PlanRow {
-    /// The node it is about.
-    pub node: u64,
-    /// Its kind.
-    pub kind: String,
-    /// What it means.
-    pub value: Json,
 }
 
 /// The **command** being filled in.

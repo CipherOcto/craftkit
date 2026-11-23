@@ -305,10 +305,12 @@ fn interact(app: &mut App, ui: &egui::Ui, response: &egui::Response) {
 /// The **plan**, on the right: what the document means.
 fn plan(app: &App, ui: &mut egui::Ui) {
     ui.heading("the plan");
+    // The plan is a **command** (`doc.plan`), and it is read when it is
+    // drawn: the window has no rows of its own, and it keeps nothing.
     let rows = app.window.plan();
     egui::ScrollArea::vertical().show(ui, |ui| {
         for row in rows {
-            ui.label(format!("{}  {}  {}", row.node, row.kind, row.value));
+            ui.label(row);
         }
     });
 }

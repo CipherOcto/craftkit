@@ -55,9 +55,9 @@ fn the_window_runs_a_command_through_the_registry() {
 
 /// The window shows the **plan**: what the document means.
 ///
-/// It is read from the session, and it is read again every time it is
-/// asked for: a window that kept it would show a document that is not
-/// there any more.
+/// It is read from the **command** — `doc.plan` — and it is read again
+/// every time it is asked for: a window that kept it would show a
+/// document that is not there any more.
 #[test]
 fn the_window_shows_the_plan() {
     let mut window = window();
@@ -67,13 +67,38 @@ fn the_window_shows_the_plan() {
     window.run().expect("the command runs");
 
     let plan = window.plan();
-    let about = plan.iter().find(|row| row.node == 1);
+    let about = plan.iter().find(|line| line.contains("geometry.rect"));
     assert!(about.is_some(), "the plan says what the node means: {plan:?}");
-    assert_eq!(about.map(|row| row.kind.clone()), Some("geometry.rect".to_string()));
 
     // The plan is read again, and it is the same: the window keeps
     // nothing.
     assert_eq!(window.plan(), plan, "the plan is read again");
+}
+
+/// The plan is the **command's** work, and the window asks for it.
+///
+/// The door and the window must say the same thing about the same
+/// document, and they do it the same way: through the registry.
+#[test]
+fn the_plan_is_the_commands_work() {
+    let mut window = window();
+    window.open("node.add");
+    window.set("name", json!("a shape"));
+    window.set("kind", json!("geometry.rect"));
+    window.run().expect("the command runs");
+
+    let outcome = window.session().execute("doc.plan", &json!({})).expect("the plan is made");
+    let items = outcome.data.get("items").and_then(|items| items.as_array()).expect("the items");
+    let from_the_command = items
+        .iter()
+        .map(|item| {
+            let node = item.get("node").and_then(|node| node.as_u64()).unwrap_or_default();
+            let kind = item.get("kind").and_then(|kind| kind.as_str()).unwrap_or("?");
+            let value = item.get("value").map(|value| value.to_string()).unwrap_or_default();
+            format!("{node}  {kind}  {value}")
+        })
+        .collect::<Vec<String>>();
+    assert_eq!(window.plan(), from_the_command, "the window asks the command");
 }
 
 /// A command that is **not there** opens nothing.

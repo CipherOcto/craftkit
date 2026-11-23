@@ -33,7 +33,10 @@ fn main() {
     println!("   tools:  {}", ecosystem.tools.ids().join(", "));
     println!("   panels: {}", ecosystem.panels.ids().join(", "));
     println!("   formats: {}", ecosystem.formats.ids().join(", "));
-    println!("   evaluators: {}", ecosystem.evaluators.ids().join(", "));
+    // The **evaluators** are not listed here: a program that looks at the
+    // kit does not reach into the evaluator's own registry, and the
+    // manifest below carries every evaluator with its layer and its line
+    // about itself. That is the door: what the agent is told.
 
     println!("\n── the manifest (what an agent is told)");
     for line in ecosystem.projection().manifest() {
@@ -86,8 +89,20 @@ fn main() {
     }
 
     println!("\n── the plan: what the document means, as the kinds say it");
-    for item in session.evaluate().items {
-        println!("   {} {} {}", item.kind, item.node, item.value);
+    // The plan is a **command** — `doc.plan` — and the studio asks it
+    // the way every other door does, so every door says the same thing
+    // about the same document.
+    match session.execute("doc.plan", &json!({})) {
+        Ok(outcome) => {
+            let items = outcome.data.get("items").and_then(|items| items.as_array());
+            for item in items.into_iter().flatten() {
+                let kind = item.get("kind").and_then(|kind| kind.as_str()).unwrap_or("?");
+                let node = item.get("node").and_then(|node| node.as_u64()).unwrap_or_default();
+                let value = item.get("value").map(|value| value.to_string()).unwrap_or_default();
+                println!("   {kind} {node} {value}");
+            }
+        }
+        Err(error) => println!("   refused: {error}"),
     }
 
     println!("\n── the menu, as a tree");
@@ -167,7 +182,10 @@ fn main() {
     // An edit, undone, and then done differently: the work that was
     // undone is still there, on its own branch.
     let _ = session.execute("node.add", &json!({ "name": "branch", "kind": "geometry.rect" }));
-    match session.undo() {
+    // The **undo is a command**, like every other thing the kit does:
+    // the entry point runs `history.undo` through the registry, and the
+    // history's own door is not opened here.
+    match session.execute("history.undo", &json!({})) {
         Ok(outcome) => println!("   {}", outcome.message),
         Err(error) => println!("   refused: {error}"),
     }

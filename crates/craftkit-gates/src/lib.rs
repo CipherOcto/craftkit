@@ -294,15 +294,32 @@ pub const FRONT_ENDS: &[&str] = &["craftkit-a2ui-server", "craftkit-window"];
 ///   computed;
 /// - `undo` and `redo` are the history's own doors: a front end that
 ///   opens one is a front end that changes the design without a
-///   command, and **everything** is a command.
+///   command, and **everything** is a command;
+/// - `evaluate` is the evaluator's own door: the plan is a **command**
+///   (`doc.plan`), and a front end that asks the session for the plan
+///   itself has a second path to the same answer.
 ///
-/// The plan itself is not forbidden: the session hands it out, and a
+/// The plan itself is not forbidden: the command hands it out, and a
 /// front end may read it. What it may not do is **keep** it.
 ///
 /// The names are read from the **code** and not from the comments and
 /// the strings: a name in a comment is not a call, and a name in a
 /// string is not a call either.
-pub const FRONT_END_FORBIDDEN: &[&str] = &["document_mut", "evaluators", "Plan", "PlanItem", "undo", "redo"];
+pub const FRONT_END_FORBIDDEN: &[&str] =
+    &["document_mut", "evaluators", "evaluate", "Plan", "PlanItem", "undo", "redo"];
+
+/// The front-end **files** of a crate that is not a front end all through.
+///
+/// The **studio** is a host: its library holds the commands the studio
+/// itself defines, and a command's body is allowed to open the document
+/// — that is what a command is. Its **entry point** is a front end all
+/// the same: it is the part a person looks at, and it reads the kit's
+/// state and acts through the registry like any other.
+///
+/// So the rule is not the crate's but the **file's**, and this says
+/// which file is the front end of a host. A crate that is a front end
+/// all through needs no entry here: [`FRONT_ENDS`] is the whole of it.
+pub const FRONT_END_FILES: &[(&str, &str)] = &[("craftkit-studio", "src/main.rs")];
 
 /// The **batteries**: the crates whose commands are declared as a table.
 ///
@@ -636,12 +653,22 @@ fn batteries_are_tables(root: &Path, findings: &mut Vec<Finding>) {
 /// The rule is checked against the **text**, as the outer tree's rule
 /// for its own shell is: the names are whole words, so `PlanRow` is not
 /// `Plan`, and a name inside a string is not a call.
+///
+/// A crate that is a front end **all through** is checked in all of its
+/// files, and a **host** is checked in the files that are its front end
+/// — [`FRONT_END_FILES`] says which those are.
 fn front_ends_are_thin(root: &Path, findings: &mut Vec<Finding>) {
     for crate_ in crates(root) {
-        if !FRONT_ENDS.contains(&crate_.name.as_str()) {
-            continue;
-        }
-        for file in rust_files(&crate_.dir) {
+        let files = if FRONT_ENDS.contains(&crate_.name.as_str()) {
+            rust_files(&crate_.dir)
+        } else {
+            FRONT_END_FILES
+                .iter()
+                .filter(|(name, _)| *name == crate_.name)
+                .map(|(_, relative)| crate_.dir.join(relative))
+                .collect()
+        };
+        for file in files {
             let Ok(text) = std::fs::read_to_string(&file) else { continue };
             let code = code_only(&text);
             for name in FRONT_END_FORBIDDEN {
