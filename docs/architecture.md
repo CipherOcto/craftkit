@@ -287,22 +287,32 @@ Token-authenticated JSON lines over loopback, for driving a **running** program
 
 ## 6. The front ends
 
-| application | what it is |
-|---|---|
-| `apps/craftkit-window` | the window: an egui front end over the same registry |
-| `apps/craftkit-studio` | the studio: the ecosystem every front end builds |
-| `apps/craftkit-repl` | the terminal door |
-| `apps/craftkit-mcp-server` | the agent door |
-| `apps/craftkit-a2ui-server` | the a2ui door: an agent speaks a2ui over JSON-RPC |
-| `apps/craftkit-bridge` | the bridge: JSON-RPC over stdio |
-| `apps/craftkit-wasm` | the browser door |
-| `apps/craftkit-hello-server` | a small server, used as a fixture |
+| application | what it is | the rule reaches it |
+|---|---|---|
+| `apps/craftkit-window` | the window: an egui front end over the same registry | all of it |
+| `apps/craftkit-studio` | the studio: the ecosystem every front end builds | its **entry point** (`src/main.rs`): the library is a command book |
+| `apps/craftkit-repl` | the terminal door | all of it |
+| `apps/craftkit-mcp-server` | the agent door | all of it |
+| `apps/craftkit-a2ui-server` | the a2ui door: an agent speaks a2ui over JSON-RPC | all of it |
+| `apps/craftkit-bridge` | the bridge: JSON-RPC over stdio | all of it |
+| `apps/craftkit-wasm` | the browser door | all of it |
+| `apps/craftkit-hello-server` | a small server, used as a fixture | not a door: it is a **plugin** that is a program |
+
+**The transports are not doors.** `crates/craftkit-mcp` and
+`crates/craftkit-control` carry a door's messages, and a transport holds no
+session of its own to keep thin.
 
 **The UI is thin.** A front end reads the kit's state and acts through the
 registry. It never writes the document, never calls the evaluator, and never
 keeps a value the evaluator computes. The gate checks it: `crates/craftkit-gates`
-has `FRONT_ENDS` and `FRONT_END_FORBIDDEN` (`document_mut`, `evaluators`,
-`Plan`, `PlanItem`, `undo`, `redo`) and refuses a front end that names them.
+has `FRONT_ENDS` (the six doors), `FRONT_END_FILES` (the front-end file of a
+**host**, such as the studio's entry point) and `FRONT_END_FORBIDDEN`
+(`document_mut`, `evaluators`, `evaluate`, `Plan`, `PlanItem`, `undo`, `redo`),
+and refuses a front end that names them.
+
+The **plan** is a **command** — `doc.plan` — so a front end never asks the
+session for the plan itself: it asks the registry, and every door says the
+same thing about the same document.
 
 **One set of camera controls.** The camera is `craftkit_sdk::camera::Camera`:
 one type, with its own caps (`MIN_ZOOM`, `MAX_ZOOM`), and the rasteriser

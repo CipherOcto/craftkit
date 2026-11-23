@@ -189,6 +189,15 @@ about — so it is a *cost of widening the list*, not a defect that exists
 today. The two studio ones belong in `KNOWN-GAPS.md` now; all three do once
 the classification is settled.
 
+**Since this was written.** The six doors are **classified** (README §1116):
+the gate's `FRONT_ENDS` names them all, the **transports** (`craftkit-mcp`,
+`craftkit-control`) are not doors, and the **studio** is a **host** whose
+entry point is the front end (`FRONT_END_FILES`). The bridge's two doors are
+gone — the plan is the `doc.plan` command, and the evaluator's ids are the
+**manifest**'s — and the rule names `evaluate` as well. What is left of this
+section is the **parity matrix** (§6.2, O4.2), which is a table and not a
+defect.
+
 ### 3.3 The mid-run cycle exists in two transports, and the `Supplier` seam in none
 
 The SDK has a complete, deliberately agent-shaped prompt seam:
@@ -1023,7 +1032,7 @@ not a front end.
 | 2 | **O2** prune the agent-facing view | **small**, and only once O1 exists | **yes** | the agent-facing list equals the pruned set, asserted by a test |
 | 3 | **O5** model picks commands, pre-binds params | **small, *if* scoped this way**; large if scoped as a "surface" | **yes** | a door calls `execute_with` with a `Supplier` fed by the model's own output |
 | 4 | **O8** bounds derived into the catalog | **small** — in practice one `maxLength` | **yes** | the text bound appears in the schema the agent is told |
-| 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it |
+| 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it — **done** (README §1116) |
 | 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table checked by hand | no | the table exists, and every row has been checked by hand |
 | 7 | **O3** recipe **claim** check | **small**, but it is a judgement, not a link — the link half is already done by `cargo xtask lists` (`xtask/src/lists.rs:55`) | no | a named claim in a recipe is checked against the tree, and a broken claim is reported |
 | 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it |

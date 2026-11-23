@@ -75,33 +75,30 @@ itself, and it has four honest limits:
 
 ---
 
-## 4. The bridge has not been classified, and it is not a thin front end
+## 4. The doors are classified; the parity matrix is not written
 
-The three house rules the tree broke — the studio undid through the
-history's own door, the studio reached into the evaluator's registry,
-and the window kept rows of the plan — were **defects**, and they are
-**repaired** (README §1115). The gate sees the studio now, and the
-window's rows are gone.
+The tree has **six doors**, and the rule "a front end is thin" now reaches
+all six (README §1116): the terminal door, the window, the browser door,
+the agent door, the bridge and the a2ui door. The **transports** — the MCP
+library and the control channel — are not doors, and the **studio** is a
+**host**: its entry point is a front end, and its library is a command
+book.
 
-**What is left is the bridge.** It reads `self.ecosystem.evaluators` at
-`apps/craftkit-bridge/src/lib.rs:231` and evaluates the document itself
-at `:237`, and the rule now names both (`evaluators` and `evaluate`).
-The bridge is **not** in `FRONT_ENDS`, so the rule does not reach it —
-and it is a **proof**, not a product: it speaks JSON-RPC over stdio
-because that is the cheapest way to show a second front end over the
-same registry.
+**What is left is the parity matrix.** Nobody has written down what each
+door can do: which commands it publishes, whether it publishes a schema,
+whether it can run one, whether it can undo, what it says when a command
+is refused. The survey calls it "a project, not a task", and its honest
+first cut is a **table checked by hand** — six rows and a dozen columns,
+with a person reading every cell. It is not a defect: nothing in the tree
+is broken by it. It is the thing that makes a difference between the
+doors visible.
 
-**So the open question is the classification.** Is the bridge a front
-end? If it is, it is a front end that keeps two doors of its own, and
-both have to go: the plan is the `doc.plan` command, and the evaluator's
-registry is the manifest. If it is not — if it is a **host** whose
-library is a command book, like the studio — then the rule reaches its
-entry point the way it reaches the studio's. Either way it is the
-bridge's own arc, and it waits for the owner's word.
-
-**Why the gate cannot see it either.** The forbidden names are read
-from the **code**, and the gate reads the crates in `FRONT_ENDS`; the
-bridge is in neither that list nor `FRONT_END_FILES`.
+**And the bridge's protocol changed** when the bridge became thin:
+`resources/list` carries the **manifest** now and not the evaluator's ids,
+because the manifest is the door that names every evaluator and the
+registry is not a door at all. The bridge is a **proof** and not a
+product, and a proof that changes shape is cheap to change now and would
+not be later.
 
 ---
 

@@ -4561,6 +4561,7 @@ so.
 | **a surface is a command** | **built.** Making a surface, drawing onto it, mirroring a value and running an action are all commands, and nothing else (§1113) | §1113 |
 | **the door speaks a2ui** | **built.** The method names are a2ui's, the handshake is two-way, and a catalogue the door does not serve is refused (§1114) | §1114 |
 | **the tree keeps its own house rules** | **built.** The studio undoes through `history.undo`, the window asks `doc.plan`, and the gate reads the studio's entry point (§1115) | §1115 |
+| **the six doors are classified** | **built.** The gate reads all six, the studio's entry point among them, and the bridge asks `doc.plan` like every other door (§1116) | §1116 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70832,3 +70833,54 @@ promise in the tree's own rules is worse than a missing feature.
   and evaluates the document itself, and the rule now names both. It is
   a **proof** and not a product, and what a proof is allowed to do is
   a question nobody has answered yet (§ `KNOWN-GAPS.md` §4).
+
+## 1116. The six doors are classified
+
+The rule "a front end is thin" was a rule with no reach: the gate knew
+**one** crate, and five doors went unchecked. The survey's finding was
+not that the rule was wrong but that nobody had said which six programs
+are doors — and so the rule applied to a crate that was never a door.
+
+### What was built
+
+- **The six doors are named**: `craftkit-repl` (the terminal door),
+  `craftkit-window`, `craftkit-wasm` (the browser door),
+  `craftkit-mcp-server` (the agent door), `craftkit-bridge` and
+  `craftkit-a2ui-server`. The gate reads all six, and they were clean.
+- **The transports are not doors**: `craftkit-mcp` and `craftkit-control`
+  carry a door's messages and hold no session of their own.
+- **The studio is a host**: its **entry point** is a front end, and its
+  library is a command book — a command's body may open the document,
+  and a rule that cannot tell a command's body from a front end's own
+  path has to be told where the front end is.
+- **The bridge is thin.** It asked the session for the plan itself and
+  reached into the evaluator's registry for the evaluator's ids. The
+  plan is the **`doc.plan` command** now, and the resources are the
+  **projection's** door — the kinds, the formats and the **manifest**,
+  which names every evaluator with its layer and its line about itself.
+
+### What the port found
+
+- **Naming the doors was the cheap half.** Five of the six were clean
+  already; the sixth had two doors of its own, and the second was a
+  **registry** the door had no business in.
+- **Listing what exists is not evaluating.** The bridge wanted to tell
+  an agent which evaluators the ecosystem holds, and it went to the
+  registry to ask. The **manifest** is the door for that: it is what
+  the kit tells an agent, and it already carried every evaluator.
+- **A door's protocol is part of its claim.** `resources/list` now
+  carries the manifest and not the evaluator's ids — and the bridge is
+  a **proof**, so the change is cheap now and would not be later.
+
+### What it cost
+
+- **One bridge**, one gate list, **two gate tests** and one test of the
+  bridge's own.
+
+### What it does not settle
+
+- **There is no parity matrix.** The doors are classified, but nobody
+  has written down what each of them can do; the honest first cut is a
+  table, checked by hand.
+- **The bridge's shape changed**, and a shape that other programs read
+  is a promise. It is a proof, and the proof is the thing that changed.
