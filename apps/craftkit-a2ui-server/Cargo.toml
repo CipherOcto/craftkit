@@ -15,6 +15,10 @@ craftkit-a2ui = { path = "../../crates/craftkit-a2ui", version = "0.2.0" }
 # linked in for the same reason every plugin is: a plugin has to be
 # *linked in*.
 craftkit-plugin-a2ui = { path = "../../crates/craftkit-plugin-a2ui", version = "0.2.0" }
+# The **control channel**: the door an agent and a person drive the
+# program through. It serves the door's **own** session, so a command
+# that is run over the channel changes the document the door is drawing.
+craftkit-control = { workspace = true }
 # The **software rasteriser**: the headless picture.
 craftkit-raster = { path = "../../crates/craftkit-raster", version = "0.2.0" }
 

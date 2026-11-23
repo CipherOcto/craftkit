@@ -5,8 +5,10 @@
 //! the agent accepts one, and a catalogue the door does not serve is
 //! **refused**.
 
+use craftkit_a2ui_server::render::Headless;
 use craftkit_a2ui_server::{METHODS, Request, Server};
 use craftkit_sdk::Ecosystem;
+use craftkit_sdk::Point;
 use craftkit_sdk::serde_json::{Value as Json, json};
 
 // The plugin's anchor, held by the test: without it the linker drops the
@@ -179,11 +181,10 @@ fn the_door_answers_create_surface_with_a_surface() {
     let mut server = server();
     let answer = server.handle(&request("createSurface", json!({ "surfaceId": "s1" })));
     assert_eq!(answer["result"]["surfaceId"], json!("s1"), "{answer}");
-    let document = server.session().document();
-    assert!(
-        document.nodes().any(|node| node.kind == "a2ui.surface" && node.name == "s1"),
-        "and the surface is in the tree"
-    );
+    let in_the_tree = server.with_session(|session| {
+        session.document().nodes().any(|node| node.kind == "a2ui.surface" && node.name == "s1")
+    });
+    assert!(in_the_tree, "and the surface is in the tree");
 }
 
 /// And a **button** runs its command: the tree holds the button, the
@@ -205,13 +206,14 @@ fn a_button_runs_its_command() {
     ));
     assert_eq!(answer["result"]["surfaceId"], json!("s2"), "{answer}");
     // The **action** the button carries is a command of the tree's own.
-    let button = server
-        .session()
-        .document()
-        .walk()
-        .find(|node| node.kind == "a2ui.button")
-        .expect("the button is there");
-    assert_eq!(button.data["action"]["name"], json!("dataSet"), "and it names the command");
+    let action = server.with_session(|session| {
+        session
+            .document()
+            .walk()
+            .find(|node| node.kind == "a2ui.button")
+            .map(|node| node.data["action"]["name"].clone())
+    });
+    assert_eq!(action, Some(json!("dataSet")), "and it names the command");
     // And the command **runs**: the door runs the local function the
     // button names.
     let answer = server.handle(&request(
@@ -222,4 +224,46 @@ fn a_button_runs_its_command() {
     assert!(answer.get("error").is_none(), "{answer}");
     let model = craftkit_plugin_a2ui::model::model();
     assert_eq!(model["pressed"], json!(true), "and the model has the value");
+}
+
+/// The **control channel** serves the door's **own** session, and the
+/// one message that is not a reply goes on the wire.
+///
+/// The door's document is the channel's document: a command that is run
+/// over the channel changes what the door is drawing. And a click that
+/// raises an **agent-side** action produces a2ui's `action` message — the
+/// door's one outbound message that is not a reply to a call.
+#[test]
+fn the_channel_serves_the_doors_own_session() {
+    let mut server = server();
+    server.handle(&request("createSurface", json!({ "surfaceId": "s3" })));
+    server.handle(&request(
+        "updateComponents",
+        json!({
+            "surfaceId": "s3",
+            "components": [{
+                "component": "Button",
+                "child": "press",
+                "action": { "name": "required" },
+            }],
+        }),
+    ));
+    // The channel's **render**: the door's own headless one.
+    let mut render = Headless::new(server.shared_session(), server.outbound());
+    let picture = render.render().expect("the picture is drawn");
+    assert!(picture.len() > 8, "the picture holds bytes");
+    // And the click finds the button the **door** drew.
+    let answer = render.click(Point::new(1.0, 1.0)).expect("the click is answered");
+    assert!(!answer["clicked"].is_null(), "the button was clicked: {answer}");
+    // And the action is on the wire, for the agent.
+    let outbound = server.take_outbound();
+    assert_eq!(outbound.len(), 1, "one message is not a reply: {outbound:?}");
+    assert_eq!(outbound[0]["method"], json!("action"), "{outbound:?}");
+    assert_eq!(outbound[0]["params"]["version"], json!("1.0"), "{outbound:?}");
+    let action = &outbound[0]["params"]["action"];
+    assert_eq!(action["name"], json!("required"), "{action}");
+    assert_eq!(action["surfaceId"], json!("s3"), "{action}");
+    assert!(action["sourceComponentId"].is_string(), "{action}");
+    assert!(action["timestamp"].is_string(), "{action}");
+    assert!(action["context"].is_object(), "{action}");
 }

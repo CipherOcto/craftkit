@@ -19,10 +19,12 @@
 //! every other front end uses — so what the door shows is what a window
 //! would show.
 
-use craftkit_sdk::camera::Camera;
+use std::sync::{Arc, Mutex};
+
+use crate::Outbound;
 use craftkit_sdk::document::Rect;
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Point, Session};
+use craftkit_sdk::{Outcome, Point, Session};
 
 /// The picture's **width**, in pixels.
 pub const WIDTH: usize = 640;
@@ -32,29 +34,35 @@ pub const HEIGHT: usize = 480;
 
 /// A **headless** render: a picture of the document, and a click.
 pub struct Headless {
-    session: Session,
+    /// The door's **own** session, behind its lock.
+    ///
+    /// The channel serves the door's document and not a copy of it, so a
+    /// command an agent runs over the channel changes what the door is
+    /// drawing.
+    session: Arc<Mutex<Session>>,
+    /// The messages that are not replies, shared with the door.
+    outbound: Outbound,
     width: usize,
     height: usize,
 }
 
 impl Headless {
     /// A headless render over a session.
-    pub fn new(session: Session) -> Self {
-        Headless { session, width: WIDTH, height: HEIGHT }
+    ///
+    /// The session is the door's **own**, behind its lock, and the queue
+    /// is the door's: a click may raise an action, and the action
+    /// belongs on the wire the agent is reading.
+    pub fn new(session: Arc<Mutex<Session>>, outbound: Outbound) -> Self {
+        Headless { session, outbound, width: WIDTH, height: HEIGHT }
     }
 
     /// The session the render draws.
-    pub fn session(&mut self) -> &mut Session {
-        &mut self.session
-    }
-
-    /// The camera the picture is seen through.
-    ///
-    /// The tree's **own** camera — the one type, with its own caps — and
-    /// not a second one. A new canvas goes through that camera rather
-    /// than hand-rolling its own input.
-    fn camera(&self) -> Camera {
-        Camera::new()
+    pub fn with_session<T>(&mut self, body: impl FnOnce(&mut Session) -> T) -> T {
+        let mut session = match self.session.lock() {
+            Ok(session) => session,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        body(&mut session)
     }
 
     /// The **picture** of what the program is showing, as a PNG.
@@ -63,8 +71,11 @@ impl Headless {
     /// other front end uses — so what the door shows is what a window
     /// would show.
     pub fn render(&mut self) -> Result<Vec<u8>, String> {
-        let mut raster = craftkit_raster::Raster::new(self.width, self.height, self.camera())?;
-        self.session.paint_view(&mut raster);
+        // The camera is the **session's** own — the one type, with its
+        // own caps — and not a second one.
+        let camera = self.with_session(|session| *session.camera());
+        let mut raster = craftkit_raster::Raster::new(self.width, self.height, camera)?;
+        self.with_session(|session| session.paint_view(&mut raster));
         Ok(craftkit_raster::png::write(raster.image()))
     }
 
@@ -73,9 +84,11 @@ impl Headless {
     /// The **last** one found, so that the node on top is the one that is
     /// under the pointer: the tree paints in order, and the thing a
     /// person sees on top is the thing they clicked.
-    fn node_at(&self, at: Point) -> Option<u64> {
+    fn node_at(&mut self, at: Point) -> Option<u64> {
         let mut found: Option<u64> = None;
-        for node in self.session.document().walk() {
+        let nodes: Vec<craftkit_sdk::Node> =
+            self.with_session(|session| session.document().walk().cloned().collect());
+        for node in &nodes {
             let Some(rect) = node.rect else { continue };
             if rect.contains(at) {
                 found = Some(node.id);
@@ -89,8 +102,10 @@ impl Headless {
     /// The click is an action of a **component**, and a component is on
     /// a surface — so the surface is found by looking for the one that
     /// holds the node.
-    fn surface_of(&self, id: u64) -> Option<String> {
-        for node in self.session.document().nodes() {
+    fn surface_of(&mut self, id: u64) -> Option<String> {
+        let surfaces: Vec<craftkit_sdk::Node> =
+            self.with_session(|session| session.document().nodes().cloned().collect());
+        for node in &surfaces {
             if node.kind != "a2ui.surface" {
                 continue;
             }
@@ -109,27 +124,110 @@ impl Headless {
         let Some(id) = self.node_at(at) else {
             return Ok(json!({ "clicked": Json::Null }));
         };
-        let node =
-            self.session.document().node(id).cloned().ok_or_else(|| format!("the node {id} is not there"))?;
+        let node = self
+            .with_session(|session| session.document().node(id).cloned())
+            .ok_or_else(|| format!("the node {id} is not there"))?;
         // The **action** is the node's own: a component carries one.
         let action = node.data.get("action").cloned().unwrap_or_else(|| Json::Object(Default::default()));
         let surface = self.surface_of(id).unwrap_or_default();
         let outcome = self
-            .session
-            .execute(
-                "a2ui.component.invoke",
-                &json!({
-                    "surface_id": surface,
-                    "component_id": node.id.to_string(),
-                    "action": action,
-                }),
-            )
+            .with_session(|session| {
+                session.execute(
+                    "a2ui.component.invoke",
+                    &json!({
+                        "surface_id": surface,
+                        "component_id": node.id.to_string(),
+                        "action": action,
+                    }),
+                )
+            })
             .map_err(|error| error.to_string())?;
+        // An action that is the **agent's** goes on the wire.
+        self.queue(&outcome);
         Ok(json!({
             "clicked": id,
             "message": outcome.message,
             "changed": outcome.changed,
         }))
+    }
+
+    /// Queue an **action** the outcome raised, if it raised one.
+    fn queue(&self, outcome: &Outcome) {
+        let Some(message) = crate::action_message(outcome) else { return };
+        let mut outbound = match self.outbound.lock() {
+            Ok(outbound) => outbound,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        outbound.push(message);
+    }
+
+    /// The **drag**: what a hand does to the document.
+    ///
+    /// The same three ways a person drags: a **handle** resizes, a
+    /// **node** moves, and the **background** slides the camera. The
+    /// change goes through the **registry**, like every other change.
+    ///
+    /// And an a2ui **component** is not dragged: its place is
+    /// **derived**, and a person cannot drag a derived value about.
+    pub fn drag(&mut self, from: Point, to: Point) -> Result<Json, String> {
+        let picked = self.with_session(|session| {
+            let document = session.document();
+            document
+                .walk_visible()
+                .filter(|node| {
+                    session
+                        .kinds()
+                        .get(&node.kind)
+                        .map(|kind| (kind.hit)(node, document, from))
+                        .unwrap_or(false)
+                })
+                .last()
+                .map(|node| (node.id, node.kind.clone()))
+        });
+        let Some((node, kind)) = picked else {
+            // The **background**: the camera slides.
+            self.with_session(|session| session.camera_mut().pan(from.x - to.x, from.y - to.y));
+            return Ok(json!({ "message": "the camera moved" }));
+        };
+        if kind.starts_with("a2ui.") && kind != "a2ui.surface" {
+            return Ok(json!({
+                "message": "an a2ui component's place is derived, and a drag does not change it",
+                "moved": Json::Null,
+            }));
+        }
+        let place = self.with_session(|session| session.document().node(node).and_then(|node| node.rect));
+        let Some(place) = place else {
+            return Ok(
+                json!({ "message": "the node has no place, and it does not move", "moved": Json::Null }),
+            );
+        };
+        let outcome = self
+            .with_session(|session| {
+                session.execute(
+                    "node.move",
+                    &json!({ "node": node, "x": place.x + (to.x - from.x), "y": place.y + (to.y - from.y) }),
+                )
+            })
+            .map_err(|error| error.to_string())?;
+        Ok(json!({ "message": outcome.message, "moved": node }))
+    }
+}
+
+/// The **control channel**'s render: the door's headless one.
+///
+/// The trait is the channel's, and the door supplies it: a picture, a
+/// click and a drag — no window anywhere.
+impl craftkit_control::Render for Headless {
+    fn render(&mut self) -> Result<Vec<u8>, String> {
+        Headless::render(self)
+    }
+
+    fn click(&mut self, at: Point) -> Result<Json, String> {
+        Headless::click(self, at)
+    }
+
+    fn drag(&mut self, from: Point, to: Point) -> Result<Json, String> {
+        Headless::drag(self, from, to)
     }
 }
 
@@ -147,16 +245,57 @@ mod tests {
     use super::*;
 
     /// A session with a node in it.
-    fn session() -> Session {
+    fn session() -> Arc<Mutex<Session>> {
         let ecosystem = craftkit_sdk::Ecosystem::from_inventory().expect("the ecosystem is built");
-        ecosystem.session()
+        Arc::new(Mutex::new(ecosystem.session()))
+    }
+
+    /// A headless render over a session.
+    fn render() -> Headless {
+        Headless::new(session(), Arc::new(Mutex::new(Vec::new())))
     }
 
     /// A click on **nothing** says nothing.
     #[test]
     fn a_click_on_nothing_says_nothing() {
-        let mut render = Headless::new(session());
+        let mut render = render();
         let answer = render.click(Point::new(-10.0, -10.0)).expect("the click is answered");
         assert!(answer["clicked"].is_null(), "{answer}");
+    }
+
+    /// A drag on an a2ui **component** changes nothing: its place is
+    /// derived, and a derived value is not dragged about.
+    #[test]
+    fn a_drag_on_a_component_does_not_move_it() {
+        let mut render = render();
+        render.with_session(|session| {
+            session
+                .execute("a2ui.surface.create", &json!({ "surface_id": "s1" }))
+                .expect("the surface is made");
+            session
+                .execute(
+                    "a2ui.surface.apply",
+                    &json!({ "surface_id": "s1", "components": [{ "component": "Text", "text": "hello" }] }),
+                )
+                .expect("the text is drawn");
+        });
+        let before = render.with_session(|session| {
+            session.document().walk().find(|node| node.kind == "a2ui.text").and_then(|node| node.rect)
+        });
+        let answer = render.drag(Point::new(1.0, 1.0), Point::new(50.0, 50.0)).expect("the drag is answered");
+        assert!(answer["moved"].is_null(), "{answer}");
+        let after = render.with_session(|session| {
+            session.document().walk().find(|node| node.kind == "a2ui.text").and_then(|node| node.rect)
+        });
+        assert_eq!(before, after, "the text did not move");
+    }
+
+    /// And the **render** is the channel's: a picture, a click and a
+    /// drag, with no window anywhere.
+    #[test]
+    fn the_headless_render_is_the_channels() {
+        let mut render = render();
+        let picture = craftkit_control::Render::render(&mut render).expect("the picture is drawn");
+        assert!(!picture.is_empty(), "and it is not empty");
     }
 }

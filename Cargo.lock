@@ -412,6 +412,7 @@ name = "craftkit-a2ui-server"
 version = "0.2.0"
 dependencies = [
  "craftkit-a2ui",
+ "craftkit-control",
  "craftkit-link",
  "craftkit-plugin-a2ui",
  "craftkit-raster",

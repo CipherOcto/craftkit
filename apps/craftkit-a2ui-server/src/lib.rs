@@ -49,6 +49,24 @@
 //! door has no third route, and the protocol has no message that carries
 //! a catalogue.
 //!
+//! # The door **serves** its own session on a **control channel**
+//!
+//! Every app has its own session, so the door's document is not the
+//! window's document and nothing shares it — and the door serves **its
+//! own** session on a control channel, so that a client can see what the
+//! program is showing. The channel needs a `Render`, and the door's is
+//! the **headless** one: a software rasteriser, a click, and a drag.
+//! There is **no window**: the picture is drawn by the rasteriser, and a
+//! window that attaches to somebody else's session is not in the tree.
+//!
+//! # The one message that is **not** a reply
+//!
+//! A component's action may be the **agent's** — an event, or a function
+//! the layer does not implement. Then the door sends an **`action`**
+//! message, the door's one outbound message that is not a reply to a
+//! call. The action travels in the command's outcome, and the door puts
+//! it on the wire.
+//!
 //! # What the door **refuses**, on purpose
 //!
 //! - a **surface** that names a catalogue the door does not serve;
@@ -77,8 +95,10 @@ include!(concat!(env!("OUT_DIR"), "/plugins.rs"));
 
 pub mod render;
 
+use std::sync::{Arc, Mutex};
+
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Ecosystem, Session};
+use craftkit_sdk::{Ecosystem, Outcome, Session};
 
 /// The name this door calls itself.
 pub const SERVER_NAME: &str = "craftkit-a2ui-server";
@@ -129,10 +149,21 @@ impl Request {
     }
 }
 
+/// The messages the door has to send and that are **not** replies.
+///
+/// The door's own stream and the door's **control channel** share one
+/// queue: a click on the channel may raise an action, and the action
+/// belongs on the wire the agent is reading.
+pub type Outbound = Arc<Mutex<Vec<Json>>>;
+
 /// The door: an ecosystem and a session over it.
 pub struct Server {
     ecosystem: Ecosystem,
-    session: Session,
+    /// The door's **own** session — behind a lock, because the control
+    /// channel serves the very same document and not a copy of it.
+    session: Arc<Mutex<Session>>,
+    /// The messages that are not replies.
+    outbound: Outbound,
     /// Whether the agent has said it accepts an **inline** catalogue.
     ///
     /// The default is **false** — a2ui's own default — and the door may
@@ -145,18 +176,62 @@ pub struct Server {
 impl Server {
     /// A door over an ecosystem.
     pub fn new(ecosystem: Ecosystem) -> Self {
-        let session = ecosystem.session();
-        Server { ecosystem, session, accepts_inline_catalogs: false, accepts_catalog_files: false }
+        let session = Arc::new(Mutex::new(ecosystem.session()));
+        let outbound: Outbound = Arc::new(Mutex::new(Vec::new()));
+        Server { ecosystem, session, outbound, accepts_inline_catalogs: false, accepts_catalog_files: false }
+    }
+
+    /// The **session** the door runs commands in, behind its lock.
+    pub fn with_session<T>(&mut self, body: impl FnOnce(&mut Session) -> T) -> T {
+        let mut session = match self.session.lock() {
+            Ok(session) => session,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        body(&mut session)
+    }
+
+    /// The **shared** session, for the control channel.
+    ///
+    /// The channel serves the door's own document, so a command an agent
+    /// runs over the channel changes what the door is drawing.
+    pub fn shared_session(&self) -> Arc<Mutex<Session>> {
+        Arc::clone(&self.session)
+    }
+
+    /// The queue of the messages that are not replies.
+    pub fn outbound(&self) -> Outbound {
+        Arc::clone(&self.outbound)
+    }
+
+    /// The messages that are **waiting** to go out.
+    pub fn take_outbound(&self) -> Vec<Json> {
+        let mut outbound = match self.outbound.lock() {
+            Ok(outbound) => outbound,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        std::mem::take(&mut *outbound)
+    }
+
+    /// Run a **command**, and queue any action it raises.
+    ///
+    /// A command whose outcome names an **action** has raised one for the
+    /// agent, and the action is the door's one outbound message that is
+    /// not a reply to a call.
+    fn run(&mut self, command: &str, params: &Json) -> Result<Outcome, craftkit_sdk::EngineError> {
+        let outcome = self.with_session(|session| session.execute(command, params))?;
+        if let Some(message) = action_message(&outcome) {
+            let mut outbound = match self.outbound.lock() {
+                Ok(outbound) => outbound,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            outbound.push(message);
+        }
+        Ok(outcome)
     }
 
     /// The ecosystem the door is a view of.
     pub fn ecosystem(&self) -> &Ecosystem {
         &self.ecosystem
-    }
-
-    /// The session the door runs commands in.
-    pub fn session(&mut self) -> &mut Session {
-        &mut self.session
     }
 
     /// The **catalogue** the door serves: the projection of the
@@ -271,8 +346,7 @@ impl Server {
         // surface — and the door holds the model, so it can.
         let send_data_model = request.params.get("sendDataModel").and_then(Json::as_bool).unwrap_or(false);
         let outcome = self
-            .session
-            .execute("a2ui.surface.create", &json!({ "surface_id": surface_id }))
+            .run("a2ui.surface.create", &json!({ "surface_id": surface_id }))
             .map_err(|error| error.to_string())?;
         let mut result = json!({ "surfaceId": surface_id });
         if send_data_model {
@@ -301,8 +375,7 @@ impl Server {
             .get("components")
             .cloned()
             .ok_or_else(|| "there are no `components`".to_string())?;
-        self.session
-            .execute("a2ui.surface.apply", &json!({ "surface_id": surface_id, "components": components }))
+        self.run("a2ui.surface.apply", &json!({ "surface_id": surface_id, "components": components }))
             .map_err(|error| error.to_string())?;
         Ok(json!({ "surfaceId": surface_id }))
     }
@@ -317,8 +390,7 @@ impl Server {
             .to_string();
         let contents =
             request.params.get("contents").cloned().ok_or_else(|| "there are no `contents`".to_string())?;
-        self.session
-            .execute("a2ui.data.set", &json!({ "surface_id": surface_id, "path": "", "value": contents }))
+        self.run("a2ui.data.set", &json!({ "surface_id": surface_id, "path": "", "value": contents }))
             .map_err(|error| error.to_string())?;
         Ok(json!({ "surfaceId": surface_id }))
     }
@@ -332,8 +404,7 @@ impl Server {
             .and_then(Json::as_str)
             .ok_or_else(|| "there is no `surfaceId`".to_string())?
             .to_string();
-        self.session
-            .execute("a2ui.surface.delete", &json!({ "surface_id": surface_id }))
+        self.run("a2ui.surface.delete", &json!({ "surface_id": surface_id }))
             .map_err(|error| error.to_string())?;
         Ok(json!({ "surfaceId": surface_id }))
     }
@@ -363,9 +434,60 @@ impl Server {
             ));
         };
         let args = request.params.get("args").cloned().unwrap_or(Json::Null);
-        self.session.execute(command, &args).map_err(|error| error.to_string())?;
+        self.run(command, &args).map_err(|error| error.to_string())?;
         Ok(json!({ "name": name }))
     }
+}
+
+/// The **action** a command raised, as the door's outbound message.
+///
+/// The action travels in the command's outcome, so the door does not
+/// have to read it back out of a message. The message is a2ui's own: the
+/// action, with the surface it came from, the component that raised it,
+/// the time, and the context.
+pub fn action_message(outcome: &Outcome) -> Option<Json> {
+    let action = outcome.data.get("action")?;
+    let mut action = action.as_object()?.clone();
+    action.insert("timestamp".to_string(), json!(timestamp()));
+    Some(json!({
+        "jsonrpc": "2.0",
+        "method": "action",
+        "params": { "version": "1.0", "action": action },
+    }))
+}
+
+/// **Now**, as an ISO 8601 timestamp.
+///
+/// The door is an application and not a library, so it may ask the
+/// machine what time it is — and the tree itself has no clock.
+pub fn timestamp() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs() as i64)
+        .unwrap_or(0);
+    let days = seconds.div_euclid(86_400);
+    let time = seconds.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z", time / 3600, (time % 3600) / 60, time % 60)
+}
+
+/// The **date** of a count of days since the epoch.
+///
+/// The days-from-civil inverse, by Howard Hinnant's algorithm: the
+/// count is shifted so that the year starts on 1 March, and the leap
+/// day falls at the end of the year.
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let shifted = days + 719_468;
+    let era = if shifted >= 0 { shifted } else { shifted - 146_096 } / 146_097;
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era = (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted_month = (5 * day_of_year + 2) / 153;
+    let day = (day_of_year - (153 * shifted_month + 2) / 5 + 1) as u32;
+    let month = if shifted_month < 10 { shifted_month + 3 } else { shifted_month - 9 } as u32;
+    let year = if month <= 2 { year + 1 } else { year };
+    (year, month, day)
 }
 
 /// The catalogue as **text**, for the file.
@@ -394,6 +516,11 @@ pub fn serve(mut server: Server) {
             }),
         };
         let _ = writeln!(output, "{answer}");
+        // And the messages that are **not** replies: an action that is
+        // the agent's goes on the wire, after the answer it followed.
+        for message in server.take_outbound() {
+            let _ = writeln!(output, "{message}");
+        }
         let _ = output.flush();
     }
 }
