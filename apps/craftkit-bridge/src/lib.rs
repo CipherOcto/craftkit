@@ -39,8 +39,8 @@
 //! | `initialize` | what this server is |
 //! | `tools/list` | the commands, as tools: the projection |
 //! | `tools/call` | run one command: the session |
-//! | `resources/list` | the kinds, the formats and the evaluators |
-//! | `plan` | what the document means right now |
+//! | `resources/list` | the kinds, the formats and the manifest |
+//! | `plan` | what the document means right now: the `doc.plan` command |
 //! | `shutdown` | stop |
 //!
 //! # Why the tools are the projection
@@ -144,7 +144,7 @@ impl Bridge {
             "tools/list" => Ok(self.tools()),
             "tools/call" => self.call(request),
             "resources/list" => Ok(self.resources()),
-            "plan" => Ok(self.plan()),
+            "plan" => self.plan(),
             "journal" => Ok(self.journal()),
             "menu" => Ok(self.menu()),
             "shutdown" => Ok(json!({ "stopping": true })),
@@ -218,7 +218,13 @@ impl Bridge {
         }
     }
 
-    /// The kinds, the formats and the evaluators.
+    /// The kinds, the formats and the **manifest**.
+    ///
+    /// The manifest is the projection's own door: it names every command,
+    /// kind, tool, evaluator and panel with its layer and its line about
+    /// itself. The bridge does not reach into a registry of its own to
+    /// find the evaluator's ids — a front end that does that has a second
+    /// path into the design.
     fn resources(&self) -> Json {
         let projection = self.ecosystem.projection();
         json!({
@@ -228,13 +234,20 @@ impl Bridge {
                 "layer": kind.layer,
             })).collect::<Vec<_>>(),
             "formats": self.ecosystem.formats.ids(),
-            "evaluators": self.ecosystem.evaluators.ids(),
+            "manifest": projection.manifest(),
         })
     }
 
     /// What the document means right now.
-    fn plan(&self) -> Json {
-        self.session.evaluate().to_json()
+    ///
+    /// It is the **command's** work: the bridge asks `doc.plan` for it,
+    /// the way every other door does, so every door says the same thing
+    /// about the same document.
+    fn plan(&mut self) -> Result<Json, String> {
+        match self.session.execute("doc.plan", &json!({})) {
+            Ok(outcome) => Ok(outcome.data),
+            Err(error) => Err(engine_error_text("doc.plan", &error)),
+        }
     }
 
     /// The **journal**: what this session was asked to do.

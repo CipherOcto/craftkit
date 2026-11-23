@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use craftkit_gates::{DENY, Finding, check};
+use craftkit_gates::{DENY, FRONT_END_FILES, FRONT_ENDS, Finding, check};
 
 /// The root of this workspace.
 fn root() -> PathBuf {
@@ -359,4 +359,42 @@ fn a_hosts_library_is_not_a_front_end() {
     std::fs::write(&root, code).expect("the root is written");
     let findings = check(&tree.root);
     assert!(findings_of(&findings, "front-end").is_empty(), "the gate caught it: {findings:?}");
+}
+
+/// The **doors** are classified, and the list says which they are.
+///
+/// The rule "a front end is thin" reaches a door only when the door is
+/// **named**, so the list is the rule's reach — and a list that quietly
+/// loses a door is a rule that quietly stops applying.
+#[test]
+fn the_doors_are_classified() {
+    for door in [
+        "craftkit-repl",
+        "craftkit-window",
+        "craftkit-wasm",
+        "craftkit-mcp-server",
+        "craftkit-bridge",
+        "craftkit-a2ui-server",
+    ] {
+        assert!(FRONT_ENDS.contains(&door), "{door} is not a front end: {FRONT_ENDS:?}");
+    }
+    // The **transports** are not doors: they carry a door's messages and
+    // have no session of their own to keep thin.
+    for transport in ["craftkit-mcp", "craftkit-control"] {
+        assert!(!FRONT_ENDS.contains(&transport), "{transport} is not a front end: {FRONT_ENDS:?}");
+    }
+}
+
+/// The **studio** is a host: its entry point is a front end and its
+/// library is a command book.
+#[test]
+fn the_studio_is_a_host() {
+    assert!(
+        FRONT_END_FILES.contains(&("craftkit-studio", "src/main.rs")),
+        "the studio's entry point is not a front end: {FRONT_END_FILES:?}"
+    );
+    assert!(
+        !FRONT_ENDS.contains(&"craftkit-studio"),
+        "the studio's library is a command book, and a command's body may open the document"
+    );
 }

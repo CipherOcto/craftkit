@@ -277,11 +277,34 @@ pub const LAYERS: &[(&str, u8)] = &[
 /// The prefix a plugin's name carries.
 const PLUGIN_PREFIX: &str = "craftkit-plugin-";
 
-/// The crates that are **front ends**: a program a person looks at.
+/// The crates that are **front ends**: a program a person — or an agent —
+/// looks at.
 ///
 /// A front end reads the engine's state and acts through the registry,
 /// and the rule is that it has no second path into the design.
-pub const FRONT_ENDS: &[&str] = &["craftkit-a2ui-server", "craftkit-window"];
+///
+/// These are the **doors** of the tree, and there are six:
+///
+/// | door | who looks at it |
+/// |---|---|
+/// | `craftkit-repl` — the terminal door | a person |
+/// | `craftkit-window` — the window | a person |
+/// | `craftkit-wasm` — the browser door | a person |
+/// | `craftkit-mcp-server` — the agent door | an agent |
+/// | `craftkit-bridge` — the bridge | an agent |
+/// | `craftkit-a2ui-server` — the a2ui door | an agent |
+///
+/// The **transports** are not doors: `craftkit-mcp` and `craftkit-control`
+/// are the libraries two of the doors speak over, and a transport has no
+/// session of its own to keep thin.
+pub const FRONT_ENDS: &[&str] = &[
+    "craftkit-a2ui-server",
+    "craftkit-bridge",
+    "craftkit-mcp-server",
+    "craftkit-repl",
+    "craftkit-wasm",
+    "craftkit-window",
+];
 
 /// The names a front end may **not** use.
 ///

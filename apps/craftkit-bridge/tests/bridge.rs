@@ -81,8 +81,13 @@ fn an_unknown_method_says_which_methods_there_are() {
     assert!(message.contains("tools/list"), "{message}");
 }
 
-/// The resources are the kinds, the formats and the evaluators: the rest
-/// of the registry.
+/// The resources are the kinds, the formats and the **manifest**: the
+/// rest of the registry, read through the projection's own door.
+///
+/// The manifest is where the evaluators are named, so a door that
+/// published them would have to reach into the evaluator's registry to
+/// list them — and a front end that does that has a second path into
+/// the design.
 #[test]
 fn the_resources_are_the_rest_of_the_registry() {
     let mut bridge = bridge();
@@ -108,11 +113,17 @@ fn the_resources_are_the_rest_of_the_registry() {
             "craftkit/9"
         ])
     );
-    assert!(answer["result"]["evaluators"].as_array().expect("there are evaluators").len() >= 2);
+    let manifest = answer["result"]["manifest"].as_array().expect("there is a manifest");
+    assert!(
+        manifest.iter().any(|line| line.as_str().unwrap_or_default().starts_with("evaluator ")),
+        "the manifest names the evaluators: {manifest:?}"
+    );
 }
 
-/// The plan is what the document means, and it is the same plan the studio
-/// would show.
+/// The plan is the **command's** work.
+///
+/// The bridge asks `doc.plan` for it, the way every other door does, so
+/// every door says the same thing about the same document.
 #[test]
 fn the_plan_is_the_projects_plan() {
     let mut bridge = bridge();
