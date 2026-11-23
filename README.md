@@ -70713,12 +70713,21 @@ drives the kit on the other.
   action may be the agent's, and then the door sends an `action`
   message. The action travels in the command's outcome, so the door
   does not read it back out of a message.
+- **A surface may carry its tree and its data model** in the
+  `createSurface` that makes it — and the model is applied **first**,
+  so a component binds against it on its first resolution.
+- **A surface that asks for its data model gets it** in the metadata of
+  every message the door sends — and the payload is the protocol's own
+  `a2uiRendererDataModel` object, with the models of the surfaces that
+  asked.
 
 ### What the port found
 
 - **JSON-RPC has nowhere to put metadata**, and a2ui exchanges its
   capabilities in transport metadata or in a transport's own handshake.
-  So the door's first request is the handshake.
+  So the door's first request is the handshake — and the data model
+  rides in a `metadata` member of the message's params, which is where
+  this transport puts it.
 - **A catalogue the door does not serve is refused**, the way an unknown
   command id is refused.
 

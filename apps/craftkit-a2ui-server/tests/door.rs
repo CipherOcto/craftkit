@@ -101,6 +101,113 @@ fn a_surface_that_names_another_catalogue_is_refused() {
     assert!(answer.get("error").is_some(), "{answer}");
 }
 
+/// A surface that carries its **initial data model** gets it: the
+/// protocol says the model may come with the surface, and it is applied
+/// **first**, so that a component binds against it on its first
+/// resolution.
+#[test]
+fn a_surface_that_carries_a_data_model_gets_it() {
+    let mut server = server();
+    let answer = server
+        .handle(&request("createSurface", json!({ "surfaceId": "s11", "dataModel": { "title": "hello" } })));
+    assert!(answer.get("error").is_none(), "{answer}");
+    let model = server.with_session(|session| {
+        session
+            .document()
+            .nodes()
+            .find(|node| node.kind == "a2ui.surface")
+            .map(|node| node.data["model"].clone())
+            .unwrap_or(Json::Null)
+    });
+    assert_eq!(model["title"], json!("hello"), "and the model holds it: {model}");
+}
+
+/// And a surface that carries its **tree** gets it drawn.
+#[test]
+fn a_surface_that_carries_a_tree_gets_it_drawn() {
+    let mut server = server();
+    let answer = server.handle(&request(
+        "createSurface",
+        json!({
+            "surfaceId": "s12",
+            "components": [
+                { "component": "Column", "id": "root", "children": ["t1"] },
+                { "component": "Text", "id": "t1", "text": "hello" },
+            ],
+        }),
+    ));
+    assert!(answer.get("error").is_none(), "{answer}");
+    let drawn = server.with_session(|session| session.document().walk().any(|node| node.kind == "a2ui.text"));
+    assert!(drawn, "and the text is there");
+}
+
+/// A surface that asks for its **data model** gets it in the metadata of
+/// every message the door sends — and the payload is the protocol's own
+/// a2uiRendererDataModel object.
+#[test]
+fn a_surface_that_asks_for_its_data_model_gets_it_in_the_metadata() {
+    let mut server = server();
+    server.handle(&request(
+        "createSurface",
+        json!({ "surfaceId": "s13", "sendDataModel": true, "dataModel": { "title": "hello" } }),
+    ));
+    server.handle(&request(
+        "updateComponents",
+        json!({
+            "surfaceId": "s13",
+            "components": [
+                { "component": "Column", "id": "root", "children": ["b1"] },
+                {
+                    "component": "Button",
+                    "id": "b1",
+                    "child": "t1",
+                    "action": { "event": { "name": "pressed" } },
+                },
+                { "component": "Text", "id": "t1", "text": "press" },
+            ],
+        }),
+    ));
+    // The render shares the door's surfaces: the metadata of a message
+    // is a fact about the surfaces, and the two must not disagree.
+    let mut render = Headless::with_surfaces(server.shared_session(), server.outbound(), server.surfaces());
+    let answer = render.click(Point::new(1.0, 1.0)).expect("the click is answered");
+    assert!(!answer["clicked"].is_null(), "the button was clicked: {answer}");
+    let messages = server.take_outbound();
+    assert_eq!(messages.len(), 1, "one message is not a reply: {messages:?}");
+    let metadata = &messages[0]["params"]["metadata"]["a2uiRendererDataModel"];
+    assert_eq!(metadata["version"], json!("1.0"), "{metadata}");
+    assert_eq!(metadata["surfaces"]["s13"]["title"], json!("hello"), "{metadata}");
+}
+
+/// A surface that did **not** ask gets no metadata: the model is not
+/// sent to an agent that did not ask for it.
+#[test]
+fn a_surface_that_did_not_ask_gets_no_metadata() {
+    let mut server = server();
+    server.handle(&request("createSurface", json!({ "surfaceId": "s14" })));
+    server.handle(&request(
+        "updateComponents",
+        json!({
+            "surfaceId": "s14",
+            "components": [
+                { "component": "Column", "id": "root", "children": ["b1"] },
+                {
+                    "component": "Button",
+                    "id": "b1",
+                    "child": "t1",
+                    "action": { "event": { "name": "pressed" } },
+                },
+                { "component": "Text", "id": "t1", "text": "press" },
+            ],
+        }),
+    ));
+    let mut render = Headless::new(server.shared_session(), server.outbound());
+    render.click(Point::new(1.0, 1.0)).expect("the click is answered");
+    let messages = server.take_outbound();
+    assert_eq!(messages.len(), 1, "one message is not a reply: {messages:?}");
+    assert!(messages[0]["params"].get("metadata").is_none(), "{messages:?}");
+}
+
 /// A surface that omits the catalogue gets the door's own.
 #[test]
 fn a_surface_that_omits_the_catalogue_gets_the_doors_own() {

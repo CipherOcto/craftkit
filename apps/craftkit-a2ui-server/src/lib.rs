@@ -67,6 +67,18 @@
 //! call. The action travels in the command's outcome, and the door puts
 //! it on the wire.
 //!
+//! # The **data model** rides in the metadata
+//!
+//! a2ui says a surface that asked for its data model gets it in the
+//! metadata of **every** message the door sends — and the transport's
+//! metadata mechanism is the transport's own business, so the door puts
+//! it in a `metadata` member of the message's params, and the payload is
+//! the protocol's own `a2uiRendererDataModel` object.
+//!
+//! And a surface may carry its **tree** and its **data model** in the
+//! `createSurface` that makes it: the model is applied **first**, so
+//! that a component binds against it on its first resolution.
+//!
 //! # What the door **refuses**, on purpose
 //!
 //! - a **surface** that names a catalogue the door does not serve;
@@ -164,6 +176,44 @@ impl Request {
 /// is raised while the agent says nothing is still written.
 pub type Outbound = std::sync::mpsc::Sender<Option<Json>>;
 
+/// The surfaces that asked for their **data model** to be sent.
+///
+/// The protocol says a surface that asked for its model gets it in the
+/// metadata of **every** message the door sends to the agent — so the
+/// answer is a fact about the surface, and the door and its render have
+/// to agree on it: they share this.
+#[derive(Clone, Default)]
+pub struct Surfaces(Arc<Mutex<std::collections::BTreeMap<String, bool>>>);
+
+impl Surfaces {
+    /// A surface that asked for its **data model** to be sent.
+    pub fn ask(&self, surface_id: &str) {
+        let mut surfaces = match self.0.lock() {
+            Ok(surfaces) => surfaces,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        surfaces.insert(surface_id.to_string(), true);
+    }
+
+    /// Whether **any** surface asked for its data model.
+    pub fn any(&self) -> bool {
+        let surfaces = match self.0.lock() {
+            Ok(surfaces) => surfaces,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        surfaces.values().any(|asked| *asked)
+    }
+
+    /// The surfaces that asked, and their names.
+    pub fn asked(&self) -> Vec<String> {
+        let surfaces = match self.0.lock() {
+            Ok(surfaces) => surfaces,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        surfaces.iter().filter(|(_, asked)| **asked).map(|(surface_id, _)| surface_id.clone()).collect()
+    }
+}
+
 /// A **failure**, and what kind it is.
 ///
 /// The JSON-RPC codes say what went wrong: a method that is not there,
@@ -229,6 +279,8 @@ pub struct Server {
     /// The protocol says every call to an agent-side function carries an
     /// id of its own, and the agent copies it into the answer.
     calls: std::sync::atomic::AtomicU64,
+    /// The surfaces that asked for their **data model** to be sent.
+    surfaces: Surfaces,
 }
 
 impl Server {
@@ -244,6 +296,7 @@ impl Server {
             accepts_inline_catalogs: false,
             accepts_catalog_files: false,
             calls: std::sync::atomic::AtomicU64::new(0),
+            surfaces: Surfaces::default(),
         }
     }
 
@@ -254,6 +307,14 @@ impl Server {
             Err(poisoned) => poisoned.into_inner(),
         };
         body(&mut session)
+    }
+
+    /// The surfaces that asked for their **data model** to be sent.
+    ///
+    /// The render shares them: the metadata of a message is a fact
+    /// about the surfaces, and the two must not disagree.
+    pub fn surfaces(&self) -> Surfaces {
+        self.surfaces.clone()
     }
 
     /// The **shared** session, for the control channel.
@@ -309,7 +370,9 @@ impl Server {
     /// on the wire, because the protocol says they are.
     fn outbound_message(&mut self, outcome: &Outcome) -> Option<Json> {
         let call_id = self.next_call_id();
-        message_of(outcome, &call_id)
+        let surfaces = self.surfaces.clone();
+        let metadata = self.with_session(|session| metadata_of(&surfaces, session));
+        message_of(outcome, &call_id, metadata)
     }
 
     /// The **next** id of a call to the agent.
@@ -480,11 +543,27 @@ impl Server {
         }
         // The **sendDataModel** flag asks the door to put the whole data
         // model in the metadata of every message it sends for this
-        // surface — and the door holds the model, so it can.
+        // surface — and the door holds the model, so it can. The flag
+        // is remembered, because the messages are sent later.
         let send_data_model = request.params.get("sendDataModel").and_then(Json::as_bool).unwrap_or(false);
+        if send_data_model {
+            self.surfaces.ask(&surface_id);
+        }
         let outcome = self
             .run("a2ui.surface.create", &json!({ "surface_id": surface_id }))
             .map_err(|error| Fault::Refused(error.to_string()))?;
+        // The **initial data model** may come with the surface, and the
+        // protocol says it is applied **first**: a component binds
+        // against it on its first resolution.
+        if let Some(model) = request.params.get("dataModel") {
+            self.run("a2ui.data.set", &json!({ "surface_id": surface_id, "path": "", "value": model }))
+                .map_err(|error| Fault::Refused(error.to_string()))?;
+        }
+        // And the **tree** may come with it too.
+        if let Some(components) = request.params.get("components") {
+            self.run("a2ui.surface.apply", &json!({ "surface_id": surface_id, "components": components }))
+                .map_err(|error| Fault::Refused(error.to_string()))?;
+        }
         let mut result = json!({ "surfaceId": surface_id });
         if send_data_model {
             result["dataModel"] = self.data_model(&surface_id);
@@ -630,17 +709,52 @@ pub fn translate(name: &str, args: &Json) -> Result<Json, String> {
 /// An **action** is the agent's, and a **call** to an agent-side
 /// function is the agent's too — and the two are different messages on
 /// the wire, because the protocol says they are.
-pub fn message_of(outcome: &Outcome, call_id: &str) -> Option<Json> {
-    if let Some(message) = action_message(outcome) {
-        return Some(message);
+pub fn message_of(outcome: &Outcome, call_id: &str, metadata: Option<Json>) -> Option<Json> {
+    let (method, mut params) = match outcome.data.get("action") {
+        Some(action) => {
+            let mut action = action.as_object()?.clone();
+            action.insert("timestamp".to_string(), json!(timestamp()));
+            ("action", json!({ "version": "1.0", "action": action }))
+        }
+        None => {
+            let call = outcome.data.get("callAgentFunction")?;
+            let mut call = call.as_object()?.clone();
+            call.insert("functionCallId".to_string(), json!(call_id));
+            ("callAgentFunction", json!({ "version": "1.0", "callAgentFunction": call }))
+        }
+    };
+    // The **metadata** goes with the message: the protocol says the data
+    // model rides in the transport's metadata, and the transport here is
+    // JSON-RPC — so the metadata is a member of the message's params.
+    if let Some(metadata) = metadata {
+        params["metadata"] = metadata;
     }
-    let call = outcome.data.get("callAgentFunction")?;
-    let mut call = call.as_object()?.clone();
-    call.insert("functionCallId".to_string(), json!(call_id));
+    Some(json!({ "jsonrpc": "2.0", "method": method, "params": params }))
+}
+
+/// The **metadata** of a message: the data models of the surfaces that
+/// asked for them.
+///
+/// The protocol's own shape: the a2uiRendererDataModel object, with a
+/// map of surface ids to their models. And a surface that asked and is
+/// not there any more has **no** model to send.
+fn metadata_of(surfaces: &Surfaces, session: &Session) -> Option<Json> {
+    let asked = surfaces.asked();
+    if asked.is_empty() {
+        return None;
+    }
+    let document = session.document();
+    let mut models = craftkit_sdk::serde_json::Map::new();
+    for surface_id in asked {
+        let model = document
+            .nodes()
+            .find(|node| node.kind == "a2ui.surface" && node.name == surface_id)
+            .and_then(|node| node.data.get("model").cloned())
+            .unwrap_or(Json::Object(Default::default()));
+        models.insert(surface_id, model);
+    }
     Some(json!({
-        "jsonrpc": "2.0",
-        "method": "callAgentFunction",
-        "params": { "version": "1.0", "callAgentFunction": call },
+        "a2uiRendererDataModel": { "version": "1.0", "surfaces": Json::Object(models) },
     }))
 }
 
@@ -659,6 +773,16 @@ pub fn action_message(outcome: &Outcome) -> Option<Json> {
         "method": "action",
         "params": { "version": "1.0", "action": action },
     }))
+}
+
+/// The **action** a command raised, as the door's outbound message — and
+/// the metadata it carries, if any.
+pub fn action_message_with(outcome: &Outcome, metadata: Option<Json>) -> Option<Json> {
+    let mut message = action_message(outcome)?;
+    if let Some(metadata) = metadata {
+        message["params"]["metadata"] = metadata;
+    }
+    Some(message)
 }
 
 /// **Now**, as an ISO 8601 timestamp.

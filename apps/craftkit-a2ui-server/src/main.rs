@@ -66,10 +66,12 @@ fn open_the_channel(server: &craftkit_a2ui_server::Server, port: u16) -> Option<
         eprintln!("the control channel needs CRAFTKIT_CONTROL_TOKEN, and it was not given");
         return None;
     };
-    let render = std::sync::Arc::new(std::sync::Mutex::new(craftkit_a2ui_server::render::Headless::new(
-        server.shared_session(),
-        server.outbound(),
-    )));
+    let render =
+        std::sync::Arc::new(std::sync::Mutex::new(craftkit_a2ui_server::render::Headless::with_surfaces(
+            server.shared_session(),
+            server.outbound(),
+            server.surfaces(),
+        )));
     let options = craftkit_control::Options {
         token,
         address: std::net::SocketAddr::from(([127, 0, 0, 1], port)),

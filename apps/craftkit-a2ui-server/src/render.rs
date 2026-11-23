@@ -49,6 +49,11 @@ pub struct Headless {
     /// The protocol says every call to an agent-side function carries an
     /// id of its own, and the agent copies it into the answer.
     calls: std::sync::atomic::AtomicU64,
+    /// The surfaces that asked for their **data model** to be sent.
+    ///
+    /// The door's own: the metadata of a message is a fact about the
+    /// surfaces, and the render and the door must not disagree.
+    surfaces: crate::Surfaces,
 }
 
 impl Headless {
@@ -64,7 +69,22 @@ impl Headless {
             width: WIDTH,
             height: HEIGHT,
             calls: std::sync::atomic::AtomicU64::new(0),
+            surfaces: crate::Surfaces::default(),
         }
+    }
+
+    /// A render that shares the door's **surfaces**.
+    ///
+    /// The door knows which surfaces asked for their data model, and the
+    /// metadata of a message says so — so the render is given them.
+    pub fn with_surfaces(
+        session: Arc<Mutex<Session>>,
+        outbound: Outbound,
+        surfaces: crate::Surfaces,
+    ) -> Self {
+        let mut render = Headless::new(session, outbound);
+        render.surfaces = surfaces;
+        render
     }
 
     /// The session the render draws.
@@ -204,9 +224,11 @@ impl Headless {
     ///
     /// The message goes on the wire even if the agent says nothing more:
     /// the writer waits on the queue.
-    fn queue(&self, outcome: &Outcome) {
+    fn queue(&mut self, outcome: &Outcome) {
         let count = self.calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let Some(message) = crate::message_of(outcome, &format!("call-{count}")) else { return };
+        let surfaces = self.surfaces.clone();
+        let metadata = self.with_session(|session| crate::metadata_of(&surfaces, session));
+        let Some(message) = crate::message_of(outcome, &format!("call-{count}"), metadata) else { return };
         let _ = self.outbound.send(Some(message));
     }
 
