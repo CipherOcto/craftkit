@@ -22,7 +22,7 @@
 //! fail later, in front of a person, instead of now, in front of a log.
 
 use crate::command::CommandSpec;
-use crate::contribution::{Contribution, Registry, RegistryError};
+use crate::contribution::{CatalogEntry, Contribution, Registry, RegistryError};
 use crate::document::NodeKindSpec;
 use crate::evaluator::EvaluatorSpec;
 use crate::format::{FormatSpec, MigrationSpec};
@@ -124,6 +124,9 @@ pub struct Ecosystem {
     pub migrations: Registry<MigrationSpec>,
     /// The evaluators: what a whole document means.
     pub evaluators: Registry<EvaluatorSpec>,
+    /// The catalogue entries: the named, schema-described things an agent
+    /// may use.
+    pub catalog: Registry<CatalogEntry>,
 }
 
 impl Ecosystem {
@@ -138,6 +141,7 @@ impl Ecosystem {
             formats: Registry::new(),
             migrations: Registry::new(),
             evaluators: Registry::new(),
+            catalog: Registry::new(),
         }
     }
 
@@ -155,6 +159,7 @@ impl Ecosystem {
             formats: Registry::from_inventory()?,
             migrations: Registry::from_inventory()?,
             evaluators: Registry::from_inventory()?,
+            catalog: Registry::from_inventory()?,
         };
         ecosystem.validate()?;
         Ok(ecosystem)
@@ -292,6 +297,7 @@ impl Ecosystem {
         check_layers(&self.formats, &self.layers)?;
         check_layers(&self.migrations, &self.layers)?;
         check_layers(&self.evaluators, &self.layers)?;
+        check_layers(&self.catalog, &self.layers)?;
         Ok(())
     }
 
@@ -555,6 +561,101 @@ impl<'a> Projection<'a> {
             "doc": command.doc,
             "parameters": parameters,
         }))
+    }
+
+    /// A command's parameters, as a **JSON Schema**.
+    ///
+    /// **The one generator.** The MCP door publishes this, and so does any
+    /// other door that publishes a schema — the mapping lives in the SDK
+    /// ([`crate::schema::to_json_schema`]) and every door calls it.
+    ///
+    /// This is a **different thing** from [`Projection::schema`], which is
+    /// the *descriptor* — the envelope the bridge reads its names from. A
+    /// schema and a descriptor are not re-expressed as one another.
+    pub fn json_schema(&self, id: &str) -> Option<serde_json::Value> {
+        let command = self.ecosystem.commands.get(id)?;
+        Some(crate::schema::to_json_schema(command.params))
+    }
+
+    /// The **vocabulary view**: every command, tool, panel and kind.
+    ///
+    /// **The whole vocabulary, and nothing else.** A command carries its
+    /// **schema** — the JSON Schema an agent is told — and a tool, a panel
+    /// and a kind carry a label and no schema, because a kind's payload is
+    /// its own business.
+    ///
+    /// **This is not the catalogue of catalogue entries.** That is
+    /// [`Projection::entries`], and it is a view of a different registry.
+    /// The two overlap in one place — an a2ui component is a **kind** here
+    /// and a **component** there — and they differ in shape and in reader.
+    pub fn catalog(&self) -> Vec<serde_json::Value> {
+        let mut entries: Vec<serde_json::Value> = Vec::new();
+        for command in self.ecosystem.commands.all() {
+            entries.push(serde_json::json!({
+                "id": command.id,
+                "capability": command.capability,
+                "label": command.label,
+                "doc": command.doc,
+                "layer": command.layer,
+                "schema": crate::schema::to_json_schema(command.params),
+            }));
+        }
+        for tool in self.ecosystem.tools.all() {
+            entries.push(serde_json::json!({
+                "id": tool.id,
+                "capability": "tool",
+                "label": tool.label,
+                "doc": tool.shortcut.map(|_| "A gesture that runs a command."),
+                "layer": tool.layer,
+                "schema": serde_json::Value::Null,
+            }));
+        }
+        for panel in self.ecosystem.panels.all() {
+            entries.push(serde_json::json!({
+                "id": panel.id,
+                "capability": "panel",
+                "label": panel.label,
+                "doc": "A window's worth of commands.",
+                "layer": panel.layer,
+                "schema": serde_json::Value::Null,
+            }));
+        }
+        for kind in self.ecosystem.kinds.all() {
+            entries.push(serde_json::json!({
+                "id": kind.kind,
+                "capability": "kind",
+                "label": kind.label,
+                "doc": "A kind of thing in the document.",
+                "layer": kind.layer,
+                "schema": serde_json::Value::Null,
+            }));
+        }
+        entries
+    }
+
+    /// The **catalogue entries**, as a generic view.
+    ///
+    /// **No shape of its own.** An entry is a name, a label, a layer, a
+    /// line about itself and a schema, and this says them in those terms —
+    /// the **a2ui**-shaped projection of the same registry is a different
+    /// thing, and it lives in the a2ui crate, because this one must not
+    /// know what a2ui is.
+    pub fn entries(&self) -> Vec<serde_json::Value> {
+        self.ecosystem
+            .catalog
+            .all()
+            .iter()
+            .map(|entry| {
+                serde_json::json!({
+                    "id": entry.id,
+                    "name": entry.name,
+                    "label": entry.label,
+                    "layer": entry.layer,
+                    "doc": entry.doc,
+                    "schema": (entry.schema)(),
+                })
+            })
+            .collect()
     }
 
     /// Every contribution, one line each: the manifest.

@@ -68,7 +68,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 pub mod prompts;
 pub mod resources;
 
-use craftkit_sdk::{Doc, EngineError, Outcome, Session};
+use craftkit_sdk::{EngineError, Outcome, Session};
 
 /// The protocol version this server speaks.
 pub const PROTOCOL_VERSION: &str = "2025-06-18";
@@ -436,53 +436,11 @@ fn describe(label: &str, doc: &str) -> String {
 ///
 /// The types come from the command's own declaration, so the schema
 /// cannot disagree with the code that reads the values.
+///
+/// **The mapping lives in the SDK** — [`craftkit_sdk::schema::to_json_schema`]
+/// — and this door calls it. That is what "one schema for every door"
+/// means: one function, and every door that publishes a schema publishes
+/// what it returns.
 fn schema_of(params: &[craftkit_sdk::ParamDoc]) -> Json {
-    let mut properties = serde_json::Map::new();
-    let mut required: Vec<Json> = Vec::new();
-    for param in params {
-        let mut schema = match param.kind {
-            Doc::Number => json!({ "type": "number" }),
-            Doc::Text => json!({ "type": "string" }),
-            Doc::Bool => json!({ "type": "boolean" }),
-            Doc::NodeRef => json!({ "type": "integer", "minimum": 0 }),
-            Doc::NodeKind => json!({ "type": "string" }),
-            Doc::Json => json!({}),
-        };
-        let description = param.help.trim();
-        if !description.is_empty() {
-            schema["description"] = Json::String(description.to_string());
-        }
-        // A kind that is a plugin's own carries its **name** and its
-        // **unit**: `title` is the name a schema gives a thing, and the
-        // unit says what the number means. The type is unchanged: a
-        // length is a number, and the schema says number.
-        if let Some(type_name) = param.type_name {
-            schema["title"] = Json::String(type_name.to_string());
-        }
-        if let Some(unit) = param.unit {
-            schema["unit"] = Json::String(unit.to_string());
-        }
-        properties.insert(param.name.to_string(), schema);
-        if let Some(alternative) = param.alternative {
-            properties
-                .insert(alternative.to_string(), json!({ "type": "string", "description": description }));
-            // The pair is required, and neither half is: the schema says
-            // so in the words of the description, because JSON Schema
-            // cannot say "one of these two".
-            properties[param.name]["description"] =
-                Json::String(format!("{description} (or `{alternative}`)"));
-        }
-        if param.required {
-            required.push(Json::String(param.name.to_string()));
-        }
-    }
-    let mut schema = json!({
-        "type": "object",
-        "properties": properties,
-        "additionalProperties": false,
-    });
-    if !required.is_empty() {
-        schema["required"] = Json::Array(required);
-    }
-    schema
+    craftkit_sdk::schema::to_json_schema(params)
 }

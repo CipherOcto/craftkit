@@ -278,5 +278,58 @@ pub fn malformed_word_id(id: &str) -> Option<String> {
     None
 }
 
+/// A **catalogue entry**: a named, schema-described thing an agent may use.
+///
+/// A contribution like any other: it has an id, a capability, a layer, and
+/// the registry checks it like every other one. What it adds is a **second
+/// name** — the name it is **published under**, which is the key in a
+/// catalogue — and a **schema**, which is the shape an agent is told.
+///
+/// **Why two names.** The id is craftkit's, and the registry refuses an id
+/// that is not dotted and lower case. A catalogue may name things in
+/// another vocabulary — an a2ui component is `a2ui.text` here and `Text`
+/// there — so the entry carries the published name beside the checked one,
+/// and the two are never the same string when the vocabulary differs.
+#[derive(Debug, Clone)]
+pub struct CatalogEntry {
+    /// The entry's id: dotted, lower case, unique.
+    ///
+    /// It is craftkit's own name, and it is the one the registry checks.
+    pub id: &'static str,
+    /// The name it is **published under**: the key in the catalogue.
+    ///
+    /// It is usually the id, and it is different when the vocabulary the
+    /// entry is published in names it differently.
+    pub name: &'static str,
+    /// What it is called, for a person.
+    pub label: &'static str,
+    /// The layer that owns it.
+    pub layer: &'static str,
+    /// One line about itself.
+    pub doc: &'static str,
+    /// Its schema: the parameters, as JSON Schema.
+    ///
+    /// A **function**, so that the entry is a constant and the schema is
+    /// built when it is asked for.
+    pub schema: fn() -> serde_json::Value,
+}
+
+// The link collects catalogue entries here.
+inventory::collect!(crate::contribution::Registration<CatalogEntry>);
+
+impl Contribution for CatalogEntry {
+    fn id(&self) -> &'static str {
+        self.id
+    }
+
+    fn capability(&self) -> &'static str {
+        "component"
+    }
+
+    fn layer(&self) -> &'static str {
+        self.layer
+    }
+}
+
 /// A predicate that says a contribution can be used now.
 pub type Enabled = fn(&Session) -> bool;

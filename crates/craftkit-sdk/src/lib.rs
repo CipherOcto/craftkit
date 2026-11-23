@@ -91,10 +91,12 @@ pub mod prompt;
 pub mod realtime;
 pub mod relation;
 pub mod resume;
+pub mod schema;
 pub mod seams;
 pub mod select;
 pub mod session;
 pub mod stream;
+pub mod svgpath;
 pub mod taskcmds;
 pub mod tasks;
 pub mod testing;
@@ -106,7 +108,7 @@ pub use appearance::{AddAppearance, AppearanceKind, SetAppearance};
 pub use bundle::{Bundle, File};
 pub use camera::Camera;
 pub use command::{CommandRun, CommandSpec, DynamicRun};
-pub use contribution::{Contribution, Registration, Registry, RegistryError};
+pub use contribution::{CatalogEntry, Contribution, Registration, Registry, RegistryError};
 pub use document::{
     Appearance, Asset, BlendMode, Canvas, Cap, Colour, Document, Fill, FillRule, Gradient, GradientGeometry,
     GradientKind, GradientStop, Join, Node, NodeKindSpec, Path, Point, RecordingCanvas, Rect, Relation,
