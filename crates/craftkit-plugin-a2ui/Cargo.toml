@@ -1,0 +1,15 @@
+[package]
+name = "craftkit-plugin-a2ui"
+description = "The a2ui plugin: eleven components, and the five commands a surface is made of."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK, and the layer above it. Nothing else: a plugin may not depend
+# on an app, and it may not depend on another plugin.
+craftkit-sdk = { workspace = true }
+craftkit-a2ui = { path = "../craftkit-a2ui", version = "0.2.0" }
+# The macros: the components' table and the commands' table.
+craftkit-derive = { workspace = true }
