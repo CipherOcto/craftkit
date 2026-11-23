@@ -70627,7 +70627,7 @@ gap.
 
 ### What it cost
 
-- **One crate**, **three modules** and **two test files**.
+- **One crate**, **seven modules** and **two test files**.
 - **No new dependency** beyond the SDK and the layer.
 
 ### What it does not settle
@@ -70748,7 +70748,7 @@ drives the kit on the other.
 
 ### What it cost
 
-- **One crate**, **three modules** and **two test files**.
+- **One crate**, **three modules** and **three test files**.
 - **One new dependency**: the **control channel**, which the door
   serves its own session on. The rasteriser was already there.
 
