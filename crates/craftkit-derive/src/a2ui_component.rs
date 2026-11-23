@@ -159,10 +159,51 @@ pub struct Prop {
     pub ty: syn::Type,
     /// The **inner** type, when the field is an `Option`.
     pub inner: Option<syn::Type>,
+    /// The **left** type, when the field is an `Either`.
+    pub left: Option<syn::Type>,
+    /// The **other spelling** of the prop, when it has one.
+    pub alternative: Option<String>,
     /// The a2ui definition, if the prop names one.
     pub definition: Option<String>,
     /// The doc comment — the prop's one line about itself.
     pub help: String,
+}
+
+/// `#[param(...)]` on a field.
+///
+/// The only field it has is `or` — the **other spelling** of a prop that is
+/// one value written two ways. An `Either` prop needs it, and a prop that
+/// is not an `Either` may not have it.
+#[derive(Default)]
+pub struct ParamArgs {
+    /// The other spelling of this prop.
+    pub alternative: Option<LitStr>,
+}
+
+impl Parse for ParamArgs {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut args = ParamArgs::default();
+        while !input.is_empty() {
+            let field: Ident = input.parse()?;
+            match field.to_string().as_str() {
+                "or" => {
+                    input.parse::<Token![=]>()?;
+                    args.alternative = Some(input.parse::<LitStr>()?);
+                }
+                other => {
+                    return Err(Error::new(
+                        field.span(),
+                        format!("unknown prop field `{other}`: a prop has `or`"),
+                    ));
+                }
+            }
+            if input.is_empty() {
+                break;
+            }
+            input.parse::<Token![,]>()?;
+        }
+        Ok(args)
+    }
 }
 
 /// The last segment of a type's path, if it has one.
@@ -195,6 +236,18 @@ fn optional_inner(ty: &syn::Type) -> Option<syn::Type> {
     }
 }
 
+/// Whether a type is an `Either<A, B>`, and what the `A` is.
+///
+/// An `Either` is one prop written two ways, so it needs the **other
+/// spelling** — `#[param(or = "…")]` — and without it the prop cannot be
+/// read.
+fn either_left(ty: &syn::Type) -> Option<syn::Type> {
+    match last_segment(ty).map(Ident::to_string).as_deref() {
+        Some("Either") => first_argument(ty).cloned(),
+        _ => None,
+    }
+}
+
 /// Read the props out of a set of named fields.
 pub fn props_of(fields: &syn::FieldsNamed) -> Result<Vec<Prop>> {
     let mut props: Vec<Prop> = Vec::new();
@@ -216,7 +269,47 @@ pub fn props_of(fields: &syn::FieldsNamed) -> Result<Vec<Prop>> {
         let definition = attribute.and_then(|attribute| attribute.definition).map(|value| value.value());
         let ty = field.ty.clone();
         let inner = optional_inner(&ty);
-        props.push(Prop { name, ident, ty, inner, definition, help: doc_of(&field.attrs) });
+        let left = either_left(&ty);
+        // The **other spelling**: `#[param(or = "…")]`.
+        let alternative = field
+            .attrs
+            .iter()
+            .find(|attribute| attribute.path().is_ident("param"))
+            .map(|attribute| attribute.parse_args_with(ParamArgs::parse))
+            .transpose()?
+            .and_then(|args| args.alternative)
+            .map(|value| value.value());
+        // An `Either` needs the other spelling, and a prop that is not an
+        // `Either` may not have one: the shape and the declaration say the
+        // same thing, or they are both wrong.
+        match (&left, &alternative) {
+            (None, Some(_)) => {
+                return Err(Error::new(
+                    ident.span(),
+                    format!("`{name}` has another spelling, so its type must be an `Either`"),
+                ));
+            }
+            (Some(_), None) => {
+                return Err(Error::new(
+                    ident.span(),
+                    format!(
+                        "`{name}` is an `Either`, so it needs the other spelling: \
+                         `#[param(or = \"…\")]`"
+                    ),
+                ));
+            }
+            _ => {}
+        }
+        props.push(Prop {
+            name,
+            ident,
+            ty,
+            inner,
+            left,
+            alternative,
+            definition,
+            help: doc_of(&field.attrs),
+        });
     }
     Ok(props)
 }
@@ -358,6 +451,30 @@ pub fn expand_component(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
         let ident = &prop.ident;
         let ty = &prop.ty;
         let help = prop.help.as_str();
+        // An `Either` is one prop written two ways: it is read with the
+        // other spelling, and it is declared with it.
+        if let (Some(left), Some(alternative)) = (&prop.left, &prop.alternative) {
+            let alternative = alternative.as_str();
+            reads.push(quote! {
+                let #ident = <#ty>::read_either(params, #prop_name, #alternative)
+                    .map_err(|source| #sdk::EngineError::Param {
+                        id: #prop_name.to_string(),
+                        source,
+                    })?;
+            });
+            declarations.push(quote! {
+                #sdk::ParamDoc::either(
+                    #prop_name,
+                    <#left as #sdk::ParamKind>::DOC,
+                    #help,
+                    #alternative,
+                )
+                .with_type_name(<#left as #sdk::ParamKind>::NAME)
+                .with_unit(<#left as #sdk::ParamKind>::UNIT)
+            });
+            idents.push(ident.clone());
+            continue;
+        }
         reads.push(quote! {
             let #ident = <#ty as #sdk::ParamKind>::read(params, #prop_name)
                 .map_err(|source| #sdk::EngineError::Param {
@@ -792,5 +909,58 @@ pub struct TextComponent {
 "#,
         );
         assert!(message.contains("declared twice"), "{message}");
+    }
+
+    /// An `Either` **needs** the other spelling: it is one prop written
+    /// two ways, and without the second the prop cannot be read.
+    #[test]
+    fn an_either_needs_the_other_spelling() {
+        let message = refuse(
+            r#"
+#[derive(A2uiComponent)]
+#[a2ui_component(name = "Text", table = "a::defs", shapes = "a::schema")]
+pub struct TextComponent {
+    /// The text to show.
+    pub text: Either<Text, Number>,
+}
+"#,
+        );
+        assert!(message.contains("needs the other spelling"), "{message}");
+    }
+
+    /// And a prop that is **not** an `Either` may not have one.
+    #[test]
+    fn a_prop_that_is_not_an_either_may_not_have_another_spelling() {
+        let message = refuse(
+            r#"
+#[derive(A2uiComponent)]
+#[a2ui_component(name = "Text", table = "a::defs", shapes = "a::schema")]
+pub struct TextComponent {
+    /// The text to show.
+    #[param(or = "content")]
+    pub text: Text,
+}
+"#,
+        );
+        assert!(message.contains("must be an `Either`"), "{message}");
+    }
+
+    /// And an `Either` **with** the other spelling is read with it.
+    #[test]
+    fn an_either_with_the_other_spelling_is_read_with_it() {
+        let tokens = accept(
+            r#"
+#[derive(A2uiComponent)]
+#[a2ui_component(name = "Text", table = "a::defs", shapes = "a::schema")]
+pub struct TextComponent {
+    /// The text to show.
+    #[param(or = "content")]
+    pub text: Either<Text, Number>,
+}
+"#,
+        );
+        assert!(tokens.contains("read_either"), "{tokens}");
+        assert!(tokens.contains("either"), "{tokens}");
+        assert!(tokens.contains("\"content\""), "{tokens}");
     }
 }
