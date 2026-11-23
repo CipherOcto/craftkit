@@ -53,13 +53,25 @@ enum Token {
     Command(char),
     /// A number.
     Number(f64),
+    /// A **flag**: an arc's `large-arc` and `sweep`.
+    Flag(bool),
 }
 
 /// The **tokens** of path data.
+///
+/// The tokenizer knows the **command** it is under, because an arc's
+/// flags are **single characters** and not numbers: a file writes
+/// `A 1 1 0 0110 0`, and the `011` is a flag, a flag and a number — and
+/// a number reader would have read it as one number of one hundred and
+/// eleven.
 fn read_tokens(data: &str) -> Result<Vec<Token>, String> {
     let bytes: Vec<char> = data.chars().collect();
     let mut at = 0usize;
     let mut tokens: Vec<Token> = Vec::new();
+    // The **command** the numbers are under, and **how many** of them
+    // have been read: an arc's flags are its fourth and its fifth.
+    let mut command: Option<char> = None;
+    let mut index = 0usize;
     while at < bytes.len() {
         let byte = bytes[at];
         if byte.is_whitespace() || byte == ',' {
@@ -68,7 +80,19 @@ fn read_tokens(data: &str) -> Result<Vec<Token>, String> {
         }
         if byte.is_ascii_alphabetic() {
             tokens.push(Token::Command(byte));
+            command = Some(byte.to_ascii_uppercase());
+            index = 0;
             at += 1;
+            continue;
+        }
+        // A **flag**: a single `0` or a single `1`.
+        if command == Some('A') && (index == 3 || index == 4) {
+            if byte != '0' && byte != '1' {
+                return Err(format!("the path data has the flag `{byte}`, and a flag is a `0` or a `1`"));
+            }
+            tokens.push(Token::Flag(byte == '1'));
+            at += 1;
+            index += 1;
             continue;
         }
         let start = at;
@@ -107,8 +131,42 @@ fn read_tokens(data: &str) -> Result<Vec<Token>, String> {
             return Err(format!("the path data has the number `{text}` and it is not finite"));
         }
         tokens.push(Token::Number(number));
+        index += 1;
+        if let Some(letter) = command {
+            let count = parameter_count(letter);
+            if count > 0 {
+                index %= count;
+            }
+        }
     }
     Ok(tokens)
+}
+
+/// How many numbers a **command** takes.
+///
+/// The count is what says where an arc's flags are: they are its fourth
+/// and its fifth.
+fn parameter_count(letter: char) -> usize {
+    match letter {
+        'M' | 'L' | 'T' => 2,
+        'H' | 'V' => 1,
+        'C' => 6,
+        'S' | 'Q' => 4,
+        'A' => 7,
+        _ => 0,
+    }
+}
+
+/// A **point** that stays in numbers.
+///
+/// The numbers in path data are finite, but the **sum** of two of them
+/// need not be: a relative move of a very large number overflows, and a
+/// point that is not a number is not a point.
+fn point(x: f64, y: f64) -> Result<Point, String> {
+    if !x.is_finite() || !y.is_finite() {
+        return Err("the path data holds a point that does not stay in numbers".to_string());
+    }
+    Ok(Point::new(x, y))
 }
 
 /// The **path** a path data holds.
@@ -121,7 +179,9 @@ fn read_tokens(data: &str) -> Result<Vec<Token>, String> {
 ///
 /// The path data that holds no path at all is refused, and so is the
 /// path data that holds a command this tree does not read, or a number
-/// that is not a number, or a number that is not finite.
+/// that is not a number, or a number that is not finite, or a command
+/// with **not enough numbers** — a path that is cut short is refused
+/// and not read as far as it goes.
 pub fn read_path(data: &str) -> Result<Path, String> {
     let tokens = read_tokens(data)?;
     let mut at = 0usize;
@@ -133,14 +193,26 @@ pub fn read_path(data: &str) -> Result<Path, String> {
     let mut last_cubic: Option<Point> = None;
     let mut last_quad: Option<Point> = None;
     let mut command: Option<char> = None;
+    // A path **begins** with a move: the file says so, and a path that
+    // begins with a line has no place to begin the line from.
+    let mut begun = false;
 
-    let number = |at: &mut usize| -> Option<f64> {
+    let number = |at: &mut usize, letter: char| -> Result<f64, String> {
         match tokens.get(*at) {
             Some(Token::Number(number)) => {
                 *at += 1;
-                Some(*number)
+                Ok(*number)
             }
-            _ => None,
+            _ => Err(format!("the path data holds the command `{letter}` and not enough numbers")),
+        }
+    };
+    let flag = |at: &mut usize, letter: char| -> Result<bool, String> {
+        match tokens.get(*at) {
+            Some(Token::Flag(flag)) => {
+                *at += 1;
+                Ok(*flag)
+            }
+            _ => Err(format!("the path data holds the command `{letter}` and not enough numbers")),
         }
     };
 
@@ -151,95 +223,101 @@ pub fn read_path(data: &str) -> Result<Path, String> {
             at += 1;
         }
         let Some(letter) = command else {
-            return Err("the path data starts with a number".to_string());
+            return Err("the path data holds a number and not a command".to_string());
         };
         let relative = letter.is_lowercase();
         let letter = letter.to_ascii_uppercase();
+        if !begun && letter != 'M' {
+            return Err(format!(
+                "the path data begins with the command `{letter}`, and a path begins with a move"
+            ));
+        }
         match letter {
             'M' => {
-                let Some(x) = number(&mut at) else { break };
-                let Some(y) = number(&mut at) else { break };
-                let point = if relative { Point::new(pen.x + x, pen.y + y) } else { Point::new(x, y) };
+                let x = number(&mut at, letter)?;
+                let y = number(&mut at, letter)?;
+                let point = if relative { point(pen.x + x, pen.y + y)? } else { point(x, y)? };
                 if let Some(subpath) = current.take() {
                     subpaths.push(subpath);
                 }
                 start = point;
                 pen = point;
                 current = Some(SubPath { start: point, segments: Vec::new(), closed: false });
+                begun = true;
                 // The **rest** of the numbers of a move are lines.
                 command = Some(if relative { 'l' } else { 'L' });
                 last_cubic = None;
                 last_quad = None;
             }
             'L' => {
-                let Some(x) = number(&mut at) else { break };
-                let Some(y) = number(&mut at) else { break };
-                let point = if relative { Point::new(pen.x + x, pen.y + y) } else { Point::new(x, y) };
+                let x = number(&mut at, letter)?;
+                let y = number(&mut at, letter)?;
+                let point = if relative { point(pen.x + x, pen.y + y)? } else { point(x, y)? };
                 push_line(&mut current, &mut pen, point);
                 last_cubic = None;
                 last_quad = None;
             }
             'H' => {
-                let Some(x) = number(&mut at) else { break };
-                let point = if relative { Point::new(pen.x + x, pen.y) } else { Point::new(x, pen.y) };
+                let x = number(&mut at, letter)?;
+                let point = if relative { point(pen.x + x, pen.y)? } else { point(x, pen.y)? };
                 push_line(&mut current, &mut pen, point);
                 last_cubic = None;
                 last_quad = None;
             }
             'V' => {
-                let Some(y) = number(&mut at) else { break };
-                let point = if relative { Point::new(pen.x, pen.y + y) } else { Point::new(pen.x, y) };
+                let y = number(&mut at, letter)?;
+                let point = if relative { point(pen.x, pen.y + y)? } else { point(pen.x, y)? };
                 push_line(&mut current, &mut pen, point);
                 last_cubic = None;
                 last_quad = None;
             }
             'C' => {
-                let Some(x1) = number(&mut at) else { break };
-                let Some(y1) = number(&mut at) else { break };
-                let Some(x2) = number(&mut at) else { break };
-                let Some(y2) = number(&mut at) else { break };
-                let Some(x) = number(&mut at) else { break };
-                let Some(y) = number(&mut at) else { break };
+                let x1 = number(&mut at, letter)?;
+                let y1 = number(&mut at, letter)?;
+                let x2 = number(&mut at, letter)?;
+                let y2 = number(&mut at, letter)?;
+                let x = number(&mut at, letter)?;
+                let y = number(&mut at, letter)?;
                 let (c1, c2, to) = if relative {
                     (
-                        Point::new(pen.x + x1, pen.y + y1),
-                        Point::new(pen.x + x2, pen.y + y2),
-                        Point::new(pen.x + x, pen.y + y),
+                        point(pen.x + x1, pen.y + y1)?,
+                        point(pen.x + x2, pen.y + y2)?,
+                        point(pen.x + x, pen.y + y)?,
                     )
                 } else {
-                    (Point::new(x1, y1), Point::new(x2, y2), Point::new(x, y))
+                    (point(x1, y1)?, point(x2, y2)?, point(x, y)?)
                 };
                 push_cubic(&mut current, &mut pen, c1, c2, to);
                 last_cubic = Some(c2);
                 last_quad = None;
             }
             'S' => {
-                let Some(x2) = number(&mut at) else { break };
-                let Some(y2) = number(&mut at) else { break };
-                let Some(x) = number(&mut at) else { break };
-                let Some(y) = number(&mut at) else { break };
+                let x2 = number(&mut at, letter)?;
+                let y2 = number(&mut at, letter)?;
+                let x = number(&mut at, letter)?;
+                let y = number(&mut at, letter)?;
                 let c1 = match last_cubic {
-                    Some(previous) => Point::new(2.0 * pen.x - previous.x, 2.0 * pen.y - previous.y),
+                    Some(previous) => point(2.0 * pen.x - previous.x, 2.0 * pen.y - previous.y)?,
                     None => pen,
                 };
                 let (c2, to) = if relative {
-                    (Point::new(pen.x + x2, pen.y + y2), Point::new(pen.x + x, pen.y + y))
+                    (point(pen.x + x2, pen.y + y2)?, point(pen.x + x, pen.y + y)?)
                 } else {
-                    (Point::new(x2, y2), Point::new(x, y))
+                    (point(x2, y2)?, point(x, y)?)
                 };
                 push_cubic(&mut current, &mut pen, c1, c2, to);
                 last_cubic = Some(c2);
                 last_quad = None;
             }
             'Q' => {
-                let Some(x1) = number(&mut at) else { break };
-                let Some(y1) = number(&mut at) else { break };
-                let Some(x) = number(&mut at) else { break };
-                let Some(y) = number(&mut at) else { break };
+                let x1 = number(&mut at, letter)?;
+                let y1 = number(&mut at, letter)?;
+                let x = number(&mut at, letter)?;
+                let y = number(&mut at, letter)?;
                 let (control, to) = if relative {
-                    (Point::new(pen.x + x1, pen.y + y1), Point::new(pen.x + x, pen.y + y))
+                    (point(pen.x + x1, pen.y + y1)?, point(pen.x + x, pen.y + y)?)
                 } else {
-                    (Point::new(x1, y1), Point::new(x, y))
+                    (point(x1, y1)?, point(x, y)?)
                 };
                 let (c1, c2) = quadratic_as_cubic(pen, control, to);
                 push_cubic(&mut current, &mut pen, c1, c2, to);
@@ -247,11 +325,11 @@ pub fn read_path(data: &str) -> Result<Path, String> {
                 last_cubic = None;
             }
             'T' => {
-                let Some(x) = number(&mut at) else { break };
-                let Some(y) = number(&mut at) else { break };
-                let to = if relative { Point::new(pen.x + x, pen.y + y) } else { Point::new(x, y) };
+                let x = number(&mut at, letter)?;
+                let y = number(&mut at, letter)?;
+                let to = if relative { point(pen.x + x, pen.y + y)? } else { point(x, y)? };
                 let control = match last_quad {
-                    Some(previous) => Point::new(2.0 * pen.x - previous.x, 2.0 * pen.y - previous.y),
+                    Some(previous) => point(2.0 * pen.x - previous.x, 2.0 * pen.y - previous.y)?,
                     None => pen,
                 };
                 let (c1, c2) = quadratic_as_cubic(pen, control, to);
@@ -260,15 +338,19 @@ pub fn read_path(data: &str) -> Result<Path, String> {
                 last_cubic = None;
             }
             'A' => {
-                let Some(rx) = number(&mut at) else { break };
-                let Some(ry) = number(&mut at) else { break };
-                let Some(rotation) = number(&mut at) else { break };
-                let Some(large) = number(&mut at) else { break };
-                let Some(sweep) = number(&mut at) else { break };
-                let Some(x) = number(&mut at) else { break };
-                let Some(y) = number(&mut at) else { break };
-                let to = if relative { Point::new(pen.x + x, pen.y + y) } else { Point::new(x, y) };
-                let pieces = arc_as_cubics(pen, to, rx, ry, rotation, large != 0.0, sweep != 0.0)?;
+                let rx = number(&mut at, letter)?;
+                let ry = number(&mut at, letter)?;
+                let rotation = number(&mut at, letter)?;
+                // The **flags**: a single `0` or a single `1`, and not a
+                // number — the file may write them without a separator,
+                // and a number reader would swallow the next number with
+                // them.
+                let large = flag(&mut at, letter)?;
+                let sweep = flag(&mut at, letter)?;
+                let x = number(&mut at, letter)?;
+                let y = number(&mut at, letter)?;
+                let to = if relative { point(pen.x + x, pen.y + y)? } else { point(x, y)? };
+                let pieces = arc_as_cubics(pen, to, rx, ry, rotation, large, sweep)?;
                 for piece in pieces {
                     match piece {
                         ArcPiece::Line(end) => push_line(&mut current, &mut pen, end),

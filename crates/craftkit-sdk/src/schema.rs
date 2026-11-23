@@ -64,10 +64,19 @@ pub fn to_json_schema(params: &[ParamDoc]) -> Json {
         if let Some(unit) = param.unit {
             schema["unit"] = Json::String(unit.to_string());
         }
+        if let Some(alternative) = param.alternative {
+            // The **alternative** is the same prop written another way,
+            // so it is published with the **same type** — and not as a
+            // string whatever the prop is. A number written two ways is
+            // two numbers, and a schema that says otherwise is a schema
+            // that lies.
+            let mut other = schema.clone();
+            other["description"] =
+                Json::String(format!("{description} (the other spelling of `{}`)", param.name));
+            properties.insert(alternative.to_string(), other);
+        }
         properties.insert(param.name.to_string(), schema);
         if let Some(alternative) = param.alternative {
-            properties
-                .insert(alternative.to_string(), json!({ "type": "string", "description": description }));
             // The pair is required, and neither half is: the schema says
             // so in the words of the description, because JSON Schema
             // cannot say "one of these two".

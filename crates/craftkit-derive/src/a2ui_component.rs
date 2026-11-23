@@ -37,11 +37,11 @@
 //! `a2ui.*` kinds, and this crate knows nothing about them.
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
-use quote::{format_ident, quote};
+use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{Error, Ident, LitStr, Result, Token};
 
-use crate::common::{anchored_impl, check_id, doc_of, screaming_text, sdk_root};
+use crate::common::{anchored_impl, check_id, check_id_text, doc_of, screaming_text, sdk_root};
 
 /// The `#[a2ui_component(...)]` attribute.
 #[derive(Default)]
@@ -329,8 +329,18 @@ fn kind_of(name: &str, prefix: &str) -> String {
 const A2UI_PREFIX: &str = "a2ui";
 
 /// The name of the struct a component's row makes: `Text` → `TextComponent`.
-fn struct_of(name: &str) -> Ident {
-    format_ident!("{name}Component")
+///
+/// The name is **checked**, and not formatted: a name that is not a name
+/// a struct can be called is refused with a message that says so — and
+/// not a panic in the compiler's middle.
+fn struct_of(name: &str) -> Result<Ident> {
+    let candidate = format!("{name}Component");
+    syn::parse_str::<Ident>(&candidate).map_err(|_| {
+        Error::new(
+            Span::call_site(),
+            format!("the a2ui name `{name}` is not a name a component's struct can be called"),
+        )
+    })
 }
 
 /// Write one component from a row.
@@ -386,21 +396,35 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
             "a component needs the layer's shapes: `#[a2ui_component(shapes = \"…::schema\")]`",
         )
     })?;
+    // The **kind** is the a2ui name under the layer's own prefix: the
+    // layer says what it is called, and the prefix is the layer's id.
     let kind = match &args.kind {
         Some(kind) => {
             check_id(kind)?;
             kind.value()
         }
-        None => kind_of(&name, A2UI_PREFIX),
+        None => kind_of(&name, &layer),
     };
+    check_id_text(&kind, Span::call_site())?;
+    // And the **struct** is the one the derive writes into: the struct's
+    // own name is the name the a2ui name makes, and a struct with
+    // another name would get an implementation of a struct that is not
+    // there.
+    let struct_name = struct_of(&name)?;
+    if input.ident != struct_name {
+        return Err(Error::new(
+            input.ident.span(),
+            format!(
+                "the struct is called `{}`, and the a2ui name `{name}` makes it `{}`",
+                input.ident, struct_name
+            ),
+        ));
+    }
     // The doc comment is the component's one line about itself: it is
     // what the catalogue shows and what the schema says.
     let doc = doc_of(&input.attrs);
 
-    expand_component(
-        &sdk,
-        &Row { struct_name: struct_of(&name), name, kind, layer, table, shapes, props, doc },
-    )
+    expand_component(&sdk, &Row { struct_name, name, kind, layer, table, shapes, props, doc })
 }
 
 /// The two paths, as a `syn::Path`.
@@ -522,6 +546,11 @@ pub fn expand_component(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
         })
         .collect();
 
+    // The row's own **optionality**: a prop declared as `Option<T>` is
+    // optional, and the published schema says so — the layer knows the
+    // names and the shapes, and the row knows this.
+    let prop_optionals: Vec<bool> = props.iter().map(|prop| prop.inner.is_some()).collect();
+
     // The **byte-array** names, for the compile-time check against the
     // layer's table. A `const` cannot compare `&str`, so the table holds
     // bytes and the check walks them.
@@ -576,10 +605,11 @@ pub fn expand_component(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
             /// The layer owns the shapes, and the row owns the names —
             /// so this is a **call** into the layer, not a copy of it.
             pub fn schema() -> #sdk::serde_json::Value {
-                #shapes_path::published(
+                #shapes_path::published_with(
                     #name_literal,
                     &[#(#prop_names),*],
                     &[#(#prop_definitions),*],
+                    &[#(#prop_optionals),*],
                 )
             }
 
@@ -688,6 +718,45 @@ pub struct TextComponent {
     pub weight: Option<Number>,
 }
 "#;
+
+    /// A name that is **not a name** is refused — and not a panic in the
+    /// compiler's middle.
+    #[test]
+    fn a_name_that_is_not_a_name_is_refused() {
+        let source = GOOD.replace("name = \"Text\"", "name = \"Text Field\"");
+        let message = refuse(&source);
+        assert!(message.contains("not a name"), "{message}");
+    }
+
+    /// The struct's **own name** is the name the a2ui name makes, and a
+    /// struct with another name is refused.
+    #[test]
+    fn a_struct_with_another_name_is_refused() {
+        let source = GOOD.replace("pub struct TextComponent", "pub struct SomethingElse");
+        let message = refuse(&source);
+        assert!(message.contains("SomethingElse"), "{message}");
+    }
+
+    /// An `Either` with **another spelling** is accepted: the attribute
+    /// is declared, and the prop is read both ways.
+    #[test]
+    fn an_either_with_another_spelling_is_accepted() {
+        let source = r#"
+/// A prop written two ways.
+#[derive(A2uiComponent)]
+#[a2ui_component(name = "Text", kind = "a2ui.text", layer = "a2ui",
+                 table = "craftkit_a2ui::defs",
+                 shapes = "craftkit_a2ui::schema")]
+pub struct TextComponent {
+    /// The text to show.
+    #[param(or = "label")]
+    pub text: Either<Text, String>,
+}
+"#;
+        let tokens = accept(source);
+        assert!(tokens.contains("read_either"), "{tokens}");
+        assert!(tokens.contains("label"), "{tokens}");
+    }
 
     /// The macro writes the **reader**.
     #[test]

@@ -287,9 +287,9 @@ pub fn malformed_word_id(id: &str) -> Option<String> {
 ///
 /// **Why two names.** The id is craftkit's, and the registry refuses an id
 /// that is not dotted and lower case. A catalogue may name things in
-/// another vocabulary — an a2ui component is `a2ui.text` here and `Text`
-/// there — so the entry carries the published name beside the checked one,
-/// and the two are never the same string when the vocabulary differs.
+/// another vocabulary — a component is `plugin.text` here and `Text` there
+/// — so the entry carries the published name beside the checked one, and
+/// the two are never the same string when the vocabulary differs.
 #[derive(Debug, Clone)]
 pub struct CatalogEntry {
     /// The entry's id: dotted, lower case, unique.

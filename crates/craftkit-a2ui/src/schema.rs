@@ -258,6 +258,20 @@ pub fn inline(component: &str, prop: &str) -> Option<Json> {
 /// **no properties**, because the layer evaluates no check rule and a
 /// rule it cannot run must not be published. The `allOf` itself stays.
 pub fn published(name: &str, names: &[&str], definitions: &[Option<&str>]) -> Json {
+    published_with(name, names, definitions, &[])
+}
+
+/// The **published** schema, with the **row's** own optionality.
+///
+/// The layer knows the **names** and the **shapes**, and the row knows
+/// whether a prop is **optional** — and the row is the one that reads
+/// it: `Option<T>` is optional, and `T` is not. So the published
+/// `required` list is the layer's rule **and** the row's, and a prop
+/// either of them calls optional is optional.
+///
+/// A row that says nothing — the layer's own tests — leaves the layer's
+/// rule alone.
+pub fn published_with(name: &str, names: &[&str], definitions: &[Option<&str>], optionals: &[bool]) -> Json {
     let mut properties = Map::new();
     properties.insert("component".to_string(), json!({ "const": name }));
     // Every component carries an **id**: a2ui's `ComponentCommon` says so,
@@ -268,7 +282,8 @@ pub fn published(name: &str, names: &[&str], definitions: &[Option<&str>]) -> Js
     for (index, prop) in names.iter().enumerate() {
         let definition = definitions.get(index).copied().flatten();
         properties.insert((*prop).to_string(), prop_shape(name, prop, definition));
-        if !optional(name, prop) {
+        let row_says_optional = optionals.get(index).copied().unwrap_or(false);
+        if !optional(name, prop) && !row_says_optional {
             required.push(prop);
         }
     }

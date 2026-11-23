@@ -204,3 +204,45 @@ fn an_arc_resets_the_smooth_curves_memory() {
     let kinds = kinds("M 0 0 A 10 10 0 0 1 20 0 S 30 0 40 0");
     assert!(kinds.iter().all(|kind| *kind == "cubic"), "everything is a cubic: {kinds:?}");
 }
+
+/// Path data that is **cut short** is refused, and not read as far as it
+/// goes.
+///
+/// A path that ends in the middle of a command is a mistake, and a
+/// mistake is refused: the tree does not draw the half a path it can
+/// make sense of.
+#[test]
+fn path_data_that_is_cut_short_is_refused() {
+    let error = read_path("M 10 20 L 30").expect_err("the path data is refused");
+    assert!(error.contains("not enough numbers"), "{error}");
+    let error = read_path("M 10 20 L").expect_err("the path data is refused");
+    assert!(error.contains("not enough numbers"), "{error}");
+}
+
+/// A path that does **not begin** with a move is refused: the file says
+/// so, and a line with no place to begin from is not a line.
+#[test]
+fn a_path_that_does_not_begin_with_a_move_is_refused() {
+    let error = read_path("L 10 10").expect_err("the path data is refused");
+    assert!(error.contains("begins with a move"), "{error}");
+}
+
+/// A point that **overflows** is refused: the numbers are finite, and
+/// their sum need not be.
+#[test]
+fn a_point_that_overflows_is_refused() {
+    let error = read_path("M 1e308 0 l 1e308 0").expect_err("the point is refused");
+    assert!(error.contains("does not stay in numbers"), "{error}");
+}
+
+/// An arc's **flags** are single characters, and not numbers.
+#[test]
+fn an_arcs_flags_are_single_characters() {
+    // The flags are written without a separator: `0110` is a flag, a
+    // flag and a number.
+    let segments = segments("M 0 0 A 10 10 0 0110 0");
+    assert!(!segments.is_empty(), "the arc holds segments");
+    // And a flag that is not a `0` or a `1` is refused.
+    let error = read_path("M 0 0 A 10 10 0 2 1 10 10").expect_err("the flag is refused");
+    assert!(error.contains("flag"), "{error}");
+}

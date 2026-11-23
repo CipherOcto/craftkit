@@ -57,7 +57,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Block, Error, Ident, LitStr, Result, Token, Type, Visibility, braced};
 
 use crate::a2ui_component::{expand_component, props_of};
-use crate::common::sdk_root;
+use crate::common::{check_id_text, sdk_root};
 
 /// One component of the table.
 struct Row {
@@ -349,8 +349,19 @@ fn expand_row(sdk: &TokenStream2, table: &Table, row: &Row) -> Result<TokenStrea
         )
     })?;
 
-    let kind = row.kind.clone().unwrap_or_else(|| format!("a2ui.{}", row.name.to_lowercase()));
+    // The **layer** comes first: the kind's prefix is the layer's own
+    // id, and not a name the table hard-codes.
     let layer = row.layer.clone().unwrap_or_else(|| "a2ui".to_string());
+    // And the **kind** is checked: the registry refuses an id that is not
+    // dotted and lower case, and the table says so while the reader is
+    // still looking at it.
+    let kind = match &row.kind {
+        Some(kind) => {
+            check_id_text(kind, Span::call_site())?;
+            kind.clone()
+        }
+        None => format!("{layer}.{}", row.name.to_lowercase()),
+    };
     let doc = crate::common::doc_of(&row.docs);
 
     // The **bodies**: the painter and the hit test, hand-written.
@@ -459,6 +470,32 @@ mod tests {
         assert!(tokens.contains("fn hit"), "{tokens}");
         assert!(tokens.contains("craftkit_a2ui :: defs"), "{tokens}");
         assert!(tokens.contains("craftkit_a2ui :: schema"), "{tokens}");
+    }
+
+    /// A row whose **kind** is not an id is refused: the registry would
+    /// refuse it when it is built, and the table says so while the
+    /// reader is still looking at it.
+    #[test]
+    fn a_row_with_a_kind_that_is_not_an_id_is_refused() {
+        let error = crate::a2ui_table::expand(
+            r#"
+        table = "a::defs",
+        shapes = "a::schema",
+    {
+        /// A line of text.
+        Text {
+            kind: "Text",
+            props: {},
+            paint: {},
+            hit: {},
+        }
+    }
+"#
+            .parse()
+            .expect("the table parses"),
+        )
+        .expect_err("the table is refused");
+        assert!(error.to_string().contains("contribution id"), "{error}");
     }
 
     /// Two rows with one **name** are refused.

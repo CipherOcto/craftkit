@@ -70501,6 +70501,11 @@ tree's own rule may not be depended on by another plugin.
   is unchanged.
 - **The reader reads arcs.** An elliptical arc is read as the cubic
   segments it is, and a path that held one used to be refused.
+- **And the reader refuses what it cannot read.** A path that is cut
+  short in the middle of a command, a path that does not begin with a
+  move, a point that overflows into infinity, and an arc's flag that is
+  not a single `0` or a single `1` are all refused — and not read as
+  far as they go.
 
 ### What the port found
 
@@ -70605,6 +70610,12 @@ gap.
   to live in the layer (§1111) and not in the plugin.
 - **The a2ui name and the craftkit id are different strings**, and the
   id is dotted and lower case because the registry says so.
+- **The macro checks the names it is given.** An a2ui name that is not a
+  name a struct can be called, a struct called something else, and a
+  kind that is not a dotted lower-case id are all refused — at compile
+  time, and without a panic in the compiler's middle. And the **row**
+  says which of its props are optional, so the published `required` list
+  is the row's as well as the layer's.
 
 ### What it cost
 

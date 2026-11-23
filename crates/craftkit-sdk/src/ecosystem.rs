@@ -586,8 +586,9 @@ impl<'a> Projection<'a> {
     ///
     /// **This is not the catalogue of catalogue entries.** That is
     /// [`Projection::entries`], and it is a view of a different registry.
-    /// The two overlap in one place — an a2ui component is a **kind** here
-    /// and a **component** there — and they differ in shape and in reader.
+    /// The two overlap in one place — a plugin's own component is a
+    /// **kind** here and a **component** there — and they differ in shape
+    /// and in reader.
     pub fn catalog(&self) -> Vec<serde_json::Value> {
         let mut entries: Vec<serde_json::Value> = Vec::new();
         for command in self.ecosystem.commands.all() {
@@ -637,9 +638,9 @@ impl<'a> Projection<'a> {
     ///
     /// **No shape of its own.** An entry is a name, a label, a layer, a
     /// line about itself and a schema, and this says them in those terms —
-    /// the **a2ui**-shaped projection of the same registry is a different
-    /// thing, and it lives in the a2ui crate, because this one must not
-    /// know what a2ui is.
+    /// a projection in **another** shape is a different thing, and it
+    /// lives in the crate that owns that shape, because this one must
+    /// not know what that shape is.
     pub fn entries(&self) -> Vec<serde_json::Value> {
         self.ecosystem
             .catalog

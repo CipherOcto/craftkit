@@ -146,7 +146,7 @@ pub fn commands(input: TokenStream) -> TokenStream {
 /// The `table` and the `shapes` are **paths**, not dependencies: this crate
 /// is L0 and may not depend on the a2ui layer, so the row names the two
 /// places in the layer and everything resolves where the macro is used.
-#[proc_macro_derive(A2uiComponent, attributes(a2ui_component, a2ui_prop))]
+#[proc_macro_derive(A2uiComponent, attributes(a2ui_component, a2ui_prop, param))]
 pub fn derive_a2ui_component(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     match a2ui_component::expand(input) {

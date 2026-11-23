@@ -89,7 +89,16 @@ mod layer {
         /// The real layer stamps the discriminator, resolves the `$ref`s
         /// and writes the `required` list; this stub does the first and
         /// the last, and says so.
-        pub fn published(name: &str, names: &[&str], definitions: &[Option<&str>]) -> Json {
+        /// The published schema, with the **row's** optionality.
+        ///
+        /// A prop the row calls optional is optional, and the stub says
+        /// so: the real layer has its own rules as well.
+        pub fn published_with(
+            name: &str,
+            names: &[&str],
+            definitions: &[Option<&str>],
+            optionals: &[bool],
+        ) -> Json {
             let mut properties = craftkit_sdk::serde_json::Map::new();
             let mut required: Vec<Json> = Vec::new();
             for (index, prop) in names.iter().enumerate() {
@@ -98,7 +107,9 @@ mod layer {
                     None => json!({ "type": "string" }),
                 };
                 properties.insert((*prop).to_string(), shape);
-                required.push(Json::String((*prop).to_string()));
+                if !optionals.get(index).copied().unwrap_or(false) {
+                    required.push(Json::String((*prop).to_string()));
+                }
             }
             properties.insert("component".to_string(), json!({ "const": name }));
             json!({

@@ -112,21 +112,28 @@ pub fn label_from_id(id: &str) -> String {
 /// also be made at run time, and one made at run time has no compiler
 /// behind it. So both check it, and both use the same words.
 pub fn check_id(id: &LitStr) -> Result<Vec<String>> {
-    let value = id.value();
+    check_id_text(&id.value(), id.span())
+}
+
+/// Check an id that is **text**, and not a literal.
+///
+/// A table's row holds its kind as text, and the rule is the same rule:
+/// an id is dotted, lower case, and at least two parts.
+pub fn check_id_text(value: &str, span: Span) -> Result<Vec<String>> {
     let parts: Vec<String> = value.split('.').map(|part| part.to_string()).collect();
     if parts.len() < 2 {
         return Err(Error::new(
-            id.span(),
+            span,
             format!("`{value}` is not a contribution id: an id is `<area>.<thing>`"),
         ));
     }
     for part in &parts {
         if part.is_empty() {
-            return Err(Error::new(id.span(), format!("`{value}` has an empty part")));
+            return Err(Error::new(span, format!("`{value}` has an empty part")));
         }
         if !part.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
             return Err(Error::new(
-                id.span(),
+                span,
                 format!("`{value}` is not dotted and lower case, and it has no underscores"),
             ));
         }

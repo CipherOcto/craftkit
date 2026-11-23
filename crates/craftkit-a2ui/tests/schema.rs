@@ -51,6 +51,28 @@ fn the_discriminator_is_stamped() {
     assert_eq!(required[0], json!("component"));
 }
 
+/// The **row** decides the `required` list too: a prop the row calls
+/// optional is optional, and the layer's own rule still holds.
+#[test]
+fn the_row_decides_what_is_required() {
+    // The row says `variant` is optional — and the published schema
+    // says so.
+    let published =
+        schema::published_with("Text", &["text", "variant"], &[Some("DynamicString"), None], &[false, true]);
+    let required = published["required"].as_array().expect("there is a required list");
+    assert!(required.contains(&json!("text")), "{required:?}");
+    assert!(!required.contains(&json!("variant")), "{required:?}");
+}
+
+/// And the layer's own rule still holds: a prop the layer calls
+/// optional is optional whatever the row says.
+#[test]
+fn the_layers_own_rule_still_holds() {
+    let published = schema::published_with("Text", &["text", "weight"], &[None, None], &[true, true]);
+    let required = published["required"].as_array().expect("there is a required list");
+    assert!(!required.contains(&json!("weight")), "the weight is optional: {required:?}");
+}
+
 /// The three **checkable** components keep their `allOf`, so that
 /// `Checkable` is a definition the closure reaches.
 #[test]
