@@ -32,23 +32,9 @@
 //! round trip, and the command that carries it is the one that resolves
 //! it.
 
-use craftkit_a2ui::bindings;
+use crate::props::{BoundBool, BoundText, IconPath};
 use craftkit_sdk::serde_json::Value as Json;
-use craftkit_sdk::{BlendMode, Bool, Colour, Document, Fill, Node, Number, Point, Rect, Text};
-
-/// The **text** of a prop, resolved against the model.
-///
-/// A literal is used, a binding is looked up, and a call is **refused** —
-/// a call has no text until the round trip is made, and a painter is not
-/// where a round trip is made.
-pub fn text_of(value: &Json) -> Option<String> {
-    crate::model::resolve(|model| bindings::resolve_text(model, value).ok())
-}
-
-/// The **boolean** of a prop, resolved against the model.
-pub fn bool_of(value: &Json) -> Option<bool> {
-    crate::model::resolve(|model| bindings::resolve_bool(model, value).ok())
-}
+use craftkit_sdk::{BlendMode, Colour, Document, Fill, Node, Number, Point, Rect, Text};
 
 /// The **colour** a node is drawn in.
 ///
@@ -77,7 +63,7 @@ craftkit_derive::components! {
         props: {
             /// The text to show.
             #[a2ui_prop(DynamicString)]
-            text: Text,
+            text: BoundText,
             /// A hint for the base text size.
             variant: Option<Text>,
             /// How much of the row this takes.
@@ -87,7 +73,7 @@ craftkit_derive::components! {
         paint: {
             let Some(props) = TextComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
-            let Some(text) = text_of(&Json::String(props.text.0.clone())) else { return };
+            let text = props.text.0.clone();
             let size = match props.variant.as_ref().map(|value| value.0.as_str()) {
                 Some("caption") => 8.0,
                 _ => 12.0,
@@ -110,9 +96,9 @@ craftkit_derive::components! {
         props: {
             /// Where the picture is.
             #[a2ui_prop(DynamicString)]
-            url: Text,
+            url: BoundText,
             /// What the picture is, for a person.
-            description: Option<Text>,
+            description: Option<BoundText>,
             /// How the picture fills its place.
             fit: Option<Text>,
             /// A hint for the base text size.
@@ -122,11 +108,14 @@ craftkit_derive::components! {
             weight: Option<Number>,
         },
         paint: {
-            // The tree does **not** fetch anything over a network, and it
-            // does not read a file the agent names: a picture is drawn
-            // as its place, and the place is what the agent asked for.
+            // The tree does **not** fetch anything over a network: the
+            // picture is a **file** the agent names, and the file is
+            // read at paint time — so it is read again on every frame,
+            // and the read is bounded.
+            let Some(props) = ImageComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
-            canvas.rect(rect, Fill::Solid(Colour::NONE), BlendMode::Normal);
+            let Some(picture) = crate::picture::picture_of(&props.url.0) else { return };
+            canvas.picture(rect, &picture);
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))
@@ -138,7 +127,7 @@ craftkit_derive::components! {
         kind: "a2ui.icon",
         props: {
             /// The shape to draw.
-            name: Text,
+            name: IconPath,
             /// How much of the row this takes.
             #[a2ui_prop(Weight)]
             weight: Option<Number>,
@@ -236,7 +225,7 @@ craftkit_derive::components! {
         props: {
             /// The card's child.
             #[a2ui_prop(Child)]
-            child: Text,
+            child: BoundText,
             /// How much of the parent this takes.
             #[a2ui_prop(Weight)]
             weight: Option<Number>,
@@ -281,7 +270,7 @@ craftkit_derive::components! {
         props: {
             /// What the button says.
             #[a2ui_prop(Child)]
-            child: Text,
+            child: BoundText,
             /// A hint for the base text size.
             variant: Option<Text>,
             /// What the button does.
@@ -295,7 +284,7 @@ craftkit_derive::components! {
             let Some(props) = ButtonComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
             canvas.rect(rect, Fill::Solid(Colour::WHITE), BlendMode::Normal);
-            let Some(text) = text_of(&Json::String(props.child.0.clone())) else { return };
+            let text = props.child.0.clone();
             canvas.text(Point::new(rect.x, rect.y), &text, colour_of(node, document), 12.0);
         },
         hit: {
@@ -309,10 +298,10 @@ craftkit_derive::components! {
         props: {
             /// What the box says.
             #[a2ui_prop(DynamicString)]
-            label: Text,
+            label: BoundText,
             /// Whether it is ticked.
             #[a2ui_prop(DynamicBoolean)]
-            value: Option<Bool>,
+            value: Option<BoundBool>,
             /// How much of the row this takes.
             #[a2ui_prop(Weight)]
             weight: Option<Number>,
@@ -321,7 +310,7 @@ craftkit_derive::components! {
             let Some(props) = CheckBoxComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
             canvas.rect(rect, Fill::Solid(Colour::WHITE), BlendMode::Normal);
-            let Some(text) = text_of(&Json::String(props.label.0.clone())) else { return };
+            let text = props.label.0.clone();
             canvas.text(Point::new(rect.x, rect.y), &text, colour_of(node, document), 12.0);
         },
         hit: {
@@ -335,12 +324,12 @@ craftkit_derive::components! {
         props: {
             /// What the field says.
             #[a2ui_prop(DynamicString)]
-            label: Text,
+            label: BoundText,
             /// What is in the field.
             #[a2ui_prop(DynamicString)]
-            value: Option<Text>,
+            value: Option<BoundText>,
             /// A hint for what to type.
-            placeholder: Option<Text>,
+            placeholder: Option<BoundText>,
             /// A hint for the base text size.
             variant: Option<Text>,
             /// How much of the row this takes.
@@ -351,7 +340,7 @@ craftkit_derive::components! {
             let Some(props) = TextFieldComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
             canvas.rect(rect, Fill::Solid(Colour::WHITE), BlendMode::Normal);
-            let Some(text) = text_of(&Json::String(props.label.0.clone())) else { return };
+            let text = props.label.0.clone();
             canvas.text(Point::new(rect.x, rect.y), &text, colour_of(node, document), 12.0);
         },
         hit: {

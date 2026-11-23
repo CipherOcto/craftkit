@@ -40,6 +40,8 @@
 pub mod commands;
 pub mod components;
 pub mod model;
+pub mod picture;
+pub mod props;
 pub mod svg;
 
 use craftkit_derive::Layer;

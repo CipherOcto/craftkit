@@ -176,6 +176,18 @@ fn the_catalogue_carries_one_catalog_id() {
     assert_eq!(catalogue["catalogId"], json!(craftkit_a2ui::catalog::CATALOG_ID));
 }
 
+/// A picture of **one pixel**, as a PNG.
+///
+/// The bytes are the tree's own test bytes — a file the scratch hands
+/// out and the plugin's reader reads.
+const A_PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00,
+    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00,
+    0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50, 0x0f, 0x00, 0x04,
+    0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42,
+    0x60, 0x82,
+];
+
 /// **Each component paints something**, and the picture is not empty.
 ///
 /// A component that draws nothing is a component the tree cannot show,
@@ -186,7 +198,7 @@ fn each_component_paints_something() {
     // The **eleven**, each with the props it needs.
     let cases: Vec<(&str, craftkit_sdk::serde_json::Value)> = vec![
         ("Text", json!({ "component": "Text", "text": "hello" })),
-        ("Image", json!({ "component": "Image", "url": "https://example.com/i.png" })),
+        ("Image", json!({ "component": "Image", "url": "a picture that is not there yet" })),
         ("Icon", json!({ "component": "Icon", "name": "M 0 0 L 10 0 L 10 10 Z" })),
         ("Row", json!({ "component": "Row", "children": [] })),
         ("Column", json!({ "component": "Column", "children": [] })),
@@ -198,6 +210,21 @@ fn each_component_paints_something() {
         ("TextField", json!({ "component": "TextField", "label": "name" })),
     ];
     assert_eq!(cases.len(), COMPONENTS.len(), "every component is drawn");
+    // The **image** is a file, and the file is a PNG — so the test asks
+    // the scratch for one and writes it.
+    let picture = craftkit_scratch::file("a2ui-image.png").expect("the scratch is made");
+    std::fs::write(&picture, A_PNG).expect("the picture is written");
+    let cases = cases
+        .into_iter()
+        .map(|(name, component)| {
+            if name != "Image" {
+                return (name, component);
+            }
+            let mut component = component;
+            component["url"] = json!(picture.to_string_lossy());
+            (name, component)
+        })
+        .collect::<Vec<_>>();
     for (name, component) in cases {
         let mut session = ecosystem().session();
         session.execute("a2ui.surface.create", &json!({ "surface_id": name })).expect("the surface is made");
@@ -215,4 +242,113 @@ fn each_component_paints_something() {
         session.paint_view(&mut canvas);
         assert!(canvas.drawn.len() > before, "{name} paints nothing");
     }
+}
+
+/// A **bound** prop is resolved against the model, and the component
+/// draws the value the binding names.
+///
+/// The props are a2ui's types and the component holds the **resolved**
+/// values — so a bound text is the text in the model, and not an empty
+/// picture because the reader refused to guess.
+#[test]
+fn a_bound_prop_is_resolved_against_the_model() {
+    let mut session = ecosystem().session();
+    session.execute("a2ui.surface.create", &json!({ "surface_id": "s1" })).expect("the surface is made");
+    session
+        .execute("a2ui.data.set", &json!({ "surface_id": "s1", "path": "/greeting", "value": "hello" }))
+        .expect("the model holds it");
+    session
+        .execute(
+            "a2ui.surface.apply",
+            &json!({
+                "surface_id": "s1",
+                "components": [{ "component": "Text", "text": { "@path": "/greeting" } }],
+            }),
+        )
+        .expect("the tree is drawn");
+    let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+    session.paint_view(&mut canvas);
+    assert!(
+        canvas.drawn.iter().any(|drawn| drawn.contains("hello")),
+        "the bound text is drawn: {:?}",
+        canvas.drawn
+    );
+}
+
+/// And a binding that names a path that is **not there** draws nothing
+/// — and says so, rather than drawing the path.
+#[test]
+fn a_binding_that_names_nothing_draws_nothing() {
+    let mut session = ecosystem().session();
+    session.execute("a2ui.surface.create", &json!({ "surface_id": "s2" })).expect("the surface is made");
+    session
+        .execute(
+            "a2ui.surface.apply",
+            &json!({
+                "surface_id": "s2",
+                "components": [{ "component": "Text", "text": { "@path": "/nowhere" } }],
+            }),
+        )
+        .expect("the tree is drawn");
+    let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+    session.paint_view(&mut canvas);
+    assert!(
+        !canvas.drawn.iter().any(|drawn| drawn.contains("nowhere")),
+        "the path is not drawn: {:?}",
+        canvas.drawn
+    );
+}
+
+/// The **icon** is a path in a2ui's own shape: an object with an
+/// `svgPath`, which is what the catalogue publishes.
+#[test]
+fn the_icon_is_drawn_from_its_own_shape() {
+    let mut session = ecosystem().session();
+    session.execute("a2ui.surface.create", &json!({ "surface_id": "s3" })).expect("the surface is made");
+    session
+        .execute(
+            "a2ui.surface.apply",
+            &json!({
+                "surface_id": "s3",
+                "components": [{
+                    "component": "Icon",
+                    "name": { "svgPath": "M 0 0 L 10 0 L 10 10 Z" },
+                }],
+            }),
+        )
+        .expect("the icon is drawn");
+    let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+    session.paint_view(&mut canvas);
+    assert!(
+        canvas.drawn.iter().any(|drawn| drawn.starts_with("path(")),
+        "the path is drawn: {:?}",
+        canvas.drawn
+    );
+}
+
+/// And a picture that is **not there** is refused: nothing is fetched and
+/// nothing is guessed at.
+#[test]
+fn a_picture_that_is_not_there_is_refused() {
+    let mut session = ecosystem().session();
+    session.execute("a2ui.surface.create", &json!({ "surface_id": "s4" })).expect("the surface is made");
+    session
+        .execute(
+            "a2ui.surface.apply",
+            &json!({
+                "surface_id": "s4",
+                "components": [{
+                    "component": "Image",
+                    "url": "https://example.com/not-fetched.png",
+                }],
+            }),
+        )
+        .expect("the image is drawn");
+    let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+    session.paint_view(&mut canvas);
+    assert!(
+        !canvas.drawn.iter().any(|drawn| drawn.starts_with("picture(")),
+        "nothing is fetched: {:?}",
+        canvas.drawn
+    );
 }
