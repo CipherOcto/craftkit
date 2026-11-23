@@ -4551,6 +4551,15 @@ so.
 | **an element may be moved** | **built.** The place of an element on the timeline and the track it is on are the element's own, and a move that crosses a track keeps the element whole (§1103) | §1103 |
 | **an element may be taken away** | **built.** The element goes and its edges go with it, because an edge to an element that is not there is an edge to nothing (§1104) | §1104 |
 | **a node may be renamed** | **built.** The name is the node's own, so one command renames a track, a scene and a clip alike, and an empty name is refused (§1105) | §1105 |
+| **the schema an agent is told is the same schema every door is told** | **built.** The JSON Schema is written once, in the SDK, and every door that publishes a schema publishes that one (§1106) | §1106 |
+| **a catalogue entry is a contribution** | **built.** An entry is checked by the registry like every other contribution, and it carries a published name beside its own (§1107) | §1107 |
+| **the vocabulary is one view of the registry** | **built.** Every command, tool, panel and kind is listed once, and nothing else is (§1108) | §1108 |
+| **a component is a struct, and the compiler writes the rest** | **built.** The reader, the declarations, the published schema, the kind and the catalogue entry are all written by the macro (§1109) | §1109 |
+| **the SVG path data is read in one place, and it reads arcs** | **built.** The reader is the SDK's, the vector plugin calls it, and an arc is the cubics it is (§1110) | §1110 |
+| **a2ui's shapes are craftkit's shapes** | **built.** The catalogue is one self-contained file with local references, and the five narrowings are declared in it (§1111) | §1111 |
+| **eleven a2ui components are craftkit kinds** | **built.** Each one is a struct whose props the compiler reads, and each one paints itself (§1112) | §1112 |
+| **a surface is a command** | **built.** Making a surface, drawing onto it, mirroring a value and running an action are all commands, and nothing else (§1113) | §1113 |
+| **the door speaks a2ui** | **built.** The method names are a2ui's, the handshake is two-way, and a catalogue the door does not serve is refused (§1114) | §1114 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70332,3 +70341,335 @@ could not rename anything at all**.
 - **The name is not unique.** Two nodes may be called the same thing,
   and a lookup by name finds the first of them — the tree's rule is
   that an unknown name is an error, not that a name is a key.
+
+## 1106. One schema for every door
+
+The a2ui survey asked what a **door** publishes, and the answer was: it
+depends which door you ask. The MCP door published a JSON Schema. The
+bridge published a **descriptor** — `id`, `label`, `area`, `doc` and the
+parameter list — and the two were written by two different people in two
+different crates, and neither one knew the other existed.
+
+### What was built
+
+- **`craftkit_sdk::schema::to_json_schema`**, in the SDK: a command's
+  parameters, as a JSON Schema.
+- **`Projection::json_schema(id)`**, beside the descriptor that
+  `Projection::schema(id)` already returns.
+- **The MCP door calls the SDK's function.** Its output did not change,
+  and a golden test says so.
+
+### What the port found
+
+- **The mapping was in the wrong crate.** The SDK is what every door
+  stands on, and the one thing an agent is told was in a door.
+- **Two things, not one.** The **descriptor** is the bridge's envelope —
+  it reads `id` and `doc` out of it — and the **schema** is what an agent
+  reads. A schema that replaced the descriptor would have left the
+  bridge's tools nameless, so both survive.
+
+### What it cost
+
+- **One module** in the SDK, **one edit** in the MCP door, and **two
+  test files**.
+- **No new crate** and **no new dependency**.
+
+### What it does not settle
+
+- **The descriptor is not the schema.** Two views of one command, and
+  they are different views.
+- **The schema is the *parameters*.** What a command *does* is still said
+  in prose, and prose is not a schema.
+
+## 1107. A catalogue entry is a contribution
+
+The survey asked what an agent may be told about, and the tree had no
+answer that was a **value**. The registry held commands, tools, panels,
+kinds, formats and evaluators — and a **catalogue** was none of them,
+because a catalogue is a list of *things an agent may use*, and those
+things are not commands.
+
+### What was built
+
+- **`CatalogEntry`**, in the SDK: an id, a **published name** beside it,
+  a label, a layer, a line about itself and a **schema**.
+- **A registry for it**, checked by the same rules as every other
+  contribution: a malformed id is refused, a duplicate id is refused, and
+  an entry in a layer that is not linked in is refused.
+- **`Projection::entries`**, the generic view of that registry.
+
+### What the port found
+
+- **A catalogue is not a command.** It has no runner, no undo and no
+  mutates — and making it one would have been a lie about what it is.
+- **Two names.** The id is craftkit's and the registry checks it; the
+  **published name** is the vocabulary's, and the two are never the same
+  string when the vocabulary differs.
+
+### What it cost
+
+- **One contribution type** in the SDK and **one test file**.
+- **No new crate**.
+
+### What it does not settle
+
+- **An entry's schema is a function**, so it is built when it is asked
+  for and never stored.
+- **The entry is not a component.** What a component *is* is §1112.
+
+## 1108. The vocabulary is one view of the registry
+
+The survey asked whether the tree could say what it **was** — every
+command, every tool, every panel, every kind — in one place. It could
+not: four mechanisms described the same commands, and a grep for the
+right string found some of them and not the others.
+
+### What was built
+
+- **`Projection::catalog()`**, in the SDK: every command, tool, panel and
+  kind, in one list.
+- **A command carries its schema**; a tool, a panel and a kind carry a
+  label and no schema, because a kind's payload is its own business.
+
+### What the port found
+
+- **The count was wrong by twenty-three** when it was first taken by
+  grep, because the counting method was easier to state than to run.
+- **The vocabulary and the catalogue are two views**, and they are **not
+  disjoint**: an a2ui component is a **kind** here and a **component**
+  there.
+
+### What it cost
+
+- **One method** in the SDK and **four tests** in its own test file.
+- **No new crate**.
+
+### What it does not settle
+
+- **The vocabulary says what there is, not what it is for.** The prose
+  around it is still the tree's own.
+- **The list is long.** It is a view of the registry, and the registry
+  grows.
+
+## 1109. A component is a struct, and the compiler writes the rest
+
+The survey asked how an a2ui component should be **declared**, and the
+answer was that a component is a struct whose fields are its props — and
+that everything else about it is written by the compiler.
+
+### What was built
+
+- **`#[derive(A2uiComponent)]`**, in the derive crate: it writes the
+  reader, the `ParamDoc`s, the published schema, the typed view of a
+  payload, the kind, the catalogue entry and the two registrations.
+- **`components! { … }`**, the table beside it: one row per component,
+  and the compiler writes the same work for every row.
+- **A compile-time check**: the row's props and the layer's table must
+  hold the **same set** of names, and a mismatch is a **compile error**.
+
+### What the port found
+
+- **The derive is L0 and may not depend on the layer.** So the layer is
+  named by **path** — a table and a set of shapes — and everything
+  resolves where the macro is used. The derive emits **no a2ui type**.
+- **The shapes cannot be invented by a compiler.** They come from a
+  specification, so the macro calls the layer and the layer owns them.
+
+### What it cost
+
+- **Two modules** in the derive crate, **two test files**, and **one**
+  edit to the SDK.
+- **No new crate**.
+
+### What it does not settle
+
+- **The painter is hand-written.** The macro writes the edges; the middle
+  is the programmer's, exactly as `commands!` does with `run:`.
+- **The check is on the names only.** The shapes are checked in a test.
+
+## 1110. The SVG path data is read in one place, and it reads arcs
+
+The a2ui layer needs an **icon** to be drawn from a path, and the tree's
+only path reader was in the **vector plugin** — a plugin, which by the
+tree's own rule may not be depended on by another plugin.
+
+### What was built
+
+- **`craftkit_sdk::svgpath`**, the SDK's reader: the tokeniser, the
+  commands, and the error messages.
+- **The vector plugin calls it.** Its own copy is gone, and its importer
+  is unchanged.
+- **The reader reads arcs.** An elliptical arc is read as the cubic
+  segments it is, and a path that held one used to be refused.
+
+### What the port found
+
+- **A reader in a plugin is a reader two plugins cannot share.** The
+  promotion is the point, and the plugin is not changed by it.
+- **`atan2`'s arguments were the wrong way round** in the arc
+  conversion — and the tree's own tests found it, because a quarter turn
+  came out as three cubics.
+
+### What it cost
+
+- **One module** in the SDK, **one edit** in the vector plugin, and
+  **two test files**.
+- **No new crate**.
+
+### What it does not settle
+
+- **The reader is not a renderer.** It reads path data; it does not draw
+  it.
+- **An arc is read as cubics**, so a caller that wants the arc itself
+  does not get one.
+
+## 1111. a2ui's shapes are craftkit's shapes
+
+The a2ui protocol publishes a catalogue: the components, the functions and
+the definitions they share. The tree's rule — `docs/clean-room.md` — says
+that nothing is copied from another project, so the shapes had to be
+**re-derived** from the public specification and **written** here.
+
+### What was built
+
+- **`craftkit-a2ui`**, a new crate at **L3**: the data model, the
+  bindings, the box layout, the function table, the property-name table,
+  the shapes and the catalogue projection.
+- **The catalogue is one self-contained file**, with **local** `$ref`s —
+  so no a2ui file enters the tree, and the catalogue can be read on its
+  own.
+- **The five narrowings are declared in it**: the 59-name icon enum, the
+  `ChildList` template, the reserved `@index` function, the `@checks`
+  property and the `TextField`'s literal value.
+
+### What the port found
+
+- **The closure is fourteen** — thirteen re-derived definitions and the
+  catalogue's own `anyComponent` — and a definition nothing reaches is a
+  definition that could be dropped without anybody noticing.
+- **The protocol's own default is a fallback**, and craftkit's rule is
+  that an unknown name is refused. So a function name in neither table is
+  **refused**, not forwarded.
+
+### What it cost
+
+- **One crate**, **seven modules** and **five test files**.
+- **No new dependency** beyond the SDK.
+
+### What it does not settle
+
+- **The layer knows nothing about craftkit** beyond the SDK's types. The
+  compatibility runs the other way round.
+- **The layout is the minimum**: measure the children and stack them.
+
+## 1112. Eleven a2ui components are craftkit kinds
+
+The survey asked what an a2ui agent could put on a surface, and the
+answer was a list of eighteen. Eleven of them are things craftkit can
+draw; the other seven are refused, and the refusal is a decision, not a
+gap.
+
+### What was built
+
+- **`craftkit-plugin-a2ui`**, a plugin at **L4**: the eleven components,
+  declared with the `components!` table.
+- **Each one is a craftkit kind** (`a2ui.text` and the rest) **and** a
+  catalogue entry, so it is in the vocabulary view as a kind and in the
+  a2ui catalogue as a component.
+- **Each one paints itself**, in craftkit's own terms: `node.rect`,
+  `canvas.text`, `Rect::contains`.
+
+### What the port found
+
+- **The plugin may not depend on another plugin**, so the **layout** had
+  to live in the layer (§1111) and not in the plugin.
+- **The a2ui name and the craftkit id are different strings**, and the
+  id is dotted and lower case because the registry says so.
+
+### What it cost
+
+- **One crate**, **three modules** and **two test files**.
+- **No new dependency** beyond the SDK and the layer.
+
+### What it does not settle
+
+- **The other seven are refused**: `Video`, `AudioPlayer`, `Tabs`,
+  `Modal`, `ChoicePicker`, `Slider` and `DateTimeInput`.
+- **An icon is an SVG path**, not a name — the fifty-nine built-in names
+  are a vocabulary craftkit does not have.
+
+## 1113. A surface is a command
+
+The survey asked how an a2ui agent would change what is on the screen,
+and the answer had to be the tree's own answer: **a command**, and
+nothing else.
+
+### What was built
+
+- **Five commands**, in the plugin: `a2ui.surface.create`,
+  `a2ui.surface.apply`, `a2ui.surface.delete`, `a2ui.data.set` and
+  `a2ui.component.invoke`.
+- **The layout is derived at apply time** and never stored: the
+  rectangles are the children's *places*, set by the command that creates
+  them.
+- **A value is mirrored into craftkit by issuing a command**, never by
+  writing the document.
+
+### What the port found
+
+- **The door does not write the document.** Every change is a command, so
+  the same undo, the same refusals and the same journal apply to an a2ui
+  agent as to a person.
+- **An unknown component is refused**, and not drawn as a placeholder.
+
+### What it cost
+
+- **One module** in the plugin and **one test file**.
+- **No new crate**.
+
+### What it does not settle
+
+- **The first cut has no keyboard.** A `TextField` takes a value from the
+  data model and does not take typing.
+- **The action is either an event or a call**, and a call is resolved
+  **local first**.
+
+## 1114. The door speaks a2ui
+
+The survey asked how an a2ui agent would reach craftkit at all, and the
+answer was a door — a program that speaks a protocol on one side and
+drives the kit on the other.
+
+### What was built
+
+- **`apps/craftkit-a2ui-server`**, a stdio JSON-RPC door at **L5**.
+- **The method names are a2ui's**: `createSurface`, `updateComponents`,
+  `updateDataModel`, `deleteSurface`, `callRendererFunction`. The one
+  that is not a2ui's is `initialize`, because the handshake is the
+  transport's.
+- **The handshake is two-way**: the agent's capabilities go up, the
+  renderer's go down, and the inline catalogue is published **only** if
+  the agent said it accepts one.
+- **The catalogue is written to a file**, and the path is written to
+  **stderr** — never to stdout, which carries the JSON-RPC stream.
+
+### What the port found
+
+- **JSON-RPC has nowhere to put metadata**, and a2ui exchanges its
+  capabilities in transport metadata or in a transport's own handshake.
+  So the door's first request is the handshake.
+- **A catalogue the door does not serve is refused**, the way an unknown
+  command id is refused.
+
+### What it cost
+
+- **One crate**, **two modules** and **two test files**.
+- **No new dependency** beyond the SDK, the layer and the plugin.
+
+### What it does not settle
+
+- **The door is thin.** It reads the kit's state and acts through the
+  registry; it never writes to the document and never calls the
+  evaluator.
+- **The first cut has no keyboard** and **no surface that is not a
+  component tree**.
