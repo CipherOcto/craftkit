@@ -25,18 +25,21 @@ fn main() {
     let server = Server::new(ecosystem);
 
     // The **catalogue file**: the door writes it, and says where — on
-    // stderr, because stdout carries the JSON-RPC stream.
-    let path = std::env::temp_dir().join("craftkit-a2ui-catalog.json");
+    // stderr, because stdout carries the JSON-RPC stream. The path is
+    // **this door's own**: two doors do not write over each other, and
+    // the file is created and not followed, so a link in its place is
+    // refused.
+    let path = std::env::temp_dir().join(format!("craftkit-a2ui-catalog-{}.json", std::process::id()));
     if let Err(error) = server.write_catalogue(&path) {
         eprintln!("the catalogue was not written: {error}");
     } else {
         eprintln!("the a2ui catalogue is at {}", path.display());
     }
 
-    // The **control channel**, over the door's own session.
-    if let Some(port) = the_port() {
-        open_the_channel(&server, port);
-    }
+    // The **control channel**, over the door's own session. The channel
+    // is **held** for as long as the program runs: it owns the thread
+    // that listens, and it stops listening when it is dropped.
+    let _channel = the_port().and_then(|port| open_the_channel(&server, port));
 
     craftkit_a2ui_server::serve(server);
 }
@@ -58,10 +61,10 @@ fn the_port() -> Option<u16> {
 /// command that is run over the channel changes what the door is
 /// drawing. The **token** is asked for and not invented — a channel
 /// with a token that a program can guess is a channel with no token.
-fn open_the_channel(server: &craftkit_a2ui_server::Server, port: u16) {
+fn open_the_channel(server: &craftkit_a2ui_server::Server, port: u16) -> Option<craftkit_control::Server> {
     let Ok(token) = std::env::var("CRAFTKIT_CONTROL_TOKEN") else {
         eprintln!("the control channel needs CRAFTKIT_CONTROL_TOKEN, and it was not given");
-        return;
+        return None;
     };
     let render = std::sync::Arc::new(std::sync::Mutex::new(craftkit_a2ui_server::render::Headless::new(
         server.shared_session(),
@@ -74,11 +77,16 @@ fn open_the_channel(server: &craftkit_a2ui_server::Server, port: u16) {
         render: Some(render),
     };
     match craftkit_control::Server::serve_shared(server.shared_session(), options) {
-        Ok(server) => {
-            eprintln!("the control channel is listening on {}", server.address());
+        Ok(channel) => {
+            eprintln!("the control channel is listening on {}", channel.address());
+            // The channel's **server** is returned and held by the
+            // caller: it owns the thread that listens, and it stops
+            // listening when it is dropped.
+            Some(channel)
         }
         Err(error) => {
             eprintln!("the control channel could not be opened: {error}");
+            None
         }
     }
 }

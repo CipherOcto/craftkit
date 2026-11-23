@@ -103,8 +103,12 @@ use craftkit_sdk::{Ecosystem, Outcome, Session};
 /// The name this door calls itself.
 pub const SERVER_NAME: &str = "craftkit-a2ui-server";
 
-/// The version of the JSON-RPC this door speaks.
-pub const PROTOCOL_VERSION: &str = "2025-06-18";
+/// The version of a2ui's protocol this door speaks.
+///
+/// **One** version: the door says which one it speaks, and it refuses a
+/// request that names another — so the version it says is the version it
+/// accepts.
+pub const PROTOCOL_VERSION: &str = craftkit_a2ui::catalog::PROTOCOL_VERSION;
 
 /// The methods a2ui's protocol defines, and the one the transport adds.
 pub const METHODS: &[&str] = &[
@@ -154,7 +158,51 @@ impl Request {
 /// The door's own stream and the door's **control channel** share one
 /// queue: a click on the channel may raise an action, and the action
 /// belongs on the wire the agent is reading.
-pub type Outbound = Arc<Mutex<Vec<Json>>>;
+///
+/// The queue is a **channel**, and not a vector behind a lock: the
+/// writer that owns the standard output waits on it, so an action that
+/// is raised while the agent says nothing is still written.
+pub type Outbound = std::sync::mpsc::Sender<Option<Json>>;
+
+/// A **failure**, and what kind it is.
+///
+/// The JSON-RPC codes say what went wrong: a method that is not there,
+/// a request that is wrong, and a command that was refused are three
+/// different things, and a client that cannot tell them apart cannot
+/// say what to do.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Fault {
+    /// There is no such method.
+    Method(String),
+    /// The request is wrong.
+    Params(String),
+    /// The command was refused.
+    Refused(String),
+}
+
+impl Fault {
+    /// The JSON-RPC code for the fault.
+    pub fn code(&self) -> i64 {
+        match self {
+            Fault::Method(_) => -32601,
+            Fault::Params(_) => -32602,
+            Fault::Refused(_) => -32000,
+        }
+    }
+
+    /// What the fault says.
+    pub fn message(&self) -> &str {
+        match self {
+            Fault::Method(message) | Fault::Params(message) | Fault::Refused(message) => message,
+        }
+    }
+}
+
+impl From<String> for Fault {
+    fn from(message: String) -> Self {
+        Fault::Params(message)
+    }
+}
 
 /// The door: an ecosystem and a session over it.
 pub struct Server {
@@ -164,6 +212,11 @@ pub struct Server {
     session: Arc<Mutex<Session>>,
     /// The messages that are not replies.
     outbound: Outbound,
+    /// The other end of the queue, for the **writer**.
+    ///
+    /// The writer takes it when the door is served, and the door's own
+    /// tests take the messages out of it.
+    outbound_rx: Mutex<Option<std::sync::mpsc::Receiver<Option<Json>>>>,
     /// Whether the agent has said it accepts an **inline** catalogue.
     ///
     /// The default is **false** — a2ui's own default — and the door may
@@ -177,8 +230,15 @@ impl Server {
     /// A door over an ecosystem.
     pub fn new(ecosystem: Ecosystem) -> Self {
         let session = Arc::new(Mutex::new(ecosystem.session()));
-        let outbound: Outbound = Arc::new(Mutex::new(Vec::new()));
-        Server { ecosystem, session, outbound, accepts_inline_catalogs: false, accepts_catalog_files: false }
+        let (outbound, outbound_rx) = std::sync::mpsc::channel();
+        Server {
+            ecosystem,
+            session,
+            outbound,
+            outbound_rx: Mutex::new(Some(outbound_rx)),
+            accepts_inline_catalogs: false,
+            accepts_catalog_files: false,
+        }
     }
 
     /// The **session** the door runs commands in, behind its lock.
@@ -200,16 +260,25 @@ impl Server {
 
     /// The queue of the messages that are not replies.
     pub fn outbound(&self) -> Outbound {
-        Arc::clone(&self.outbound)
+        self.outbound.clone()
     }
 
     /// The messages that are **waiting** to go out.
+    ///
+    /// The door's own tests take them this way; the door itself hands
+    /// the reader to the **writer**, and the writer waits on it.
     pub fn take_outbound(&self) -> Vec<Json> {
-        let mut outbound = match self.outbound.lock() {
-            Ok(outbound) => outbound,
+        let mut messages = Vec::new();
+        let receiver = match self.outbound_rx.lock() {
+            Ok(receiver) => receiver,
             Err(poisoned) => poisoned.into_inner(),
         };
-        std::mem::take(&mut *outbound)
+        if let Some(receiver) = receiver.as_ref() {
+            while let Ok(Some(message)) = receiver.try_recv() {
+                messages.push(message);
+            }
+        }
+        messages
     }
 
     /// Run a **command**, and queue any action it raises.
@@ -220,11 +289,9 @@ impl Server {
     fn run(&mut self, command: &str, params: &Json) -> Result<Outcome, craftkit_sdk::EngineError> {
         let outcome = self.with_session(|session| session.execute(command, params))?;
         if let Some(message) = action_message(&outcome) {
-            let mut outbound = match self.outbound.lock() {
-                Ok(outbound) => outbound,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            outbound.push(message);
+            // The message goes on the wire even if the agent says nothing
+            // more: the writer waits on the queue.
+            let _ = self.outbound.send(Some(message));
         }
         Ok(outcome)
     }
@@ -244,17 +311,17 @@ impl Server {
     /// Answer one request.
     ///
     /// A method that is not there is an error, and the error says which
-    /// methods are.
+    /// methods are. A request that names another version of the protocol
+    /// is refused — craftkit's rule, and not a2ui's adapter chain.
+    ///
+    /// A request with **no id** is a notification, and the **door** does
+    /// not answer it: the answer would be a reply to nothing.
     pub fn handle(&mut self, request: &Request) -> Json {
         let result = match self.version_of(request) {
-            // The door speaks **one** version of the protocol, and a
-            // request that names another is refused — craftkit's rule,
-            // and not a2ui's adapter chain.
-            Some(version) => Err(format!(
+            Some(version) => Err(Fault::Params(format!(
                 "the request names the protocol version `{version}`, and the door speaks only \
-                 `{}`",
-                craftkit_a2ui::catalog::PROTOCOL_VERSION
-            )),
+                 `{PROTOCOL_VERSION}`"
+            ))),
             None => self.dispatch(request),
         };
         match result {
@@ -263,10 +330,10 @@ impl Server {
                 "id": request.id.clone().unwrap_or(Json::Null),
                 "result": result,
             }),
-            Err(message) => json!({
+            Err(fault) => json!({
                 "jsonrpc": "2.0",
                 "id": request.id.clone().unwrap_or(Json::Null),
-                "error": { "code": -32601, "message": message },
+                "error": { "code": fault.code(), "message": fault.message() },
             }),
         }
     }
@@ -290,7 +357,7 @@ impl Server {
     }
 
     /// Answer one request, once the version is known to be the door's.
-    fn dispatch(&mut self, request: &Request) -> Result<Json, String> {
+    fn dispatch(&mut self, request: &Request) -> Result<Json, Fault> {
         match request.method.as_str() {
             "initialize" => Ok(self.initialize(request)),
             "createSurface" => self.create_surface(request),
@@ -299,11 +366,11 @@ impl Server {
             "deleteSurface" => self.delete_surface(request),
             "callRendererFunction" => self.call_renderer_function(request),
             "agentFunctionResponse" => Ok(json!({})),
-            other => Err(format!(
+            other => Err(Fault::Method(format!(
                 "there is no method `{other}`: the methods are initialize, createSurface, \
                  updateComponents, updateDataModel, deleteSurface, callRendererFunction and \
                  agentFunctionResponse"
-            )),
+            ))),
         }
     }
 
@@ -339,19 +406,29 @@ impl Server {
 
     /// The **catalogue file**: the door writes it, and says where, **on
     /// stderr**.
+    ///
+    /// The file is **created**, and not opened: a path that is already
+    /// there — a link, or another door's file — is refused, so the door
+    /// never writes over something it did not make.
     pub fn write_catalogue(&self, path: &std::path::Path) -> Result<(), String> {
         let catalogue = self.catalogue();
         let text = serde_json_to_string(&catalogue)?;
-        std::fs::write(path, text).map_err(|error| format!("the catalogue was not written: {error}"))
+        // The file is **created**, and not opened: a path that is
+        // already there — a link, or another door's file — is refused,
+        // so the door never writes over something it did not make.
+        let mut file = std::fs::File::create_new(path)
+            .map_err(|error| format!("the catalogue was not written: {error}"))?;
+        use std::io::Write;
+        file.write_all(text.as_bytes()).map_err(|error| format!("the catalogue was not written: {error}"))
     }
 
     /// **`createSurface`**: make a surface, and the node it draws into.
-    fn create_surface(&mut self, request: &Request) -> Result<Json, String> {
+    fn create_surface(&mut self, request: &Request) -> Result<Json, Fault> {
         let surface_id = request
             .params
             .get("surfaceId")
             .and_then(Json::as_str)
-            .ok_or_else(|| "there is no `surfaceId`".to_string())?
+            .ok_or_else(|| Fault::Params("there is no `surfaceId`".to_string()))?
             .to_string();
         // The **catalogue** the surface names is the agent's choice — and
         // the door serves exactly one. An omitted one is the door's own;
@@ -359,20 +436,22 @@ impl Server {
         if let Some(catalog) = request.params.get("catalogId").and_then(Json::as_str)
             && catalog != craftkit_a2ui::catalog::CATALOG_ID
         {
-            return Err(format!(
+            return Err(Fault::Params(format!(
                 "the surface names the catalogue `{catalog}`, and the door serves only \
                      `{}`",
                 craftkit_a2ui::catalog::CATALOG_ID
-            ));
+            )));
         }
         // **The extensions** are data craftkit does not know, and a
         // payload the tree cannot interpret has nowhere to go.
         if let Some(extensions) = request.params.get("metadata").and_then(|m| m.get("extensions"))
             && !extensions.is_null()
         {
-            return Err("the surface carries `metadata.extensions`, and the door has nowhere to put \
+            return Err(Fault::Params(
+                "the surface carries `metadata.extensions`, and the door has nowhere to put \
                      them"
-                .to_string());
+                    .to_string(),
+            ));
         }
         // The **sendDataModel** flag asks the door to put the whole data
         // model in the metadata of every message it sends for this
@@ -380,7 +459,7 @@ impl Server {
         let send_data_model = request.params.get("sendDataModel").and_then(Json::as_bool).unwrap_or(false);
         let outcome = self
             .run("a2ui.surface.create", &json!({ "surface_id": surface_id }))
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| Fault::Refused(error.to_string()))?;
         let mut result = json!({ "surfaceId": surface_id });
         if send_data_model {
             result["dataModel"] = self.data_model();
@@ -396,49 +475,52 @@ impl Server {
 
     /// **`updateComponents`**: the component tree → the layer's nodes →
     /// the document, **through commands**.
-    fn update_components(&mut self, request: &Request) -> Result<Json, String> {
+    fn update_components(&mut self, request: &Request) -> Result<Json, Fault> {
         let surface_id = request
             .params
             .get("surfaceId")
             .and_then(Json::as_str)
-            .ok_or_else(|| "there is no `surfaceId`".to_string())?
+            .ok_or_else(|| Fault::Params("there is no `surfaceId`".to_string()))?
             .to_string();
         let components = request
             .params
             .get("components")
             .cloned()
-            .ok_or_else(|| "there are no `components`".to_string())?;
+            .ok_or_else(|| Fault::Params("there are no `components`".to_string()))?;
         self.run("a2ui.surface.apply", &json!({ "surface_id": surface_id, "components": components }))
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| Fault::Refused(error.to_string()))?;
         Ok(json!({ "surfaceId": surface_id }))
     }
 
     /// **`updateDataModel`**: the crate's tree.
-    fn update_data_model(&mut self, request: &Request) -> Result<Json, String> {
+    fn update_data_model(&mut self, request: &Request) -> Result<Json, Fault> {
         let surface_id = request
             .params
             .get("surfaceId")
             .and_then(Json::as_str)
-            .ok_or_else(|| "there is no `surfaceId`".to_string())?
+            .ok_or_else(|| Fault::Params("there is no `surfaceId`".to_string()))?
             .to_string();
-        let contents =
-            request.params.get("contents").cloned().ok_or_else(|| "there are no `contents`".to_string())?;
+        let contents = request
+            .params
+            .get("contents")
+            .cloned()
+            .ok_or_else(|| Fault::Params("there are no `contents`".to_string()))?;
         self.run("a2ui.data.set", &json!({ "surface_id": surface_id, "path": "", "value": contents }))
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| Fault::Refused(error.to_string()))?;
         Ok(json!({ "surfaceId": surface_id }))
     }
 
     /// **`deleteSurface`**: remove the surface's nodes, **through
     /// commands**.
-    fn delete_surface(&mut self, request: &Request) -> Result<Json, String> {
+    fn delete_surface(&mut self, request: &Request) -> Result<Json, Fault> {
         let surface_id = request
             .params
             .get("surfaceId")
             .and_then(Json::as_str)
-            .ok_or_else(|| "there is no `surfaceId`".to_string())?
+            .ok_or_else(|| Fault::Params("there is no `surfaceId`".to_string()))?
             .to_string();
         self.run("a2ui.surface.delete", &json!({ "surface_id": surface_id }))
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| Fault::Refused(error.to_string()))?;
         Ok(json!({ "surfaceId": surface_id }))
     }
 
@@ -449,25 +531,25 @@ impl Server {
     /// a name that is in neither table is **refused** — the protocol's
     /// own default is a fallback to the agent, and craftkit's rule is
     /// that an unknown name is refused.
-    fn call_renderer_function(&mut self, request: &Request) -> Result<Json, String> {
+    fn call_renderer_function(&mut self, request: &Request) -> Result<Json, Fault> {
         let name = request
             .params
             .get("name")
             .and_then(Json::as_str)
-            .ok_or_else(|| "there is no `name`".to_string())?
+            .ok_or_else(|| Fault::Params("there is no `name`".to_string()))?
             .to_string();
         if craftkit_a2ui::functions::is_reserved(&name) {
-            return Err(format!(
+            return Err(Fault::Params(format!(
                 "the function `{name}` is reserved, and the door implements no reserved function"
-            ));
+            )));
         }
         let Some(command) = craftkit_a2ui::functions::command_of(&name) else {
-            return Err(format!(
+            return Err(Fault::Params(format!(
                 "the function `{name}` is in neither the layer's table nor the agent-side table"
-            ));
+            )));
         };
         let args = request.params.get("args").cloned().unwrap_or(Json::Null);
-        self.run(command, &args).map_err(|error| error.to_string())?;
+        self.run(command, &args).map_err(|error| Fault::Refused(error.to_string()))?;
         Ok(json!({ "name": name }))
     }
 }
@@ -529,33 +611,77 @@ fn serde_json_to_string(value: &Json) -> Result<String, String> {
         .map_err(|error| format!("the catalogue was not written: {error}"))
 }
 
+/// The most bytes one request may hold.
+///
+/// A line that is over the limit is **refused**: the door reads a line
+/// byte by byte, so the limit is checked as it goes and not after the
+/// whole line has been in memory.
+pub const MAX_LINE: usize = 1024 * 1024;
+
 /// Serve the door: one JSON-RPC message per line, in and out.
-pub fn serve(mut server: Server) {
-    use std::io::{BufRead, Write};
+///
+/// **One writer owns the standard output.** The answers and the
+/// messages that are not replies go through the same writer, so the
+/// lines never interleave — and a message that is raised while the
+/// agent says nothing is still written, because the writer waits on the
+/// queue.
+pub fn serve(server: Server) {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
-    let mut output = stdout.lock();
-    for line in stdin.lock().lines() {
+    serve_with(server, stdin.lock(), stdout);
+}
+
+/// Serve the door over **these** streams.
+///
+/// The streams are the parameters, and not the standard ones, so that
+/// the door's own loop can be driven by a test.
+pub fn serve_with(
+    mut server: Server,
+    input: impl std::io::BufRead,
+    output: impl std::io::Write + Send + 'static,
+) {
+    // The **writer** takes the reader's end of the queue: it owns the
+    // output, and every message — the answers and the messages that are
+    // not replies — goes through it, so the lines never interleave.
+    let receiver = match server.outbound_rx.lock() {
+        Ok(mut receiver) => receiver.take(),
+        Err(poisoned) => poisoned.into_inner().take(),
+    };
+    let Some(receiver) = receiver else { return };
+    let writing = std::thread::spawn(move || {
+        let mut output = output;
+        while let Ok(message) = receiver.recv() {
+            let Some(message) = message else { break };
+            let _ = writeln!(output, "{message}");
+            let _ = output.flush();
+        }
+    });
+    for line in craftkit_sdk::lines::lines_bounded(input, MAX_LINE) {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
             continue;
         }
         let answer = match Request::parse(&line) {
-            Ok(request) => server.handle(&request),
+            // A **notification** — a request with no id — is not
+            // answered: the answer would be a reply to nothing.
+            Ok(request) => {
+                if request.id.is_none() {
+                    continue;
+                }
+                server.handle(&request)
+            }
             Err(message) => json!({
                 "jsonrpc": "2.0",
                 "id": Json::Null,
                 "error": { "code": -32700, "message": message },
             }),
         };
-        let _ = writeln!(output, "{answer}");
-        // And the messages that are **not** replies: an action that is
-        // the agent's goes on the wire, after the answer it followed.
-        for message in server.take_outbound() {
-            let _ = writeln!(output, "{message}");
-        }
-        let _ = output.flush();
+        let _ = server.outbound.send(Some(answer));
     }
+    // The writer ends when it is **told** to: the door is done.
+    let _ = server.outbound.send(None);
+    drop(server);
+    let _ = writing.join();
 }
 
 #[cfg(test)]

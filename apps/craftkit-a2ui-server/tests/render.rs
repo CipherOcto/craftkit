@@ -21,6 +21,12 @@ fn plain() -> Session {
     ecosystem.session()
 }
 
+/// The queue of the messages that are not replies.
+fn queue() -> std::sync::mpsc::Sender<Option<craftkit_sdk::serde_json::Value>> {
+    let (sender, _reader) = std::sync::mpsc::channel();
+    sender
+}
+
 /// The same session, behind a lock.
 fn session() -> Arc<Mutex<Session>> {
     Arc::new(Mutex::new(plain()))
@@ -29,7 +35,7 @@ fn session() -> Arc<Mutex<Session>> {
 /// A render over a session, and the queue of the messages that are not
 /// replies.
 fn render() -> Headless {
-    Headless::new(session(), Arc::new(Mutex::new(Vec::new())))
+    Headless::new(session(), queue())
 }
 
 /// The **picture** is a PNG, and it is the tree's own.
@@ -68,7 +74,7 @@ fn a_click_on_a_component_runs_its_action() {
             }),
         )
         .expect("the button is drawn");
-    let mut render = Headless::new(Arc::new(Mutex::new(session)), Arc::new(Mutex::new(Vec::new())));
+    let mut render = Headless::new(Arc::new(Mutex::new(session)), queue());
     // The button is at the surface's place, so the click is inside it.
     let answer = render.click(Point::new(1.0, 1.0)).expect("the click is answered");
     assert!(!answer["clicked"].is_null(), "the button was clicked: {answer}");
@@ -93,7 +99,7 @@ fn the_click_is_a_command() {
             }),
         )
         .expect("the button is drawn");
-    let mut render = Headless::new(Arc::new(Mutex::new(session)), Arc::new(Mutex::new(Vec::new())));
+    let mut render = Headless::new(Arc::new(Mutex::new(session)), queue());
     // The action names a function in neither table, so the command
     // **refuses** it — and the refusal is the answer.
     let error = render.click(Point::new(1.0, 1.0)).expect_err("the action is refused");

@@ -85,15 +85,19 @@ impl Headless {
     /// under the pointer: the tree paints in order, and the thing a
     /// person sees on top is the thing they clicked.
     fn node_at(&mut self, at: Point) -> Option<u64> {
+        // The **tree's own** hit-test: the kind says whether the point is
+        // on the node, and a node of a kind the tree does not know is
+        // never under the pointer.
         let mut found: Option<u64> = None;
-        let nodes: Vec<craftkit_sdk::Node> =
-            self.with_session(|session| session.document().walk().cloned().collect());
-        for node in &nodes {
-            let Some(rect) = node.rect else { continue };
-            if rect.contains(at) {
-                found = Some(node.id);
+        self.with_session(|session| {
+            let document = session.document();
+            for node in document.walk() {
+                let Some(kind) = session.kinds().get(&node.kind) else { continue };
+                if (kind.hit)(node, document, at) {
+                    found = Some(node.id);
+                }
             }
-        }
+        });
         found
     }
 
@@ -129,7 +133,11 @@ impl Headless {
             .ok_or_else(|| format!("the node {id} is not there"))?;
         // The **action** is the node's own: a component carries one.
         let action = node.data.get("action").cloned().unwrap_or_else(|| Json::Object(Default::default()));
-        let surface = self.surface_of(id).unwrap_or_default();
+        // A node that is not on a surface is not a component: there is
+        // nothing to invoke, and the click says so.
+        let Some(surface) = self.surface_of(id) else {
+            return Ok(json!({ "clicked": Json::Null }));
+        };
         let outcome = self
             .with_session(|session| {
                 session.execute(
@@ -152,13 +160,12 @@ impl Headless {
     }
 
     /// Queue an **action** the outcome raised, if it raised one.
+    ///
+    /// The message goes on the wire even if the agent says nothing more:
+    /// the writer waits on the queue.
     fn queue(&self, outcome: &Outcome) {
         let Some(message) = crate::action_message(outcome) else { return };
-        let mut outbound = match self.outbound.lock() {
-            Ok(outbound) => outbound,
-            Err(poisoned) => poisoned.into_inner(),
-        };
-        outbound.push(message);
+        let _ = self.outbound.send(Some(message));
     }
 
     /// The **drag**: what a hand does to the document.
@@ -184,32 +191,19 @@ impl Headless {
                 .last()
                 .map(|node| (node.id, node.kind.clone()))
         });
-        let Some((node, kind)) = picked else {
+        let Some((_node, kind)) = picked else {
             // The **background**: the camera slides.
             self.with_session(|session| session.camera_mut().pan(from.x - to.x, from.y - to.y));
             return Ok(json!({ "message": "the camera moved" }));
         };
-        if kind.starts_with("a2ui.") && kind != "a2ui.surface" {
-            return Ok(json!({
-                "message": "an a2ui component's place is derived, and a drag does not change it",
-                "moved": Json::Null,
-            }));
-        }
-        let place = self.with_session(|session| session.document().node(node).and_then(|node| node.rect));
-        let Some(place) = place else {
-            return Ok(
-                json!({ "message": "the node has no place, and it does not move", "moved": Json::Null }),
-            );
-        };
-        let outcome = self
-            .with_session(|session| {
-                session.execute(
-                    "node.move",
-                    &json!({ "node": node, "x": place.x + (to.x - from.x), "y": place.y + (to.y - from.y) }),
-                )
-            })
-            .map_err(|error| error.to_string())?;
-        Ok(json!({ "message": outcome.message, "moved": node }))
+        // Everything this program draws is an a2ui node, and an a2ui
+        // node's place is **derived**: a person cannot drag a derived
+        // value about. So the drag says so, and nothing moves.
+        debug_assert!(kind.starts_with("a2ui."), "the door holds a2ui nodes only");
+        Ok(json!({
+            "message": "an a2ui component's place is derived, and a drag does not change it",
+            "moved": Json::Null,
+        }))
     }
 }
 
@@ -250,9 +244,15 @@ mod tests {
         Arc::new(Mutex::new(ecosystem.session()))
     }
 
+    /// The queue of the messages that are not replies.
+    fn a_queue() -> std::sync::mpsc::Sender<Option<craftkit_sdk::serde_json::Value>> {
+        let (sender, _reader) = std::sync::mpsc::channel();
+        sender
+    }
+
     /// A headless render over a session.
     fn render() -> Headless {
-        Headless::new(session(), Arc::new(Mutex::new(Vec::new())))
+        Headless::new(session(), a_queue())
     }
 
     /// A click on **nothing** says nothing.
