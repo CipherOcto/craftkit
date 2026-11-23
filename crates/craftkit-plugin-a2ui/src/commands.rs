@@ -175,7 +175,7 @@ craftkit_derive::commands! {
             }
             // The **mirror**: the value is in craftkit as a node of its
             // own, and it is put there by a **command**.
-            let mirrored = mirror(session, surface.id, &self.path.0, &self.value)?;
+            let mirrored = mirror(session, &surface, &self.path.0, &self.value)?;
             Ok(Outcome::changed(format!(
                 "the value at `{}` is mirrored in {mirrored}",
                 self.path.0
@@ -396,9 +396,9 @@ fn find_surface(session: &mut Session, name: &str) -> Result<Node, craftkit_sdk:
 /// Whether the surface holds a **component** with a name.
 fn has_component(session: &mut Session, surface: &Node, id: &str) -> bool {
     let document = session.document();
-    document
-        .walk()
-        .any(|node| node.kind != SURFACE_KIND && node.name == id && under(document, node.id, surface.id))
+    document.walk().any(|node| {
+        crate::tree::is_component_kind(&node.kind) && node.name == id && under(document, node.id, surface.id)
+    })
 }
 
 /// Whether a node is **under** another one.
@@ -494,15 +494,18 @@ fn place(
 /// history of the values that were.
 fn mirror(
     session: &mut Session,
-    surface_id: u64,
+    surface: &Node,
     path: &str,
     value: &Json,
 ) -> Result<u64, craftkit_sdk::EngineError> {
-    let name = if path.is_empty() { surface_id.to_string() } else { path.to_string() };
+    let name = if path.is_empty() { surface.name.clone() } else { path.to_string() };
     let data = json!({ "path": path, "value": value });
-    let existing = session
-        .document()
-        .walk()
+    // The mirror is the **surface's**: two surfaces may hold a value at
+    // the same path, and each has its own mirror — so the search is
+    // within the surface's own nodes and not across the document.
+    let existing = surface
+        .children
+        .iter()
         .find(|node| node.kind == MIRROR_KIND && node.name == name)
         .map(|node| node.id);
     match existing {
@@ -513,7 +516,7 @@ fn mirror(
             Ok(id)
         }
         None => {
-            Ok(session.document_mut()?.add_node_with_under(Some(surface_id), name, MIRROR_KIND, None, data))
+            Ok(session.document_mut()?.add_node_with_under(Some(surface.id), name, MIRROR_KIND, None, data))
         }
     }
 }

@@ -263,6 +263,27 @@ fn a_value_that_is_set_is_undone() {
     assert!(model_of(&session, "s5").get("title").is_none(), "and the value is gone");
 }
 
+/// Two surfaces may hold a value at the **same path**, and each has
+/// its own mirror: the mirror is the surface's, and not the document's.
+#[test]
+fn two_surfaces_may_hold_a_value_at_the_same_path() {
+    let mut session = session();
+    surface(&mut session, "s5");
+    surface(&mut session, "s6");
+    session
+        .execute("a2ui.data.set", &json!({ "surface_id": "s5", "path": "/title", "value": "one" }))
+        .expect("the value is set");
+    session
+        .execute("a2ui.data.set", &json!({ "surface_id": "s6", "path": "/title", "value": "two" }))
+        .expect("the value is set");
+    assert_eq!(model_of(&session, "s5")["title"], json!("one"), "the first surface has its own");
+    assert_eq!(model_of(&session, "s6")["title"], json!("two"), "and the second has its own");
+    // And each surface holds **one** mirror: two mirrors would be two
+    // copies of one value.
+    let mirrors = session.document().walk().filter(|node| node.kind == "a2ui.data").count();
+    assert_eq!(mirrors, 2, "one mirror each: {mirrors}");
+}
+
 /// A path that is not a path is **refused**.
 #[test]
 fn a_path_that_is_not_a_path_is_refused() {
