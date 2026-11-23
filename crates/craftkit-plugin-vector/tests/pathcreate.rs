@@ -4,7 +4,8 @@
 //! written in the SVG spelling, or out of a list of anchors. The rules
 //! here are the tree's own: a handle that is not given is the point
 //! itself, a side with no handle is a straight line, a malformed anchor
-//! is refused rather than given a default, and an arc is not read.
+//! is refused rather than given a default, and an arc is read as the
+//! curve it describes.
 
 use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::serde_json::json;
@@ -178,13 +179,17 @@ fn the_path_data_may_close_the_path() {
     assert_eq!(contour.get("closed").and_then(|closed| closed.as_bool()), Some(true));
 }
 
-/// An **arc** is not read: this tree does not write a curve it cannot
-/// say.
+/// An **arc** is read: the tree says a curve it can say. The arc
+/// becomes a curve of its own, and the path says so.
 #[test]
-fn an_arc_is_refused() {
+fn an_arc_is_read() {
     let mut session = session();
-    let outcome = session.execute("vector.path.create", &json!({ "d": "M 0 0 A 5 5 0 0 1 10 10" }));
-    assert!(outcome.is_err(), "the arc is refused");
+    session
+        .execute("vector.path.create", &json!({ "d": "M 0 0 A 5 5 0 0 1 10 10" }))
+        .expect("the arc is added");
+    let contour = contour_of(&session);
+    let segments = contour.get("segments").and_then(|segments| segments.as_array());
+    assert!(segments.is_some_and(|segments| segments.len() > 1), "the arc became a curve");
 }
 
 /// An anchor that is **malformed** is refused, and not given a default.

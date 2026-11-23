@@ -139,21 +139,21 @@ fn a_file_with_no_path_is_refused() {
     assert!(message.contains("no path"), "and it says why: {message}");
 }
 
-/// A path that holds an **arc** is not read: an arc is a curve, and
-/// this tree does not write a curve it cannot say. A file with no
-/// other path is refused, and the refusal says why.
+/// A path that holds an **arc** is read, because the reader learned
+/// arcs: it reads them as the cubics they are.
 #[test]
-fn a_path_that_holds_an_arc_is_refused() {
+fn a_path_that_holds_an_arc_is_read() {
     let mut session = session();
-    let directory = directory("arc");
-    let path = format!("{directory}/drawing.svg");
-    std::fs::write(
-        &path,
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><path d=\"M 0 0 A 10 10 0 0 1 20 20\"/></svg>",
-    )
-    .expect("the file is written");
-    let outcome = session.execute("vector.import.svg", &json!({ "path": path }));
-    assert!(outcome.is_err(), "a file with no readable path is refused");
-    let message = outcome.err().map(|error| error.to_string()).unwrap_or_default();
-    assert!(message.contains("arc"), "and it says why: {message}");
+    let read = read(
+        &mut session,
+        "arc",
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+             <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#000000"/>
+           </svg>"##,
+    );
+    assert_eq!(read["paths"], json!(1), "the file holds one path");
+    let id = read["ids"][0].as_u64().expect("the path has an id");
+    let node = session.document().node(id).expect("the path is there");
+    let path = node.data["path"].as_object().expect("the path is in the payload");
+    assert!(path["subpaths"].is_array(), "the path holds its subpaths");
 }
