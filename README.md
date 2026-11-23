@@ -70541,6 +70541,14 @@ that nothing is copied from another project, so the shapes had to be
 - **The five narrowings are declared in it**: the 59-name icon enum, the
   `ChildList` template, the reserved `@index` function, the `@checks`
   property and the `TextField`'s literal value.
+- **Every declared function says who may call it** — `rendererOnly` for
+  both kinds — because a function that does not say is the renderer's
+  alone, and the protocol says a declared function carries its own
+  boundary.
+- **The seven refused components are named, with their reasons**, in the
+  layer and not in the plugin: two need media the tree has no seam for,
+  and five are a widget's — a thing the document has no node kind that
+  means.
 
 ### What the port found
 
@@ -70594,7 +70602,9 @@ gap.
 ### What it does not settle
 
 - **The other seven are refused**: `Video`, `AudioPlayer`, `Tabs`,
-  `Modal`, `ChoicePicker`, `Slider` and `DateTimeInput`.
+  `Modal`, `ChoicePicker`, `Slider` and `DateTimeInput` — and each one
+  says why it is refused, so a refusal is a declaration and not a
+  shrug.
 - **An icon is an SVG path**, not a name — the fifty-nine built-in names
   are a vocabulary craftkit does not have.
 
@@ -70652,6 +70662,13 @@ drives the kit on the other.
   the agent said it accepts one.
 - **The catalogue is written to a file**, and the path is written to
   **stderr** — never to stdout, which carries the JSON-RPC stream.
+- **The door serves its own session on a control channel** — the same
+  document and not a copy of it — with the **headless** render as the
+  channel's: a picture, a click and a drag, and no window anywhere.
+- **The action is the one message that is not a reply**: a component's
+  action may be the agent's, and then the door sends an `action`
+  message. The action travels in the command's outcome, so the door
+  does not read it back out of a message.
 
 ### What the port found
 
@@ -70663,13 +70680,16 @@ drives the kit on the other.
 
 ### What it cost
 
-- **One crate**, **two modules** and **two test files**.
-- **No new dependency** beyond the SDK, the layer and the plugin.
+- **One crate**, **three modules** and **two test files**.
+- **One new dependency**: the **control channel**, which the door
+  serves its own session on. The rasteriser was already there.
 
 ### What it does not settle
 
 - **The door is thin.** It reads the kit's state and acts through the
   registry; it never writes to the document and never calls the
   evaluator.
+- **A drag on an a2ui component changes nothing**, because its place is
+  derived and a person cannot drag a derived value about.
 - **The first cut has no keyboard** and **no surface that is not a
   component tree**.
