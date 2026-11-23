@@ -172,3 +172,54 @@ fn the_handshake_is_the_transports_own() {
     assert_eq!(answer["result"]["protocolVersion"], json!(craftkit_a2ui_server::PROTOCOL_VERSION));
     assert_eq!(answer["result"]["serverInfo"]["name"], json!(craftkit_a2ui_server::SERVER_NAME));
 }
+
+/// The door **answers** `createSurface` with the surface it made.
+#[test]
+fn the_door_answers_create_surface_with_a_surface() {
+    let mut server = server();
+    let answer = server.handle(&request("createSurface", json!({ "surfaceId": "s1" })));
+    assert_eq!(answer["result"]["surfaceId"], json!("s1"), "{answer}");
+    let document = server.session().document();
+    assert!(
+        document.nodes().any(|node| node.kind == "a2ui.surface" && node.name == "s1"),
+        "and the surface is in the tree"
+    );
+}
+
+/// And a **button** runs its command: the tree holds the button, the
+/// click finds it, and the action it carries is the command that runs.
+#[test]
+fn a_button_runs_its_command() {
+    let mut server = server();
+    server.handle(&request("createSurface", json!({ "surfaceId": "s2" })));
+    let answer = server.handle(&request(
+        "updateComponents",
+        json!({
+            "surfaceId": "s2",
+            "components": [{
+                "component": "Button",
+                "child": "press",
+                "action": { "name": "dataSet", "args": { "surface_id": "s2", "path": "/pressed", "value": true } },
+            }],
+        }),
+    ));
+    assert_eq!(answer["result"]["surfaceId"], json!("s2"), "{answer}");
+    // The **action** the button carries is a command of the tree's own.
+    let button = server
+        .session()
+        .document()
+        .walk()
+        .find(|node| node.kind == "a2ui.button")
+        .expect("the button is there");
+    assert_eq!(button.data["action"]["name"], json!("dataSet"), "and it names the command");
+    // And the command **runs**: the door runs the local function the
+    // button names.
+    let answer = server.handle(&request(
+        "callRendererFunction",
+        json!({ "name": "dataSet", "args": { "surface_id": "s2", "path": "/pressed", "value": true } }),
+    ));
+    assert_eq!(answer["result"]["name"], json!("dataSet"), "{answer}");
+    assert!(answer.get("error").is_none(), "{answer}");
+    let model = craftkit_plugin_a2ui::model::model();
+    assert_eq!(model["pressed"], json!(true), "and the model has the value");
+}

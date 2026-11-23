@@ -84,3 +84,26 @@ fn the_descriptor_is_not_the_schema() {
     // And it is **not** the JSON Schema: the schema has no envelope.
     assert!(tool.schema.get("id").is_none(), "the schema has no envelope");
 }
+
+/// The **golden of the move**: the list the door publishes is the
+/// registry, in the registry's order, and every tool carries the name
+/// the door has always given it.
+///
+/// The mapping moved from this door into the SDK, and the door's output
+/// did not change: this says what it is, exactly.
+#[test]
+fn the_tool_list_is_the_registry_in_its_own_order() {
+    let ecosystem = ecosystem();
+    let server = Server::new(session());
+    let commands: Vec<&str> = ecosystem.commands.all().iter().map(|entry| entry.id).collect();
+    let tools: Vec<&str> = server.tools().iter().map(|tool| tool.command.as_str()).collect();
+    assert_eq!(tools, commands, "the tool list is the command list");
+    for tool in server.tools() {
+        assert_eq!(
+            tool.name,
+            craftkit_mcp::tool_name(&tool.command),
+            "{} is named as it always was",
+            tool.command
+        );
+    }
+}

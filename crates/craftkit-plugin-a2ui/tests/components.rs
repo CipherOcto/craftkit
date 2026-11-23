@@ -175,3 +175,44 @@ fn the_catalogue_carries_one_catalog_id() {
     let catalogue = craftkit_a2ui::catalog::catalogue(&projection.entries());
     assert_eq!(catalogue["catalogId"], json!(craftkit_a2ui::catalog::CATALOG_ID));
 }
+
+/// **Each component paints something**, and the picture is not empty.
+///
+/// A component that draws nothing is a component the tree cannot show,
+/// so the eleven are drawn one at a time and the canvas is asked what
+/// it holds.
+#[test]
+fn each_component_paints_something() {
+    // The **eleven**, each with the props it needs.
+    let cases: Vec<(&str, craftkit_sdk::serde_json::Value)> = vec![
+        ("Text", json!({ "component": "Text", "text": "hello" })),
+        ("Image", json!({ "component": "Image", "url": "https://example.com/i.png" })),
+        ("Icon", json!({ "component": "Icon", "name": "M 0 0 L 10 0 L 10 10 Z" })),
+        ("Row", json!({ "component": "Row", "children": [] })),
+        ("Column", json!({ "component": "Column", "children": [] })),
+        ("List", json!({ "component": "List", "children": [] })),
+        ("Card", json!({ "component": "Card", "child": "a2ui.text" })),
+        ("Divider", json!({ "component": "Divider" })),
+        ("Button", json!({ "component": "Button", "child": "press" })),
+        ("CheckBox", json!({ "component": "CheckBox", "label": "tick" })),
+        ("TextField", json!({ "component": "TextField", "label": "name" })),
+    ];
+    assert_eq!(cases.len(), COMPONENTS.len(), "every component is drawn");
+    for (name, component) in cases {
+        let mut session = ecosystem().session();
+        session.execute("a2ui.surface.create", &json!({ "surface_id": name })).expect("the surface is made");
+        // The **surface alone**, so the count before is the surface's own
+        // drawing and not the component's.
+        let before = {
+            let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+            session.paint_view(&mut canvas);
+            canvas.drawn.len()
+        };
+        session
+            .execute("a2ui.surface.apply", &json!({ "surface_id": name, "components": [component] }))
+            .expect("the component is drawn");
+        let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
+        session.paint_view(&mut canvas);
+        assert!(canvas.drawn.len() > before, "{name} paints nothing");
+    }
+}

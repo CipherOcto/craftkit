@@ -207,3 +207,45 @@ fn a_surface_is_deleted() {
     let document = session.document();
     assert!(!document.walk().any(|node| node.kind == "a2ui.text"), "the text is gone");
 }
+
+/// A surface apply is **undoable**: the step it makes is a step a person
+/// can take back.
+#[test]
+fn a_surface_apply_is_undoable() {
+    let mut session = session();
+    session.execute("a2ui.surface.create", &json!({ "surface_id": "s10" })).expect("the surface is made");
+    session
+        .execute(
+            "a2ui.surface.apply",
+            &json!({
+                "surface_id": "s10",
+                "components": [{ "component": "Text", "text": "hello" }],
+            }),
+        )
+        .expect("the tree is drawn");
+    assert!(session.document().walk().any(|node| node.kind == "a2ui.text"), "the text is there");
+    session.undo().expect("the apply is undone");
+    assert!(!session.document().walk().any(|node| node.kind == "a2ui.text"), "and the text is gone");
+}
+
+/// An apply that **fails** leaves the document as it was: the tree is
+/// checked before it is changed, and a command that did not happen
+/// changed nothing.
+#[test]
+fn a_failing_apply_leaves_the_document_as_it_was() {
+    let mut session = session();
+    session.execute("a2ui.surface.create", &json!({ "surface_id": "s11" })).expect("the surface is made");
+    let outcome = session.execute(
+        "a2ui.surface.apply",
+        &json!({
+            "surface_id": "s11",
+            "components": [
+                { "component": "Text", "text": "hello" },
+                { "component": "Video", "url": "https://example.com/v" },
+            ],
+        }),
+    );
+    assert!(outcome.is_err(), "the apply is refused");
+    let kinds: Vec<&str> = session.document().walk().map(|node| node.kind.as_str()).collect();
+    assert!(!kinds.contains(&"a2ui.text"), "and the text was never made: {kinds:?}");
+}
