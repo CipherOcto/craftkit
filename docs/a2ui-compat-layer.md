@@ -1086,13 +1086,18 @@ of three things** (`common_types.json`'s `$defs/DynamicString`):
 
 `DynamicBoolean` and `DynamicNumber` are the same three ways.
 
-**The data model lives in `craftkit-a2ui`**, not in craftkit:
+**The data model's type lives in `craftkit-a2ui`**, and its **value lives in
+the document**:
 
 - the crate holds a JSON tree, addressed by JSON-Pointer-ish paths;
-- a2ui's `updateDataModel` writes it;
-- a binding is resolved **before** the props are read — so the props the
-  component sees are **plain craftkit params**, and the generated reader is
-  used unchanged.
+- the **surface's** model is in the **surface's node**, under `model` — so it
+  is undone with the document, it is not shared with another surface, and it
+  is not shared with another session;
+- a2ui's `updateDataModel` writes it, **through a command**;
+- a binding is resolved in the **painter**, because the model is in the
+  document and the painter is the only place that has both — so the props
+  the component sees are the values **as they were sent**, and the generated
+  reader is used unchanged.
 
 **The three forms resolve three ways, and the third one is a round trip.**
 

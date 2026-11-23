@@ -180,11 +180,16 @@ fn a_click_on_the_channel_raises_an_action() {
         method: "updateComponents".to_string(),
         params: json!({
             "surfaceId": "s1",
-            "components": [{
-                "component": "Button",
-                "child": "press",
-                "action": { "name": "required" },
-            }],
+            "components": [
+                { "component": "Column", "id": "root", "children": ["b1"] },
+                {
+                    "component": "Button",
+                    "id": "b1",
+                    "child": "t1",
+                    "action": { "event": { "name": "required" } },
+                },
+                { "component": "Text", "id": "t1", "text": "press" },
+            ],
         }),
     });
     let mut render = Headless::new(server.shared_session(), outbound);

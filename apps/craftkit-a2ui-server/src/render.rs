@@ -44,6 +44,11 @@ pub struct Headless {
     outbound: Outbound,
     width: usize,
     height: usize,
+    /// How many calls to the agent the render has made.
+    ///
+    /// The protocol says every call to an agent-side function carries an
+    /// id of its own, and the agent copies it into the answer.
+    calls: std::sync::atomic::AtomicU64,
 }
 
 impl Headless {
@@ -53,7 +58,13 @@ impl Headless {
     /// is the door's: a click may raise an action, and the action
     /// belongs on the wire the agent is reading.
     pub fn new(session: Arc<Mutex<Session>>, outbound: Outbound) -> Self {
-        Headless { session, outbound, width: WIDTH, height: HEIGHT }
+        Headless {
+            session,
+            outbound,
+            width: WIDTH,
+            height: HEIGHT,
+            calls: std::sync::atomic::AtomicU64::new(0),
+        }
     }
 
     /// The session the render draws.
@@ -104,18 +115,43 @@ impl Headless {
     /// The **surface** a node is on, if there is one.
     ///
     /// The click is an action of a **component**, and a component is on
-    /// a surface — so the surface is found by looking for the one that
-    /// holds the node.
+    /// a surface — and a component may be **nested**: a card's child is
+    /// in the card, and the card is in the surface. So the surface is
+    /// found by walking **up**.
     fn surface_of(&mut self, id: u64) -> Option<String> {
         let surfaces: Vec<craftkit_sdk::Node> =
             self.with_session(|session| session.document().nodes().cloned().collect());
-        for node in &surfaces {
-            if node.kind != "a2ui.surface" {
-                continue;
-            }
-            if node.children.iter().any(|child| child.id == id) {
+        let document = self.with_session(|session| session.document().clone());
+        let mut current = Some(id);
+        while let Some(id) = current {
+            if let Some(node) = surfaces.iter().find(|node| node.id == id)
+                && node.kind == "a2ui.surface"
+            {
                 return Some(node.name.clone());
             }
+            current = document.parent_of(id).flatten();
+        }
+        None
+    }
+
+    /// The **target** of a click: the node under the pointer, or the
+    /// nearest **ancestor** that carries an action.
+    ///
+    /// A button's label is a node **inside** the button, and the label
+    /// is drawn on top of it — so a click on the label is a click on the
+    /// button, and not on a label with nothing to do.
+    fn target_of(&mut self, id: u64) -> Option<u64> {
+        let document = self.with_session(|session| session.document().clone());
+        let mut current = Some(id);
+        while let Some(id) = current {
+            let node = document.node(id)?;
+            if node.data.get("action").is_some() {
+                return Some(id);
+            }
+            if node.kind == "a2ui.surface" {
+                return None;
+            }
+            current = document.parent_of(id).flatten();
         }
         None
     }
@@ -126,6 +162,11 @@ impl Headless {
     /// and the command's outcome is the answer.
     pub fn click(&mut self, at: Point) -> Result<Json, String> {
         let Some(id) = self.node_at(at) else {
+            return Ok(json!({ "clicked": Json::Null }));
+        };
+        // And the **target**: the node, or the nearest ancestor that
+        // carries an action.
+        let Some(id) = self.target_of(id) else {
             return Ok(json!({ "clicked": Json::Null }));
         };
         let node = self
@@ -144,7 +185,7 @@ impl Headless {
                     "a2ui.component.invoke",
                     &json!({
                         "surface_id": surface,
-                        "component_id": node.id.to_string(),
+                        "component_id": node.name,
                         "action": action,
                     }),
                 )
@@ -164,7 +205,8 @@ impl Headless {
     /// The message goes on the wire even if the agent says nothing more:
     /// the writer waits on the queue.
     fn queue(&self, outcome: &Outcome) {
-        let Some(message) = crate::action_message(outcome) else { return };
+        let count = self.calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let Some(message) = crate::message_of(outcome, &format!("call-{count}")) else { return };
         let _ = self.outbound.send(Some(message));
     }
 
@@ -275,7 +317,10 @@ mod tests {
             session
                 .execute(
                     "a2ui.surface.apply",
-                    &json!({ "surface_id": "s1", "components": [{ "component": "Text", "text": "hello" }] }),
+                    &json!({
+                        "surface_id": "s1",
+                        "components": [{ "component": "Text", "id": "root", "text": "hello" }],
+                    }),
                 )
                 .expect("the text is drawn");
         });

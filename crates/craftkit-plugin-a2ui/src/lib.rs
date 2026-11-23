@@ -43,6 +43,7 @@ pub mod model;
 pub mod picture;
 pub mod props;
 pub mod svg;
+pub mod tree;
 
 use craftkit_derive::Layer;
 

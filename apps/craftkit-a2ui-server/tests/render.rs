@@ -66,11 +66,16 @@ fn a_click_on_a_component_runs_its_action() {
             "a2ui.surface.apply",
             &json!({
                 "surface_id": "s1",
-                "components": [{
-                    "component": "Button",
-                    "child": "press",
-                    "action": { "name": "required" },
-                }],
+                "components": [
+                    { "component": "Column", "id": "root", "children": ["b1"] },
+                    {
+                        "component": "Button",
+                        "id": "b1",
+                        "child": "t1",
+                        "action": { "event": { "name": "required" } },
+                    },
+                    { "component": "Text", "id": "t1", "text": "press" },
+                ],
             }),
         )
         .expect("the button is drawn");
@@ -78,7 +83,7 @@ fn a_click_on_a_component_runs_its_action() {
     // The button is at the surface's place, so the click is inside it.
     let answer = render.click(Point::new(1.0, 1.0)).expect("the click is answered");
     assert!(!answer["clicked"].is_null(), "the button was clicked: {answer}");
-    assert_eq!(answer["message"], json!("the action `required` of the component 2 is the agent's"));
+    assert_eq!(answer["message"], json!("the action of the component b1 is the agent's"));
 }
 
 /// The click is a **command**, and the command's answer is the answer.
@@ -91,11 +96,16 @@ fn the_click_is_a_command() {
             "a2ui.surface.apply",
             &json!({
                 "surface_id": "s2",
-                "components": [{
-                    "component": "Button",
-                    "child": "press",
-                    "action": { "name": "somethingElse" },
-                }],
+                "components": [
+                    { "component": "Column", "id": "root", "children": ["b1"] },
+                    {
+                        "component": "Button",
+                        "id": "b1",
+                        "child": "t1",
+                        "action": { "functionCall": { "@call": "somethingElse" } },
+                    },
+                    { "component": "Text", "id": "t1", "text": "press" },
+                ],
             }),
         )
         .expect("the button is drawn");

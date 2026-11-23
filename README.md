@@ -70568,7 +70568,9 @@ that nothing is copied from another project, so the shapes had to be
 
 - **The layer knows nothing about craftkit** beyond the SDK's types. The
   compatibility runs the other way round.
-- **The layout is the minimum**: measure the children and stack them.
+- **The layout is the minimum**: a child has no size of its own here,
+  except for a text and a divider, so the box is divided by weight and
+  the justification has no spare space to distribute.
 
 ## 1112. Eleven a2ui components are craftkit kinds
 
@@ -70587,9 +70589,11 @@ gap.
 - **Each one paints itself**, in craftkit's own terms: `node.rect`,
   `canvas.text`, `Rect::contains`.
 - **The props are resolved**: a dynamic value is a literal **or** a
-  binding to the data model, and the component holds the **resolved**
-  value — so a bound text is the text in the model, and not an empty
-  picture because the reader refused to guess.
+  binding to the data model, and the component holds the value **as it
+  was sent** — and the **painter** resolves it, because the model is
+  the surface's and the surface is in the document, and the painter is
+  the only place that has both. So a bound text is the text in the
+  model, and not an empty picture because the reader refused to guess.
 - **An image is a file**, not a URL to fetch: the tree's own PNG reader
   reads it at paint time, the read is **bounded**, and the picture is
   not stored — the node carries the path, and the width and height are
@@ -70629,9 +70633,26 @@ nothing else.
   `a2ui.component.invoke`.
 - **The layout is derived at apply time** and never stored: the
   rectangles are the children's *places*, set by the command that creates
-  them.
+  them. The box is divided by **weight**, so no child overflows the
+  surface, and the **direction** says which way it runs.
 - **A value is mirrored into craftkit by issuing a command**, never by
   writing the document.
+- **The data model is the surface's, and it is in the document** — in
+  the surface's own data. So it is undone with the document, it is not
+  shared with another surface, and it is not shared with another
+  session.
+- **The children are nested**: a2ui's components are a flat list with
+  ids, and a container names its children **by id** — so the children
+  are nodes **under** their parent, and a card's child is in the card.
+- **Deleting a surface takes the surface away**, with the tree and the
+  model it holds.
+- **A tree that is sent again replaces the one that was there**, because
+  a surface holds one tree.
+- **An action is one undo step**: the action and the command it runs
+  are one thing to undo.
+- **The arguments are translated, not guessed**: a2ui says `surfaceId`
+  and craftkit says `surface_id`, and the layer's table says which is
+  which.
 
 ### What the port found
 
@@ -70639,6 +70660,10 @@ nothing else.
   the same undo, the same refusals and the same journal apply to an a2ui
   agent as to a person.
 - **An unknown component is refused**, and not drawn as a placeholder.
+- **A tree that does not fit is refused**: a component with no id, an id
+  two components share, a child that names nothing, a component no
+  parent holds, a weight that is not a weight, a binding to a path that
+  is not a path, and a property the component does not have.
 
 ### What it cost
 

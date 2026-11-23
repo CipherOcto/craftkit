@@ -198,11 +198,25 @@ fn a_button_runs_its_command() {
         "updateComponents",
         json!({
             "surfaceId": "s2",
-            "components": [{
-                "component": "Button",
-                "child": "press",
-                "action": { "name": "dataSet", "args": { "surface_id": "s2", "path": "/pressed", "value": true } },
-            }],
+            "components": [
+                {
+                    "component": "Column",
+                    "id": "root",
+                    "children": ["b1"],
+                },
+                {
+                    "component": "Button",
+                    "id": "b1",
+                    "child": "t1",
+                    "action": {
+                        "functionCall": {
+                            "@call": "dataSet",
+                            "args": { "surfaceId": "s2", "path": "/pressed", "value": true },
+                        },
+                    },
+                },
+                { "component": "Text", "id": "t1", "text": "press" },
+            ],
         }),
     ));
     assert_eq!(answer["result"]["surfaceId"], json!("s2"), "{answer}");
@@ -212,19 +226,42 @@ fn a_button_runs_its_command() {
             .document()
             .walk()
             .find(|node| node.kind == "a2ui.button")
-            .map(|node| node.data["action"]["name"].clone())
+            .map(|node| node.data["action"]["functionCall"]["@call"].clone())
     });
     assert_eq!(action, Some(json!("dataSet")), "and it names the command");
     // And the command **runs**: the door runs the local function the
-    // button names.
+    // button names — and the arguments are **translated** from a2ui's
+    // names to craftkit's.
+    let answer = server.handle(&request(
+        "callRendererFunction",
+        json!({ "name": "dataSet", "args": { "surfaceId": "s2", "path": "/pressed", "value": true } }),
+    ));
+    assert_eq!(answer["result"]["name"], json!("dataSet"), "{answer}");
+    assert!(answer.get("error").is_none(), "{answer}");
+    let model = server.with_session(|session| {
+        session
+            .document()
+            .nodes()
+            .find(|node| node.kind == "a2ui.surface")
+            .map(|node| node.data["model"].clone())
+            .unwrap_or(Json::Null)
+    });
+    assert_eq!(model["pressed"], json!(true), "and the model has the value");
+}
+
+/// An argument the layer's table does not name is **refused**: the
+/// names are translated, and a name that is not known is not used.
+#[test]
+fn an_argument_the_table_does_not_name_is_refused() {
+    let mut server = server();
+    server.handle(&request("createSurface", json!({ "surfaceId": "s2" })));
     let answer = server.handle(&request(
         "callRendererFunction",
         json!({ "name": "dataSet", "args": { "surface_id": "s2", "path": "/pressed", "value": true } }),
     ));
-    assert_eq!(answer["result"]["name"], json!("dataSet"), "{answer}");
-    assert!(answer.get("error").is_none(), "{answer}");
-    let model = craftkit_plugin_a2ui::model::model();
-    assert_eq!(model["pressed"], json!(true), "and the model has the value");
+    assert!(answer.get("error").is_some(), "{answer}");
+    let message = answer["error"]["message"].as_str().unwrap_or_default();
+    assert!(message.contains("surface_id"), "{message}");
 }
 
 /// The **control channel** serves the door's **own** session, and the
@@ -242,11 +279,16 @@ fn the_channel_serves_the_doors_own_session() {
         "updateComponents",
         json!({
             "surfaceId": "s3",
-            "components": [{
-                "component": "Button",
-                "child": "press",
-                "action": { "name": "required" },
-            }],
+            "components": [
+                { "component": "Column", "id": "root", "children": ["b1"] },
+                {
+                    "component": "Button",
+                    "id": "b1",
+                    "child": "t1",
+                    "action": { "event": { "name": "required" } },
+                },
+                { "component": "Text", "id": "t1", "text": "press" },
+            ],
         }),
     ));
     // The channel's **render**: the door's own headless one.

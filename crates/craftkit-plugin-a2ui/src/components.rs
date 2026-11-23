@@ -11,7 +11,7 @@
 //! # The props are craftkit's; the names are a2ui's
 //!
 //! The **name** of a prop is a2ui's — `text`, `children`, `child` — and
-//! the **type** of a prop is craftkit's — `Text`, `Option<Text>`,
+//! the **type** of a prop is craftkit's — `Dynamic`, `Option<Text>`,
 //! `Number`. The `#[a2ui_prop(…)]` says which **a2ui definition** the
 //! prop uses, and the definition is a2ui's own name, literally:
 //! `DynamicString`, `Weight`, `Child`, `ChildList`, `Action`.
@@ -28,21 +28,46 @@
 //! An a2ui prop that carries a `DynamicString` may be a **literal**, a
 //! **binding** (`{"@path": "/title"}`) or a **call**. The literal is
 //! used, the binding is looked up in the layer's model
-//! (`craftkit_a2ui::model::Model`), and a **call** is not drawn — it is a
-//! round trip, and the command that carries it is the one that resolves
-//! it.
+//! (`craftkit_a2ui::model::Model`), and a **call** is not drawn — it is
+//! a round trip, and the command that carries it is the one that
+//! resolves it.
+//!
+//! The model is the **surface's**, and the surface is in the document —
+//! so the painter reads it from the document, and the painter is the
+//! only place that has both.
 
-use crate::props::{BoundBool, BoundText, IconPath};
+use crate::props::Dynamic;
 use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::{BlendMode, Colour, Document, Fill, Node, Number, Point, Rect, Text};
 
 /// The **colour** a node is drawn in.
 ///
-/// The node's own appearance says so, and a node with no appearance is
-/// drawn in the tree's own black.
+/// The node's own appearance says so — and a node with no appearance is
+/// drawn in the tree's own black. A **muted** node is drawn in nothing
+/// at all.
 fn colour_of(node: &Node, document: &Document) -> Colour {
-    let _ = document.appearance_of(node);
-    if node.muted { Colour::NONE } else { Colour::BLACK }
+    if node.muted {
+        return Colour::NONE;
+    }
+    match document.appearance_of(node) {
+        Some(appearance) => appearance.fill.colour(),
+        None => Colour::BLACK,
+    }
+}
+
+/// The **fill** a box is drawn with.
+///
+/// A box is a box: a card, a button, a field. Its own appearance says
+/// what it is filled with, and a box with no appearance is the tree's
+/// own white.
+fn box_fill_of(node: &Node, document: &Document) -> Fill {
+    if node.muted {
+        return Fill::Solid(Colour::NONE);
+    }
+    match document.appearance_of(node) {
+        Some(appearance) => appearance.fill,
+        None => Fill::Solid(Colour::WHITE),
+    }
 }
 
 /// The **rectangle** a node is drawn in, if it has one.
@@ -63,7 +88,7 @@ craftkit_derive::components! {
         props: {
             /// The text to show.
             #[a2ui_prop(DynamicString)]
-            text: BoundText,
+            text: Dynamic,
             /// A hint for the base text size.
             variant: Option<Text>,
             /// How much of the row this takes.
@@ -73,7 +98,8 @@ craftkit_derive::components! {
         paint: {
             let Some(props) = TextComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
-            let text = props.text.0.clone();
+            let model = crate::model::model_of(node, document);
+            let Some(text) = crate::props::text_of(&model, &props.text.0) else { return };
             let size = match props.variant.as_ref().map(|value| value.0.as_str()) {
                 Some("caption") => 8.0,
                 _ => 12.0,
@@ -96,9 +122,9 @@ craftkit_derive::components! {
         props: {
             /// Where the picture is.
             #[a2ui_prop(DynamicString)]
-            url: BoundText,
-            /// What the picture is, for a person.
-            description: Option<BoundText>,
+            url: Dynamic,
+            /// A description of it, for a person.
+            description: Option<Dynamic>,
             /// How the picture fills its place.
             fit: Option<Text>,
             /// A hint for the base text size.
@@ -114,7 +140,9 @@ craftkit_derive::components! {
             // and the read is bounded.
             let Some(props) = ImageComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
-            let Some(picture) = crate::picture::picture_of(&props.url.0) else { return };
+            let model = crate::model::model_of(node, document);
+            let Some(url) = crate::props::text_of(&model, &props.url.0) else { return };
+            let Some(picture) = crate::picture::picture_of(&url) else { return };
             canvas.picture(rect, &picture);
         },
         hit: {
@@ -127,17 +155,21 @@ craftkit_derive::components! {
         kind: "a2ui.icon",
         props: {
             /// The shape to draw.
-            name: IconPath,
+            name: Dynamic,
             /// How much of the row this takes.
             #[a2ui_prop(Weight)]
             weight: Option<Number>,
         },
         paint: {
             let Some(props) = IconComponent::of(node) else { return };
-            // The **path** is the icon: a2ui's own names are a vocabulary
-            // craftkit does not have, so the name is read and the shape
-            // is drawn from it when it is a path.
-            let Some(path) = crate::svg::path_of(&props.name.0) else { return };
+            let Some(rect) = rect_of(node) else { return };
+            let model = crate::model::model_of(node, document);
+            let Some(name) = crate::props::icon_path_of(&model, &props.name.0) else { return };
+            let Some(path) = crate::svg::path_of(&name) else { return };
+            // The path is in the agent's own coordinates, and the icon's
+            // place is where it is drawn: so the path is fitted to the
+            // place, and the shape is kept.
+            let Some(path) = crate::svg::fitted(&path, rect) else { return };
             canvas.path(&path, Fill::Solid(colour_of(node, document)), BlendMode::Normal, None);
         },
         hit: {
@@ -225,14 +257,16 @@ craftkit_derive::components! {
         props: {
             /// The card's child.
             #[a2ui_prop(Child)]
-            child: BoundText,
+            child: Text,
             /// How much of the parent this takes.
             #[a2ui_prop(Weight)]
             weight: Option<Number>,
         },
         paint: {
+            // The child is a node of its own, under the card, and it
+            // draws itself: the card draws the box.
             let Some(rect) = rect_of(node) else { return };
-            canvas.rect(rect, Fill::Solid(Colour::WHITE), BlendMode::Normal);
+            canvas.rect(rect, box_fill_of(node, document), BlendMode::Normal);
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))
@@ -257,7 +291,7 @@ craftkit_derive::components! {
             } else {
                 Rect::new(rect.x, rect.y, 1.0, rect.h)
             };
-            canvas.rect(fill, Fill::Solid(Colour::BLACK), BlendMode::Normal);
+            canvas.rect(fill, Fill::Solid(colour_of(node, document)), BlendMode::Normal);
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))
@@ -268,9 +302,9 @@ craftkit_derive::components! {
     Button {
         kind: "a2ui.button",
         props: {
-            /// What the button says.
+            /// What the button says — the id of the child that says it.
             #[a2ui_prop(Child)]
-            child: BoundText,
+            child: Text,
             /// A hint for the base text size.
             variant: Option<Text>,
             /// What the button does.
@@ -281,11 +315,10 @@ craftkit_derive::components! {
             weight: Option<Number>,
         },
         paint: {
-            let Some(props) = ButtonComponent::of(node) else { return };
+            // The button draws the box, and the child — a text, say —
+            // is a node of its own under it, and it draws itself.
             let Some(rect) = rect_of(node) else { return };
-            canvas.rect(rect, Fill::Solid(Colour::WHITE), BlendMode::Normal);
-            let text = props.child.0.clone();
-            canvas.text(Point::new(rect.x, rect.y), &text, colour_of(node, document), 12.0);
+            canvas.rect(rect, box_fill_of(node, document), BlendMode::Normal);
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))
@@ -298,10 +331,10 @@ craftkit_derive::components! {
         props: {
             /// What the box says.
             #[a2ui_prop(DynamicString)]
-            label: BoundText,
+            label: Dynamic,
             /// Whether it is ticked.
             #[a2ui_prop(DynamicBoolean)]
-            value: Option<BoundBool>,
+            value: Option<Dynamic>,
             /// How much of the row this takes.
             #[a2ui_prop(Weight)]
             weight: Option<Number>,
@@ -309,9 +342,23 @@ craftkit_derive::components! {
         paint: {
             let Some(props) = CheckBoxComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
-            canvas.rect(rect, Fill::Solid(Colour::WHITE), BlendMode::Normal);
-            let text = props.label.0.clone();
-            canvas.text(Point::new(rect.x, rect.y), &text, colour_of(node, document), 12.0);
+            let model = crate::model::model_of(node, document);
+            canvas.rect(rect, box_fill_of(node, document), BlendMode::Normal);
+            let Some(label) = crate::props::text_of(&model, &props.label.0) else { return };
+            let colour = colour_of(node, document);
+            canvas.text(Point::new(rect.x + 14.0, rect.y), &label, colour, 12.0);
+            // The **tick**: the box is ticked when the value says so.
+            let ticked = match &props.value {
+                Some(value) => crate::props::bool_of(&model, &value.0).unwrap_or(false),
+                None => false,
+            };
+            if ticked {
+                canvas.rect(
+                    Rect::new(rect.x + 2.0, rect.y + 2.0, 8.0, 8.0),
+                    Fill::Solid(colour),
+                    BlendMode::Normal,
+                );
+            }
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))
@@ -324,12 +371,12 @@ craftkit_derive::components! {
         props: {
             /// What the field says.
             #[a2ui_prop(DynamicString)]
-            label: BoundText,
+            label: Dynamic,
             /// What is in the field.
             #[a2ui_prop(DynamicString)]
-            value: Option<BoundText>,
+            value: Option<Dynamic>,
             /// A hint for what to type.
-            placeholder: Option<BoundText>,
+            placeholder: Option<Dynamic>,
             /// A hint for the base text size.
             variant: Option<Text>,
             /// How much of the row this takes.
@@ -339,9 +386,29 @@ craftkit_derive::components! {
         paint: {
             let Some(props) = TextFieldComponent::of(node) else { return };
             let Some(rect) = rect_of(node) else { return };
-            canvas.rect(rect, Fill::Solid(Colour::WHITE), BlendMode::Normal);
-            let text = props.label.0.clone();
-            canvas.text(Point::new(rect.x, rect.y), &text, colour_of(node, document), 12.0);
+            let model = crate::model::model_of(node, document);
+            canvas.rect(rect, box_fill_of(node, document), BlendMode::Normal);
+            let colour = colour_of(node, document);
+            if let Some(label) = crate::props::text_of(&model, &props.label.0) {
+                canvas.text(Point::new(rect.x + 2.0, rect.y), &label, colour, 8.0);
+            }
+            // The **value**: what is in the field, and the placeholder
+            // when there is none.
+            let value = props
+                .value
+                .as_ref()
+                .and_then(|value| crate::props::text_of(&model, &value.0));
+            let shown = match value {
+                Some(value) => value,
+                None => match &props.placeholder {
+                    Some(placeholder) => match crate::props::text_of(&model, &placeholder.0) {
+                        Some(placeholder) => placeholder,
+                        None => return,
+                    },
+                    None => return,
+                },
+            };
+            canvas.text(Point::new(rect.x + 2.0, rect.y + 10.0), &shown, colour, 12.0);
         },
         hit: {
             node.rect.is_some_and(|rect| rect.contains(point))

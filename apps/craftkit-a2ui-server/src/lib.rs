@@ -224,6 +224,11 @@ pub struct Server {
     accepts_inline_catalogs: bool,
     /// Whether the agent has said it accepts a catalogue **by file**.
     accepts_catalog_files: bool,
+    /// How many calls to the agent the door has made.
+    ///
+    /// The protocol says every call to an agent-side function carries an
+    /// id of its own, and the agent copies it into the answer.
+    calls: std::sync::atomic::AtomicU64,
 }
 
 impl Server {
@@ -238,6 +243,7 @@ impl Server {
             outbound_rx: Mutex::new(Some(outbound_rx)),
             accepts_inline_catalogs: false,
             accepts_catalog_files: false,
+            calls: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
@@ -288,12 +294,31 @@ impl Server {
     /// not a reply to a call.
     fn run(&mut self, command: &str, params: &Json) -> Result<Outcome, craftkit_sdk::EngineError> {
         let outcome = self.with_session(|session| session.execute(command, params))?;
-        if let Some(message) = action_message(&outcome) {
+        if let Some(message) = self.outbound_message(&outcome) {
             // The message goes on the wire even if the agent says nothing
             // more: the writer waits on the queue.
             let _ = self.outbound.send(Some(message));
         }
         Ok(outcome)
+    }
+
+    /// The **message** a command's outcome raised, if it raised one.
+    ///
+    /// An **action** is the agent's, and a **call** to an agent-side
+    /// function is the agent's too — and the two are different messages
+    /// on the wire, because the protocol says they are.
+    fn outbound_message(&mut self, outcome: &Outcome) -> Option<Json> {
+        let call_id = self.next_call_id();
+        message_of(outcome, &call_id)
+    }
+
+    /// The **next** id of a call to the agent.
+    ///
+    /// The protocol says the id is unique for the call, and the agent
+    /// copies it into the answer — so the door counts them.
+    fn next_call_id(&self) -> String {
+        let count = self.calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        format!("call-{count}")
     }
 
     /// The ecosystem the door is a view of.
@@ -462,15 +487,30 @@ impl Server {
             .map_err(|error| Fault::Refused(error.to_string()))?;
         let mut result = json!({ "surfaceId": surface_id });
         if send_data_model {
-            result["dataModel"] = self.data_model();
+            result["dataModel"] = self.data_model(&surface_id);
         }
         let _ = outcome;
         Ok(result)
     }
 
     /// The surface's **data model**, as the metadata carries it.
-    fn data_model(&self) -> Json {
-        Json::Object(Default::default())
+    ///
+    /// The model is the **surface's**, and it is in the document — so
+    /// the door reads it from there, and not from a copy of its own.
+    /// A surface that is not there has **no** model, and the metadata
+    /// carries an empty one.
+    fn data_model(&mut self, surface_id: &str) -> Json {
+        self.with_session(|session| {
+            let document = session.document();
+            let surface =
+                document.nodes().find(|node| node.kind == "a2ui.surface" && node.name == surface_id);
+            match surface {
+                Some(surface) => {
+                    surface.data.get("model").cloned().unwrap_or(Json::Object(Default::default()))
+                }
+                None => Json::Object(Default::default()),
+            }
+        })
     }
 
     /// **`updateComponents`**: the component tree → the layer's nodes →
@@ -549,9 +589,59 @@ impl Server {
             )));
         };
         let args = request.params.get("args").cloned().unwrap_or(Json::Null);
+        // The arguments are **translated**: a2ui says `surfaceId` and
+        // craftkit says `surface_id`, and the layer's table says which
+        // is which — so the names are translated and not guessed, and an
+        // argument the table does not name is refused.
+        let args = translate(&name, &args).map_err(Fault::Params)?;
         self.run(command, &args).map_err(|error| Fault::Refused(error.to_string()))?;
         Ok(json!({ "name": name }))
     }
+}
+
+/// The **arguments** of a call, in craftkit's own names.
+///
+/// a2ui says `surfaceId` and craftkit says `surface_id`, and the
+/// layer's table says which is which — so the names are **translated**,
+/// not guessed. An argument the table does not name is **refused**: a
+/// name that is not known is a name that is not used.
+pub fn translate(name: &str, args: &Json) -> Result<Json, String> {
+    let Some(pairs) = craftkit_a2ui::functions::arguments_of(name) else {
+        return Err(format!("the function `{name}` takes no arguments"));
+    };
+    let Some(object) = args.as_object() else {
+        if args.is_null() {
+            return Ok(Json::Object(Default::default()));
+        }
+        return Err(format!("the arguments of `{name}` are not an object"));
+    };
+    let mut out = craftkit_sdk::serde_json::Map::new();
+    for (key, value) in object {
+        let Some((_, craftkit_name)) = pairs.iter().find(|(a2ui, _)| a2ui == key) else {
+            return Err(format!("`{key}` is not an argument of `{name}`"));
+        };
+        out.insert((*craftkit_name).to_string(), value.clone());
+    }
+    Ok(Json::Object(out))
+}
+
+/// The **message** a command's outcome raised, if it raised one.
+///
+/// An **action** is the agent's, and a **call** to an agent-side
+/// function is the agent's too — and the two are different messages on
+/// the wire, because the protocol says they are.
+pub fn message_of(outcome: &Outcome, call_id: &str) -> Option<Json> {
+    if let Some(message) = action_message(outcome) {
+        return Some(message);
+    }
+    let call = outcome.data.get("callAgentFunction")?;
+    let mut call = call.as_object()?.clone();
+    call.insert("functionCallId".to_string(), json!(call_id));
+    Some(json!({
+        "jsonrpc": "2.0",
+        "method": "callAgentFunction",
+        "params": { "version": "1.0", "callAgentFunction": call },
+    }))
 }
 
 /// The **action** a command raised, as the door's outbound message.

@@ -200,17 +200,29 @@ const A_PNG: &[u8] = &[
 fn each_component_paints_something() {
     // The **eleven**, each with the props it needs.
     let cases: Vec<(&str, craftkit_sdk::serde_json::Value)> = vec![
-        ("Text", json!({ "component": "Text", "text": "hello" })),
-        ("Image", json!({ "component": "Image", "url": "a picture that is not there yet" })),
-        ("Icon", json!({ "component": "Icon", "name": "M 0 0 L 10 0 L 10 10 Z" })),
-        ("Row", json!({ "component": "Row", "children": [] })),
-        ("Column", json!({ "component": "Column", "children": [] })),
-        ("List", json!({ "component": "List", "children": [] })),
-        ("Card", json!({ "component": "Card", "child": "a2ui.text" })),
-        ("Divider", json!({ "component": "Divider" })),
-        ("Button", json!({ "component": "Button", "child": "press" })),
-        ("CheckBox", json!({ "component": "CheckBox", "label": "tick" })),
-        ("TextField", json!({ "component": "TextField", "label": "name" })),
+        ("Text", json!([{ "component": "Text", "id": "root", "text": "hello" }])),
+        ("Image", json!([{ "component": "Image", "id": "root", "url": "a picture that is not there yet" }])),
+        ("Icon", json!([{ "component": "Icon", "id": "root", "name": "M 0 0 L 10 0 L 10 10 Z" }])),
+        ("Row", json!([{ "component": "Row", "id": "root", "children": [] }])),
+        ("Column", json!([{ "component": "Column", "id": "root", "children": [] }])),
+        ("List", json!([{ "component": "List", "id": "root", "children": [] }])),
+        (
+            "Card",
+            json!([
+                { "component": "Card", "id": "root", "child": "t1" },
+                { "component": "Text", "id": "t1", "text": "inside" },
+            ]),
+        ),
+        ("Divider", json!([{ "component": "Divider", "id": "root" }])),
+        (
+            "Button",
+            json!([
+                { "component": "Button", "id": "root", "child": "t1" },
+                { "component": "Text", "id": "t1", "text": "press" },
+            ]),
+        ),
+        ("CheckBox", json!([{ "component": "CheckBox", "id": "root", "label": "tick" }])),
+        ("TextField", json!([{ "component": "TextField", "id": "root", "label": "name" }])),
     ];
     assert_eq!(cases.len(), COMPONENTS.len(), "every component is drawn");
     // The **image** is a file, and the file is a PNG — so the test asks
@@ -224,7 +236,7 @@ fn each_component_paints_something() {
                 return (name, component);
             }
             let mut component = component;
-            component["url"] = json!(picture.to_string_lossy());
+            component[0]["url"] = json!(picture.to_string_lossy());
             (name, component)
         })
         .collect::<Vec<_>>();
@@ -239,7 +251,7 @@ fn each_component_paints_something() {
             canvas.drawn.len()
         };
         session
-            .execute("a2ui.surface.apply", &json!({ "surface_id": name, "components": [component] }))
+            .execute("a2ui.surface.apply", &json!({ "surface_id": name, "components": component }))
             .expect("the component is drawn");
         let mut canvas = craftkit_sdk::document::RecordingCanvas::default();
         session.paint_view(&mut canvas);
@@ -265,7 +277,7 @@ fn a_bound_prop_is_resolved_against_the_model() {
             "a2ui.surface.apply",
             &json!({
                 "surface_id": "s1",
-                "components": [{ "component": "Text", "text": { "@path": "/greeting" } }],
+                "components": [{ "component": "Text", "id": "root", "text": { "@path": "/greeting" } }],
             }),
         )
         .expect("the tree is drawn");
@@ -289,7 +301,7 @@ fn a_binding_that_names_nothing_draws_nothing() {
             "a2ui.surface.apply",
             &json!({
                 "surface_id": "s2",
-                "components": [{ "component": "Text", "text": { "@path": "/nowhere" } }],
+                "components": [{ "component": "Text", "id": "root", "text": { "@path": "/nowhere" } }],
             }),
         )
         .expect("the tree is drawn");
@@ -315,6 +327,7 @@ fn the_icon_is_drawn_from_its_own_shape() {
                 "surface_id": "s3",
                 "components": [{
                     "component": "Icon",
+                    "id": "root",
                     "name": { "svgPath": "M 0 0 L 10 0 L 10 10 Z" },
                 }],
             }),
@@ -342,6 +355,7 @@ fn a_picture_that_is_not_there_is_refused() {
                 "surface_id": "s4",
                 "components": [{
                     "component": "Image",
+                    "id": "root",
                     "url": "https://example.com/not-fetched.png",
                 }],
             }),
