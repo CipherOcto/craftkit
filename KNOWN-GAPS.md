@@ -75,7 +75,43 @@ itself, and it has four honest limits:
 
 ---
 
-## 4. What the design honestly does not do
+## 4. Three house rules the tree breaks today, and the gate cannot see
+
+These are **defects**, not features: the tree breaks three of its own
+rules today, in code the inner gate does not read. The a2ui survey found
+them and states each with the file and the line (`docs/survey-a2ui.md`
+§3.5); they are here because a gap written down is a gap somebody can
+close.
+
+| # | where | what it does | the rule it breaks |
+|---|---|---|---|
+| 1 | `apps/craftkit-studio/src/main.rs:170` | `match session.undo()` | *"…`undo` and `redo` are the history's own doors … and **everything** is a command"* (`crates/craftkit-gates/src/lib.rs:295-296`) |
+| 2 | `apps/craftkit-studio/src/main.rs:36` | `ecosystem.evaluators.ids()` | *"`evaluators` is the evaluator's own registry: a front end that reaches it is a front end that evaluates the document itself"* (`:290-291`) |
+| 3 | `apps/craftkit-window/src/lib.rs:201-209` | `plan()` calls `session().evaluate()` and **keeps** the derived rows | *"A front end … never calls the evaluator, never keeps a value the evaluator computes"* (`AGENTS.md`) |
+
+**Why the gate does not see them.**
+
+- The **studio** is not in the gate's `FRONT_ENDS` — the list is
+  `craftkit-window` and `craftkit-a2ui-server` — so the rule "a front end
+  is thin" does not reach it at all. And widening the list is not the
+  one-liner it looks like: the studio's **command implementations** call
+  `document_mut` twenty-four times, which is exactly what a command's
+  body is for, and a crate-wide text rule cannot tell a command's body
+  from a front end's own path.
+- The **window** *is* in the list, and the rule misses it because the
+  forbidden names are `evaluators`, `Plan` and `PlanItem`, while the
+  window writes `evaluate()` and `PlanRow`. The gate reads **names**, and
+  a name can be avoided without the behaviour being avoided.
+
+**And the bridge** reads `self.ecosystem.evaluators` at
+`apps/craftkit-bridge/src/lib.rs:231` — the same rule, and a violation
+**only once the bridge is classified as a front end**. The classification
+is the open question, and the three above do not wait for it: they are
+defects today.
+
+---
+
+## 5. What the design honestly does not do
 
 These are the README's own honest notes, and they are still true of the tree:
 
@@ -120,7 +156,7 @@ These are the README's own honest notes, and they are still true of the tree:
 
 ---
 
-## 5. Things this tree has not been asked for
+## 6. Things this tree has not been asked for
 
 Not gaps in the design — things nobody asked for:
 
@@ -136,7 +172,7 @@ Not gaps in the design — things nobody asked for:
 
 ---
 
-## 6. Things the README has claimed and the tree has since changed
+## 7. Things the README has claimed and the tree has since changed
 
 The README is a build log, written in order, and some of its early sentences
 have been overtaken by later sections. The ones that matter to a reader who
