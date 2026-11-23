@@ -84,14 +84,12 @@ library and the control channel — are not doors, and the **studio** is a
 **host**: its entry point is a front end, and its library is a command
 book.
 
-**What is left is the parity matrix.** Nobody has written down what each
-door can do: which commands it publishes, whether it publishes a schema,
-whether it can run one, whether it can undo, what it says when a command
-is refused. The survey calls it "a project, not a task", and its honest
-first cut is a **table checked by hand** — six rows and a dozen columns,
-with a person reading every cell. It is not a defect: nothing in the tree
-is broken by it. It is the thing that makes a difference between the
-doors visible.
+**What is left of it is the parity matrix's keeping.** The table itself
+is written — the six doors side by side, cell by cell, with the line each
+cell was read in ([`docs/door-parity.md`](docs/door-parity.md)) — and
+nothing keeps it true: it is checked by hand, and the next cut, if there
+is one, is a check that reads the doors and compares. That is not a
+defect: nothing in the tree is broken by a table that drifts.
 
 **And the bridge's protocol changed** when the bridge became thin:
 `resources/list` carries the **manifest** now and not the evaluator's ids,

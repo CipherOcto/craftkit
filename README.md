@@ -70879,8 +70879,10 @@ are doors — and so the rule applied to a crate that was never a door.
 
 ### What it does not settle
 
-- **There is no parity matrix.** The doors are classified, but nobody
-  has written down what each of them can do; the honest first cut is a
-  table, checked by hand.
+- **The parity matrix is a table, checked by hand.** The six doors are
+  written side by side in [`docs/door-parity.md`](docs/door-parity.md),
+  cell by cell, with the line each cell was read in — and nothing keeps
+  it true. The next cut, if there is one, is a check that reads the
+  doors and compares.
 - **The bridge's shape changed**, and a shape that other programs read
   is a promise. It is a proof, and the proof is the thing that changed.
