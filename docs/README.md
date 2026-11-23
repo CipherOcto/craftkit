@@ -17,6 +17,9 @@ somebody will look for it.
 | [`recipes/add-a-crate.md`](recipes/add-a-crate.md) | add a crate, and give it a layer |
 | [`recipes/change-a-command.md`](recipes/change-a-command.md) | change a command's parameters — a format and a prose change |
 | [`recipes/fix-a-crash.md`](recipes/fix-a-crash.md) | the regression-test discipline for a crash |
+| [`survey-a2ui.md`](survey-a2ui.md) | a reading of a2ui's patterns against this tree, and what a downstream application would need this tree to grow |
+| [`survey-a2ui-review.md`](survey-a2ui-review.md) | the record of the adversarial review of that survey: every round, every finding and every fix |
+| [`a2ui-compat-layer.md`](a2ui-compat-layer.md) | the design and the arcs for an a2ui-compatible surface: what it adds, what it changes, and how it is built |
 | [`../skills/craftkit-editing/SKILL.md`](../skills/craftkit-editing/SKILL.md) | the checklist for changing something |
 | [`../skills/craftkit-checking/SKILL.md`](../skills/craftkit-checking/SKILL.md) | the checklist for something that is broken |
 
