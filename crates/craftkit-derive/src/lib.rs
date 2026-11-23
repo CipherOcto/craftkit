@@ -75,6 +75,8 @@
 
 use proc_macro::TokenStream;
 
+mod a2ui_component;
+mod a2ui_table;
 mod command;
 mod commands;
 mod common;
@@ -129,6 +131,37 @@ pub fn derive_command(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn commands(input: TokenStream) -> TokenStream {
     match commands::expand(input.into()) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Declare an **a2ui component**: a struct whose fields are its props.
+///
+/// The compiler writes the reader, the declarations, the published schema,
+/// the typed view of a payload, the kind, the catalogue entry and the two
+/// registrations. The **painter** and the **hit test** are the struct's own
+/// methods, and the macro calls them.
+///
+/// The `table` and the `shapes` are **paths**, not dependencies: this crate
+/// is L0 and may not depend on the a2ui layer, so the row names the two
+/// places in the layer and everything resolves where the macro is used.
+#[proc_macro_derive(A2uiComponent, attributes(a2ui_component, a2ui_prop))]
+pub fn derive_a2ui_component(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    match a2ui_component::expand(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Declare a **family** of a2ui components in one table.
+///
+/// The table's rows are components, and the compiler writes for each of them
+/// the same work it writes for one derived component.
+#[proc_macro]
+pub fn components(input: TokenStream) -> TokenStream {
+    match a2ui_table::expand(input.into()) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }
