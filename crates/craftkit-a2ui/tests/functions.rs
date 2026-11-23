@@ -51,3 +51,21 @@ fn the_declaration_carries_the_envelope() {
     assert!(declaration["returnType"].is_string(), "and it says what it returns");
     assert_eq!(declaration["unevaluatedProperties"], json!(false));
 }
+
+/// Every declared function says **who may call it**.
+///
+/// A function that does not say is the renderer's alone, and the layer
+/// says: the local ones are the renderer's and the agent's, and the
+/// agent-side ones are the agent's.
+#[test]
+fn every_function_says_who_may_call_it() {
+    for function in craftkit_a2ui::functions::all() {
+        // The plan's own table: **both** kinds are `rendererOnly` — the
+        // value that lets the renderer dispatch the call and forbids the
+        // agent from calling it back.
+        let allowed = "rendererOnly";
+        assert_eq!(function.allowed_callers, allowed, "{} says who may call it", function.name);
+        let declared = craftkit_a2ui::functions::declaration(&function);
+        assert_eq!(declared["allowedCallers"], json!(allowed), "{} declares it", function.name);
+    }
+}

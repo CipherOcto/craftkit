@@ -65,6 +65,22 @@ pub struct Function {
     /// enum of eight, and a function whose return shape is not known is
     /// **not declared**.
     pub return_type: &'static str,
+    /// **Who may call it**: the boundary the declaration carries.
+    ///
+    /// The protocol says a function declares its own boundary
+    /// (`specification/v1_0/docs/a2ui_protocol.md:629`), and a function
+    /// that does not say is the renderer's alone. The layer says
+    /// **`rendererOnly`** for every function it declares, and the value
+    /// is the one that **permits the renderer's own dispatch** — the
+    /// layer resolves a call itself, or hands it to the agent, and
+    /// `rendererOnly` is what lets the hand happen
+    /// (`a2ui_protocol.md:1484`; `a2ui_custom_functions.md:71`).
+    ///
+    /// It is the **agent** that `rendererOnly` forbids: the agent may
+    /// not call a function back. So the local functions are the
+    /// renderer's, and the agent-side ones are the agent's to answer —
+    /// and neither is the agent's to call.
+    pub allowed_callers: &'static str,
 }
 
 /// The **local** functions: the layer's own commands.
@@ -79,30 +95,35 @@ pub const LOCAL: &[Function] = &[
         doc: "Make a surface, and the node it draws into.",
         kind: Kind::Local,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "surfaceApply",
         doc: "Draw a component tree onto a surface.",
         kind: Kind::Local,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "surfaceDelete",
         doc: "Remove a surface's nodes.",
         kind: Kind::Local,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "dataSet",
         doc: "Write a value into the data model, and mirror it into craftkit.",
         kind: Kind::Local,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "componentInvoke",
         doc: "Run a component's action.",
         kind: Kind::Local,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
 ];
 
@@ -121,70 +142,99 @@ pub const AGENT_SIDE: &[Function] = &[
         doc: "Check that a value is not null, undefined or empty.",
         kind: Kind::Agent,
         return_type: "validationResult",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "regex",
         doc: "Check that a value matches a regular expression.",
         kind: Kind::Agent,
         return_type: "validationResult",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "length",
         doc: "Check a string's length.",
         kind: Kind::Agent,
         return_type: "validationResult",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "numeric",
         doc: "Check that a value is a number.",
         kind: Kind::Agent,
         return_type: "validationResult",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "email",
         doc: "Check that a value is an email address.",
         kind: Kind::Agent,
         return_type: "validationResult",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "formatString",
         doc: "Format a value as a string.",
         kind: Kind::Agent,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "formatNumber",
         doc: "Format a value as a number.",
         kind: Kind::Agent,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "formatCurrency",
         doc: "Format a value as an amount of money.",
         kind: Kind::Agent,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "formatDate",
         doc: "Format a value as a date.",
         kind: Kind::Agent,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
     Function {
         name: "pluralize",
         doc: "Choose the singular or the plural of a word.",
         kind: Kind::Agent,
         return_type: "string",
+        allowed_callers: "rendererOnly",
     },
-    Function { name: "openUrl", doc: "Open a URL.", kind: Kind::Agent, return_type: "void" },
-    Function { name: "and", doc: "Both of two values must hold.", kind: Kind::Agent, return_type: "boolean" },
+    Function {
+        name: "openUrl",
+        doc: "Open a URL.",
+        kind: Kind::Agent,
+        return_type: "void",
+        allowed_callers: "rendererOnly",
+    },
+    Function {
+        name: "and",
+        doc: "Both of two values must hold.",
+        kind: Kind::Agent,
+        return_type: "boolean",
+        allowed_callers: "rendererOnly",
+    },
     Function {
         name: "or",
         doc: "Either of two values must hold.",
         kind: Kind::Agent,
         return_type: "boolean",
+        allowed_callers: "rendererOnly",
     },
-    Function { name: "not", doc: "A value must not hold.", kind: Kind::Agent, return_type: "boolean" },
+    Function {
+        name: "not",
+        doc: "A value must not hold.",
+        kind: Kind::Agent,
+        return_type: "boolean",
+        allowed_callers: "rendererOnly",
+    },
 ];
 
 /// Every function of the table: the local ones and the agent-side ones.
@@ -235,6 +285,7 @@ pub fn declaration(function: &Function) -> craftkit_sdk::serde_json::Value {
         "type": "object",
         "description": function.doc,
         "returnType": function.return_type,
+        "allowedCallers": function.allowed_callers,
         "properties": {
             "@call": { "const": function.name },
             "args": {
