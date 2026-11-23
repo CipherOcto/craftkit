@@ -70724,10 +70724,10 @@ drives the kit on the other.
 - **The door serves its own session on a control channel** — the same
   document and not a copy of it — with the **headless** render as the
   channel's: a picture, a click and a drag, and no window anywhere.
-- **The action is the one message that is not a reply**: a component's
-  action may be the agent's, and then the door sends an `action`
-  message. The action travels in the command's outcome, so the door
-  does not read it back out of a message.
+- **The messages that are not replies** are the `action` and the
+  `callAgentFunction`: a component's action may be the agent's, and then
+  the door sends one of those. The action travels in the command's
+  outcome, so the door does not read it back out of a message.
 - **A surface may carry its tree and its data model** in the
   `createSurface` that makes it — and the model is applied **first**,
   so a component binds against it on its first resolution.

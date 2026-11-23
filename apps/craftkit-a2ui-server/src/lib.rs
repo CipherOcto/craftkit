@@ -59,13 +59,14 @@
 //! There is **no window**: the picture is drawn by the rasteriser, and a
 //! window that attaches to somebody else's session is not in the tree.
 //!
-//! # The one message that is **not** a reply
+//! # The messages that are **not** replies
 //!
 //! A component's action may be the **agent's** — an event, or a function
 //! the layer does not implement. Then the door sends an **`action`**
-//! message, the door's one outbound message that is not a reply to a
-//! call. The action travels in the command's outcome, and the door puts
-//! it on the wire.
+//! message, or a **`callAgentFunction`** message when the agent is to
+//! run a function. Those are the door's outbound messages that are not
+//! replies to a call, and the action travels in the command's outcome,
+//! so the door puts it on the wire.
 //!
 //! # The **data model** rides in the metadata
 //!
@@ -359,8 +360,8 @@ impl Server {
     /// Run a **command**, and queue any action it raises.
     ///
     /// A command whose outcome names an **action** has raised one for the
-    /// agent, and the action is the door's one outbound message that is
-    /// not a reply to a call.
+    /// agent, and the action is one of the door's outbound messages that
+    /// are not replies to a call.
     fn run(&mut self, command: &str, params: &Json) -> Result<Outcome, craftkit_sdk::EngineError> {
         let outcome = self.with_session(|session| session.execute(command, params))?;
         if let Some(message) = self.outbound_message(&outcome) {
