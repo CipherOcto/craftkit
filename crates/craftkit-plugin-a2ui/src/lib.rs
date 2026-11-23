@@ -37,6 +37,7 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod commands;
 pub mod components;
 pub mod model;
 pub mod svg;
