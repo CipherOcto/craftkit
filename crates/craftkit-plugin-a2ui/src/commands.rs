@@ -177,11 +177,25 @@ craftkit_derive::commands! {
             }
             if craftkit_a2ui::functions::by_name(&name).is_some() {
                 // An **agent-side** function: the layer does not
-                // implement it, and the door forwards it.
+                // implement it, and the door forwards it. The action
+                // travels in the outcome's **data**, so the door does not
+                // have to read it back out of a message.
+                let mut action = craftkit_sdk::serde_json::Map::new();
+                action.insert("name".to_string(), craftkit_sdk::serde_json::json!(name));
+                if let Some(user_message) = self.action.get("userMessage") {
+                    action.insert("userMessage".to_string(), user_message.clone());
+                }
+                action.insert("surfaceId".to_string(), craftkit_sdk::serde_json::json!(self.surface_id.0));
+                action.insert("sourceComponentId".to_string(), craftkit_sdk::serde_json::json!(self.component_id.0));
+                action.insert(
+                    "context".to_string(),
+                    self.action.get("context").cloned().unwrap_or_else(|| craftkit_sdk::serde_json::json!({})),
+                );
                 return Ok(Outcome::new(format!(
                     "the action `{name}` of the component {} is the agent's",
                     self.component_id.0
-                )));
+                ))
+                .with_data(craftkit_sdk::serde_json::json!({ "action": action })));
             }
             Err(failed(format!(
                 "the action `{name}` is in neither the layer's table nor the agent-side table"
@@ -244,7 +258,12 @@ fn place(
         if let Some(name) = &kind
             && !is_known(name)
         {
-            return Err(failed(format!("the component `{name}` is not one this layer draws")));
+            // A name the layer **refuses** says why it is refused, and a
+            // name it simply does not draw is not a component at all.
+            return Err(failed(match craftkit_a2ui::defs::refusal_of(name) {
+                Some(reason) => format!("the component `{name}` is refused: {reason}"),
+                None => format!("the component `{name}` is not one this layer draws"),
+            }));
         }
         laid.push(Child { weight: weight_of(component), size: DEFAULT_WIDTH, cross: DEFAULT_HEIGHT });
         kinds.push(kind);

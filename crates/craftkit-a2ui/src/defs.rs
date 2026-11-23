@@ -80,6 +80,43 @@ pub const TEXT_FIELD: &[&[u8]] = &[b"label", b"value", b"placeholder", b"variant
 /// the layer — so neither is a prop a row declares.
 pub const EXEMPT: &[&[u8]] = &[b"component", b"@checks"];
 
+/// The components the layer **refuses**, and why.
+///
+/// a2ui's basic catalogue has **eighteen** components. Eleven are drawn
+/// here, and **seven** are refused — and a refusal that says why is a
+/// declaration waiting for an application that knows what the component
+/// means.
+///
+/// The seven are refused for two reasons, and the reasons are not the
+/// same:
+///
+/// - **two** of them need media, and craftkit's `Canvas` seam has none:
+///   `Video` and `AudioPlayer`;
+/// - **five** of them are a **widget's** — a tab that is chosen, a modal
+///   that is open, a choice that is picked, a value that is dragged, a
+///   date that is typed — and craftkit's document has no node kind that
+///   means any of those. They *could* be drawn: a slider is two
+///   rectangles. They are refused because the tree does not know what
+///   they **mean**, and a picture of a widget that does nothing is worse
+///   than a refusal.
+pub const REFUSED: &[(&str, &str)] = &[
+    ("Video", "the tree's seam draws a box, a text, a path and a picture, and it has no media"),
+    ("AudioPlayer", "the tree's seam draws a box, a text, a path and a picture, and it has no media"),
+    ("Tabs", "a tab is a widget's choice, and the tree has no notion of one"),
+    ("Modal", "a modal is a widget's state, and the tree has no notion of one"),
+    ("ChoicePicker", "a choice is a widget's state, and the tree has no notion of one"),
+    ("Slider", "a dragged value is a widget's state, and the tree has no notion of one"),
+    ("DateTimeInput", "a typed date is a widget's state, and the tree has no notion of one"),
+];
+
+/// The reason a component is **refused**, if it is one.
+///
+/// A name that is not refused is not refused for being unknown — it is
+/// simply not a component the layer draws, and the caller says so.
+pub fn refusal_of(name: &str) -> Option<&'static str> {
+    REFUSED.iter().find(|(component, _)| *component == name).map(|(_, reason)| *reason)
+}
+
 /// Whether the table and the names hold the same **set**.
 ///
 /// Order-insensitive, and byte-wise: a slice's `PartialEq` is **not**

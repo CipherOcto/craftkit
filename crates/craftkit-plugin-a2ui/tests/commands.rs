@@ -249,3 +249,26 @@ fn a_failing_apply_leaves_the_document_as_it_was() {
     let kinds: Vec<&str> = session.document().walk().map(|node| node.kind.as_str()).collect();
     assert!(!kinds.contains(&"a2ui.text"), "and the text was never made: {kinds:?}");
 }
+
+/// A component the layer **refuses** says why it is refused.
+///
+/// The refusal is not "craftkit cannot draw it" — a slider is two
+/// rectangles. It is that the tree does not know what the component
+/// **means**, and says so.
+#[test]
+fn a_refused_component_says_why() {
+    let mut session = session();
+    session.execute("a2ui.surface.create", &json!({ "surface_id": "s12" })).expect("the surface is made");
+    let outcome = session.execute(
+        "a2ui.surface.apply",
+        &json!({
+            "surface_id": "s12",
+            "components": [{ "component": "Slider", "value": 0.5 }],
+        }),
+    );
+    let error = outcome.expect_err("the slider is refused");
+    let message = error.to_string();
+    assert!(message.contains("Slider"), "{message}");
+    assert!(message.contains("refused"), "{message}");
+    assert!(message.contains("widget"), "{message}");
+}

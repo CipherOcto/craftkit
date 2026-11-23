@@ -92,3 +92,34 @@ fn the_refused_components_have_no_row() {
         assert!(!screaming.is_empty(), "{refused} has no name");
     }
 }
+
+/// The **refused** components say why they are refused.
+///
+/// a2ui's catalogue has eighteen components: eleven are drawn here and
+/// seven are refused. A refusal that says why is a declaration waiting
+/// for an application that knows what the component means.
+#[test]
+fn the_refused_components_say_why() {
+    assert_eq!(craftkit_a2ui::defs::REFUSED.len(), 7, "seven of the eighteen are refused");
+    for (name, reason) in craftkit_a2ui::defs::REFUSED {
+        assert!(!reason.is_empty(), "{name} says why");
+        assert_eq!(craftkit_a2ui::defs::refusal_of(name), Some(*reason), "{name} is refused");
+    }
+    // And the two reasons are not the same one: two need media, and five
+    // are a widget's.
+    let media: Vec<&str> = craftkit_a2ui::defs::REFUSED
+        .iter()
+        .filter(|(_, reason)| reason.contains("no media"))
+        .map(|(name, _)| *name)
+        .collect();
+    assert_eq!(media, vec!["Video", "AudioPlayer"], "two need media: {media:?}");
+    let widget = craftkit_a2ui::defs::REFUSED.len() - media.len();
+    assert_eq!(widget, 5, "and five are a widget's");
+}
+
+/// And a name that is **not** refused is not refused for being unknown.
+#[test]
+fn a_name_that_is_not_refused_is_not_a_refusal() {
+    assert!(craftkit_a2ui::defs::refusal_of("Text").is_none(), "the text is drawn");
+    assert!(craftkit_a2ui::defs::refusal_of("Video2").is_none(), "and an unknown name is not a refusal");
+}
