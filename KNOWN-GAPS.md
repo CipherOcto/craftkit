@@ -75,39 +75,33 @@ itself, and it has four honest limits:
 
 ---
 
-## 4. Three house rules the tree breaks today, and the gate cannot see
+## 4. The bridge has not been classified, and it is not a thin front end
 
-These are **defects**, not features: the tree breaks three of its own
-rules today, in code the inner gate does not read. The a2ui survey found
-them and states each with the file and the line (`docs/survey-a2ui.md`
-§3.5); they are here because a gap written down is a gap somebody can
-close.
+The three house rules the tree broke — the studio undid through the
+history's own door, the studio reached into the evaluator's registry,
+and the window kept rows of the plan — were **defects**, and they are
+**repaired** (README §1115). The gate sees the studio now, and the
+window's rows are gone.
 
-| # | where | what it does | the rule it breaks |
-|---|---|---|---|
-| 1 | `apps/craftkit-studio/src/main.rs:170` | `match session.undo()` | *"…`undo` and `redo` are the history's own doors … and **everything** is a command"* (`crates/craftkit-gates/src/lib.rs:295-296`) |
-| 2 | `apps/craftkit-studio/src/main.rs:36` | `ecosystem.evaluators.ids()` | *"`evaluators` is the evaluator's own registry: a front end that reaches it is a front end that evaluates the document itself"* (`:290-291`) |
-| 3 | `apps/craftkit-window/src/lib.rs:201-209` | `plan()` calls `session().evaluate()` and **keeps** the derived rows | *"A front end … never calls the evaluator, never keeps a value the evaluator computes"* (`AGENTS.md`) |
+**What is left is the bridge.** It reads `self.ecosystem.evaluators` at
+`apps/craftkit-bridge/src/lib.rs:231` and evaluates the document itself
+at `:237`, and the rule now names both (`evaluators` and `evaluate`).
+The bridge is **not** in `FRONT_ENDS`, so the rule does not reach it —
+and it is a **proof**, not a product: it speaks JSON-RPC over stdio
+because that is the cheapest way to show a second front end over the
+same registry.
 
-**Why the gate does not see them.**
+**So the open question is the classification.** Is the bridge a front
+end? If it is, it is a front end that keeps two doors of its own, and
+both have to go: the plan is the `doc.plan` command, and the evaluator's
+registry is the manifest. If it is not — if it is a **host** whose
+library is a command book, like the studio — then the rule reaches its
+entry point the way it reaches the studio's. Either way it is the
+bridge's own arc, and it waits for the owner's word.
 
-- The **studio** is not in the gate's `FRONT_ENDS` — the list is
-  `craftkit-window` and `craftkit-a2ui-server` — so the rule "a front end
-  is thin" does not reach it at all. And widening the list is not the
-  one-liner it looks like: the studio's **command implementations** call
-  `document_mut` twenty-four times, which is exactly what a command's
-  body is for, and a crate-wide text rule cannot tell a command's body
-  from a front end's own path.
-- The **window** *is* in the list, and the rule misses it because the
-  forbidden names are `evaluators`, `Plan` and `PlanItem`, while the
-  window writes `evaluate()` and `PlanRow`. The gate reads **names**, and
-  a name can be avoided without the behaviour being avoided.
-
-**And the bridge** reads `self.ecosystem.evaluators` at
-`apps/craftkit-bridge/src/lib.rs:231` — the same rule, and a violation
-**only once the bridge is classified as a front end**. The classification
-is the open question, and the three above do not wait for it: they are
-defects today.
+**Why the gate cannot see it either.** The forbidden names are read
+from the **code**, and the gate reads the crates in `FRONT_ENDS`; the
+bridge is in neither that list nor `FRONT_END_FILES`.
 
 ---
 

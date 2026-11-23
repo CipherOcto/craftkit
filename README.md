@@ -4560,6 +4560,7 @@ so.
 | **eleven a2ui components are craftkit kinds** | **built.** Each one is a struct whose props the compiler reads, and each one paints itself (§1112) | §1112 |
 | **a surface is a command** | **built.** Making a surface, drawing onto it, mirroring a value and running an action are all commands, and nothing else (§1113) | §1113 |
 | **the door speaks a2ui** | **built.** The method names are a2ui's, the handshake is two-way, and a catalogue the door does not serve is refused (§1114) | §1114 |
+| **the tree keeps its own house rules** | **built.** The studio undoes through `history.undo`, the window asks `doc.plan`, and the gate reads the studio's entry point (§1115) | §1115 |
 
 ### The list of things that are honestly not there: empty
 
@@ -8084,8 +8085,10 @@ that the front ends were not built.
 - **One way to run a command.** The window calls `Session::execute` and
   nothing else; the answer goes to the log.
 - **A sixth rule in v2's own gate**: *a front end is thin*. It does not
-  name `document_mut`, it does not name the evaluator's registry, and it
-  does not hold the plan — with three tests that show the rule bites.
+  name `document_mut`, it does not name the evaluator's registry, it
+  does not evaluate the document itself, and it does not hold the plan —
+  with three tests that show the rule bites (§1115 adds two more and
+  the studio's entry point).
 
 ### What the port found
 
@@ -8093,7 +8096,9 @@ that the front ends were not built.
   the evaluator's own value, and a window that holds one holds a value
   that goes stale the moment the document changes. So the window reads
   the plan when it draws and copies what it shows into rows of its own
-  — and the gate refuses the word `Plan` in its source.
+  — and the gate refuses the word `Plan` in its source. (The rows are
+  **gone**: §1115 — the window asks the `doc.plan` command and draws
+  text.)
 - **An optional parameter that nobody filled in is not sent.** The
   window's first version sent every field, and `node.add` refused:
   the *parent* was node zero, and zero is a node that is not there. The
@@ -8110,6 +8115,8 @@ that the front ends were not built.
   words, so `PlanRow` is not `Plan`, and a name inside a string is not
   a call. The gate is a function over a tree (§54), so a test can point
   it at a tree that is broken on purpose and say that the rule bites.
+  (And a name can be **avoided** without the behaviour being avoided:
+  `PlanRow` was `Plan` in another coat, and §1115 closes that.)
 
 ### What it cost
 
@@ -70766,3 +70773,62 @@ drives the kit on the other.
   resolve the prop that made the call, which the tree does not do yet.
   So the answer is **refused**, and not swallowed: the agent is told
   that its answer was not used, and why.
+
+## 1115. The three house rules the tree broke
+
+The a2ui survey read the tree against its own rules and found three
+places where the tree broke them. They were not a2ui's business, and
+they were defects: a **defect** is a broken promise, and a broken
+promise in the tree's own rules is worse than a missing feature.
+
+### What was built
+
+- **The studio undoes through the registry.** It asked for
+  `session.undo()` — the history's own door — and a front end that
+  opens that door is a front end with a second way into the design.
+  Now it runs **`history.undo`**, a command like any other, and the
+  answer is the same answer the rest of the kit gives.
+- **The studio does not reach into the evaluator's registry.** The
+  summary line that listed the evaluators is gone: the **manifest** —
+  what the agent is told — carries every evaluator with its layer and
+  its line about itself, and that is the door.
+- **The window keeps no rows of its own.** The window had a `plan()`
+  that evaluated the document and copied the result into a `PlanRow` of
+  its own — a second answer to every question, one of which was the
+  day before. There is no `PlanRow` and no `plan()` any more: the
+  window asks the **`doc.plan` command**, the way the terminal door and
+  the bridge do, and draws the **text** it says.
+- **The gate sees the studio.** The rule "a front end is thin" now has
+  a **scoped** form: `FRONT_END_FILES` says which file of a **host**
+  is its front end. The studio's library is a command book — a
+  command's body may open the document — and its **entry point** is a
+  front end all the same.
+- **The rule names `evaluate` as well.** A front end that asks the
+  session for the plan itself has a second path to the same answer,
+  and the plan is a **command**.
+
+### What the port found
+
+- **A name can be avoided without the behaviour being avoided.** The
+  window's rows were called `PlanRow`, and `PlanRow` is not `Plan`:
+  the gate read the name and the behaviour went on. A rule that bites
+  on a name has to be read next to the shape it is about.
+- **A crate is not a front end all the way through.** The studio's
+  commands live in its library and open the document, which is what a
+  command's body does; a rule that cannot tell a command's body from a
+  front end's own path has to be told **where** the front end is.
+- **The plan is a command, and the doors are not the exception.** The
+  SDK had already made the plan a command (`doc.plan`), and the studio
+  and the window were still computing it themselves.
+
+### What it cost
+
+- **Two crates** and the gate: three files, five lines of the rule, and
+  **two gate tests** that show the scoped rule bites.
+
+### What it does not settle
+
+- **The bridge is not classified.** It reads the evaluator's registry
+  and evaluates the document itself, and the rule now names both. It is
+  a **proof** and not a product, and what a proof is allowed to do is
+  a question nobody has answered yet (§ `KNOWN-GAPS.md` §4).

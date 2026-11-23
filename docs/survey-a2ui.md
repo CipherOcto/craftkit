@@ -297,6 +297,13 @@ writes `evaluate()` and `PlanRow`. The gate reads **names**, and a name can
 be avoided without the behaviour being avoided. That is a limit of the rule
 as written, not a gap in the report.
 
+**All three are repaired** (README §1115): the studio undoes through
+`history.undo`, the studio's evaluators line is gone, and the window has
+no rows of its own — it asks the `doc.plan` command. The gate now reads
+the studio's **entry point** (`FRONT_END_FILES`) and names `evaluate` as
+well. What is left of this section is the **bridge**, which is not
+classified yet (`KNOWN-GAPS.md` §4).
+
 ### 3.6 The renderable catalogue — the seam that plays a2ui's catalog
 
 There is a **second catalogue** in the tree, and it is the one a2ui's catalog
@@ -993,6 +1000,20 @@ It becomes the acceptance test for **D3** as soon as the forbidden list
 names `evaluate` and `PlanRow` — the window is already in `FRONT_ENDS`, so
 only the list has to grow — and for **D1 and D2** only once **O4.1** puts
 the studio in it.
+
+**All three are done** (README §1115). **D1**: the studio runs
+`history.undo`, a command like any other. **D2**: the `evaluators` line is
+dropped, and the manifest carries every evaluator with its layer and its
+line about itself. **D3**: the window has no `plan()` and no `PlanRow`; it
+asks the `doc.plan` command and draws the text it says.
+
+**The acceptance is the gate, not a studio test.** `FRONT_END_FILES` puts
+the studio's **entry point** under the rule — the studio's library is a
+command book, and a command's body may open the document — and the
+forbidden list now names `evaluate`. It does not name `PlanRow`: there is
+no `PlanRow` in the tree to name. Two gate tests carry the new scope: a
+host whose entry point undoes itself is caught, and a host's library is
+not a front end.
 
 ### 6.2 Opportunities — these wait for a product question
 
