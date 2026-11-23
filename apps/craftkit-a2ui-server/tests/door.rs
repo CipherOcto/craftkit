@@ -70,7 +70,8 @@ fn the_inline_catalogue_is_only_published_when_it_is_accepted() {
 fn an_agent_that_accepts_neither_is_refused() {
     let mut server = server();
     let answer = server.handle(&request("initialize", json!({ "capabilities": {} })));
-    assert!(answer["result"]["error"].is_string(), "{answer}");
+    assert!(answer["error"]["message"].is_string(), "{answer}");
+    assert_eq!(answer["error"]["code"], json!(-32602), "{answer}");
 }
 
 /// The catalogue the door serves is the **layer's own**.

@@ -69,3 +69,21 @@ fn every_function_says_who_may_call_it() {
         assert_eq!(declared["allowedCallers"], json!(allowed), "{} declares it", function.name);
     }
 }
+
+/// The **arguments** of a function are written down, in the a2ui
+/// spelling and in craftkit's.
+///
+/// An agent that follows the catalogue can then call a function: the
+/// catalogue says which arguments it takes, and the table says which
+/// craftkit parameter each one is.
+#[test]
+fn the_arguments_are_written_down() {
+    let args = functions::arguments_of("surfaceCreate").expect("the function has arguments");
+    assert_eq!(args, &[("surfaceId", "surface_id")]);
+    let args = functions::arguments_of("surfaceApply").expect("the function has arguments");
+    assert_eq!(args, &[("surfaceId", "surface_id"), ("components", "components")]);
+    // And the **declaration** says them.
+    let declared = functions::declaration(&functions::LOCAL[1]);
+    assert_eq!(declared["properties"]["args"]["properties"]["surfaceId"], json!({}));
+    assert_eq!(declared["properties"]["args"]["properties"]["components"], json!({}));
+}

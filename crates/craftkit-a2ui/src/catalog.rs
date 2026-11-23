@@ -63,13 +63,25 @@ pub const PROTOCOL_VERSION: &str = "1.0";
 ///
 /// The result is a2ui's `catalog.json` shape: the components by their
 /// **a2ui** names, the functions, and the `$defs`.
-pub fn catalogue(entries: &[Json]) -> Json {
+pub fn catalogue(entries: &[Json]) -> Result<Json, String> {
     let mut components = JsonMap::<String, Json>::new();
     for entry in entries {
         // The **published** name is the key: an a2ui component is `Text`
-        // there, and `a2ui.text` here.
-        let Some(name) = entry.get("name").and_then(Json::as_str) else { continue };
-        let Some(schema) = entry.get("schema") else { continue };
+        // there, and `a2ui.text` here. An entry that names nothing, or
+        // that carries no schema, is **refused** — a catalogue entry
+        // that says nothing is an entry that says nothing.
+        let Some(name) = entry.get("name").and_then(Json::as_str) else {
+            return Err("a catalogue entry has no name".to_string());
+        };
+        let Some(schema) = entry.get("schema") else {
+            return Err(format!("the catalogue entry `{name}` has no schema"));
+        };
+        // A name that is **listed twice** is refused: the catalogue says
+        // one thing about a component, and a second entry would say
+        // another.
+        if components.contains_key(name) {
+            return Err(format!("the catalogue lists `{name}` twice"));
+        }
         components.insert(name.to_string(), schema.clone());
     }
 
@@ -89,13 +101,13 @@ pub fn catalogue(entries: &[Json]) -> Json {
     defs.insert("anyComponent".to_string(), any_component(entries));
     defs.insert("anyFunction".to_string(), any_function());
 
-    json!({
+    Ok(json!({
         "catalogId": CATALOG_ID,
         "protocolVersion": PROTOCOL_VERSION,
         "components": Json::Object(components),
         "functions": Json::Object(declared),
         "$defs": Json::Object(defs),
-    })
+    }))
 }
 
 /// The catalogue's **`anyComponent`**: a `oneOf` over its components.
@@ -149,7 +161,8 @@ mod tests {
         let catalogue = catalogue(&[
             entry("Text", "a2ui.text", json!({ "type": "object" })),
             entry("Card", "a2ui.card", json!({ "type": "object" })),
-        ]);
+        ])
+        .expect("the catalogue is built");
         let components = catalogue["components"].as_object().expect("there are components");
         assert_eq!(components.len(), 2);
         assert!(components.contains_key("Text"), "by the a2ui name");
@@ -160,14 +173,14 @@ mod tests {
     /// The catalogue carries **one** `catalogId`.
     #[test]
     fn the_catalogue_carries_one_catalog_id() {
-        let catalogue = catalogue(&[entry("Text", "a2ui.text", json!({}))]);
+        let catalogue = catalogue(&[entry("Text", "a2ui.text", json!({}))]).expect("the catalogue is built");
         assert_eq!(catalogue["catalogId"], json!(CATALOG_ID));
     }
 
     /// The functions map holds the local ones and the agent-side ones.
     #[test]
     fn the_functions_map_holds_both_kinds() {
-        let catalogue = catalogue(&[]);
+        let catalogue = catalogue(&[]).expect("the catalogue is built");
         let declared = catalogue["functions"].as_object().expect("there are functions");
         assert_eq!(declared.len(), 19, "five local and fourteen agent-side");
         assert!(declared.contains_key("surfaceApply"), "a local one");
@@ -180,7 +193,7 @@ mod tests {
     /// two.
     #[test]
     fn the_defs_hold_the_definitions_and_the_catalogue_own_two() {
-        let catalogue = catalogue(&[entry("Text", "a2ui.text", json!({}))]);
+        let catalogue = catalogue(&[entry("Text", "a2ui.text", json!({}))]).expect("the catalogue is built");
         let defs = catalogue["$defs"].as_object().expect("there are definitions");
         assert!(defs.contains_key("DynamicString"), "a re-derived definition");
         assert!(defs.contains_key("DataBinding"));
@@ -197,7 +210,8 @@ mod tests {
     #[test]
     fn any_component_is_a_one_of_over_the_catalogue() {
         let catalogue =
-            catalogue(&[entry("Text", "a2ui.text", json!({})), entry("Card", "a2ui.card", json!({}))]);
+            catalogue(&[entry("Text", "a2ui.text", json!({})), entry("Card", "a2ui.card", json!({}))])
+                .expect("the catalogue is built");
         let defs = catalogue["$defs"].as_object().expect("there are definitions");
         let branches = defs["anyComponent"]["oneOf"].as_array().expect("it is a oneOf");
         assert_eq!(branches.len(), 2);
@@ -209,7 +223,7 @@ mod tests {
     /// `anyFunction` is a `oneOf` over the catalogue's own functions.
     #[test]
     fn any_function_is_a_one_of_over_the_catalogue() {
-        let catalogue = catalogue(&[]);
+        let catalogue = catalogue(&[]).expect("the catalogue is built");
         let defs = catalogue["$defs"].as_object().expect("there are definitions");
         let branches = defs["anyFunction"]["oneOf"].as_array().expect("it is a oneOf");
         assert_eq!(branches.len(), 19);
@@ -219,7 +233,7 @@ mod tests {
     /// The catalogue is **one file**: every `$ref` in it is local.
     #[test]
     fn every_ref_in_the_catalogue_is_local() {
-        let catalogue = catalogue(&[entry("Text", "a2ui.text", json!({}))]);
+        let catalogue = catalogue(&[entry("Text", "a2ui.text", json!({}))]).expect("the catalogue is built");
         let text = catalogue.to_string();
         assert!(!text.contains("common_types.json"), "no file is named: {text}");
         assert!(!text.contains(".json#"), "and no ref points at a file");

@@ -81,6 +81,15 @@ pub struct Function {
     /// renderer's, and the agent-side ones are the agent's to answer —
     /// and neither is the agent's to call.
     pub allowed_callers: &'static str,
+    /// The **arguments** the function takes: the a2ui name and the
+    /// craftkit parameter name.
+    ///
+    /// The two vocabularies are not the same — an a2ui call says
+    /// `surfaceId` and a craftkit command says `surface_id` — so the
+    /// table says which is which, and the door translates before it
+    /// runs the command. An agent that follows the catalogue can call
+    /// a function, and the layer does not guess at an argument's name.
+    pub args: &'static [(&'static str, &'static str)],
 }
 
 /// The **local** functions: the layer's own commands.
@@ -96,6 +105,7 @@ pub const LOCAL: &[Function] = &[
         kind: Kind::Local,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[("surfaceId", "surface_id")],
     },
     Function {
         name: "surfaceApply",
@@ -103,6 +113,7 @@ pub const LOCAL: &[Function] = &[
         kind: Kind::Local,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[("surfaceId", "surface_id"), ("components", "components")],
     },
     Function {
         name: "surfaceDelete",
@@ -110,6 +121,7 @@ pub const LOCAL: &[Function] = &[
         kind: Kind::Local,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[("surfaceId", "surface_id")],
     },
     Function {
         name: "dataSet",
@@ -117,6 +129,7 @@ pub const LOCAL: &[Function] = &[
         kind: Kind::Local,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[("surfaceId", "surface_id"), ("path", "path"), ("value", "value")],
     },
     Function {
         name: "componentInvoke",
@@ -124,6 +137,7 @@ pub const LOCAL: &[Function] = &[
         kind: Kind::Local,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[("surfaceId", "surface_id"), ("componentId", "component_id"), ("action", "action")],
     },
 ];
 
@@ -143,6 +157,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "regex",
@@ -150,6 +165,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "length",
@@ -157,6 +173,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "numeric",
@@ -164,6 +181,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "email",
@@ -171,6 +189,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "validationResult",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "formatString",
@@ -178,6 +197,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "formatNumber",
@@ -185,6 +205,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "formatCurrency",
@@ -192,6 +213,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "formatDate",
@@ -199,6 +221,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "pluralize",
@@ -206,6 +229,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "string",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "openUrl",
@@ -213,6 +237,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "void",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "and",
@@ -220,6 +245,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "boolean",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "or",
@@ -227,6 +253,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "boolean",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
     Function {
         name: "not",
@@ -234,6 +261,7 @@ pub const AGENT_SIDE: &[Function] = &[
         kind: Kind::Agent,
         return_type: "boolean",
         allowed_callers: "rendererOnly",
+        args: &[],
     },
 ];
 
@@ -281,6 +309,13 @@ pub fn is_reserved(name: &str) -> bool {
 /// `unevaluatedProperties: false`.
 pub fn declaration(function: &Function) -> craftkit_sdk::serde_json::Value {
     use craftkit_sdk::serde_json::json;
+    // The **arguments** the function takes: the a2ui names, and the
+    // shapes they are. A function that takes arguments says which, so
+    // an agent that follows the catalogue can call it.
+    let mut properties = craftkit_sdk::serde_json::Map::new();
+    for (name, _) in function.args {
+        properties.insert((*name).to_string(), json!({}));
+    }
     json!({
         "type": "object",
         "description": function.doc,
@@ -290,13 +325,22 @@ pub fn declaration(function: &Function) -> craftkit_sdk::serde_json::Value {
             "@call": { "const": function.name },
             "args": {
                 "type": "object",
-                "properties": {},
+                "properties": properties,
                 "unevaluatedProperties": false,
             },
         },
         "required": ["@call"],
         "unevaluatedProperties": false,
     })
+}
+
+/// The **arguments** a function takes, by its a2ui name.
+///
+/// The pairs are the a2ui name and the craftkit parameter name: the
+/// door translates before it runs the command, so an agent's own
+/// spelling is the one that is written down.
+pub fn arguments_of(name: &str) -> Option<&'static [(&'static str, &'static str)]> {
+    all().iter().find(|function| function.name == name).map(|function| function.args)
 }
 
 #[cfg(test)]

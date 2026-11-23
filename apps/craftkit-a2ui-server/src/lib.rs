@@ -303,9 +303,9 @@ impl Server {
 
     /// The **catalogue** the door serves: the projection of the
     /// `CatalogEntry` registry into a2ui's own shape.
-    pub fn catalogue(&self) -> Json {
+    pub fn catalogue(&self) -> Result<Json, Fault> {
         let projection = self.ecosystem.projection();
-        craftkit_a2ui::catalog::catalogue(&projection.entries())
+        craftkit_a2ui::catalog::catalogue(&projection.entries()).map_err(Fault::Refused)
     }
 
     /// Answer one request.
@@ -359,7 +359,7 @@ impl Server {
     /// Answer one request, once the version is known to be the door's.
     fn dispatch(&mut self, request: &Request) -> Result<Json, Fault> {
         match request.method.as_str() {
-            "initialize" => Ok(self.initialize(request)),
+            "initialize" => self.initialize(request),
             "createSurface" => self.create_surface(request),
             "updateComponents" => self.update_components(request),
             "updateDataModel" => self.update_data_model(request),
@@ -376,32 +376,32 @@ impl Server {
 
     /// The **handshake**: the agent's capabilities up, the renderer's
     /// down.
-    fn initialize(&mut self, request: &Request) -> Json {
+    fn initialize(&mut self, request: &Request) -> Result<Json, Fault> {
         let capabilities = request.params.get("capabilities").cloned().unwrap_or(Json::Null);
         self.accepts_inline_catalogs =
             capabilities.get("acceptsInlineCatalogs").and_then(Json::as_bool).unwrap_or(false);
         self.accepts_catalog_files =
             capabilities.get("acceptsCatalogFiles").and_then(Json::as_bool).unwrap_or(false);
         if !self.accepts_inline_catalogs && !self.accepts_catalog_files {
-            return json!({
-                "protocolVersion": PROTOCOL_VERSION,
-                "serverInfo": { "name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
-                "error": "the agent accepts neither an inline catalogue nor a catalogue file, and \
-                          the door has no third route",
-            });
+            return Err(Fault::Params(
+                "the agent accepts neither an inline catalogue nor a catalogue file, and the \
+                 door has no third route"
+                    .to_string(),
+            ));
         }
         let mut renderer = json!({
             "supportedCatalogIds": [craftkit_a2ui::catalog::CATALOG_ID],
             "protocolVersion": craftkit_a2ui::catalog::PROTOCOL_VERSION,
         });
         if self.accepts_inline_catalogs {
-            renderer["inlineCatalogs"] = json!([self.catalogue()]);
+            renderer["inlineCatalogs"] =
+                json!([self.catalogue().map_err(|fault| fault.message().to_string())?]);
         }
-        json!({
+        Ok(json!({
             "protocolVersion": PROTOCOL_VERSION,
             "serverInfo": { "name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
             "a2uiRendererCapabilities": renderer,
-        })
+        }))
     }
 
     /// The **catalogue file**: the door writes it, and says where, **on
@@ -411,7 +411,7 @@ impl Server {
     /// there — a link, or another door's file — is refused, so the door
     /// never writes over something it did not make.
     pub fn write_catalogue(&self, path: &std::path::Path) -> Result<(), String> {
-        let catalogue = self.catalogue();
+        let catalogue = self.catalogue().map_err(|fault| fault.message().to_string())?;
         let text = serde_json_to_string(&catalogue)?;
         // The file is **created**, and not opened: a path that is
         // already there — a link, or another door's file — is refused,
@@ -756,7 +756,8 @@ mod tests {
             params: json!({ "capabilities": {} }),
         };
         let answer = server.handle(&request);
-        assert!(answer["result"]["error"].is_string(), "{answer}");
+        assert!(answer["error"]["message"].is_string(), "{answer}");
+        assert_eq!(answer["error"]["code"], json!(-32602), "{answer}");
     }
 
     /// A surface that names a catalogue the door does not serve is

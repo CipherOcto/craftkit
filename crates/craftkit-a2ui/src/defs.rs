@@ -17,6 +17,9 @@
 //!
 //! * `component` — the discriminator is **stamped** by the compiler, so it
 //!   is not a property a row declares. It is in [`EXEMPT`].
+//! * `id` — a2ui's `ComponentCommon` gives **every** component an id, and
+//!   it is the id a container's children are named by. The layer stamps it
+//!   too, so it is not a property a row declares. It is in [`EXEMPT`].
 //! * `@checks` — a2ui gives it to `Button`, `CheckBox` and `TextField`
 //!   through the `Checkable` definition. The layer evaluates no check rule,
 //!   so it **removes** the property. It is in [`EXEMPT`].
@@ -76,9 +79,9 @@ pub const TEXT_FIELD: &[&[u8]] = &[b"label", b"value", b"placeholder", b"variant
 
 /// The names the layer does not publish.
 ///
-/// `component` is stamped by the compiler, and `@checks` is removed by
-/// the layer — so neither is a prop a row declares.
-pub const EXEMPT: &[&[u8]] = &[b"component", b"@checks"];
+/// `component` and `id` are stamped by the compiler, and `@checks` is
+/// removed by the layer — so none of them is a prop a row declares.
+pub const EXEMPT: &[&[u8]] = &[b"component", b"id", b"@checks"];
 
 /// The components the layer **refuses**, and why.
 ///
@@ -108,6 +111,27 @@ pub const REFUSED: &[(&str, &str)] = &[
     ("Slider", "a dragged value is a widget's state, and the tree has no notion of one"),
     ("DateTimeInput", "a typed date is a widget's state, and the tree has no notion of one"),
 ];
+
+/// Whether the layer **draws** a component.
+///
+/// The eleven the layer supports; everything else is either refused —
+/// and says why — or is not a component at all.
+pub fn is_supported(name: &str) -> bool {
+    matches!(
+        name,
+        "Text"
+            | "Image"
+            | "Icon"
+            | "Row"
+            | "Column"
+            | "List"
+            | "Card"
+            | "Divider"
+            | "Button"
+            | "CheckBox"
+            | "TextField"
+    )
+}
 
 /// The reason a component is **refused**, if it is one.
 ///

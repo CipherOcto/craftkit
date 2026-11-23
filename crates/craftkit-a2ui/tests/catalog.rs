@@ -26,7 +26,8 @@ fn the_catalogue_holds_the_components_by_their_a2ui_names() {
     let catalogue = catalog::catalogue(&[
         entry("Text", "a2ui.text", json!({ "type": "object" })),
         entry("Card", "a2ui.card", json!({ "type": "object" })),
-    ]);
+    ])
+    .expect("the catalogue is built");
     let components = catalogue["components"].as_object().expect("there are components");
     assert_eq!(components.len(), 2);
     assert!(components.contains_key("Text"), "by the a2ui name");
@@ -36,7 +37,7 @@ fn the_catalogue_holds_the_components_by_their_a2ui_names() {
 /// The catalogue carries **one** `catalogId`, and it is the layer's own.
 #[test]
 fn the_catalogue_carries_one_catalog_id() {
-    let catalogue = catalog::catalogue(&[]);
+    let catalogue = catalog::catalogue(&[]).expect("the catalogue is built");
     assert_eq!(catalogue["catalogId"], json!(catalog::CATALOG_ID));
     assert_eq!(catalogue["protocolVersion"], json!(catalog::PROTOCOL_VERSION));
 }
@@ -89,7 +90,7 @@ fn the_defs_hold_fourteen_entries() {
         "a2ui.text",
         schema::published("Text", &["text", "variant", "weight"], &[Some("DynamicString"), None, None]),
     )];
-    let catalogue = catalog::catalogue(&entries);
+    let catalogue = catalog::catalogue(&entries).expect("the catalogue is built");
     let defs = catalogue["$defs"].as_object().expect("there are definitions");
     assert_eq!(defs.len(), 14, "thirteen definitions and the catalogue's own");
     assert!(defs.contains_key("anyComponent"));
@@ -105,7 +106,7 @@ fn the_defs_hold_fourteen_entries() {
 #[test]
 fn any_component_is_a_one_of_over_the_catalogue() {
     let entries = vec![entry("Text", "a2ui.text", json!({})), entry("Card", "a2ui.card", json!({}))];
-    let catalogue = catalog::catalogue(&entries);
+    let catalogue = catalog::catalogue(&entries).expect("the catalogue is built");
     let defs = catalogue["$defs"].as_object().expect("there are definitions");
     let branches = defs["anyComponent"]["oneOf"].as_array().expect("it is a oneOf");
     assert_eq!(branches.len(), 2);
@@ -122,7 +123,7 @@ fn every_ref_is_local() {
         "a2ui.text",
         schema::published("Text", &["text", "variant", "weight"], &[Some("DynamicString"), None, None]),
     )];
-    let catalogue = catalog::catalogue(&entries);
+    let catalogue = catalog::catalogue(&entries).expect("the catalogue is built");
     let text = catalogue.to_string();
     assert!(!text.contains("common_types.json"), "no file is named: {text}");
     assert!(!text.contains(".json#"), "and no ref points at a file");

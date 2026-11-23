@@ -37,6 +37,14 @@ impl Model {
         Model { root: Json::Object(JsonMap::<String, Json>::new()) }
     }
 
+    /// A model over a tree that is **already** there.
+    ///
+    /// The tree may be any value: a model is a tree of values, and a
+    /// tree that is not an object is a tree with no keys.
+    pub fn from_json(root: Json) -> Self {
+        Model { root }
+    }
+
     /// The whole tree, as it is.
     pub fn root(&self) -> &Json {
         &self.root
@@ -48,6 +56,11 @@ impl Model {
     /// because a binding to a missing path is a missing value and the
     /// house rule is that an unknown name is refused.
     pub fn get(&self, path: &str) -> Option<&Json> {
+        // A path that is not a path addresses nothing, and a binding
+        // to it is a binding to nothing: it is **refused**.
+        if !is_path(path) {
+            return None;
+        }
         let mut current = &self.root;
         for step in steps_of(path) {
             current = match current {
@@ -91,11 +104,14 @@ impl Model {
 
     /// The value at a path, as a **number**.
     pub fn get_number(&self, path: &str) -> Option<f64> {
-        match self.get(path)? {
-            Json::Number(number) => number.as_f64(),
-            Json::String(text) => text.parse().ok(),
-            _ => None,
-        }
+        let number = match self.get(path)? {
+            Json::Number(number) => number.as_f64()?,
+            Json::String(text) => text.parse::<f64>().ok()?,
+            _ => return None,
+        };
+        // A number that is not finite is not a number this tree can
+        // draw: the text "NaN" is a name, and not a value.
+        if number.is_finite() { Some(number) } else { None }
     }
 
     /// **Write** the value at a path, creating what is missing.
@@ -106,6 +122,10 @@ impl Model {
     /// A path that cannot be written — a step through a **scalar**, say —
     /// is an error: the model is not re-shaped to fit a path.
     pub fn set(&mut self, path: &str, value: Json) -> Result<(), String> {
+        // A path that is not a path is not a place to write to.
+        if !is_path(path) {
+            return Err(format!("the path `{path}` is not a path"));
+        }
         let steps = steps_of(path);
         if steps.is_empty() {
             self.root = value;
@@ -171,8 +191,10 @@ fn steps_of(path: &str) -> Vec<String> {
         return Vec::new();
     }
     let trimmed = path.strip_prefix('/').unwrap_or(path);
+    // The path `/` names the member whose name is **empty** — and not
+    // the whole tree. (RFC 6901.)
     if trimmed.is_empty() {
-        return Vec::new();
+        return vec![String::new()];
     }
     trimmed.split('/').map(|step| step.replace("~1", "/").replace("~0", "~")).collect()
 }
@@ -282,6 +304,34 @@ mod tests {
         assert_eq!(model.get_text("/a~1b"), Some("slash".to_string()));
         model.set("/c~0d", json!("tilde")).expect("the value is written");
         assert_eq!(model.get_text("/c~0d"), Some("tilde".to_string()));
+    }
+
+    /// A path that is not a path is **refused**: it is not a place.
+    #[test]
+    fn a_path_that_is_not_a_path_is_refused() {
+        let mut model = Model::new();
+        let error = model.set("title", json!("x")).expect_err("the path is refused");
+        assert!(error.contains("not a path"), "{error}");
+        assert!(model.get_text("title").is_none(), "and it reads nothing");
+    }
+
+    /// The path `/` names the member whose name is empty — and not the
+    /// whole tree.
+    #[test]
+    fn a_slash_names_an_empty_member() {
+        let mut model = Model::new();
+        model.set("/title", json!("hello")).expect("the value is written");
+        model.set("/", json!("empty")).expect("the empty member is written");
+        assert_eq!(model.get_text("/title"), Some("hello".to_string()), "the tree is whole");
+        assert_eq!(model.get_text("/"), Some("empty".to_string()));
+    }
+
+    /// A number that is not a number is not a number.
+    #[test]
+    fn a_number_that_is_not_a_number_is_not_one() {
+        let mut model = Model::new();
+        model.set("/count", json!("NaN")).expect("the value is written");
+        assert!(model.get_number("/count").is_none(), "and it is not read as one");
     }
 
     /// A malformed path is refused.

@@ -31,13 +31,13 @@ fn the_table_holds_a_row_for_every_supported_component() {
     }
 }
 
-/// The **exempt** set is the two the plan names.
+/// The **exempt** set is the names the layer stamps or removes.
 #[test]
-fn the_exempt_set_is_the_two_the_plan_names() {
+fn the_exempt_set_is_the_names_the_layer_stamps_or_removes() {
     let mut exempt: Vec<String> =
         defs::EXEMPT.iter().map(|name| String::from_utf8_lossy(name).to_string()).collect();
     exempt.sort();
-    assert_eq!(exempt, vec!["@checks".to_string(), "component".to_string()]);
+    assert_eq!(exempt, vec!["@checks".to_string(), "component".to_string(), "id".to_string()]);
 }
 
 /// The table's **set** equality walks both directions.
@@ -122,4 +122,33 @@ fn the_refused_components_say_why() {
 fn a_name_that_is_not_refused_is_not_a_refusal() {
     assert!(craftkit_a2ui::defs::refusal_of("Text").is_none(), "the text is drawn");
     assert!(craftkit_a2ui::defs::refusal_of("Video2").is_none(), "and an unknown name is not a refusal");
+}
+
+/// The **supported** components are the eleven, and nothing else.
+///
+/// The refusal of a name that is not a component is not a refusal of a
+/// name the layer knows and does not draw: that one says why.
+#[test]
+fn the_supported_components_are_the_eleven() {
+    assert!(defs::is_supported("Text"));
+    assert!(defs::is_supported("TextField"));
+    assert!(!defs::is_supported("Video"), "and a refused one is not supported");
+    assert!(!defs::is_supported("Nonsense"));
+    // Every supported one has a table, and every refused one has not.
+    for (name, table) in [
+        ("Text", defs::TEXT),
+        ("Image", defs::IMAGE),
+        ("Icon", defs::ICON),
+        ("Row", defs::ROW),
+        ("Column", defs::COLUMN),
+        ("List", defs::LIST),
+        ("Card", defs::CARD),
+        ("Divider", defs::DIVIDER),
+        ("Button", defs::BUTTON),
+        ("CheckBox", defs::CHECK_BOX),
+        ("TextField", defs::TEXT_FIELD),
+    ] {
+        assert!(defs::is_supported(name), "{name} is supported");
+        assert!(!table.is_empty(), "{name} has a table");
+    }
 }

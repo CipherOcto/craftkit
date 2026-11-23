@@ -260,7 +260,10 @@ pub fn inline(component: &str, prop: &str) -> Option<Json> {
 pub fn published(name: &str, names: &[&str], definitions: &[Option<&str>]) -> Json {
     let mut properties = Map::new();
     properties.insert("component".to_string(), json!({ "const": name }));
-    let mut required: Vec<&str> = vec!["component"];
+    // Every component carries an **id**: a2ui's `ComponentCommon` says so,
+    // and the id is how a container's children are named.
+    properties.insert("id".to_string(), json!({ "$ref": "#/$defs/ComponentId" }));
+    let mut required: Vec<&str> = vec!["component", "id"];
 
     for (index, prop) in names.iter().enumerate() {
         let definition = definitions.get(index).copied().flatten();
@@ -275,6 +278,9 @@ pub fn published(name: &str, names: &[&str], definitions: &[Option<&str>]) -> Js
     own.insert("properties".to_string(), Json::Object(properties));
     let listed = required.iter().map(|prop| Json::String((*prop).to_string())).collect();
     own.insert("required".to_string(), Json::Array(listed));
+    // A prop the component does not declare is **refused**: the schema
+    // says what the component takes, and the layer refuses the rest.
+    own.insert("additionalProperties".to_string(), json!(false));
 
     if !is_checkable(name) {
         return Json::Object(own);

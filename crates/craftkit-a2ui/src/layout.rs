@@ -176,9 +176,18 @@ pub fn arrange(
     if !size.is_finite() || !cross.is_finite() {
         return Err("the box is not a number this tree can draw".to_string());
     }
+    // A box that is **inside out** is not a box: a negative size is a
+    // number, and it is not one this tree can draw. The house rule is
+    // that an out-of-range value is refused and not clamped.
+    if size < 0.0 || cross < 0.0 {
+        return Err("the box has a negative size".to_string());
+    }
     for child in children {
         if !child.size.is_finite() || !child.cross.is_finite() {
             return Err("a child's size is not a number this tree can draw".to_string());
+        }
+        if child.size < 0.0 || child.cross < 0.0 {
+            return Err("a child's size is negative".to_string());
         }
         if let Some(weight) = child.weight
             && (!weight.is_finite() || weight < 0.0)
@@ -266,9 +275,17 @@ pub fn arrange(
     let mut rects = Vec::with_capacity(count);
     for (index, child) in children.iter().enumerate() {
         let child_size = sizes[index];
+        // A child that does not fit across is **refused**, and not
+        // shrunk: a box that is smaller than its child is a mistake,
+        // and a shrunk child is a lie.
         let cross_size = match align {
             Align::Stretch => cross,
-            _ => child.cross.min(cross),
+            _ => {
+                if child.cross > cross {
+                    return Err(format!("a child is {} across and the box is {cross}", child.cross));
+                }
+                child.cross
+            }
         };
         let cross_at = match align {
             Align::Start | Align::Stretch => 0.0,
@@ -424,6 +441,30 @@ mod tests {
             arrange(Direction::Horizontal, Justify::Start, Align::Stretch, 100.0, 20.0, &[child(f64::NAN)])
                 .expect_err("the child is refused");
         assert!(error.contains("not a number"), "{error}");
+    }
+
+    /// A box with a **negative** size is refused.
+    #[test]
+    fn a_box_with_a_negative_size_is_refused() {
+        let error =
+            arrange(Direction::Horizontal, Justify::Start, Align::Stretch, -10.0, 20.0, &[child(20.0)])
+                .expect_err("the box is refused");
+        assert!(error.contains("negative"), "{error}");
+    }
+
+    /// A child that does not fit across is refused, and not shrunk.
+    #[test]
+    fn a_child_that_does_not_fit_is_refused() {
+        let error = arrange(
+            Direction::Horizontal,
+            Justify::Start,
+            Align::Start,
+            100.0,
+            5.0,
+            &[Child { weight: None, size: 20.0, cross: 100.0 }],
+        )
+        .expect_err("the child is refused");
+        assert!(error.contains("across"), "{error}");
     }
 
     /// A weight that is not a weight is **refused**.

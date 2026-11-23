@@ -93,8 +93,11 @@ fn each_published_schema_carries_exactly_the_tables_props() {
         let properties = schema::properties_of(&published);
         let expected: Vec<String> =
             table.iter().map(|prop| String::from_utf8_lossy(prop).to_string()).collect();
-        // The **discriminator** is stamped on top of the row's props.
-        assert_eq!(properties.len(), expected.len() + 1, "{name} holds {properties:?}");
+        // The **discriminator** and the **id** are stamped on top of the
+        // row's props.
+        assert_eq!(properties.len(), expected.len() + 2, "{name} holds {properties:?}");
+        assert!(properties.contains(&"component".to_string()), "{name} has the discriminator");
+        assert!(properties.contains(&"id".to_string()), "{name} has the id");
         for prop in &expected {
             assert!(properties.contains(prop), "{name} is missing `{prop}`");
         }
@@ -123,7 +126,7 @@ fn every_component_carries_the_discriminator() {
 fn the_catalogue_holds_the_eleven_components() {
     let ecosystem = ecosystem();
     let projection = ecosystem.projection();
-    let catalogue = craftkit_a2ui::catalog::catalogue(&projection.entries());
+    let catalogue = craftkit_a2ui::catalog::catalogue(&projection.entries()).expect("the catalogue is built");
     let components = catalogue["components"].as_object().expect("there are components");
     assert_eq!(components.len(), 11, "and nothing else: {components:?}");
     assert!(components.contains_key("Text"));
@@ -172,7 +175,7 @@ fn the_icon_is_a_path() {
 fn the_catalogue_carries_one_catalog_id() {
     let ecosystem = ecosystem();
     let projection = ecosystem.projection();
-    let catalogue = craftkit_a2ui::catalog::catalogue(&projection.entries());
+    let catalogue = craftkit_a2ui::catalog::catalogue(&projection.entries()).expect("the catalogue is built");
     assert_eq!(catalogue["catalogId"], json!(craftkit_a2ui::catalog::CATALOG_ID));
 }
 
