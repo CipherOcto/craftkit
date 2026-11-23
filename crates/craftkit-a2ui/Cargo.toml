@@ -1,0 +1,12 @@
+[package]
+name = "craftkit-a2ui"
+description = "The a2ui protocol: the data model, the bindings, the box layout, and the catalogue the door serves."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The SDK, and nothing else: the layer is above the SDK and below the
+# plugins, and it knows nothing about a2ui beyond its own shapes.
+craftkit-sdk = { workspace = true }

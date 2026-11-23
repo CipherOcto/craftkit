@@ -401,6 +401,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-a2ui"
+version = "0.2.0"
+dependencies = [
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-a2ui-server"
+version = "0.2.0"
+dependencies = [
+ "craftkit-a2ui",
+ "craftkit-link",
+ "craftkit-plugin-a2ui",
+ "craftkit-raster",
+ "craftkit-scratch",
+ "craftkit-sdk",
+]
+
+[[package]]
 name = "craftkit-alloc"
 version = "0.2.0"
 
@@ -574,6 +593,15 @@ dependencies = [
 [[package]]
 name = "craftkit-pdf-writer"
 version = "0.2.0"
+
+[[package]]
+name = "craftkit-plugin-a2ui"
+version = "0.2.0"
+dependencies = [
+ "craftkit-a2ui",
+ "craftkit-derive",
+ "craftkit-sdk",
+]
 
 [[package]]
 name = "craftkit-plugin-art"

@@ -23,6 +23,10 @@ authors = ["craftkit contributors"]
 [workspace.dependencies]
 # The SDK is the only thing a plugin depends on.
 craftkit-sdk = { path = "crates/craftkit-sdk", version = "0.2.0" }
+# The **a2ui layer**: the protocol's types, the data model, the bindings
+# and the box layout. It is a library and not a plugin, so a plugin may
+# depend on it.
+craftkit-a2ui = { path = "crates/craftkit-a2ui", version = "0.2.0" }
 craftkit-derive = { path = "crates/craftkit-derive", version = "0.2.0" }
 # The geometry: a **library**, not a plugin. It contributes nothing to the
 # registry and the linker does not wire it in.

@@ -218,6 +218,11 @@ pub const LAYERS: &[(&str, u8)] = &[
     // which speaks the SDK's own types.
     ("craftkit-control", 3),
     ("craftkit-mcp", 3),
+    // The **a2ui layer**: the protocol's types, the data model, the
+    // bindings and the box layout. It is here and not at L4 because it
+    // is a **library** and not a plugin — and a plugin may not depend
+    // on another plugin, so a layout in a plugin could never be shared.
+    ("craftkit-a2ui", 3),
     // The numeric library is here and not at L0 because a **length** can
     // be a command's parameter, and that means implementing the kit's
     // own `ParamKind` — which is speaking the SDK's types. §56.

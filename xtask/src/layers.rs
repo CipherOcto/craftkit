@@ -158,6 +158,10 @@ pub const TABLE: &[(&str, Class)] = &[
     // the MCP door, and the libraries that speak the SDK's own types.
     ("craftkit-control", Class::Layer(3)),
     ("craftkit-mcp", Class::Layer(3)),
+    // The **a2ui layer**: the protocol's types, the data model, the
+    // bindings and the box layout. It is a library and not a plugin, so
+    // a plugin may depend on it.
+    ("craftkit-a2ui", Class::Layer(3)),
     ("craftkit-numeric", Class::Layer(3)),
     ("craftkit-raster", Class::Layer(3)),
     ("craftkit-vector-geom", Class::Layer(3)),
