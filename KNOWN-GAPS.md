@@ -107,8 +107,10 @@ These are the README's own honest notes, and they are still true of the tree:
 - **The linker is part of the design.** The anchor macro is what keeps a
   plugin in the binary. Without it, the plugin's contributions are missing and
   nothing says so.
-- **A run-time command is written out by hand.** A command made while the
-  program runs has no struct to derive from, so it reads its own parameter.
+- **A run-time command is declared, and there is no macro for it.** The
+  SDK writes the fields and the reader (§1120), and what is left is the
+  leak: a run-time command's names are `&'static str` and a name that
+  arrives at run time cannot be static, so each one is leaked once.
 - **The `Either` is a compromise.** One parameter with two spellings of
   different kinds cannot be a single typed value, so the command is handed
   whichever half arrived and decides what to do with it.
@@ -196,7 +198,12 @@ so that it is not rediscovered as a surprise:
   while a program runs, and a panel that was drawn before a plugin
   arrived does not know about it. The remedy is a **version counter**
   and a reconciliation step: **medium**, and a decision about what a
-  panel does when the registry moves under it.
+  panel does when the registry moves under it. What is closed is the
+  **sharpest case**: a session can gain a command while it runs, and
+  every door reads its list from the session it runs the commands in, so
+  a door never offers a command it cannot run (§1121). What is left is
+  the *panel's* side: a drawing that was made before the command
+  arrived.
 - **O7 — a path resolves to a plain value, inside the SDK.** The a2ui
   layer resolves its own paths and the door gets plain values, and the
   gate refuses a front end that names the plan — so the *constraint*

@@ -4565,6 +4565,8 @@ so.
 | **the agent is told the bound** | **built.** The schema carries the text bound, read from the SDK's own constant and not copied into it (§1117) | §1117 |
 | **the agent is told what changes** | **built.** The vocabulary and the descriptor carry the command's own promise, and the agent door's hint is read and not guessed (§1118) | §1118 |
 | **the recipe says what the tree does** | **built.** The batteries the tree has are named in the recipe, and the gate says so when a name drifts (§1119) | §1119 |
+| **a command made while the program runs is declared** | **built.** The SDK writes the fields and the reader, and the bound on a run-time parameter is the SDK's (§1120) | §1120 |
+| **every door lists what it can run** | **built.** A session can gain a command while it runs, and every door reads its list from the session it runs the commands in (§1121) | §1121 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71018,3 +71020,99 @@ follow the convention — no pinned registry, and no place in the studio.
   and only the links are checked.
 - **The rule reads one list.** A recipe that named a second list of
   crates would need a second stated line, and there is not one.
+
+## 1120. A command made while the program runs is declared
+
+The tree's honest limits said: *"A run-time command is written out by
+hand. A command made while the program runs has no struct to derive
+from, so it reads its own parameter."* Both halves of that are closed.
+
+### What was built
+
+- **The SDK declares a run-time command.** `CommandSpec::dynamic` writes
+  the sixteen fields — once, in the SDK — and the caller says only what
+  is its own: the id, the label, the area, the line about it, the
+  parameters and the body. The flags are the house defaults: the
+  command does not change the document, it is undoable only if it says
+  so, and it is written in the journal.
+- **Its parameter is read by the SDK's reader.** The body is handed the
+  `Params` and reads its parameter with `params.param::<Text>(…)`, so
+  the **kind** and the **bound** are the SDK's: a text that is too long
+  is refused because the SDK refuses it, and not because the author
+  remembered.
+- **The studio's run-time command is a declaration.** It was sixteen
+  fields and a hand-rolled reader; it is five lines and a typed read.
+
+### What the port found
+
+- **A command without a struct did not have to be without a reader.**
+  The macro writes the reader from the struct, and the SDK's reader was
+  there all the same — the run-time command was reading its parameter
+  *by hand* because nothing had told it that it could ask.
+- **The names are leaked, once each.** A command's metadata is
+  `&'static str` and a name that arrives at run time cannot be static.
+  That is the same trade the plugin loader makes, and the SDK now makes
+  it in one place instead of in every caller.
+
+### What it cost
+
+- **Two constructors** in the SDK (`CommandSpec::dynamic` and
+  `ParamDoc::dynamic`), **one method** (`Params::param`), and one
+  command in the studio.
+
+### What it does not settle
+
+- **The names are still leaked.** A run-time command's id, label and
+  help are leaked, once each, and the leak is bounded by the number of
+  commands that are made.
+- **There is no macro for it.** The derive writes a command from a
+  struct, and a run-time command has no struct; the declaration is the
+  next best thing and not the same thing.
+
+## 1121. Every door lists what it can run
+
+A door that offers a command it cannot run is a door that lies, and a
+door that hides a command it can run is a door that is quiet. The
+registry is open — a command can join a session while the program runs
+— and the doors were reading a **snapshot**.
+
+### What was built
+
+- **A session can gain a command while it runs.** `Session::register`
+  puts a command in the session that is running. The registry is
+  grow-only, and a command that is already there is refused: two
+  commands with one id are two commands.
+- **Every door reads its list from the session it runs the commands in.**
+  The terminal door's `help` and `commands`, the bridge's `tools/list`,
+  the agent door's `tools/list`, the control channel's `describe` and
+  the window's commands all read the **live** registry now — and the
+  **descriptor** is one function of a command, in the SDK, so the shape
+  is written once.
+- **The terminal door holds one registry.** It kept the ecosystem *and*
+  the session, and the two were two answers to "which commands are
+  there"; the ecosystem is what the session was made from, and the door
+  keeps the one it can run.
+
+### What the port found
+
+- **The sharpest case was the bridge**: it listed from the ecosystem
+  and ran in the session, so a command that arrived late was offered
+  and then refused. The survey named it, and it was true.
+- **A snapshot is a lie with a timestamp.** Every door read its list
+  when it was built, and a registry that is open means a list that is
+  out of date the moment it is written.
+
+### What it cost
+
+- **One method** in the SDK, **one function** moved into it, and **four
+  doors** that read their list again.
+
+### What it does not settle
+
+- **A command cannot be taken away.** The registry is grow-only, and a
+  panel that was drawn before a command arrived reconciles against a
+  registry that only grows: the "disappeared" direction does not exist
+  and is not planned.
+- **The list changed shape once.** The bridge's tools are the session's
+  commands in the registry's order and not the menu's order, and the
+  agent door's tools are read when they are asked for.

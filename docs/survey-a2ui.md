@@ -696,6 +696,13 @@ and a reconciliation step**, which is a smaller and more honest claim.
 
 **Cost.** Medium.
 
+**The sharpest case is closed** (README §1121). A session can gain a
+command while it runs (`Session::register`), and every door reads its
+list from the session it runs the commands in — so the bridge no longer
+lists a command it then refuses, and the agent door's list is read when
+it is asked for. What is left is the *panel's* side: a drawing made
+before the command arrived, and the **version counter** that says so.
+
 ### O7 · Paths that resolve to plain values, inside the SDK
 
 **Opportunity.** Give the derived-value surface an address — the plan's
@@ -1047,7 +1054,7 @@ not a front end.
 | 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it — **done** (README §1116) |
 | 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table checked by hand | no | the table exists, and every row has been checked by hand — **done** ([`door-parity.md`](door-parity.md)): the six doors side by side, cell by cell, with the line each cell was read in |
 | 7 | **O3** recipe **claim** check | **small**, but it is a judgement, not a link — the link half is already done by `cargo xtask lists` (`xtask/src/lists.rs:55`) | no | a named claim in a recipe is checked against the tree, and a broken claim is reported — **done** (README §1119): the battery list is checked by the tree's own gate, on a stated line |
-| 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it |
+| 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it — **the sharp case is closed** (README §1121): a session can gain a command while it runs, and every door lists what it can run; what is left is the panel's own reconciliation |
 | 9 | **O7** paths resolving inside the SDK | **large**, and architecture-defining | no | a path resolves to a plain JSON value inside the SDK, and no front end names a `Plan` — **its constraint holds**: the a2ui layer resolves the paths and the door gets plain values, and the gate refuses a front end that names the plan (§1115); the general API in the SDK is not built |
 | 10 | **O11** the a2ui compat layer — **scope superseded by [`a2ui-compat-layer.md`](a2ui-compat-layer.md)** | **medium** — three crates (L3, L4, an app), eleven components, one new derive macro, **the SVG path-data reader promoted to L2** (and it learns arcs), and **changes to the SDK, to the derive crate and to the vector plugin**; **no** change to the raster or the window | **yes** | yes — an a2ui-speaking agent can drive craftkit |
 | — | **O9** evals | **blocked on a posture decision** — the tree has no outbound network and no secret-management story; that is a decision memo, not an opportunity | measures the claim | — |

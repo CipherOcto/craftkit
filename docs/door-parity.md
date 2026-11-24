@@ -51,11 +51,12 @@ never opens the door behind it.
 Each cell below was read in the code, and the line is where it was read.
 
 **The terminal door** — `apps/craftkit-repl/src/lib.rs`.
-`help` lists the menu by area and `commands` lists the ids
-(`:136`, `:145`); `run_command` runs any command by its id (`:208`);
-`plan` asks `doc.plan` (`:154`); `memory` reports the journal's **size**
-(`:176`); a refusal is answered with the refusal's own text (`:241`).
-There is no node list and no schema: a person at a prompt reads a line.
+`help` lists the commands by area and `commands` lists the ids, both
+read from the **session** the door drives (`:144`, `:160`);
+`run_command` runs any command by its id (`:223`); `plan` asks `doc.plan`
+(`:169`); `memory` reports the journal's **size** (`:191`); a refusal is
+answered with the refusal's own text (`:256`). There is no node list and
+no schema: a person at a prompt reads a line.
 
 **The window** — `apps/craftkit-window/src/lib.rs`.
 `commands` lists the commands and `commands_outside_panels` the ones no
@@ -70,21 +71,22 @@ cell of that row is that door's cell: the browser door is the terminal
 door in a page.
 
 **The agent door** — `crates/craftkit-mcp/src/lib.rs`.
-The tools are made from the session's registry, one per command
-(`:142`); a tool's schema is the **JSON Schema**, and the mapping lives
-in the SDK (`craftkit_sdk::schema::to_json_schema`, `:445`); the methods
-are `tools/list`, `tools/call`, `prompts/list`, `prompts/get`,
-`resources/list`, `resources/read` and `completion/complete` (`:243`–`:306`).
+The tools are made from the session's registry, one per command, and the
+list is **read when it is asked for** (`:160`); a tool's schema is the
+**JSON Schema**, and the mapping lives in the SDK
+(`craftkit_sdk::schema::to_json_schema`, `:460`); the methods are
+`tools/list`, `tools/call`, `prompts/list`, `prompts/get`,
+`resources/list`, `resources/read` and `completion/complete` (`:258`–`:321`).
 The plan, the undo and the journal are **tools like any other**, because
 every command is a tool.
 
 **The bridge** — `apps/craftkit-bridge/src/lib.rs`.
-`tools` is the **projection** and every tool carries the projection's
-**descriptor** (`:183`); `plan` asks the `doc.plan` command (`:246`);
-`journal` answers with the entries (`:258`); `resources` is the kinds, the
-formats and the **manifest** (`:228`); `menu` is the menu tree (`:266`).
-Its protocol is **its own**, so its tools carry `parameters` and not
-`inputSchema`.
+`tools` is read from the **session** the tools run in, and every tool
+carries the SDK's **descriptor** (`:189`); `plan` asks the `doc.plan`
+command (`:246`); `journal` answers with the entries (`:258`); `resources`
+is the kinds, the formats and the **manifest** (`:228`); `menu` is the
+menu tree (`:266`). Its protocol is **its own**, so its tools carry
+`parameters` and not `inputSchema`.
 
 **The a2ui door** — `apps/craftkit-a2ui-server/src/lib.rs`.
 The methods are a2ui's own (`:458`–`:464`): `createSurface`,
@@ -102,6 +104,10 @@ a2ui's components, and a surface is a tree of those.
 - **The plan is a command, and the undo is a command.** Every door that
   has a plan asks `doc.plan`, and no door opens the history's own door.
   That is the rule "everything is a command" reaching the surface.
+- **Every door lists what it can run.** The list is read from the
+  session the commands run in, so a command that joins the session while
+  the program runs is listed with the rest — and a door never offers a
+  command it cannot run.
 - **Only the agent door publishes a JSON Schema**, because only an agent
   reads one; a person at a window gets a **form** built from the same
   parameters. The bridge publishes a **descriptor** — the projection's own
