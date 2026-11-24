@@ -12,7 +12,7 @@
 use craftkit_sdk::command::{CommandRun, CommandSpec};
 use craftkit_sdk::contribution::Registry;
 use craftkit_sdk::document::{Document, MAX_DOCUMENT_BYTES};
-use craftkit_sdk::history::History;
+use craftkit_sdk::history::{History, MAX_HISTORY_BYTES};
 use craftkit_sdk::session::MAX_LOG_ENTRIES;
 use craftkit_sdk::tasks::TaskRegistry;
 use craftkit_sdk::{EngineError, Outcome, Session};
@@ -90,6 +90,17 @@ fn the_estimate_never_under_estimates() {
     let payload = "x".repeat(4096);
     let document = a_document_with(4096);
     assert!(document.estimated_bytes() >= payload.len(), "the payload was not counted");
+}
+
+/// The history's own budget is the tree's **promise**.
+///
+/// The budget is derived from the document's own budget rather than
+/// written out, and a promise that no test names is a promise no reader
+/// can look up: this is the test that says what the number is.
+#[test]
+fn the_historys_budget_is_the_trees_promise() {
+    let history = History::new(a_document_with(1024));
+    assert_eq!(history.budget(), MAX_HISTORY_BYTES, "the history's budget is the tree's number");
 }
 
 /// The history is pruned by its **bytes**, not only by its count.

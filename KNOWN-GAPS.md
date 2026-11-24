@@ -198,6 +198,13 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **A bound that no test names is caught** (§1139): the same rule, read over
+  the tree's **promise bounds** — the ones whose name says what they
+  bound, `MAX_…_BYTES`, `MAX_…_MEMORY`, `MAX_…_STEPS` — and the rule is
+  about the **name**. A cap on a count of entries is the program's own
+  business and is not a promise, and the tree's own gate makes the same
+  distinction. The rule says the number is named by a test; it does not
+  say that the code refuses what is over it.
 - **An evaluator that no test names is caught** (§1138): the same rule, read
   over the tree's **evaluators** — the gestures about the whole document —
   and the rule is about the **name**, so an evaluator named in a comment

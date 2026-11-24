@@ -4589,6 +4589,7 @@ so.
 | **every layer is named by a test** | **built.** The outer gate reads every layer the tree declares and says the ones that no test names (§1138) | §1138 |
 | **every format is named by a test** | **built.** The outer gate reads every format the tree declares and says the ones that no test names (§1138) | §1138 |
 | **every evaluator is proved by a test in the battery that owns it** | **built.** All eighteen of the tree's evaluators are proved by a test beside the battery that owns them (§1138) | §1138 |
+| **every bound the tree promises is named by a test** | **built.** The outer gate reads every promise bound the tree declares and says the ones that no test names (§1139) | §1139 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72212,3 +72213,49 @@ by the studio's tests, not by a test beside the battery that owns them.
 - **A test beside the battery is still a test of the tree.** A battery
   whose evaluator is proved only outside the tree is a battery the rule
   does not see, and the rule says nothing about the tree's own users.
+
+## 1139. Every bound the tree promises is named by a test
+
+A **bound** is a number a document may not exceed. A bound whose name
+says **what it bounds** — `MAX_…_BYTES`, `MAX_…_MEMORY`, `MAX_…_STEPS` —
+is a **promise**: a reader may rely on it. The tree's own gate holds
+those promises to the **prose**; this arc holds them to a **test** — and
+**one** of the tree's four promise bounds was named by no test.
+
+### What was built
+
+- **Every bound the tree promises is named by a test.** The outer gate
+  reads the promise bounds of every crate — the production code only — and
+  says the ones that no test names.
+- **The history's budget has a test.** One test says what the number is:
+  the history's budget is the tree's promise, and it is derived from the
+  document's own budget rather than written out.
+
+### What the port found
+
+- **A promise held to the prose is a promise a reader cannot check.** The
+  README says what the number is and why it is there, and that is the
+  reader's only way in. A test says it a second way, and a test can be
+  run: the prose is read, and the number is proved.
+- **The reader had to learn the shape of a promise.** The outer gate's
+  bound reader had only ever read a bound whose value was a plain
+  number, and three of the tree's four promises are written as a product
+  of other numbers. A reader that cannot read a promise cannot hold it.
+
+### What it cost
+
+- **One test**, **two tests** for the gate's rule, and the reader that
+  finds the promise bounds and the shape that says which bound is one.
+
+### What it does not settle
+
+- **The rule is about the name, and about the name's shape.** A cap on a
+  count of entries is the program's own business and is not a promise,
+  and the tree's own gate makes the same distinction — so a cap that
+  nobody may rely on is a cap no rule holds.
+- **A bound that is named is not a bound that holds.** The rule says the
+  number is named by a test; it does not say that the code refuses what
+  is over it. The SDK's own bounds tests say that for the bounds the SDK
+  keeps.
+- **The rule is about the tree's own tests.** A promise that only a
+  program outside the tree checks is a promise the rule does not see.

@@ -587,6 +587,7 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     let mut evaluators: Vec<String> = Vec::new();
     let mut layers: Vec<String> = Vec::new();
     let mut formats: Vec<String> = Vec::new();
+    let mut bounds: Vec<String> = Vec::new();
     let index = crate::index::build(root)?;
     commands.extend(index.commands.iter().map(|command| command.id.clone()));
     kinds.extend(index.kinds.iter().map(|kind| kind.id.clone()));
@@ -624,6 +625,21 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             tests.push(std::fs::read_to_string(&file).unwrap_or_default());
         }
     }
+    // **The promise bounds of every crate.** A bound whose name says what
+    // it bounds is a promise to a reader, and the tree's own gate holds
+    // it to the prose. This rule holds it to a **test**: a promise that
+    // no test names is a promise no reader can check.
+    for directory in crate_directories(root) {
+        let name = directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+        for file in crate::index::rust_files(&directory.join("src")) {
+            let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Production) else {
+                continue;
+            };
+            bounds.extend(
+                crate::index::promise_bounds_in(&text, &file, &name).into_iter().map(|bound| bound.name),
+            );
+        }
+    }
     commands.sort();
     commands.dedup();
     kinds.sort();
@@ -640,6 +656,8 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     layers.dedup();
     formats.sort();
     formats.dedup();
+    bounds.sort();
+    bounds.dedup();
     let mut problems = Vec::new();
     for command in commands {
         if tests.iter().any(|body| names_it(body, &command)) {
@@ -703,6 +721,14 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
         }
         problems.push(format!(
             "the format `{format}` is named by no test: every format the tree has is named by a test"
+        ));
+    }
+    for bound in bounds {
+        if tests.iter().any(|body| names_it(body, &bound)) {
+            continue;
+        }
+        problems.push(format!(
+            "the bound `{bound}` is named by no test: every bound the tree promises is named by a test"
         ));
     }
     Ok(problems)
@@ -1681,6 +1707,46 @@ mod tests {
         std::fs::write(
             crate_directory.join("tests").join("thing.rs"),
             "#[test]\nfn a_test() { let panel = \"panel.thing\"; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// A **promise bound** that no test names is caught.
+    #[test]
+    fn a_promise_bound_that_no_test_names_is_caught() {
+        let root = crate::temp::dir("lists-bound").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "pub const MAX_THING_BYTES: usize = 10;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("MAX_THING_BYTES"), "{problems:?}");
+    }
+
+    /// And a promise bound a test names is **not** caught.
+    #[test]
+    fn a_promise_bound_that_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-bound-named").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "pub const MAX_THING_BYTES: usize = 10;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let bound = MAX_THING_BYTES; }\n",
         )
         .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");

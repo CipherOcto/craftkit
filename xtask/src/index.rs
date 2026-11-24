@@ -380,6 +380,46 @@ pub struct Bound {
     pub battery: String,
 }
 
+/// The **promise bounds** a file declares: `MAX_…_BYTES`, `MAX_…_MEMORY`
+/// and `MAX_…_STEPS`.
+///
+/// A bound whose name says **what it bounds** is a promise: a reader may
+/// rely on it, and the tree's own gate holds it to the prose. The value
+/// is read as it is written — a promise may be written as a product of
+/// other numbers — and the name is what the rule is about.
+pub fn promise_bounds_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
+    let mut found = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed.strip_prefix("pub const ") else { continue };
+        let Some((name, rest)) = rest.split_once(':') else { continue };
+        let name = name.trim();
+        if !is_a_promise_bound(name) {
+            continue;
+        }
+        let value =
+            rest.split_once('=').map(|(_, value)| value.trim().trim_end_matches(';').trim().to_string());
+        found.push(Bound {
+            name: name.to_string(),
+            value: value.unwrap_or_default(),
+            file: file.to_path_buf(),
+            line: number + 1,
+            battery: battery.to_string(),
+        });
+    }
+    found
+}
+
+/// Whether a bound's name is a **promise**: it says what it bounds.
+///
+/// The shape is the tree's own: `MAX_`, and then what it bounds —
+/// bytes, memory or steps. A cap on a count of entries is the program's
+/// own business and is not a promise to a reader.
+pub fn is_a_promise_bound(name: &str) -> bool {
+    name.starts_with("MAX_")
+        && (name.ends_with("BYTES") || name.ends_with("MEMORY") || name.ends_with("STEPS"))
+}
+
 /// The batteries of the tree, and the crate of each.
 ///
 /// The crates whose name begins with `craftkit-plugin-` and that have a
