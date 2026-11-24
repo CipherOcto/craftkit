@@ -71761,19 +71761,29 @@ the same way agree with each other**.
 - **The session is the anchor.** The harness asks a session of its own
   the same five questions, and every door's answer is compared with the
   session's as well as with the other doors'.
-- **Five things are compared.** Every command a door lists is one the
-  session has; the answer the door gives is the answer the session gives;
-  the plan the door publishes is the plan the session publishes; the word
-  the door says when it undoes is the session's; and the refusal names
-  the command that is not there.
-- **A door that lists fewer is not a difference.** The bridge prunes its
-  list, and pruning is the door's own business — what is a difference is
-  a door that lists a command the session does not have.
-- **The harness bites.** Four unit tests break the comparison on purpose:
-  a door that lists what the session does not have, a door that says
-  something else, a door that lists less, and a door that agrees. And a
-  door test says that the doors of the tree agree with the session of the
-  tree.
+- **Five things are compared.**
+  - **the list**: every id a door lists is one the session has, and a
+    door that does not prune lists **all** of them;
+  - **the run**: the answer the door gives is the answer the session
+    gives;
+  - **the plan**: the plan the door publishes is the plan the session
+    publishes;
+  - **the undo**: the word the door says when it undoes is the
+    session's;
+  - **the refusal**: the refusal names the command that is not there.
+- **A door that prunes may list less.** The bridge runs only what it
+  lists, so it lists only what it runs: pruning is that door's own
+  business, and it is the one door that says so. What is a difference is
+  a door that lists a command the session does not have — and a door
+  that quietly **lost** a command, because a door that does not prune
+  lists everything.
+- **The harness bites.** Five unit tests break the comparison on
+  purpose: three say that a difference **is** found — a door that lists
+  what the session does not have, a door that says something else, and a
+  door that lists less without saying it prunes — and two say that a
+  difference is **not** found: a door that prunes and lists less, and a
+  door that agrees. And a test in the harness's own test file says that
+  the doors of the tree agree with the session of the tree.
 
 ### What the port found
 
@@ -71788,8 +71798,8 @@ the same way agree with each other**.
 
 ### What it cost
 
-- **One struct**, **one function**, **one comparison** and **five
-  tests**: four in the crate and one in the door's own file.
+- **One struct**, **one function**, **one comparison** and **six
+  tests**: five in the crate and one in the harness's own test file.
 
 ### What it does not settle
 

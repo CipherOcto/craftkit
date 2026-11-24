@@ -19,9 +19,11 @@ this command, what plan do you publish, what do you say when you undo it,
 what do you say when the command is not there — and says where they
 differ. It asks a **session of its own** the same questions, and compares
 the doors with that as well: the session is the truth behind the doors, so
-two doors that are wrong in the same way are still wrong. What the gate
-does **not** do is read this table and check a cell against a door: the
-cells are still read by a person.
+two doors that are wrong in the same way are still wrong. A door that does
+not prune its list must list **everything** the session has, and the
+bridge — which runs only what it lists — is the one door that prunes. It
+does not read this table and check a cell against a door: the cells are
+still read by a person.
 
 ## What a door is
 

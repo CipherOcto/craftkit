@@ -249,11 +249,11 @@ comes to the tree cold:
 
 - **"A commit points at the section that describes it."** `CONTRIBUTING.md`
   says the message ends with the README section's number — `feat(cad): the
-  table of a drawing — §1600` — and 542 of the tree's 602 commits carry
-  one. The **twenty-three commits of the a2ui arc** carry none: they say
-  `feat(v2): <what it does>` and name what they touch instead. The rule
-  is still the house's, and it is followed from the **next** commit; the
-  history is not rewritten.
+  table of a drawing — §1600`. Of the tree's **2 546** commits, **2 267**
+  carry one. The **twenty-three** commits of the a2ui arc do not — they
+  say `feat(v2): <what it does>` and name what they touch instead, and
+  the last of them carries the number again. The rule is still the
+  house's, and the history is not rewritten.
 
 - **"There is no numeric core."** There is now `craftkit-numeric`, a typed
   value (a length in millimetres, an angle in radians), at L3, because a

@@ -43,7 +43,15 @@
 //! changing them, so the harness asks the library the application runs.
 //! The other four doors are asked directly.
 //!
-//! And it compares the answers, one door against another.
+//! And it compares the answers, one door against another — and one door
+//! against the **session**.
+//!
+//! Two doors that are wrong in the same way agree with each other, and
+//! the first door was the one every other door was compared with: a
+//! terminal door that drifted would have dragged the others with it and
+//! the harness would have been quiet. The session is what the doors are
+//! doors *of*, so the harness asks a session of its own the same
+//! questions and compares the doors with that as well.
 //!
 //! **The a2ui door is not in it**, and that is not an oversight: the a2ui
 //! door speaks a2ui's own vocabulary — a catalogue of a2ui's components
@@ -105,6 +113,14 @@ pub struct Answer {
     pub door: String,
     /// The ids the door lists, in the order it lists them.
     pub listed: Vec<String>,
+    /// Whether the door **prunes** its list.
+    ///
+    /// The bridge runs only what it lists, so it lists only what it runs:
+    /// pruning is that door's own business, and it is the one door that
+    /// says so. A door that does not prune lists **everything** the
+    /// session has — and a door that quietly lost a command is a door
+    /// that lost a command.
+    pub prunes: bool,
     /// What the door said when it ran [`COMMAND`].
     ///
     /// The [`Err`] is the door **refusing** the command: five doors that
@@ -222,13 +238,13 @@ pub fn the_session() -> Result<Truth, String> {
 
 /// The differences between a door and the **session**.
 ///
-/// Three things are compared:
+/// Five things are compared:
 ///
-/// - **the list**: every command a door lists is one the session has. A
-///   door may list **fewer** — the bridge prunes its list — and that is
-///   not a difference; a door that lists a command the session does not
-///   have is a door that offers something there is not;
+/// - **the list**: every id a door lists is one the session has, and a
+///   door that does not prune lists **all** of them;
 /// - **the run**: the door said what the session said;
+/// - **the plan**: the door published what the session published;
+/// - **the undo**: the door said what the session said;
 /// - **the refusal**: the door's refusal **names** the command that is
 ///   not there, as the session's does — the words are the door's own,
 ///   because every door says "refused", "tool" or "command".
@@ -239,6 +255,20 @@ fn the_differences_from_the_session(answers: &[Answer], truth: &Truth) -> Vec<St
             if !truth.listed.contains(id) {
                 differences
                     .push(format!("{} lists `{id}`, and the session has no such command", answer.door));
+            }
+        }
+        // A door that does not prune lists **everything**: a door that
+        // lost a command is a door that lost a command, and the bridge
+        // is the one door that says it prunes.
+        if !answer.prunes {
+            let missing: Vec<&str> =
+                truth.listed.iter().filter(|id| !answer.listed.contains(id)).map(|id| id.as_str()).collect();
+            if !missing.is_empty() {
+                differences.push(format!(
+                    "{} does not list {}, and it does not prune its list",
+                    answer.door,
+                    missing.join(", ")
+                ));
             }
         }
         match (&answer.ran, &truth.ran) {
@@ -275,6 +305,13 @@ fn the_differences_from_the_session(answers: &[Answer], truth: &Truth) -> Vec<St
                 "{} refused `{}` without naming it: `{}`",
                 answer.door, UNKNOWN, answer.refused
             ));
+        }
+        // And the **session's** own refusal names it too: the truth is
+        // the truth, and a session that refused without naming the
+        // command would make every door's refusal unreadable.
+        if !truth.refused.contains(UNKNOWN) {
+            differences
+                .push(format!("the session refused `{}` without naming it: `{}`", UNKNOWN, truth.refused));
         }
         // The **plan** is the command's work, and the session's plan is
         // the plan the doors publish.
@@ -470,7 +507,7 @@ fn terminal() -> Result<Answer, String> {
     let planned = plan_of(&repl.run(PLAN));
     let undone = ran_of(first_line_of(&repl.run(UNDO)));
     let refused = without_the_doors_own_prefix(&first_line_of(&repl.run(UNKNOWN)));
-    Ok(Answer { door: "the terminal door".to_string(), listed, ran, planned, undone, refused })
+    Ok(Answer { door: "the terminal door".to_string(), listed, prunes: false, ran, planned, undone, refused })
 }
 
 /// The **window**.
@@ -494,7 +531,7 @@ fn window() -> Result<Answer, String> {
         Ok(outcome) => outcome.message,
         Err(error) => error.to_string(),
     };
-    Ok(Answer { door: "the window".to_string(), listed, ran, planned, undone, refused })
+    Ok(Answer { door: "the window".to_string(), listed, prunes: false, ran, planned, undone, refused })
 }
 
 /// The **browser door**.
@@ -506,7 +543,7 @@ fn browser() -> Result<Answer, String> {
     let planned = plan_of_lines(&door.run(PLAN));
     let undone = ran_of(first_line(&door.run(UNDO)));
     let refused = without_the_doors_own_prefix(&first_line(&door.run(UNKNOWN)));
-    Ok(Answer { door: "the browser door".to_string(), listed, ran, planned, undone, refused })
+    Ok(Answer { door: "the browser door".to_string(), listed, prunes: false, ran, planned, undone, refused })
 }
 
 /// The **agent door**.
@@ -520,7 +557,7 @@ fn agent() -> Result<Answer, String> {
         Ok(text) => text,
         Err(message) => message,
     };
-    Ok(Answer { door: "the agent door".to_string(), listed, ran, planned, undone, refused })
+    Ok(Answer { door: "the agent door".to_string(), listed, prunes: false, ran, planned, undone, refused })
 }
 
 /// The **bridge**.
@@ -546,7 +583,7 @@ fn bridge() -> Result<Answer, String> {
         Ok(text) => text,
         Err(message) => message,
     };
-    Ok(Answer { door: "the bridge".to_string(), listed, ran, planned, undone, refused })
+    Ok(Answer { door: "the bridge".to_string(), listed, prunes: true, ran, planned, undone, refused })
 }
 
 /// A **request** for the bridge.
@@ -713,6 +750,7 @@ mod tests {
         let first = Answer {
             door: "the first door".to_string(),
             listed: vec!["one".to_string()],
+            prunes: false,
             ran: Ok("the same".to_string()),
             planned: Ok(json!({ "items": [] })),
             undone: Ok("undid".to_string()),
@@ -721,6 +759,7 @@ mod tests {
         let second = Answer {
             door: "the second door".to_string(),
             listed: vec!["two".to_string()],
+            prunes: false,
             ran: Ok("something else".to_string()),
             planned: Ok(json!({ "items": [] })),
             undone: Ok("undid".to_string()),
@@ -739,6 +778,7 @@ mod tests {
         let answer = Answer {
             door: "a door".to_string(),
             listed: Vec::new(),
+            prunes: false,
             ran: Ok(String::new()),
             planned: Ok(json!({})),
             undone: Ok("undid".to_string()),
@@ -754,6 +794,7 @@ mod tests {
         let answer = Answer {
             door: "a door".to_string(),
             listed: vec!["one".to_string()],
+            prunes: false,
             ran: Err("there is no command `node.add`".to_string()),
             planned: Ok(json!({})),
             undone: Ok("undid".to_string()),
@@ -773,6 +814,7 @@ mod tests {
         let first = Answer {
             door: "the first door".to_string(),
             listed: vec!["one".to_string()],
+            prunes: false,
             ran: Ok("the same".to_string()),
             planned: Ok(json!({ "items": [{ "node": 1 }] })),
             undone: Ok("undid".to_string()),
@@ -781,6 +823,7 @@ mod tests {
         let second = Answer {
             door: "the second door".to_string(),
             listed: vec!["one".to_string()],
+            prunes: false,
             ran: Ok("the same".to_string()),
             planned: Ok(json!({ "items": [{ "node": 2 }] })),
             undone: Ok("undid".to_string()),
@@ -796,6 +839,7 @@ mod tests {
         let answer = || Answer {
             door: "a door".to_string(),
             listed: vec!["one".to_string(), "two".to_string()],
+            prunes: false,
             ran: Ok("the same".to_string()),
             planned: Ok(json!({ "items": [] })),
             undone: Ok("undid".to_string()),
@@ -820,6 +864,7 @@ mod tests {
         let answer = Answer {
             door: "a door".to_string(),
             listed: vec!["one".to_string(), "two".to_string()],
+            prunes: false,
             ran: Ok("the same".to_string()),
             planned: Ok(json!({ "items": [] })),
             undone: Ok("undid".to_string()),
@@ -845,6 +890,7 @@ mod tests {
         let answer = Answer {
             door: "a door".to_string(),
             listed: vec!["one".to_string()],
+            prunes: false,
             ran: Ok("the door's own answer".to_string()),
             planned: Ok(json!({ "items": [] })),
             undone: Ok("undid".to_string()),
@@ -859,7 +905,7 @@ mod tests {
     /// the bridge prunes its list, and pruning is the door's own
     /// business.
     #[test]
-    fn a_door_that_lists_less_than_the_session_is_not_a_difference() {
+    fn a_door_that_prunes_may_list_less_than_the_session() {
         let truth = Truth {
             listed: vec!["one".to_string(), "two".to_string()],
             ran: Ok("the same".to_string()),
@@ -870,6 +916,7 @@ mod tests {
         let answer = Answer {
             door: "a door".to_string(),
             listed: vec!["one".to_string()],
+            prunes: true,
             ran: Ok("the same".to_string()),
             planned: Ok(json!({ "items": [] })),
             undone: Ok("undid".to_string()),
@@ -877,6 +924,32 @@ mod tests {
         };
         let differences = the_differences_from_the_session(&[answer], &truth);
         assert!(differences.is_empty(), "{differences:?}");
+    }
+
+    /// And a door that lists less and does **not** prune is a
+    /// difference: a door that quietly lost a command is a door that
+    /// lost a command.
+    #[test]
+    fn a_door_that_lists_less_and_does_not_prune_is_a_difference() {
+        let truth = Truth {
+            listed: vec!["one".to_string(), "two".to_string()],
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let answer = Answer {
+            door: "a door".to_string(),
+            listed: vec!["one".to_string()],
+            prunes: false,
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_from_the_session(&[answer], &truth);
+        assert_eq!(differences.len(), 1, "{differences:?}");
+        assert!(differences[0].contains("does not prune"), "{differences:?}");
     }
 
     /// A door that agrees with the session is **not** a difference.
@@ -892,6 +965,7 @@ mod tests {
         let answer = Answer {
             door: "a door".to_string(),
             listed: vec!["one".to_string()],
+            prunes: false,
             ran: Ok("the same".to_string()),
             planned: Ok(json!({ "items": [] })),
             undone: Ok("undid".to_string()),
