@@ -588,6 +588,7 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     let mut layers: Vec<String> = Vec::new();
     let mut formats: Vec<String> = Vec::new();
     let mut bounds: Vec<String> = Vec::new();
+    let mut limits: Vec<String> = Vec::new();
     let index = crate::index::build(root)?;
     commands.extend(index.commands.iter().map(|command| command.id.clone()));
     kinds.extend(index.kinds.iter().map(|kind| kind.id.clone()));
@@ -616,6 +617,20 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             evaluators.extend(crate::index::evaluators_in(&text, &file, &name).into_iter().map(|e| e.id));
             layers.extend(crate::index::layers_in(&text, &file, &name).into_iter().map(|l| l.id));
             formats.extend(crate::index::formats_in(&text, &file, &name).into_iter().map(|f| f.id));
+        }
+    }
+    // **The kit's own limits.** The kit is the core: a limit it keeps is
+    // a limit every program that links it inherits. Each of them is
+    // named by a test, and the rule says the ones that are not.
+    {
+        let kit = root.join("crates").join("craftkit-sdk");
+        for file in crate::index::rust_files(&kit.join("src")) {
+            let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Production) else {
+                continue;
+            };
+            limits.extend(
+                crate::index::limits_in(&text, &file, "craftkit-sdk").into_iter().map(|limit| limit.name),
+            );
         }
     }
     // Every test file in the tree, and what it says.
@@ -658,6 +673,8 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     formats.dedup();
     bounds.sort();
     bounds.dedup();
+    limits.sort();
+    limits.dedup();
     let mut problems = Vec::new();
     for command in commands {
         if tests.iter().any(|body| names_it(body, &command)) {
@@ -729,6 +746,14 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
         }
         problems.push(format!(
             "the bound `{bound}` is named by no test: every bound the tree promises is named by a test"
+        ));
+    }
+    for limit in limits {
+        if tests.iter().any(|body| names_it(body, &limit)) {
+            continue;
+        }
+        problems.push(format!(
+            "the limit `{limit}` is named by no test: every limit the kit keeps is named by a test"
         ));
     }
     Ok(problems)
@@ -1747,6 +1772,40 @@ mod tests {
         std::fs::write(
             crate_directory.join("tests").join("thing.rs"),
             "#[test]\nfn a_test() { let bound = MAX_THING_BYTES; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// A **limit of the kit** that no test names is caught.
+    #[test]
+    fn a_limit_of_the_kit_that_no_test_names_is_caught() {
+        let root = crate::temp::dir("lists-limit").expect("a temporary folder");
+        let kit = root.join("crates").join("craftkit-sdk");
+        std::fs::create_dir_all(kit.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(kit.join("tests")).expect("the directory is made");
+        std::fs::write(kit.join("src").join("lib.rs"), "pub const MAX_THING: usize = 10;\n")
+            .expect("the source is written");
+        std::fs::write(kit.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("MAX_THING"), "{problems:?}");
+    }
+
+    /// And a limit a test names is **not** caught.
+    #[test]
+    fn a_limit_of_the_kit_that_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-limit-named").expect("a temporary folder");
+        let kit = root.join("crates").join("craftkit-sdk");
+        std::fs::create_dir_all(kit.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(kit.join("tests")).expect("the directory is made");
+        std::fs::write(kit.join("src").join("lib.rs"), "pub const MAX_THING: usize = 10;\n")
+            .expect("the source is written");
+        std::fs::write(
+            kit.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let limit = MAX_THING; }\n",
         )
         .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");

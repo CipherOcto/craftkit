@@ -392,6 +392,36 @@ pub struct Bound {
     pub battery: String,
 }
 
+/// The **limits** a file declares: the public constants whose names say
+/// they are a limit.
+///
+/// A limit is `MAX_…` or `…_LIMIT`: the first says it is the most of
+/// something, and the second says the same thing the other way round. A
+/// private constant is the program's own business and is not read: only
+/// a **public** limit is a promise or a cap somebody else may rely on.
+pub fn limits_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
+    let mut found = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed.strip_prefix("pub const ") else { continue };
+        let Some((name, rest)) = rest.split_once(':') else { continue };
+        let name = name.trim();
+        if !(name.starts_with("MAX_") || name.ends_with("_LIMIT")) {
+            continue;
+        }
+        let value =
+            rest.split_once('=').map(|(_, value)| value.trim().trim_end_matches(';').trim().to_string());
+        found.push(Bound {
+            name: name.to_string(),
+            value: value.unwrap_or_default(),
+            file: file.to_path_buf(),
+            line: number + 1,
+            battery: battery.to_string(),
+        });
+    }
+    found
+}
+
 /// The **promise bounds** a file declares: `MAX_…_BYTES`, `MAX_…_MEMORY`
 /// and `MAX_…_STEPS`.
 ///

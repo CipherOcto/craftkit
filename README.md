@@ -4591,6 +4591,7 @@ so.
 | **every evaluator is proved by a test in the battery that owns it** | **built.** All eighteen of the tree's evaluators are proved by a test beside the battery that owns them (§1138) | §1138 |
 | **every bound the tree promises is named by a test** | **built.** The outer gate reads every promise bound the tree declares and says the ones that no test names (§1139) | §1139 |
 | **the reader reads a specification and not a mention of one** | **built.** The reader that finds the evaluators, layers and formats reads the specification and not the type that names it (§1140) | §1140 |
+| **every limit the kit keeps is named by a test** | **built.** The outer gate reads every limit the kit declares and says the ones that no test names (§1141) | §1141 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72310,3 +72311,56 @@ specification.
 - **The reader reads one spelling of a specification.** A static that
   writes its name another way is a specification the gate cannot see,
   and nothing says so.
+
+## 1141. Every limit the kit keeps is named by a test
+
+A **limit** is a number the kit will not go past. Some of them are
+**promises** — the bytes a document may hold — and §1139 held those to a
+test. The rest are the kit's own caps: the depth of a raw parameter, the
+number of questions a command may ask, the size of the journal, the
+number of files in a bundle. **Seven** of the kit's sixteen public limits
+were named by no test at all.
+
+### What was built
+
+- **Every limit the kit keeps is named by a test.** Seven tests, one per
+  limit, each **exceeding** the limit and saying what the kit does: a raw
+  parameter that is too deep is refused, a raw parameter with too many
+  values is refused, a command that asks for ever is refused, a bundle
+  with too many files is refused, and the journal, the task registry and
+  the log are bounded.
+- **The outer gate says so.** The `lists` phase reads the kit's public
+  limits — the constants whose names say they are one — and says the ones
+  that no test names.
+
+### What the port found
+
+- **A limit that is not tested is a limit that might not hold.** The kit
+  keeps sixteen public limits; six of them had a test and **seven** did
+  not, and one of the seven — the bound on the number of questions a
+  command may ask — turned out to be **unreachable**: the answer bound
+  is the same number and is checked first, so the question bound never
+  refuses anything. A limit that cannot bite is a limit that cannot be
+  relied on, and the test that says so is worth more than the limit.
+- **The limits are not all the same kind.** A **promise** is a number a
+  reader may rely on and is published in the kit's own bound registry; a
+  **cap** is the kit's own business and is not published. The rule reads
+  both, and it reads the **production code** only — a limit written in a
+  test is not a limit the kit keeps.
+
+### What it cost
+
+- **One test file** of seven tests, **two tests** for the gate's rule,
+  and the reader that finds the kit's limits.
+
+### What it does not settle
+
+- **The rule is about the kit.** The batteries keep their own caps, and
+  the rule does not reach them yet: a cap a battery keeps is a cap the
+  battery's own test should prove, and the batteries are the next arc.
+- **The rule is about the name.** A limit that is named by a test is
+  named; nothing says the test **exceeded** it, and nothing says the kit
+  refuses what is over it.
+- **A limit that cannot bite is still a limit in the code.** The answer
+  bound is unreachable, and the tree says so rather than changing the
+  kit's behaviour to make it reachable.

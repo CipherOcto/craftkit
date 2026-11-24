@@ -198,6 +198,19 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **A limit of the kit that no test names is caught** (§1141): the same
+  rule, read over the **kit's own public limits** — the constants whose
+  names say they are one, `MAX_…` and `…_LIMIT` — and the rule is about
+  the **name**, so a limit named in a comment is a limit the gate counts.
+  The rule is about the **kit**: the batteries keep their own caps, and
+  the rule does not reach them yet.
+- **The answer bound cannot bite** (§1141): the kit keeps a bound on the
+  number of questions a command may ask and a bound on the number of
+  times it may be answered, and the two are the **same number**. Every
+  question is one answer, the answer bound is checked first, and the
+  question bound never refuses anything. A limit that cannot bite is a
+  limit that cannot be relied on; the tree says so rather than changing
+  the kit's behaviour to make it reachable.
 - **A bound that no test names is caught** (§1139): the same rule, read over
   the tree's **promise bounds** — the ones whose name says what they
   bound, `MAX_…_BYTES`, `MAX_…_MEMORY`, `MAX_…_STEPS` — and the rule is
