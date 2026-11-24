@@ -75,7 +75,7 @@ itself, and it has four honest limits:
 
 ---
 
-## 4. The doors are classified; the parity matrix is not written
+## 4. The doors are classified; the parity matrix is checked by hand
 
 The tree has **six doors**, and the rule "a front end is thin" now reaches
 all six (README §1116): the terminal door, the window, the browser door,
@@ -181,3 +181,31 @@ comes to the tree cold:
 
 When the README and the code disagree, the **code** is right, and this file
 records the difference rather than the README's history.
+
+---
+
+## 8. What the survey left open
+
+The a2ui survey read this tree against a2ui and found opportunities as
+well as defects. The defects are repaired and the opportunities that need
+no product decision are taken (`docs/survey-a2ui.md` §6). What is left
+**waits for a question nobody has answered**, and it is written down here
+so that it is not rediscovered as a surprise:
+
+- **O6 — the registry reconciles against itself.** The registry grows
+  while a program runs, and a panel that was drawn before a plugin
+  arrived does not know about it. The remedy is a **version counter**
+  and a reconciliation step: **medium**, and a decision about what a
+  panel does when the registry moves under it.
+- **O7 — a path resolves to a plain value, inside the SDK.** The a2ui
+  layer resolves its own paths and the door gets plain values, and the
+  gate refuses a front end that names the plan — so the *constraint*
+  holds. The general API in the SDK does not exist, and it is **large**
+  and architecture-defining: it touches the SDK's own data model.
+- **O9 — evals.** The tree has no outbound network and no
+  secret-management story, so an eval that calls a model needs **two**
+  decisions — a posture and a credential story — and not one. That is a
+  memo, not an arc.
+- **O10 — contracts.** The bounds are in the README and the code, and
+  the contracts would be a second place they live. **High**, and the
+  honest moment to write them is when they have stopped moving.
