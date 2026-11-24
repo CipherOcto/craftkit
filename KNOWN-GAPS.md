@@ -122,14 +122,15 @@ These are the README's own honest notes, and they are still true of the tree:
   SDK writes the fields and the reader (§1120), and what is left is the
   leak: a run-time command's names are `&'static str` and a name that
   arrives at run time cannot be static, so each one is leaked once.
-- **A run-time command's declaration is not checked against its body.** A
-  compiled command's parameters are the struct's fields, so the compiler
-  writes the reader and the declaration from the same thing. A run-time
-  command's declaration is written by hand, so the **kind** and the
-  **required** flag it says can disagree with what the body reads: a
-  command can declare a text and read a number, and nothing refuses it.
-  The value is still read by the SDK's reader and refused by the SDK's
-  rules; what is not checked is the *declaration's* truth.
+- **A run-time command's declaration is checked against the call, and not
+  against its body.** The **kind** is checked: the session refuses a value
+  that is not of the kind the command declared, so a command that declares
+  a text and reads a number is refused at the door (§1124). A compiled
+  command cannot be refused this way — the compiler writes the reader and
+  the declaration from the same struct. What is **not** checked is the
+  **required** flag (a body that ignores a parameter it declared is not
+  visible to the engine) and the **other spelling** of a parameter with
+  two (the second spelling's kind is not in the declaration).
 - **`mutates` and `undoable` are two flags, and the derive refuses only
   one combination.** A command that is undoable and does **not** change
   the document is refused by the macro — there is nothing to undo. A

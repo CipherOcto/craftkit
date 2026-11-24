@@ -73,6 +73,19 @@ fn the_schema_says_the_name_and_the_unit() {
     assert_eq!(value["unit"], json!("mm"), "and the unit says what the number means");
 }
 
+/// The **JSON Schema** says both shapes, because the reader takes both.
+///
+/// A length may be written `25` or `25mm`, and the schema an agent is
+/// told is the shape the reader takes — a schema that says "number" and
+/// the reader that says "or a string with a unit" are two truths.
+#[cfg(feature = "numeric")]
+#[test]
+fn the_json_schema_says_both_shapes_of_a_length() {
+    let ecosystem = ecosystem();
+    let schema = ecosystem.projection().json_schema("numeric.length.add").expect("the schema is there");
+    assert_eq!(schema["properties"]["value"]["type"], json!(["number", "string"]), "{schema}");
+}
+
 /// A length that is too long is refused **at the parameter**, before the
 /// command's body runs: the type checks it.
 #[cfg(feature = "numeric")]
@@ -187,7 +200,10 @@ fn a_value_that_is_not_a_length_is_refused() {
     let error = session
         .execute("numeric.length.add", &json!({ "value": { "millimetres": 10 } }))
         .expect_err("that is not a length either");
-    assert!(error.to_string().contains("millimetres"), "{error}");
+    // The **declaration** is checked first: a length is a number or a
+    // string with a unit, and a table is neither.
+    assert!(error.to_string().contains("value"), "{error}");
+    assert!(error.to_string().contains("a table"), "{error}");
 }
 
 /// A length that is too long is refused: the library holds a range.

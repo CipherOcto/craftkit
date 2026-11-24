@@ -987,6 +987,16 @@ impl Session {
             self.note(format!("{id}: refused ({error})"));
             return Err(error);
         }
+        // The value is of the kind the command **declared**. A command
+        // that was compiled cannot disagree — the compiler wrote the
+        // declaration and the reader from the same struct — and a command
+        // that was made while the program runs can, so the declaration is
+        // checked against the call here.
+        if let Err(source) = params.deny_wrong_kind(spec.params) {
+            let error = EngineError::Param { id: id.to_string(), source };
+            self.note(format!("{id}: refused ({error})"));
+            return Err(error);
+        }
 
         // The snapshot. A command that fails leaves the document as it was,
         // and so does one that panics — the unwind crosses this boundary and

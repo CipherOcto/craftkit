@@ -222,6 +222,14 @@ pub struct ParamDoc {
     pub type_name: Option<&'static str>,
     /// The **unit** the value is in, when the kind has one.
     pub unit: Option<&'static str>,
+    /// Whether the kind takes a **string** as well as its own shape.
+    ///
+    /// A length is a number, and `25mm` is a length too: the string is
+    /// the same value in the caller's own spelling. A kind that says so
+    /// says it here, and the schema and the session read the same
+    /// answer — so the shape an agent is told is the shape that is
+    /// taken.
+    pub accepts_text: bool,
 }
 
 impl ParamDoc {
@@ -243,17 +251,36 @@ impl ParamDoc {
             alternative: None,
             type_name: None,
             unit: None,
+            accepts_text: false,
         }
     }
 
     /// A required parameter.
     pub const fn required(name: &'static str, kind: Doc, help: &'static str) -> Self {
-        ParamDoc { name, kind, required: true, help, alternative: None, type_name: None, unit: None }
+        ParamDoc {
+            name,
+            kind,
+            required: true,
+            help,
+            alternative: None,
+            type_name: None,
+            unit: None,
+            accepts_text: false,
+        }
     }
 
     /// An optional parameter.
     pub const fn optional(name: &'static str, kind: Doc, help: &'static str) -> Self {
-        ParamDoc { name, kind, required: false, help, alternative: None, type_name: None, unit: None }
+        ParamDoc {
+            name,
+            kind,
+            required: false,
+            help,
+            alternative: None,
+            type_name: None,
+            unit: None,
+            accepts_text: false,
+        }
     }
 
     /// The parameter with the kind's **own name** on it.
@@ -268,6 +295,15 @@ impl ParamDoc {
     /// The parameter with the **unit** on it.
     pub const fn with_unit(mut self, unit: Option<&'static str>) -> Self {
         self.unit = unit;
+        self
+    }
+
+    /// The parameter whose kind takes a **string** as well.
+    ///
+    /// The kind says so, and the declaration says so, and the schema and
+    /// the session read the same answer.
+    pub const fn with_accepts_text(mut self, accepts_text: bool) -> Self {
+        self.accepts_text = accepts_text;
         self
     }
 
@@ -289,6 +325,7 @@ impl ParamDoc {
             alternative: Some(alternative),
             type_name: None,
             unit: None,
+            accepts_text: false,
         }
     }
 

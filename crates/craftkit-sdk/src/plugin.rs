@@ -441,6 +441,9 @@ impl LoadedPlugin {
                 alternative: param.alternative.as_ref().map(|name| leak(name.clone())),
                 type_name: param.type_name.as_ref().map(|name| leak(name.clone())),
                 unit: param.unit.as_ref().map(|unit| leak(unit.clone())),
+                // A plugin's kinds are the **core's** kinds, and a core
+                // kind takes its own shape and nothing else.
+                accepts_text: false,
             })
             .collect();
         let params: &'static [ParamDoc] = Box::leak(params.into_boxed_slice());

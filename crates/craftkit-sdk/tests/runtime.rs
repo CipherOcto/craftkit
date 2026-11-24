@@ -7,7 +7,7 @@
 //! SDK's reader.
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{CommandSpec, Doc, EngineError, Outcome, ParamDoc, Session, Text};
+use craftkit_sdk::{CommandSpec, Doc, EngineError, Number, Outcome, ParamDoc, Session, Text};
 
 /// A command made at run time, and the session it is in.
 fn runtime_echo() -> (CommandSpec, Session) {
@@ -100,7 +100,67 @@ fn a_refusal_names_the_parameter() {
     let error = session.execute("runtime.echo", &json!({ "text": 42 })).expect_err("a number is not a text");
     let message = error.to_string();
     assert!(message.contains("text"), "the refusal names the parameter: {message}");
-    assert!(message.contains("expected a string"), "and says what was wrong: {message}");
+    assert!(message.contains("a number"), "and says what was wrong: {message}");
+}
+
+/// A command that **lies** about its parameter is refused.
+///
+/// A command that was compiled cannot lie: the compiler wrote the
+/// declaration and the reader from the same struct. A command that was
+/// **made while the program runs** has a declaration written by hand, and
+/// the hand may say a text while the body reads a number.
+///
+/// The reader is happy — the caller sent the number the body wanted — and
+/// the declaration says otherwise. So the call is refused, and the
+/// refusal says what was declared and what arrived.
+#[test]
+fn a_declaration_that_lies_is_refused() {
+    let mut commands = craftkit_sdk::Registry::new();
+    let command = CommandSpec::dynamic(
+        "runtime.liar",
+        "Liar",
+        "runtime",
+        "Say a number back.",
+        vec![ParamDoc::dynamic("value", Doc::Text, true, "What to say.")],
+        |_session, params| {
+            let number = params.param::<Number>("value", "runtime.liar")?;
+            Ok(Outcome::new(format!("{}", number.0)))
+        },
+    );
+    commands.register(command).expect("the command is registered");
+    let mut session = Session::new(commands, craftkit_sdk::Registry::new());
+
+    let error = session.execute("runtime.liar", &json!({ "value": 42 })).expect_err("the declaration lies");
+    assert!(matches!(error, EngineError::Param { .. }), "{error:?}");
+    let message = error.to_string();
+    assert!(message.contains("value"), "the refusal names the parameter: {message}");
+    assert!(message.contains("declared as text"), "and says what it declared: {message}");
+    assert!(message.contains("a number"), "and what arrived: {message}");
+}
+
+/// A declaration that tells the truth is **not** refused.
+///
+/// The check is on the value and the declaration, and it must not refuse a
+/// call that is right.
+#[test]
+fn a_declaration_that_tells_the_truth_is_accepted() {
+    let mut commands = craftkit_sdk::Registry::new();
+    let command = CommandSpec::dynamic(
+        "runtime.truth",
+        "Truth",
+        "runtime",
+        "Say a number back.",
+        vec![ParamDoc::dynamic("value", Doc::Number, true, "What to say.")],
+        |_session, params| {
+            let number = params.param::<Number>("value", "runtime.truth")?;
+            Ok(Outcome::new(format!("{}", number.0)))
+        },
+    );
+    commands.register(command).expect("the command is registered");
+    let mut session = Session::new(commands, craftkit_sdk::Registry::new());
+
+    let outcome = session.execute("runtime.truth", &json!({ "value": 42 })).expect("the command runs");
+    assert_eq!(outcome.message, "42");
 }
 
 /// A command that joins a session has to be in a layer that is **linked

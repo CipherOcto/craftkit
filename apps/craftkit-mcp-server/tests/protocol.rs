@@ -285,7 +285,9 @@ fn a_typed_parameter_says_its_name_and_its_unit() {
         .expect("the tool is there");
     let schema = &tool["inputSchema"];
     let value = &schema["properties"]["value"];
-    assert_eq!(value["type"], json!("number"), "the shape is a number: {value}");
+    // The shape is a number, and the reader takes a string with a unit
+    // as well — so the schema says **both**.
+    assert_eq!(value["type"], json!(["number", "string"]), "the shape is a number: {value}");
     assert_eq!(value["title"], json!("length"), "and the name says what it is: {value}");
     assert_eq!(value["unit"], json!("mm"), "and the unit says what the number means: {value}");
 }

@@ -22,10 +22,17 @@
 //! - **The typed value is not a command parameter.** The kinds a
 //!   parameter may take are the **core's** — text, number, bool, a node
 //!   reference — and a plugin cannot add one. So a command takes a
-//!   number and a **unit name**, and the conversion happens in the
-//!   command's body, in the library. That is the one thing that would
-//!   need the core to change, and it is named here rather than worked
-//!   around silently.
+//!   **number**, and the plugin's own type says what the number means:
+//!   the unit is told in the schema as a name and a unit, and the
+//!   library does the conversion when the value is read. That is the one
+//!   thing that would need the core to change, and it is named here
+//!   rather than worked around silently. (The bullet was wrong once: the
+//!   trait is the SDK's and it is **not sealed**, so a library could
+//!   implement it for its own type from the day it was written — §56.)
+//! - **The spelling is the plugin's too.** A length may be written `25`
+//!   or `25mm`, and the reader takes both, so the schema says **both**
+//!   shapes — the shape that is published is the shape that is taken
+//!   (§1124).
 //! - **The other units are derived.** A length is stored once, in
 //!   millimetres, and the centimetres, the inches and the points are
 //!   worked out every time by the evaluation.

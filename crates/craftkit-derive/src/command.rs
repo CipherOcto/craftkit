@@ -301,7 +301,8 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
                         #alternative_value,
                     )
                     .with_type_name(<#left as #sdk::ParamKind>::NAME)
-                    .with_unit(<#left as #sdk::ParamKind>::UNIT)),
+                    .with_unit(<#left as #sdk::ParamKind>::UNIT)
+                    .with_accepts_text(<#left as #sdk::ParamKind>::ACCEPTS_TEXT)),
                 )
             }
             (Some(_), _) => {
@@ -330,7 +331,8 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
                     #help,
                 )
                 .with_type_name(<#inner as #sdk::ParamKind>::NAME)
-                .with_unit(<#inner as #sdk::ParamKind>::UNIT)),
+                .with_unit(<#inner as #sdk::ParamKind>::UNIT)
+                .with_accepts_text(<#inner as #sdk::ParamKind>::ACCEPTS_TEXT)),
             ),
             (None, Shape::Plain) => (
                 quote!(<#ty as #sdk::ParamKind>::read(params, #field_name_string)),
@@ -340,7 +342,8 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
                     #help,
                 )
                 .with_type_name(<#ty as #sdk::ParamKind>::NAME)
-                .with_unit(<#ty as #sdk::ParamKind>::UNIT)),
+                .with_unit(<#ty as #sdk::ParamKind>::UNIT)
+                .with_accepts_text(<#ty as #sdk::ParamKind>::ACCEPTS_TEXT)),
             ),
         };
 

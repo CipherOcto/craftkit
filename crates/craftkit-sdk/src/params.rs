@@ -25,7 +25,7 @@
 
 use serde_json::Value as Json;
 
-use crate::error::{EngineError, ParamError};
+use crate::error::{EngineError, ParamDoc, ParamError};
 
 /// The documented type of a parameter.
 ///
@@ -76,6 +76,58 @@ impl Doc {
             Doc::NodeKind => "node-kind",
             Doc::Json => "json",
         }
+    }
+
+    /// The JSON type a **schema** gives this kind.
+    ///
+    /// **One table, and everything reads it.** The schema an agent is
+    /// told says this type, and the session refuses a value that is not
+    /// of it, so the two cannot disagree: there is one answer to "what
+    /// shape is this parameter" and it is here.
+    ///
+    /// [`Doc::Json`] has **no** type: it is the door out, and a value of
+    /// any shape is of that kind.
+    pub fn json_type(self) -> Option<&'static str> {
+        match self {
+            Doc::Number => Some("number"),
+            Doc::Text => Some("string"),
+            Doc::Bool => Some("boolean"),
+            Doc::NodeRef => Some("integer"),
+            Doc::NodeKind => Some("string"),
+            Doc::Json => None,
+        }
+    }
+
+    /// Whether a value is of this kind.
+    ///
+    /// The kind is the **shape** the value has, and this is the shape the
+    /// reader reads: a text is a string, a number is a number, a yes or
+    /// no is a boolean, and a node's id is a whole number that is not
+    /// negative.
+    ///
+    /// **The raw door takes anything.** [`Doc::Json`] is the kind that
+    /// says so.
+    pub fn accepts(self, value: &Json) -> bool {
+        match self {
+            Doc::Number => value.is_number(),
+            Doc::Text => value.is_string(),
+            Doc::Bool => value.is_boolean(),
+            Doc::NodeRef => value.is_u64(),
+            Doc::NodeKind => value.is_string(),
+            Doc::Json => true,
+        }
+    }
+}
+
+/// The name of a value's **shape**, for a refusal that says what it got.
+fn json_type_name(value: &Json) -> &'static str {
+    match value {
+        Json::Null => "null",
+        Json::Bool(_) => "true or false",
+        Json::Number(_) => "a number",
+        Json::String(_) => "a string",
+        Json::Array(_) => "a list",
+        Json::Object(_) => "a table",
     }
 }
 
@@ -143,6 +195,36 @@ impl<'a> Params<'a> {
         }
         Ok(())
     }
+
+    /// Refuse a value that is **not the kind** the command declared.
+    ///
+    /// The declaration is what an agent is told, and the reader is what the
+    /// body reads the value with. A value of another kind is refused here,
+    /// at the boundary, and the refusal says **which** parameter and what
+    /// was expected.
+    ///
+    /// **The other spelling is not checked.** A parameter with two
+    /// spellings has one declared kind and two readings — the second
+    /// reading's kind is not in the declaration, so there is nothing to
+    /// check it against.
+    pub fn deny_wrong_kind(&self, docs: &[ParamDoc]) -> Result<(), ParamError> {
+        for doc in docs {
+            let Some(value) = self.get(doc.name) else { continue };
+            if doc.kind.accepts(value) || (doc.accepts_text && value.is_string()) {
+                continue;
+            }
+            return Err(ParamError::new(
+                doc.name,
+                format!(
+                    "`{}` is declared as {} and the value is {}",
+                    doc.name,
+                    doc.kind.json_name(),
+                    json_type_name(value)
+                ),
+            ));
+        }
+        Ok(())
+    }
 }
 
 /// A type that knows how to read itself, and what it is.
@@ -178,6 +260,18 @@ pub trait ParamKind: Sized {
     /// number mean something to a caller who was not told the kind's
     /// name.
     const UNIT: Option<&'static str> = None;
+
+    /// Whether the kind takes a **string** as well as its own shape.
+    ///
+    /// A length is a number, and `25mm` is a length too: the string is
+    /// the same value in the caller's own spelling. A kind that says so
+    /// says it here, and the declaration, the schema and the session all
+    /// read the same answer — so the shape that is published is the shape
+    /// that is taken.
+    ///
+    /// The core's kinds say no: a text is a string, a number is a
+    /// number, and nothing else is taken.
+    const ACCEPTS_TEXT: bool = false;
 
     /// Read one value.
     fn from_json(value: &Json) -> Result<Self, ParamError>;

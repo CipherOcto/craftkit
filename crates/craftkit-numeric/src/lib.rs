@@ -171,6 +171,9 @@ impl ParamKind for Length {
     const NAME: Option<&'static str> = Some("length");
     /// The unit the number is in.
     const UNIT: Option<&'static str> = Some("mm");
+    /// And a length may be **written with its unit**: `25mm` is a length
+    /// too, and the caller may say so.
+    const ACCEPTS_TEXT: bool = true;
 
     fn from_json(value: &Json) -> Result<Self, ParamError> {
         length_from_json(value)
@@ -187,6 +190,9 @@ impl ParamKind for Angle {
     const NAME: Option<&'static str> = Some("angle");
     /// The unit the number is in.
     const UNIT: Option<&'static str> = Some("rad");
+    /// And an angle may be **written with its unit**: `180deg` is an
+    /// angle too, and the caller may say so.
+    const ACCEPTS_TEXT: bool = true;
 
     fn from_json(value: &Json) -> Result<Self, ParamError> {
         angle_from_json(value)

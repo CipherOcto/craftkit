@@ -42,20 +42,37 @@ pub fn to_json_schema(params: &[ParamDoc]) -> Json {
     let mut properties = serde_json::Map::new();
     let mut required: Vec<Json> = Vec::new();
     for param in params {
-        let mut schema = match param.kind {
-            Doc::Number => json!({ "type": "number" }),
-            // A **text** is bounded, and the schema says so: the bound is
-            // the SDK's own (`MAX_TEXT_CHARACTERS`), read here and not
-            // restated, so the schema and the reader cannot disagree.
-            // Telling the model the bound before it proposes a value is
-            // the whole difference — a refusal after the fact is a
-            // refusal too late.
-            Doc::Text => json!({ "type": "string", "maxLength": crate::params::MAX_TEXT_CHARACTERS }),
-            Doc::Bool => json!({ "type": "boolean" }),
-            Doc::NodeRef => json!({ "type": "integer", "minimum": 0 }),
-            Doc::NodeKind => json!({ "type": "string" }),
-            Doc::Json => json!({}),
+        // The **type** comes from the SDK's own table of kinds, and the
+        // schema and the engine's refusal read the same table — so the
+        // shape an agent is told and the shape the session accepts are
+        // one answer.
+        let mut schema = match param.kind.json_type() {
+            Some(kind) => json!({ "type": kind }),
+            // The raw door has no type: a value of any shape is of it.
+            None => json!({}),
         };
+        // A kind that takes a **string** as well — a length, which may be
+        // written `25` or `25mm` — says **both** shapes. The schema is
+        // what the reader takes, and the reader takes both.
+        if param.accepts_text
+            && let Some(kind) = param.kind.json_type()
+        {
+            schema["type"] = json!([kind, "string"]);
+        }
+        // A **text** is bounded, and the schema says so: the bound is
+        // the SDK's own (`MAX_TEXT_CHARACTERS`), read here and not
+        // restated, so the schema and the reader cannot disagree.
+        // Telling the model the bound before it proposes a value is
+        // the whole difference — a refusal after the fact is a
+        // refusal too late.
+        if param.kind == Doc::Text {
+            schema["maxLength"] = json!(crate::params::MAX_TEXT_CHARACTERS);
+        }
+        // A node's id is a whole number that is not negative, and the
+        // schema says so.
+        if param.kind == Doc::NodeRef {
+            schema["minimum"] = json!(0);
+        }
         let description = param.help.trim();
         if !description.is_empty() {
             schema["description"] = Json::String(description.to_string());
