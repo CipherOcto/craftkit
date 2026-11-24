@@ -46,6 +46,16 @@ pub enum EcosystemError {
     MissingCommand { tool: String, command: String },
     /// A panel names a command that is not there.
     MissingPanelCommand { panel: String, command: String },
+    /// A panel shows a command of a layer it does not require.
+    ///
+    /// A panel is a battery's own window of commands, and a battery's
+    /// own commands are the ones of its own layer. A panel that shows
+    /// another battery's command is a battery reaching into another
+    /// battery: the rule that a plugin may not depend on another plugin
+    /// is a rule about **data** as well as about Cargo.
+    ForeignPanelCommand { panel: String, command: String, layer: String },
+    /// A tool runs a command of a layer it does not require.
+    ForeignToolCommand { tool: String, command: String, layer: String },
     /// A migration is not a step: it does not move one version forward.
     MigrationStep { id: String, from: u32, to: u32 },
     /// Two migrations start at the same version.
@@ -77,6 +87,12 @@ impl std::fmt::Display for EcosystemError {
             }
             EcosystemError::MissingPanelCommand { panel, command } => {
                 write!(f, "the panel `{panel}` shows `{command}`, which is not linked in")
+            }
+            EcosystemError::ForeignPanelCommand { panel, command, layer } => {
+                write!(f, "the panel `{panel}` shows `{command}`, which is of the `{layer}` layer")
+            }
+            EcosystemError::ForeignToolCommand { tool, command, layer } => {
+                write!(f, "the tool `{tool}` runs `{command}`, which is of the `{layer}` layer")
             }
             EcosystemError::MigrationStep { id, from, to } => {
                 write!(f, "the migration `{id}` goes from {from} to {to}: a step is one version")
@@ -170,6 +186,7 @@ impl Ecosystem {
         self.validate_layers()?;
         self.validate_layers_of_contributions()?;
         self.validate_references()?;
+        self.validate_own_layers()?;
         self.validate_migrations()?;
         Ok(())
     }
@@ -322,6 +339,69 @@ impl Ecosystem {
             }
         }
         Ok(())
+    }
+
+    /// A panel shows the commands of **its own layer**, and a tool runs
+    /// the commands of its own layer.
+    ///
+    /// **The rule that a plugin may not depend on another plugin is a
+    /// rule about data as well as about Cargo.** A battery's Cargo
+    /// manifest may not name another battery, and the tree's gate says
+    /// so — but a panel is a *list of command names*, and a panel that
+    /// named another battery's command would be a battery reaching into
+    /// another battery without a word in any manifest.
+    ///
+    /// A layer **requires** the layers below it, so a panel may show the
+    /// commands of a layer it requires: the core's own commands are
+    /// there for every battery.
+    fn validate_own_layers(&self) -> Result<(), EcosystemError> {
+        for tool in self.tools.all() {
+            let Some(command) = self.commands.get(tool.command) else { continue };
+            if !self.layer_reaches(tool.layer, command.layer) {
+                return Err(EcosystemError::ForeignToolCommand {
+                    tool: tool.id.to_string(),
+                    command: tool.command.to_string(),
+                    layer: command.layer.to_string(),
+                });
+            }
+        }
+        for panel in self.panels.all() {
+            for command in panel.commands {
+                let Some(spec) = self.commands.get(command) else { continue };
+                if !self.layer_reaches(panel.layer, spec.layer) {
+                    return Err(EcosystemError::ForeignPanelCommand {
+                        panel: panel.id.to_string(),
+                        command: (*command).to_string(),
+                        layer: spec.layer.to_string(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether a layer reaches another one: it is that one, or it
+    /// requires it, directly or through another layer.
+    fn layer_reaches(&self, from: &str, to: &str) -> bool {
+        if from == to {
+            return true;
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        self.reaches(from, to, &mut seen)
+    }
+
+    fn reaches<'a>(&self, from: &'a str, to: &str, seen: &mut Vec<&'a str>) -> bool {
+        if seen.contains(&from) {
+            return false;
+        }
+        seen.push(from);
+        let Some(layer) = self.layers.get(from) else { return false };
+        for requires in layer.requires {
+            if *requires == to || self.reaches(requires, to, seen) {
+                return true;
+            }
+        }
+        false
     }
 
     /// A session over this ecosystem.

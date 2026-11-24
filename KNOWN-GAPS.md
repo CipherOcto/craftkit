@@ -198,6 +198,15 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **A panel that no test names is caught** (§1136): the same rule, read
+  over the tree's **panels** — a battery's own window of commands — and
+  the rule is about the **name**, so a panel named in a comment is a panel
+  the gate counts.
+- **A panel shows only its own layer's commands** (§1136): the rule that a
+  plugin may not depend on another plugin is now a rule about **data** as
+  well as about Cargo. The rule is about the **layer**, not the crate: a
+  panel may show a command of a layer it requires, and two batteries that
+  shared a layer would be two batteries the rule could not tell apart.
 - **A migration that no test names is caught** (§1135): the same rule, read
   over the tree's **migrations** — the steps from one version of a file
   format to the next — and the rule is about the **name**, so a step

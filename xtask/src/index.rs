@@ -86,6 +86,8 @@ pub struct Index {
     pub kinds: Vec<Kind>,
     /// Every migration, sorted by id.
     pub migrations: Vec<Migration>,
+    /// Every panel, sorted by id.
+    pub panels: Vec<Panel>,
     /// The files of each battery's source, by battery.
     pub modules: BTreeMap<String, Vec<PathBuf>>,
     /// The files of each battery's tests, by battery.
@@ -93,6 +95,26 @@ pub struct Index {
     /// The public bounds the batteries declare: the name, the value and the
     /// file.
     pub bounds: Vec<Bound>,
+}
+
+/// One **panel** the tree declares: a battery's own window of commands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Panel {
+    /// The panel's id: `panel.<thing>`.
+    pub id: String,
+    /// The file the panel is written in, relative to the root.
+    pub file: PathBuf,
+    /// The line the panel's attribute is on.
+    pub line: usize,
+    /// The crate the panel belongs to.
+    pub crate_name: String,
+}
+
+impl Panel {
+    /// Where the panel is, for a report: `crates/x/src/y.rs:42`.
+    pub fn where_(&self) -> String {
+        format!("{}:{}", self.file.display(), self.line)
+    }
 }
 
 /// One **migration** the tree declares: a step from one version of a
@@ -215,10 +237,12 @@ pub fn build(root: &Path) -> Result<Index, String> {
         for (text, relative) in kinds_texts {
             index.kinds.extend(kinds_in(&text, &relative, &battery));
             index.kinds.extend(macro_kinds_in(&text, &relative, &battery, &macros));
+            index.panels.extend(panels_in(&text, &relative, &battery));
         }
     }
     index.commands.sort_by(|a, b| a.id.cmp(&b.id));
     index.kinds.sort_by(|a, b| a.id.cmp(&b.id));
+    index.panels.sort_by(|a, b| a.id.cmp(&b.id));
     index.bounds.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(index)
 }
@@ -250,6 +274,34 @@ pub fn commands_in(text: &str, file: &Path, battery: &str) -> Vec<Command> {
                 line,
                 battery: battery.to_string(),
                 example: has_flag(&block, "example"),
+            });
+        }
+        offset = end;
+    }
+    found
+}
+
+/// The **panels** a file declares, where the attribute is at the start of
+/// its line.
+///
+/// A panel is a battery's own window of commands, and the attribute is at
+/// the start of its line when it is a **declaration**: an attribute in a
+/// comment is an example of one, and the example is not a panel.
+pub fn panels_in(text: &str, file: &Path, crate_name: &str) -> Vec<Panel> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find("#[panel(") {
+        let start = offset + at;
+        let Some((block, end)) = block_of(text, start + "#[panel(".len()) else { break };
+        let line_start = text[..start].rfind('\n').map(|at| at + 1).unwrap_or(0);
+        if text[line_start..start].trim().is_empty()
+            && let Some(id) = field(&block, "id")
+        {
+            found.push(Panel {
+                id,
+                file: file.to_path_buf(),
+                line: text[..start].lines().count().max(1),
+                crate_name: crate_name.to_string(),
             });
         }
         offset = end;

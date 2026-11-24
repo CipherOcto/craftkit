@@ -4581,6 +4581,8 @@ so.
 | **every command is run by a test** | **built.** The outer gate reads every command the tree declares and says the ones that no test names (§1133) | §1133 |
 | **every kind is named by a test** | **built.** The outer gate reads every kind the tree declares and says the ones that no test names (§1134) | §1134 |
 | **every migration is named by a test** | **built.** The outer gate reads every migration the tree declares and says the ones that no test names (§1135) | §1135 |
+| **every panel is named by a test** | **built.** The outer gate reads every panel the tree declares and says the ones that no test names (§1136) | §1136 |
+| **a panel shows only its own layer's commands** | **built.** The ecosystem refuses a panel or tool that names a command of a layer it does not require (§1136) | §1136 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72050,3 +72052,57 @@ version to the tenth, and **seven** of them were named by no test at all.
 - **A chain is not a round trip.** The tests say what each step does; they
   do not say that a document of every version survives being written and
   read back with everything that version can carry.
+
+## 1136. A panel shows only its own layer's commands
+
+A **panel** is a battery's own window of commands: it names the commands
+it shows, in order, and a front end shows them together. It is a rule the
+kit publishes as much as a command or a kind is — and **sixteen** of the
+tree's seventeen panels were named by no test.
+
+### What was built
+
+- **A panel may only show the commands of a layer it requires.** A panel
+  is a battery's own window, so the commands it shows are its own layer's.
+  A layer **requires** the layers below it, so a panel may show the core's
+  commands — they are there for every battery — and nothing else. The
+  ecosystem refuses a panel that reaches out, and says which layer the
+  command was of.
+- **A tool may only run the commands of a layer it requires.** The same
+  rule, for the same reason: a tool is a gesture, and a gesture that
+  reaches into another battery is the same reaching.
+- **Every panel is named by a test.** Seventeen test files, one per panel,
+  each saying what the panel shows: that it is there, that every command
+  it names is linked in, and that every one of them is of its own layer.
+- **The outer gate says so.** The `lists` phase reads every panel the
+  tree declares and says a panel that no test names.
+
+### What the port found
+
+- **The rule that a plugin may not depend on another plugin was a rule
+  about Cargo alone.** The tree's gate says that a battery's manifest may
+  not name another battery — and a **panel** is a list of command *names*.
+  A panel that named another battery's command would have been a battery
+  reaching into another battery without a word in any manifest, and
+  nothing said so. The tree happened to be clean; the rule did not hold it
+  there.
+- **The layer's `requires` is the tree's own word for this.** A layer
+  says what it needs — every battery requires the core — and the rule now
+  reads that word instead of inventing a second one.
+
+### What it cost
+
+- **One rule** in the SDK's ecosystem, **five tests** for the rule,
+  **seventeen test files** for the panels (three tests each), **two tests**
+  for the gate's rule, and the index's `Panel` and the reader that finds
+  them.
+
+### What it does not settle
+
+- **The rule is about the layer, not the crate.** A panel may show a
+  command of a layer it requires, and two batteries that share a layer
+  would be two batteries the rule cannot tell apart.
+- **A panel that is named is not a panel that is right.** The gate's rule
+  is about the **name**, as §1133's, §1134's and §1135's are.
+- **The rule is about the tree's own tests.** A panel that only a program
+  outside the tree holds is a panel the rule does not see.
