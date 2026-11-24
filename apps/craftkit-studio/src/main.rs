@@ -2,8 +2,8 @@
 //!
 //! Everything interesting is in the library: this is the part a person sees.
 
+use craftkit_sdk::RecordingCanvas;
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{RecordingCanvas, Session};
 use craftkit_studio::ecosystem;
 
 /// Print a part of the menu, and what is in it.
@@ -202,15 +202,14 @@ fn main() {
     }
 
     println!("\n── a command made while the program runs");
-    let mut commands = ecosystem.commands.clone();
-    match commands.register(craftkit_studio::commands::runtime_echo()) {
-        Ok(()) => {
-            let mut session = Session::new(commands, ecosystem.kinds.clone());
-            match session.execute("runtime.echo", &json!({ "text": "made at run time" })) {
-                Ok(outcome) => println!("   {}", outcome.message),
-                Err(error) => println!("   refused: {error}"),
-            }
-        }
+    // The command **joins the session that is running**: the registry is
+    // a value and it is open, and every door that lists the session's
+    // commands lists this one too.
+    match session.register(craftkit_studio::commands::runtime_echo()) {
+        Ok(()) => match session.execute("runtime.echo", &json!({ "text": "made at run time" })) {
+            Ok(outcome) => println!("   {}", outcome.message),
+            Err(error) => println!("   refused: {error}"),
+        },
         Err(error) => println!("   refused: {error}"),
     }
 }

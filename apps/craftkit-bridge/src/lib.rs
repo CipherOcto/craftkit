@@ -178,20 +178,26 @@ impl Bridge {
 
     /// The commands, as tools.
     ///
-    /// The **projection**: the same view the studio's menu is made of, so
-    /// the two cannot disagree.
+    /// The **projection** gives the shape of a command, and the
+    /// **session** says which commands there are: the list is read from
+    /// the session the tools are run in, so a door never offers a tool it
+    /// cannot run — and never hides one it can.
+    ///
+    /// The list is **pruned** to what this door shows: the commands, the
+    /// effects and the tools. The registry stays whole, and every door
+    /// may still reach every command.
     fn tools(&self) -> Json {
-        let projection = self.ecosystem.projection();
-        let tools: Vec<Json> = projection
-            .menu(&["command", "effect", "tool"])
+        let tools: Vec<Json> = self
+            .session
+            .registry()
+            .all()
             .iter()
-            .filter_map(|entry| projection.schema(entry.id))
-            .map(|schema| {
-                let id = entry_id(&schema);
+            .filter(|command| matches!(command.capability, "command" | "effect" | "tool"))
+            .map(|command| {
+                let mut schema = craftkit_sdk::Projection::describe(command);
                 let doc = schema.get("doc").cloned().unwrap_or(Json::Null);
-                let mut schema = schema;
                 if let Some(object) = schema.as_object_mut() {
-                    object.insert("name".to_string(), Json::String(id));
+                    object.insert("name".to_string(), Json::String(command.id.to_string()));
                     object.insert("description".to_string(), doc);
                 }
                 schema
@@ -268,11 +274,6 @@ impl Bridge {
         let tree = projection.menu_tree(&["command", "effect", "tool"]);
         json!({ "menu": tree.iter().map(MenuNode::to_json).collect::<Vec<_>>() })
     }
-}
-
-/// The id in a schema.
-fn entry_id(schema: &Json) -> String {
-    schema.get("id").and_then(|id| id.as_str()).unwrap_or_default().to_string()
 }
 
 /// The text of an engine error.

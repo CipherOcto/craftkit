@@ -4,8 +4,8 @@
 //! hold them.
 
 use craftkit_bridge::{Bridge, Request};
-use craftkit_sdk::Ecosystem;
 use craftkit_sdk::serde_json::{Value as Json, json};
+use craftkit_sdk::{CommandSpec, Doc, Ecosystem, Outcome, ParamDoc, Text};
 
 /// The ecosystem of this program: the same registry the studio has.
 fn ecosystem() -> Ecosystem {
@@ -95,6 +95,36 @@ fn a_tool_says_what_it_changes() {
     assert_eq!(read["mutates"], json!(false), "the plan does not change the document");
     let write = tools.iter().find(|tool| tool["id"] == "link.add").expect("the link");
     assert_eq!(write["mutates"], json!(true), "a link changes the document");
+}
+
+/// A command that joins the session while the program runs is **listed
+/// and can be run**.
+///
+/// The door's list is read from the session its tools run in, so a door
+/// never offers a command it cannot run — and never hides one it can.
+#[test]
+fn a_command_made_at_run_time_is_listed_and_can_be_run() {
+    let mut bridge = bridge();
+    let command = CommandSpec::dynamic(
+        "runtime.echo",
+        "Echo",
+        "runtime",
+        "Say the text back.",
+        vec![ParamDoc::dynamic("text", Doc::Text, true, "What to say.")],
+        |_session, params| {
+            let text = params.param::<Text>("text", "runtime.echo")?;
+            Ok(Outcome::new(text.0))
+        },
+    );
+    bridge.session().register(command).expect("the command joins the session");
+
+    let answer = ask(&mut bridge, "tools/list", Json::Null);
+    let tools = answer["result"]["tools"].as_array().expect("there are tools");
+    assert!(tools.iter().any(|tool| tool["id"] == "runtime.echo"), "{answer}");
+
+    let answer =
+        ask(&mut bridge, "tools/call", json!({ "name": "runtime.echo", "arguments": { "text": "hello" } }));
+    assert_eq!(answer["result"]["content"][0]["text"], "hello", "{answer}");
 }
 
 /// The resources are the kinds, the formats and the **manifest**: the

@@ -39,6 +39,7 @@
 )]
 #![forbid(unsafe_code)]
 
+use craftkit_sdk::command::CommandSpec;
 use craftkit_sdk::ecosystem::Ecosystem;
 use craftkit_sdk::session::Memory;
 use craftkit_sdk::{EngineError, Session};
@@ -65,16 +66,19 @@ pub enum Reply {
 }
 
 /// The door: a session and the words of it.
+///
+/// The door holds **one** registry: the session's. The ecosystem is what
+/// the session was made from, and a door that kept both would have two
+/// answers to "which commands are there" — and only one of them would
+/// be the commands the door can run.
 pub struct Repl {
     session: Session,
-    ecosystem: Ecosystem,
 }
 
 impl Repl {
     /// A door onto that ecosystem.
     pub fn new(ecosystem: Ecosystem) -> Self {
-        let session = ecosystem.session();
-        Repl { session, ecosystem }
+        Repl { session: ecosystem.session() }
     }
 
     /// The session the door drives.
@@ -133,17 +137,28 @@ impl Repl {
     }
 
     /// The commands, by area.
+    ///
+    /// The list is read from the **session** the door drives, so a
+    /// command that joins the session while the program runs is listed
+    /// with the rest — and the door never lists a command it cannot run.
     fn help(&self) -> Vec<String> {
-        let mut out = Vec::new();
-        for entry in self.ecosystem.projection().menu(&["command", "effect"]) {
-            out.push(format!("{:<10} {:<24} {}", entry.area, entry.id, entry.doc));
-        }
-        out
+        let mut commands: Vec<&CommandSpec> = self
+            .session
+            .registry()
+            .all()
+            .iter()
+            .filter(|command| matches!(command.capability, "command" | "effect"))
+            .collect();
+        commands.sort_by(|left, right| left.area.cmp(right.area).then_with(|| left.id.cmp(right.id)));
+        commands
+            .iter()
+            .map(|command| format!("{:<10} {:<24} {}", command.area, command.id, command.doc))
+            .collect()
     }
 
     /// The commands' ids.
     fn commands(&self) -> Vec<String> {
-        self.ecosystem.commands.ids().into_iter().map(|id| id.to_string()).collect()
+        self.session.registry().ids().into_iter().map(|id| id.to_string()).collect()
     }
 
     /// What the document means.

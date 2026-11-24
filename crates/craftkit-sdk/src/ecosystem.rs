@@ -534,6 +534,20 @@ impl<'a> Projection<'a> {
     /// that reads the document does not have to write to read it.
     pub fn schema(&self, id: &str) -> Option<serde_json::Value> {
         let command = self.ecosystem.commands.get(id)?;
+        Some(Self::describe(command))
+    }
+
+    /// A command, as a **descriptor**.
+    ///
+    /// The descriptor is what a door publishes about a command: its id,
+    /// its label, its area, its capability, its line about itself, what
+    /// it changes, and the parameters it takes.
+    ///
+    /// It is a function of the **command** and not of a registry, so a
+    /// door that holds a command — the session's own registry, say —
+    /// describes it the way the projection does. There is one shape and
+    /// one place it is written.
+    pub fn describe(command: &CommandSpec) -> serde_json::Value {
         let parameters: Vec<serde_json::Value> = command
             .params
             .iter()
@@ -557,7 +571,7 @@ impl<'a> Projection<'a> {
                 schema
             })
             .collect();
-        Some(serde_json::json!({
+        serde_json::json!({
             "id": command.id,
             "label": command.label,
             "area": command.area,
@@ -566,7 +580,7 @@ impl<'a> Projection<'a> {
             "mutates": command.mutates,
             "undoable": command.undoable,
             "parameters": parameters,
-        }))
+        })
     }
 
     /// A command's parameters, as a **JSON Schema**.

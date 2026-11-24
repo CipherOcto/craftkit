@@ -140,8 +140,6 @@ impl Tool {
 pub struct Server {
     /// The session the commands run in.
     session: Session,
-    /// The tools: one per command.
-    tools: Vec<Tool>,
 }
 
 impl Server {
@@ -150,22 +148,28 @@ impl Server {
     /// The tools are made from the session's registry, so a command that
     /// is in the registry is a tool, and a command that is not is not.
     pub fn new(session: Session) -> Server {
-        let mut tools = Vec::new();
-        for spec in session.registry().all() {
-            tools.push(Tool {
+        Server { session }
+    }
+
+    /// The tools, one per command.
+    ///
+    /// **The list is read when it is asked for**, and not kept: the
+    /// registry is open, and a command that joins the session while the
+    /// program runs is a tool from then on. A door that kept a list
+    /// would offer a tool it cannot run — or hide one it can.
+    pub fn tools(&self) -> Vec<Tool> {
+        self.session
+            .registry()
+            .all()
+            .iter()
+            .map(|spec| Tool {
                 name: tool_name(spec.id),
                 command: spec.id.to_string(),
                 description: describe(spec.label, spec.doc),
                 schema: schema_of(spec.params),
                 mutates: spec.mutates,
-            });
-        }
-        Server { session, tools }
-    }
-
-    /// The tools, one per command.
-    pub fn tools(&self) -> &[Tool] {
-        &self.tools
+            })
+            .collect()
     }
 
     /// The session the commands run in.
@@ -241,7 +245,7 @@ impl Server {
                          `doc.open` is `{}`. The tool's schema is the command's typed parameters. \
                          There are {} commands, and there is no other vocabulary.",
                         tool_name("doc.open"),
-                        self.tools.len()
+                        self.tools().len()
                     ),
                 }))
             }
@@ -312,7 +316,7 @@ impl Server {
                 }
             }
             "tools/list" => {
-                Ok(json!({ "tools": self.tools.iter().map(|tool| tool.to_json()).collect::<Vec<_>>() }))
+                Ok(json!({ "tools": self.tools().iter().map(|tool| tool.to_json()).collect::<Vec<_>>() }))
             }
             "tools/call" => {
                 let name = params
@@ -331,7 +335,7 @@ impl Server {
         let Some(command) = command_id(name) else {
             return ToolResult::error(format!("`{name}` is not a craftkit command"));
         };
-        if !self.tools.iter().any(|tool| tool.name == name) {
+        if !self.tools().iter().any(|tool| tool.name == name) {
             return ToolResult::error(format!("there is no command `{command}`"));
         }
         // A command that is **waiting** for an answer: the answer comes

@@ -37,9 +37,9 @@ fn every_command_is_a_tool() {
         server.tools().len()
     );
     // The tool list is the command list: there is no second vocabulary.
+    let tools = server.tools();
     for spec in ecosystem.commands.all() {
-        let tool = server
-            .tools()
+        let tool = tools
             .iter()
             .find(|tool| tool.command == spec.id)
             .unwrap_or_else(|| panic!("`{}` is a command and there is no tool for it", spec.id));
@@ -51,7 +51,8 @@ fn every_command_is_a_tool() {
 #[test]
 fn the_schema_is_the_typed_parameters() {
     let server = server();
-    let tool = server.tools().iter().find(|tool| tool.command == "node.add").expect("the command is there");
+    let tools = server.tools();
+    let tool = tools.iter().find(|tool| tool.command == "node.add").expect("the command is there");
     let schema = &tool.schema;
     assert_eq!(schema["type"], json!("object"));
     assert_eq!(schema["additionalProperties"], json!(false), "no other keys are allowed");

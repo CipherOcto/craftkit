@@ -6,7 +6,7 @@
 
 use craftkit_mcp::Server;
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Ecosystem, Session};
+use craftkit_sdk::{CommandSpec, Doc, Ecosystem, Outcome, ParamDoc, Session, Text};
 
 /// A battery, linked in so that the catalogue holds more than the
 /// core's commands.
@@ -46,7 +46,8 @@ fn the_tool_list_is_the_command_list() {
 #[test]
 fn a_tools_schema_is_the_json_schema_the_sdk_builds() {
     let server = Server::new(session());
-    let tool = server.tools().first().expect("there is a tool");
+    let tools = server.tools();
+    let tool = tools.first().expect("there is a tool");
     assert_eq!(tool.schema["type"], json!("object"), "the schema is an object");
     assert!(tool.schema["properties"].is_object(), "with properties");
     assert_eq!(tool.schema["additionalProperties"], json!(false), "and nothing else is taken");
@@ -76,7 +77,8 @@ fn the_descriptor_is_not_the_schema() {
     let ecosystem = ecosystem();
     let projection = ecosystem.projection();
     let server = Server::new(session());
-    let tool = server.tools().first().expect("there is a tool");
+    let tools = server.tools();
+    let tool = tools.first().expect("there is a tool");
     let descriptor = projection.schema(&tool.command).expect("the command is there");
     assert_eq!(descriptor["id"], json!(tool.command));
     assert!(descriptor.get("label").is_some(), "the descriptor has an envelope");
@@ -96,7 +98,8 @@ fn the_tool_list_is_the_registry_in_its_own_order() {
     let ecosystem = ecosystem();
     let server = Server::new(session());
     let commands: Vec<&str> = ecosystem.commands.all().iter().map(|entry| entry.id).collect();
-    let tools: Vec<&str> = server.tools().iter().map(|tool| tool.command.as_str()).collect();
+    let listed = server.tools();
+    let tools: Vec<&str> = listed.iter().map(|tool| tool.command.as_str()).collect();
     assert_eq!(tools, commands, "the tool list is the command list");
     for tool in server.tools() {
         assert_eq!(
@@ -117,11 +120,37 @@ fn the_tool_list_is_the_registry_in_its_own_order() {
 #[test]
 fn a_tool_says_whether_it_changes_the_document() {
     let server = Server::new(session());
-    let read = server.tools().iter().find(|tool| tool.command == "doc.plan").expect("the plan");
+    let listed = server.tools();
+    let read = listed.iter().find(|tool| tool.command == "doc.plan").expect("the plan");
     assert!(!read.mutates, "the plan does not change the document");
     assert_eq!(read.to_json()["annotations"]["readOnlyHint"], json!(true), "{}", read.to_json());
 
-    let write = server.tools().iter().find(|tool| tool.command == "link.add").expect("the link");
+    let listed = server.tools();
+    let write = listed.iter().find(|tool| tool.command == "link.add").expect("the link");
     assert!(write.mutates, "adding a node changes the document");
     assert_eq!(write.to_json()["annotations"]["readOnlyHint"], json!(false), "{}", write.to_json());
+}
+
+/// A command that joins the session while the program runs is a **tool**.
+///
+/// The list is read when it is asked for, so the door never hides a
+/// command it can run — and never offers one it cannot.
+#[test]
+fn a_command_made_at_run_time_is_a_tool() {
+    let mut server = Server::new(session());
+    let command = CommandSpec::dynamic(
+        "runtime.echo",
+        "Echo",
+        "runtime",
+        "Say the text back.",
+        vec![ParamDoc::dynamic("text", Doc::Text, true, "What to say.")],
+        |_session, params| {
+            let text = params.param::<Text>("text", "runtime.echo")?;
+            Ok(Outcome::new(text.0))
+        },
+    );
+    server.session_mut().register(command).expect("the command joins the session");
+
+    let tool = server.tools().into_iter().find(|tool| tool.command == "runtime.echo");
+    assert!(tool.is_some(), "the command is a tool: {:?}", server.tools());
 }

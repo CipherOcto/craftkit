@@ -247,6 +247,25 @@ impl Session {
         &self.commands
     }
 
+    /// A command that **joins** the session while it runs.
+    ///
+    /// The registry is a **value**, and it is open: a command that is made
+    /// while the program runs can be put in the session that is running,
+    /// and every door that lists the session's commands lists it too.
+    ///
+    /// The registry is **grow-only**, and a command that is already there
+    /// is refused: two commands with one id are two commands, and the
+    /// registry is right to say so.
+    ///
+    /// The command's **parameters** are checked as they are registered: an
+    /// id that is not well formed is refused before anything is made.
+    pub fn register(&mut self, spec: CommandSpec) -> Result<(), EngineError> {
+        let id = spec.id;
+        self.commands
+            .register(spec)
+            .map_err(|error| EngineError::Failed { id: id.to_string(), message: error.to_string() })
+    }
+
     /// The node kinds this session knows.
     pub fn kinds(&self) -> &Registry<NodeKindSpec> {
         &self.kinds
