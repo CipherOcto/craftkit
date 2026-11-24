@@ -82,6 +82,9 @@ craftkit-plugin-clap = { path = "../../crates/craftkit-plugin-clap", version = "
 # identity, a parameter list and a state. Off by default as well: a
 # program that wants plugins says so.
 craftkit-plugin-vst3 = { path = "../../crates/craftkit-plugin-vst3", version = "0.2.0", optional = true }
+# The **a2ui battery**: a surface and the eleven components that are
+# drawn on it. Off by default: a program that wants a surface says so.
+craftkit-plugin-a2ui = { path = "../../crates/craftkit-plugin-a2ui", version = "0.2.0", optional = true }
 
 [features]
 default = []
@@ -127,6 +130,9 @@ image = ["dep:craftkit-plugin-image"]
 clap = ["dep:craftkit-plugin-clap"]
 # The VST3 battery. Off by default: a program that wants plugins says so.
 vst3 = ["dep:craftkit-plugin-vst3"]
+# The a2ui battery. Off by default: a program that wants a surface and
+# the components on it says so.
+a2ui = ["dep:craftkit-plugin-a2ui"]
 
 [dev-dependencies]
 # The **scratch**: the file or the directory a test works in, taken

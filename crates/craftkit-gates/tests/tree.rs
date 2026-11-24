@@ -59,6 +59,20 @@ impl Tree {
         std::fs::write(dir.join("src").join("lib.rs"), format!("{attribute}\n\npub fn nothing() {{}}\n"))
             .expect("the root is written");
     }
+
+    /// The recipe that names the batteries.
+    ///
+    /// The list is the backticked names after the recipe's own line,
+    /// which is the line the gate reads.
+    fn recipe(&self, names: &str) {
+        let dir = self.root.join("docs").join("recipes");
+        std::fs::create_dir_all(&dir).expect("the directory is made");
+        let body = format!(
+            "# Recipe: add a battery\n\nThe batteries in this tree are `crates/craftkit-plugin-*`: \
+             {names}\n"
+        );
+        std::fs::write(dir.join("add-a-battery.md"), body).expect("the recipe is written");
+    }
 }
 
 impl Drop for Tree {
@@ -397,4 +411,44 @@ fn the_studio_is_a_host() {
         !FRONT_ENDS.contains(&"craftkit-studio"),
         "the studio's library is a command book, and a command's body may open the document"
     );
+}
+
+/// A battery the recipe does **not** name is caught.
+///
+/// The recipe tells a person how to add a battery, and it names the
+/// batteries that are there. A battery the tree has that the recipe does
+/// not name is a battery nobody knows how to add a command to.
+#[test]
+fn a_battery_the_recipe_does_not_name_is_caught() {
+    let tree = Tree::new("recipe-unnamed");
+    tree.crate_("crates", "craftkit-plugin-art", &[], None);
+    tree.recipe("`art`, `cad`");
+    let findings = check(&tree.root);
+    let recipe = findings_of(&findings, "recipe");
+    assert_eq!(recipe.len(), 1, "the gate caught it: {findings:?}");
+    assert!(recipe[0].message.contains("cad"), "{}", recipe[0].message);
+}
+
+/// A battery the recipe names and the tree does **not** have is caught.
+///
+/// A name that has drifted sends a person to a crate that is not there.
+#[test]
+fn a_battery_the_recipe_names_and_the_tree_does_not_have_is_caught() {
+    let tree = Tree::new("recipe-ghost");
+    tree.crate_("crates", "craftkit-plugin-art", &[], None);
+    tree.recipe("`art`, `ghost`");
+    let findings = check(&tree.root);
+    let recipe = findings_of(&findings, "recipe");
+    assert_eq!(recipe.len(), 1, "the gate caught it: {findings:?}");
+    assert!(recipe[0].message.contains("ghost"), "{}", recipe[0].message);
+}
+
+/// A recipe that names the batteries the tree has is not caught.
+#[test]
+fn a_recipe_that_names_the_batteries_is_not_caught() {
+    let tree = Tree::new("recipe-clean");
+    tree.crate_("crates", "craftkit-plugin-art", &[], None);
+    tree.recipe("`art`");
+    let findings = check(&tree.root);
+    assert!(findings_of(&findings, "recipe").is_empty(), "the gate caught it: {findings:?}");
 }

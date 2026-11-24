@@ -3,9 +3,13 @@
 A **battery** is a plugin: a crate that adds commands, kinds, tools and panels
 to an application, and that the application links in **without naming it**.
 
-The batteries in this tree are `crates/craftkit-plugin-*`: `art`, `cad`,
-`clap`, `film`, `fx`, `grid`, `hello`, `image`, `layout`, `numeric`, `pdf`,
-`prose`, `shapes`, `shared`, `sound`, `text`, `vector`, `vst3`.
+The batteries in this tree are `crates/craftkit-plugin-*`: `a2ui`, `art`,
+`cad`, `clap`, `film`, `fx`, `grid`, `hello`, `image`, `layout`, `numeric`,
+`pdf`, `prose`, `shapes`, `shared`, `sound`, `text`, `vector`, `vst3`.
+
+> The tree's own gate reads this line: a battery the tree has that this
+> list does not name is a finding, and so is a name here that the tree
+> does not have.
 
 ---
 

@@ -9,7 +9,7 @@
 //! therefore **rules and not gates**: they were true, and nothing said
 //! so.
 //!
-//! This crate is the gate. It has seven rules:
+//! This crate is the gate. It has eight rules:
 //!
 //! 1. **The deny attribute is the house one.** Every crate root carries
 //!    the same six lints, in the same order, so that a deny list that
@@ -39,6 +39,11 @@
 //!    The **scratch** is the way: a path that is handed back when the
 //!    thread that asked for it ends. A test that names the temporary
 //!    directory itself is a finding. §873.
+//! 8. **The recipes say what the tree does.** A recipe names the tree's
+//!    crates, and a name that has drifted is a name that sends a person
+//!    to a crate that is not there: the batteries the tree has are named
+//!    in the recipe that adds one, and the recipe names no battery the
+//!    tree does not have.
 //!
 //! # The rule that moved, and why
 //!
@@ -554,7 +559,107 @@ pub fn check(root: &Path) -> Vec<Finding> {
     // Rule 7: a test does not litter.
     tests_do_not_litter(root, &mut findings);
 
+    // Rule 8: the recipes say what the tree does.
+    recipes_name_the_batteries(root, &mut findings);
+
     findings
+}
+
+/// The recipe that names the batteries.
+const BATTERY_RECIPE: &str = "docs/recipes/add-a-battery.md";
+
+/// The line of the recipe that carries the list.
+///
+/// The rule is a **stated** one and not a guess: the recipe says which
+/// line holds the list, and the gate reads that line. A gate that
+/// guessed where the list is would be a gate that breaks when the prose
+/// is reworded.
+const BATTERY_LIST: &str = "The batteries in this tree are";
+
+/// Rule 8: **the recipes say what the tree does**.
+///
+/// A recipe is a document that tells a person how to change the tree,
+/// and it names the tree's crates. A recipe that names a battery the
+/// tree does not have sends a person to a crate that is not there, and
+/// a battery the tree has that no recipe names is a battery nobody
+/// knows how to add a command to.
+///
+/// The **link** half of this was already checked: the outer gate walks
+/// the prose and fails on a broken path. What is checked here is the
+/// **claim**: the list of batteries is a fact about the tree, and a fact
+/// that drifts is a fact nobody looks at.
+fn recipes_name_the_batteries(root: &Path, findings: &mut Vec<Finding>) {
+    let Ok(text) = std::fs::read_to_string(root.join(BATTERY_RECIPE)) else { return };
+    let named = named_batteries(&text);
+    let batteries: Vec<String> = crates(root)
+        .iter()
+        .filter(|crate_| crate_.name.starts_with(PLUGIN_PREFIX))
+        .map(|crate_| crate_.name[PLUGIN_PREFIX.len()..].to_string())
+        .collect();
+    for battery in &batteries {
+        if named.contains(battery) {
+            continue;
+        }
+        findings.push(Finding {
+            rule: "recipe",
+            crate_: format!("{PLUGIN_PREFIX}{battery}"),
+            message: format!("the tree has the battery `{battery}` and `{BATTERY_RECIPE}` does not name it"),
+        });
+    }
+    for name in &named {
+        if batteries.contains(name) {
+            continue;
+        }
+        findings.push(Finding {
+            rule: "recipe",
+            crate_: format!("{PLUGIN_PREFIX}{name}"),
+            message: format!(
+                "`{BATTERY_RECIPE}` names the battery `{name}` and the tree has no such battery"
+            ),
+        });
+    }
+}
+
+/// The batteries the recipe names.
+///
+/// The list is the paragraph that starts with the recipe's own line, and
+/// the names in it are the **backticked** ones: a name is a name and not
+/// a path, so `crates/craftkit-plugin-*` is the shape and not a name.
+fn named_batteries(recipe: &str) -> Vec<String> {
+    let mut paragraph = String::new();
+    let mut inside = false;
+    for line in recipe.lines() {
+        if line.starts_with(BATTERY_LIST) {
+            inside = true;
+        }
+        if !inside {
+            continue;
+        }
+        if line.trim().is_empty() {
+            break;
+        }
+        paragraph.push_str(line);
+        paragraph.push(' ');
+    }
+    let mut out = Vec::new();
+    for (index, piece) in paragraph.split('`').enumerate() {
+        // The pieces between the backticks are the odd ones.
+        if index % 2 == 0 {
+            continue;
+        }
+        let name = piece.trim();
+        if name.is_empty() {
+            continue;
+        }
+        if !name
+            .chars()
+            .all(|character| character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-')
+        {
+            continue;
+        }
+        out.push(name.to_string());
+    }
+    out
 }
 
 /// The crate that owns the temporary directory: the **scratch**.

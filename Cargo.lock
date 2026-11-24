@@ -848,6 +848,7 @@ dependencies = [
  "craftkit-derive",
  "craftkit-jpeg",
  "craftkit-link",
+ "craftkit-plugin-a2ui",
  "craftkit-plugin-art",
  "craftkit-plugin-cad",
  "craftkit-plugin-clap",
