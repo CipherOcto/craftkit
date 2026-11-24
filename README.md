@@ -4583,6 +4583,8 @@ so.
 | **every migration is named by a test** | **built.** The outer gate reads every migration the tree declares and says the ones that no test names (§1135) | §1135 |
 | **every panel is named by a test** | **built.** The outer gate reads every panel the tree declares and says the ones that no test names (§1136) | §1136 |
 | **a panel shows only its own layer's commands** | **built.** The ecosystem refuses a panel or tool that names a command of a layer it does not require (§1136) | §1136 |
+| **every tool is named by a test** | **built.** The outer gate reads every tool the tree declares and says the ones that no test names (§1137) | §1137 |
+| **every tool runs the command it says** | **built.** Each tool is proved by a test in its own battery: the tool is there, and the command it runs is linked in and of its own layer (§1137) | §1137 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72106,3 +72108,46 @@ tree's seventeen panels were named by no test.
   is about the **name**, as §1133's, §1134's and §1135's are.
 - **The rule is about the tree's own tests.** A panel that only a program
   outside the tree holds is a panel the rule does not see.
+
+## 1137. Every tool is named by a test
+
+A **tool** is a gesture that runs a command: it has no parameters of its
+own, it has an icon, and it says which command it runs. It is a rule the
+kit publishes as much as a command or a panel is — and **two** of the
+tree's three tools were named by no test.
+
+### What was built
+
+- **Every tool is named by a test.** Three test files, one per tool, each
+  saying what the tool is: that it is there, that the command it runs is
+  linked in, and that the command is of the tool's own layer.
+- **The outer gate says so.** The `lists` phase reads every tool the tree
+  declares and says a tool that no test names.
+
+### What the port found
+
+- **The tree's rules held a tool's *command*, and no test held the
+  *tool*.** The ecosystem refuses a tool whose command is not linked in,
+  and since §1136 one that runs a command of a layer it does not require
+  — but nothing in the tree's own tests said that any particular tool was
+  there at all. Two of the three were invisible to the tests.
+- **The reader is a reader too.** The tools are read from the production
+  code, and the attribute is at the start of its line. The derive crate's
+  own test holds a tool declaration in a string, and a reader that
+  counted it would hold the tree to account for a tool that does not
+  ship.
+
+### What it cost
+
+- **Three test files** of three tests each, **two tests** for the gate's
+  rule, and the index's `Tool` and the reader that finds them.
+
+### What it does not settle
+
+- **A tool that is named is not a tool that works.** The tests say the
+  tool is there and names a command that is there; a gesture that does
+  the wrong thing is not caught.
+- **The rule is about the name**, as §1133's, §1134's, §1135's and
+  §1136's are.
+- **The rule is about the tree's own tests.** A tool that only a program
+  outside the tree holds is a tool the rule does not see.

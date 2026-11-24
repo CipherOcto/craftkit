@@ -198,6 +198,18 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **A tool that no test names is caught** (§1137): the same rule, read over
+  the tree's **tools** — a gesture that runs a command — and the rule is
+  about the **name**, so a tool named in a comment is a tool the gate
+  counts. The rule does not say that the gesture works: a tool that names
+  a command that is there can still be a gesture that does nothing
+  useful, and nothing checks the pointer or the keyboard.
+- **The reader that finds the tools is a reader too** (§1137): it reads the
+  tools a battery declares, where the attribute is at the start of its
+  line, and it reads the **production code** only — so a tool written in a
+  test is not a tool the tree has. The derive crate's own test holds a
+  tool declaration in a string, and a reader that counted it would hold
+  the tree to account for a tool that does not ship.
 - **A panel that no test names is caught** (§1136): the same rule, read
   over the tree's **panels** — a battery's own window of commands — and
   the rule is about the **name**, so a panel named in a comment is a panel

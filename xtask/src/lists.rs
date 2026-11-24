@@ -583,6 +583,7 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     let mut kinds: Vec<String> = Vec::new();
     let mut migrations: Vec<String> = Vec::new();
     let mut panels: Vec<String> = Vec::new();
+    let mut tools: Vec<String> = Vec::new();
     let index = crate::index::build(root)?;
     commands.extend(index.commands.iter().map(|command| command.id.clone()));
     kinds.extend(index.kinds.iter().map(|kind| kind.id.clone()));
@@ -607,6 +608,7 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
                 crate::index::migrations_in(&text, &file, &name).into_iter().map(|migration| migration.id),
             );
             panels.extend(crate::index::panels_in(&text, &file, &name).into_iter().map(|panel| panel.id));
+            tools.extend(crate::index::tools_in(&text, &file, &name).into_iter().map(|tool| tool.id));
         }
     }
     // Every test file in the tree, and what it says.
@@ -624,6 +626,8 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     migrations.dedup();
     panels.sort();
     panels.dedup();
+    tools.sort();
+    tools.dedup();
     let mut problems = Vec::new();
     for command in commands {
         if tests.iter().any(|body| names_it(body, &command)) {
@@ -655,6 +659,14 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
         }
         problems.push(format!(
             "the panel `{panel}` is named by no test: every panel the tree has is named by a test"
+        ));
+    }
+    for tool in tools {
+        if tests.iter().any(|body| names_it(body, &tool)) {
+            continue;
+        }
+        problems.push(format!(
+            "the tool `{tool}` is named by no test: every tool the tree has is named by a test"
         ));
     }
     Ok(problems)
@@ -1633,6 +1645,46 @@ mod tests {
         std::fs::write(
             crate_directory.join("tests").join("thing.rs"),
             "#[test]\nfn a_test() { let panel = \"panel.thing\"; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// A **tool** that no test names is caught.
+    #[test]
+    fn a_tool_that_no_test_names_is_caught() {
+        let root = crate::temp::dir("lists-tool").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[tool(id = \"tool.thing\", label = \"Thing\", layer = \"core\", command = \"thing.add\")]\npub struct T;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("tool.thing"), "{problems:?}");
+    }
+
+    /// And a tool a test names is **not** caught.
+    #[test]
+    fn a_tool_that_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-tool-named").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[tool(id = \"tool.thing\", label = \"Thing\", layer = \"core\", command = \"thing.add\")]\npub struct T;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let tool = \"tool.thing\"; }\n",
         )
         .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
