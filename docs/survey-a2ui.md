@@ -203,8 +203,9 @@ entry point is the front end (`FRONT_END_FILES`). The bridge's two doors are
 gone — the plan is the `doc.plan` command, and the evaluator's ids are the
 **manifest**'s — and the rule names `evaluate` as well. The **parity matrix**
 is written too ([`door-parity.md`](door-parity.md)): the six doors side by
-side, and each cell names the **test** that proves it — the outer gate
-checks that every test the matrix names exists.
+side, and **every cell that says something names the test that proves it**
+— the outer gate checks that a cell names a test and that the test is
+there.
 
 ### 3.3 The mid-run cycle exists in two transports, and the `Supplier` seam in none
 
@@ -627,11 +628,12 @@ the honest first cut is the matrix itself, written as a table and checked by
 hand, before it becomes code.
 
 **Since this was written.** The first cut is done
-([`door-parity.md`](door-parity.md)), and each cell names the **test** that
-proves it — and the outer gate checks that every test the matrix names
-exists (README §1122). A named test does not drift when the code moves,
-which a line does. What is not checked is the **cells themselves**: the
-harness that drives all six doors at once is still a project.
+([`door-parity.md`](door-parity.md)), and **every cell that says something
+names the test that proves it** — and the outer gate checks that a cell
+names a test and that the test is there (README §1122, and §1123 for the
+repair). A named test does not drift when the code moves, which a line
+does. What is not checked is the **cells themselves**: the harness that
+drives all six doors at once is still a project.
 
 **Why it matters.** The tree's own rule says a front end reads the engine's
 state and acts through the registry. A matrix is how that rule stops being a
@@ -1076,7 +1078,7 @@ not a front end.
 | 3 | **O5** model picks commands, pre-binds params | **small, *if* scoped this way**; large if scoped as a "surface" | **yes** | a door calls `execute_with` with a `Supplier` fed by the model's own output — **done in the a2ui door's terms**: the model's own output pre-binds the arguments, and the layer translates a2ui's names to the kit's (§1113) |
 | 4 | **O8** bounds derived into the catalog | **small** — in practice one `maxLength` | **yes** | the text bound appears in the schema the agent is told — **done** (README §1117): `maxLength`, read from the SDK's own `MAX_TEXT_CHARACTERS` |
 | 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it — **done** (README §1116) |
-| 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table checked by hand | no | the table exists, and every row has been checked by hand — **done** ([`door-parity.md`](door-parity.md)): the six doors side by side, cell by cell, each cell naming the **test** that proves it, and the outer gate checking that every test it names exists |
+| 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table, and keeping it is a rule in the outer gate | no | the table exists, and every cell that says something names the test that proves it — **done** ([`door-parity.md`](door-parity.md)): the six doors side by side, cell by cell, **every cell that says something naming the test that proves it**, and the outer gate checking that a cell names a test and that the test is there |
 | 7 | **O3** recipe **claim** check | **small**, but it is a judgement, not a link — the link half is already done by `cargo xtask lists` (`xtask/src/lists.rs:55`) | no | a named claim in a recipe is checked against the tree, and a broken claim is reported — **done** (README §1119): the battery list is checked by the tree's own gate, on a stated line |
 | 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it — **the sharp case is closed** (README §1121): a session can gain a command while it runs, and every door lists what the session has; what is left is the panel's own reconciliation |
 | 9 | **O7** paths resolving inside the SDK | **large**, and architecture-defining | no | a path resolves to a plain JSON value inside the SDK, and no front end names a `Plan` — **its constraint holds**: the a2ui layer resolves the paths and the door gets plain values, and the gate refuses a front end that names the plan (§1115); the general API in the SDK is not built |

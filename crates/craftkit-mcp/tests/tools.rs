@@ -181,6 +181,54 @@ fn a_tool_call_runs_the_command() {
     assert!(said.contains("byte(s)"), "the command's own answer came back: {said}");
 }
 
+/// The plan, the undo and the journal are **tools like any other**.
+///
+/// Every command is a tool, so the three things the kit keeps — the plan,
+/// the history and the journal — reach an agent as tools, and not as
+/// methods of the door's own.
+#[test]
+fn the_plan_the_undo_and_the_journal_are_tools() {
+    let server = Server::new(session());
+    let listed = server.tools();
+    let commands: Vec<&str> = listed.iter().map(|tool| tool.command.as_str()).collect();
+    for wanted in ["doc.plan", "history.undo", "journal.list"] {
+        assert!(commands.contains(&wanted), "{wanted} is a tool: {commands:?}");
+    }
+}
+
+/// And the undo is **run** as a command, over the tool's own door.
+///
+/// The door has no undo of its own: the agent asks for `history.undo` and
+/// gets the same answer every other door gets.
+#[test]
+fn the_undo_tool_runs_the_command() {
+    let mut server = Server::new(session());
+    let added = server
+        .handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "craftkit_core_appearance_add",
+                "arguments": { "name": "ink" },
+            },
+        }))
+        .expect("the call is answered");
+    assert_eq!(added["result"]["isError"], json!(false), "{added}");
+
+    let undone = server
+        .handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": { "name": "craftkit_history_undo", "arguments": {} },
+        }))
+        .expect("the call is answered");
+    assert_eq!(undone["result"]["isError"], json!(false), "{undone}");
+    let said = undone["result"]["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(said.contains("core.appearance.add"), "the undo says what it undid: {said}");
+}
+
 /// A refusal is **told**, and the tool says it is an error.
 ///
 /// The door does not swallow a refusal and does not answer with an empty

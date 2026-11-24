@@ -4568,6 +4568,7 @@ so.
 | **a command made while the program runs is declared** | **built.** The SDK writes the fields and the reader, and the bound on a run-time parameter is the SDK's (§1120) | §1120 |
 | **every door lists what the session has** | **built.** A session can gain a command while it runs, and every door reads its list from the session it runs the commands in (§1121) | §1121 |
 | **every cell of the parity matrix is proved** | **built.** The matrix names the test that proves each cell, and the outer gate says when a test it names is not there (§1122) | §1122 |
+| **every cell of the matrix names its proof** | **built.** A cell that says something names the test that proves it, and the outer gate says when it does not (§1123) | §1123 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71115,10 +71116,12 @@ doors were reading a **snapshot**.
 - **The bridge runs only what it lists.** A command that the door did
   not offer is refused, so the list an agent read is the list it can
   call.
-- **A command joins a session only in a layer that is linked in.** The
-  session knows the ecosystem's layers, and a command in a layer that
-  is not there is refused — the same check the ecosystem makes, and the
-  same reason.
+- **A command that joins a session is refused unless its layer is linked
+  in.** The session knows the ecosystem's layers, and `Session::register`
+  refuses a command in a layer that is not there — the same check the
+  ecosystem makes, and the same reason. A session that is **built** from a
+  registry is not filtered: the registry is the caller's, and the caller is
+  the one who says what is linked in.
 - **A refusal names the parameter.** A value that is the wrong shape is
   refused by the SDK's reader, and the refusal says **which** parameter
   was wrong.
@@ -71219,3 +71222,70 @@ matrix and checks that every test it names **exists**.
   layer table and the architecture document).
 - **A negative cell has no proof to name.** "The terminal door has no
   schema" is an absence, and an absence has no test to point at.
+
+## 1123. Every cell of the matrix names its proof
+
+§1122 said that every cell of the parity matrix names the test that proves
+it. **It did not.** A review of that arc read the matrix against the tree
+and found that most of the cells named a test in the *prose* below the
+table, that eight of the cells that say something named **no test at all**,
+and that the rule in the outer gate would have passed on a matrix that
+named none.
+
+### What was built
+
+- **The cells name their proofs.** The matrix's table carries the
+  citation in the cell: `path::test_name`, relative to the crate the row
+  names, so a reader of the table sees the claim and its proof together.
+- **The gate checks every cell, not only the citations it finds.** A cell
+  that says something and names no test is a **problem**, and so is a
+  citation whose file is not in the tree, is not under a `tests`
+  directory, or has no function of that name in it. The rule cannot pass
+  by saying less: a matrix with no table, or with no rows, is a problem
+  too.
+- **The eight missing proofs are tests now.** The browser door's **undo**
+  and the **journal's size**, the agent door's **plan**, **undo** and
+  **journal**, and the bridge's **undo** each have a test in the door's own
+  crate now, and the matrix names them. The a2ui door's **renderer
+  function** and its **refusal** already had tests; the matrix names them
+  now.
+- **The terminal door's undo goes through the door.** The test asked the
+  session directly, which proved that the command exists and not that the
+  door runs it; the line `history.undo` is what the test does now.
+- **The claims that were too broad are narrower.** The bridge's own
+  comment said the door never hides a command it has, while the door
+  **prunes** its list to the commands, the effects and the tools; and
+  §1121 said a command joins a session only in a linked-in layer, which
+  is true of `Session::register` and not of a session built by hand from
+  a registry. Both say what the code does now.
+
+### What the port found
+
+- **A claim about every cell is not a claim about every cell.** The
+  headline of §1122 was that each ✓ points at the test that proves it,
+  and seven of the ✓ cells pointed at nothing.
+- **A rule that reads what is there cannot notice what is not.** The old
+  rule walked the citations the matrix happened to contain: a matrix that
+  stopped naming tests would have passed. The rule now reads the
+  **cells**.
+- **The table still said it was checked by hand.** The matrix's own first
+  paragraph and its last one said the table was hand-checked and was not a
+  gate, while the rule in the outer gate said otherwise. The prose is
+  now the truth.
+
+### What it cost
+
+- **Five tests** — two in the browser door, two in the agent door and one
+  in the bridge — and **one test strengthened** in the terminal door, and
+  **one rule rewritten** in the outer gate, and a matrix that carries its
+  proofs in its cells.
+
+### What it does not settle
+
+- **The gate does not drive the doors.** It reads the table and checks
+  that every cell names a test and that the test is there. It does not
+  run the six doors and compare what they do with what the table says,
+  and it does not check that a named test is *about* the cell it is in —
+  that is still a reader's job, and the reader is the survey's reader.
+- **A negative cell has no proof to name.** An absence has no test to
+  point at, and the matrix's dashes are absences.

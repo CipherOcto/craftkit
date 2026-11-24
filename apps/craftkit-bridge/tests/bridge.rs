@@ -101,8 +101,8 @@ fn a_tool_says_what_it_changes() {
 /// and can be run**.
 ///
 /// The door's list is read from the session its tools run in, so a door
-/// never offers a command the session does not have — and never hides
-/// one it has.
+/// never offers a command the session does not have — and a command that
+/// joins the session while the program runs is in the list with the rest.
 #[test]
 fn a_command_made_at_run_time_is_listed_and_can_be_run() {
     let mut bridge = bridge();
@@ -126,6 +126,28 @@ fn a_command_made_at_run_time_is_listed_and_can_be_run() {
     let answer =
         ask(&mut bridge, "tools/call", json!({ "name": "runtime.echo", "arguments": { "text": "hello" } }));
     assert_eq!(answer["result"]["content"][0]["text"], "hello", "{answer}");
+}
+
+/// The undo is a **command**, and the bridge runs it as one.
+///
+/// The house rule is that everything is a command: a front end does not
+/// open the history's own door. The bridge therefore has no `undo` of its
+/// own — it offers `history.undo`, which is the same answer every other
+/// door gets.
+#[test]
+fn the_undo_is_a_command() {
+    let mut bridge = bridge();
+    let added = ask(
+        &mut bridge,
+        "tools/call",
+        json!({ "name": "core.appearance.add", "arguments": { "name": "ink" } }),
+    );
+    assert_eq!(added["result"]["isError"], json!(false), "{added}");
+
+    let undone = ask(&mut bridge, "tools/call", json!({ "name": "history.undo", "arguments": {} }));
+    assert_eq!(undone["result"]["isError"], json!(false), "{undone}");
+    let said = undone["result"]["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(said.contains("core.appearance.add"), "the undo says what it undid: {said}");
 }
 
 /// The menu and the tool list are **one list**.

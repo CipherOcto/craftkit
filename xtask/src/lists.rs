@@ -540,35 +540,185 @@ pub fn broken_document_links(root: &Path) -> Result<Vec<String>, String> {
     Ok(problems)
 }
 
-/// Every test the **parity matrix** names is a test that exists.
+/// Every cell of the **parity matrix** names the test that proves it.
 ///
 /// The matrix is a claim about the doors, and a claim is worth only what
-/// proves it. The matrix names the **test** that proves each cell, and a
-/// named test does not drift when the code moves — a line does, and a
-/// line that has moved says nothing.
+/// proves it. A cell that says something and names no test is a claim with
+/// no proof, and a claim with no proof is true until the next change.
 ///
-/// The citation is `path::test_name`: the file the test is in, and the
-/// test's name. The check is that the file is in the tree and that the
-/// file has a function of that name.
-pub fn the_matrix_names_tests_that_exist(root: &Path) -> Result<Vec<String>, String> {
-    let mut problems = Vec::new();
+/// So the rule has two halves, and both of them bite:
+///
+/// - **every cell that says something names a test** — a dash says nothing,
+///   and a dash is the only cell that needs no proof;
+/// - **every test it names is a test that is there** — the file is in the
+///   tree, it is under a `tests` directory, and it has a function of that
+///   name in it.
+///
+/// The citation is `path::test_name`. The path is **relative to the crate
+/// the row names** — the door's own crate, and the transport's crate for
+/// the agent door — unless it starts at the root, and then it is the tree's
+/// own path.
+pub fn every_matrix_cell_names_a_test(root: &Path) -> Result<Vec<String>, String> {
     let matrix = root.join("docs/door-parity.md");
-    let Ok(text) = read_text(&matrix) else { return Ok(problems) };
-    for (number, path, name) in matrix_test_citations(&text) {
-        let file = root.join(&path);
-        let Ok(source) = read_rust(&file, Subject::Everything) else {
-            problems
-                .push(format!("docs/door-parity.md: line {number} names `{path}`, which is not in the tree"));
-            continue;
-        };
-        if !source.contains(&format!("fn {name}(")) {
-            problems.push(format!(
-                "docs/door-parity.md: line {number} names `{path}::{name}`, and that file has no such test"
-            ));
-        }
-    }
+    let text = read_text(&matrix).map_err(|error| format!("could not read docs/door-parity.md: {error}"))?;
+    let mut problems = matrix_cell_problems(&text, |path| {
+        let file = root.join(path);
+        if file.is_file() { Some(file) } else { None }
+    });
     problems.sort();
     Ok(problems)
+}
+
+/// The problems of a matrix, and a way to find the file a citation names.
+///
+/// The finder is a **parameter**, so that a test can ask what happens when
+/// a cell names a test that is not there — and a gate that cannot fail is
+/// a gate that is not there.
+fn matrix_cell_problems(text: &str, find: impl Fn(&str) -> Option<std::path::PathBuf>) -> Vec<String> {
+    let mut problems = Vec::new();
+    let Some(rows) = matrix_rows(text) else {
+        problems.push(
+            "docs/door-parity.md: there is no table under `## The matrix`, and a matrix with no \
+             table is not a matrix"
+                .to_string(),
+        );
+        return problems;
+    };
+    if rows.is_empty() {
+        problems.push(
+            "docs/door-parity.md: the matrix has no rows, and a table with no rows says nothing".to_string(),
+        );
+        return problems;
+    }
+    for row in rows {
+        let Some(base) = row.base else {
+            problems.push(format!(
+                "docs/door-parity.md: line {}: the row of `{}` does not name the crate its proofs \
+                 live in",
+                row.number, row.door
+            ));
+            continue;
+        };
+        for cell in &row.cells {
+            if cell.text == "—" {
+                continue;
+            }
+            let citations = matrix_test_citations(&cell.text);
+            if citations.is_empty() {
+                problems.push(format!(
+                    "docs/door-parity.md: line {}: the cell `{}` of the `{}` row names no test, and \
+                     a cell that says something needs one",
+                    cell.number, cell.text, row.door
+                ));
+                continue;
+            }
+            for (_, path, name) in citations {
+                let full = if path.starts_with("crates/") || path.starts_with("apps/") {
+                    path.to_string()
+                } else {
+                    format!("{base}/{path}")
+                };
+                let Some(file) = find(&full) else {
+                    problems.push(format!(
+                        "docs/door-parity.md: line {}: names `{path}`, which is not in the tree",
+                        cell.number
+                    ));
+                    continue;
+                };
+                if !file.to_string_lossy().replace('\\', "/").contains("/tests/") {
+                    problems.push(format!(
+                        "docs/door-parity.md: line {}: `{path}` is not a test file, and a proof is \
+                         a test",
+                        cell.number
+                    ));
+                    continue;
+                }
+                let Ok(source) = read_rust(&file, Subject::Everything) else {
+                    problems.push(format!(
+                        "docs/door-parity.md: line {}: names `{path}`, which could not be read",
+                        cell.number
+                    ));
+                    continue;
+                };
+                if !source.contains(&format!("fn {name}(")) {
+                    problems.push(format!(
+                        "docs/door-parity.md: line {}: names `{path}::{name}`, and that file has no \
+                         such test",
+                        cell.number
+                    ));
+                }
+            }
+        }
+    }
+    problems
+}
+
+/// One row of the matrix, and the cells that are in it.
+struct MatrixRow {
+    /// The line the row is on.
+    number: usize,
+    /// What the row is about: the door.
+    door: String,
+    /// The crate the row's proofs live in.
+    base: Option<String>,
+    /// The cells that say something.
+    cells: Vec<MatrixCell>,
+}
+
+/// One cell of the matrix.
+struct MatrixCell {
+    /// The line the cell is on.
+    number: usize,
+    /// What the cell says.
+    text: String,
+}
+
+/// The rows of the matrix table, under `## The matrix`.
+///
+/// The table is found by its **heading**, and the heading is what says
+/// which table is the matrix: a document may hold several tables, and only
+/// one of them is the claim about the doors.
+fn matrix_rows(text: &str) -> Option<Vec<MatrixRow>> {
+    let mut after = false;
+    let mut header = false;
+    let mut table = false;
+    let mut rows = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        if line.starts_with("## ") {
+            after = line.trim() == "## The matrix";
+            header = false;
+            continue;
+        }
+        if !after {
+            continue;
+        }
+        let trimmed = line.trim();
+        if !trimmed.starts_with('|') {
+            if rows.is_empty() {
+                continue;
+            }
+            break;
+        }
+        if !header {
+            header = true;
+            table = true;
+            continue;
+        }
+        if trimmed.starts_with("|---") {
+            continue;
+        }
+        let cells = trimmed.strip_prefix('|')?.strip_suffix('|')?;
+        let parts: Vec<String> = cells.split('|').map(|cell| cell.trim().to_string()).collect();
+        let Some(first) = parts.first() else { continue };
+        let door = first.split('—').next().unwrap_or(first).trim().to_string();
+        let base = first.split('`').nth(1).filter(|path| path.contains('/')).map(|path| path.to_string());
+        let mut cells = Vec::new();
+        for part in parts.iter().skip(1) {
+            cells.push(MatrixCell { number: number + 1, text: part.clone() });
+        }
+        rows.push(MatrixRow { number: number + 1, door, base, cells });
+    }
+    if table { Some(rows) } else { None }
 }
 
 /// The `path::test_name` citations in a piece of prose.
@@ -1025,8 +1175,8 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // Every document link in the prose points at a file that is in the tree.
     problems.extend(broken_document_links(root)?);
 
-    // Every test the parity matrix names is a test that exists.
-    problems.extend(the_matrix_names_tests_that_exist(root)?);
+    // Every cell of the parity matrix names a test, and the test is there.
+    problems.extend(every_matrix_cell_names_a_test(root)?);
 
     // The `mod` groups are sorted.
     problems.extend(the_mod_groups_are_sorted(root)?);
@@ -1218,7 +1368,44 @@ mod tests {
     #[test]
     fn the_matrix_names_tests_that_are_there() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        let problems = the_matrix_names_tests_that_exist(&root).expect("the tree is there");
+        let problems = every_matrix_cell_names_a_test(&root).expect("the tree is there");
         assert!(problems.is_empty(), "the matrix names a test that is not there: {problems:?}");
+    }
+
+    /// A matrix with a cell that names **no test** is a problem.
+    ///
+    /// This is the half of the rule that the tree's own matrix cannot
+    /// show: a cell that says something and proves nothing is a claim
+    /// that is true until the next change.
+    #[test]
+    fn a_cell_that_names_no_test_is_a_problem() {
+        let text = "## The matrix\n\n| door | lists | runs |\n|---|---|---|\n| the sdk — `crates/craftkit-sdk` | ✓ `help` | ✓ `tests/runtime.rs::a_run_time_command_runs` |\n";
+        let problems = matrix_cell_problems(text, |path| {
+            let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(path);
+            if file.is_file() { Some(file) } else { None }
+        });
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("names no test"), "{problems:?}");
+    }
+
+    /// A dash is the **only** cell that needs no proof.
+    #[test]
+    fn a_dash_needs_no_test() {
+        let text = "## The matrix\n\n| door | lists | runs |\n|---|---|---|\n| the sdk — `crates/craftkit-sdk` | — | ✓ `tests/runtime.rs::a_run_time_command_runs` |\n";
+        let problems = matrix_cell_problems(text, |path| {
+            let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(path);
+            if file.is_file() { Some(file) } else { None }
+        });
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// A matrix with **no table** is a problem: a rule that cannot fail
+    /// is a rule that is not there.
+    #[test]
+    fn a_matrix_with_no_table_is_a_problem() {
+        let text = "# The doors\n\nThere is no table here.\n";
+        let problems = matrix_cell_problems(text, |_| None);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("no table"), "{problems:?}");
     }
 }

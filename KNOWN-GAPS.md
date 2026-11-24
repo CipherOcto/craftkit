@@ -85,12 +85,17 @@ library and the control channel — are not doors, and the **studio** is a
 book.
 
 **The parity matrix is kept, not kept by hand.** The table is written — the
-six doors side by side, cell by cell — and each cell names the **test**
-that proves it ([`docs/door-parity.md`](docs/door-parity.md)). The outer
-gate reads the matrix and checks that every test it names **exists**: a
-named test does not drift when the code moves, and a line does. What is
-still **not** checked is the *cells* themselves — that is, the gate does
-not read a door and compare what it does with what the table says. That
+six doors side by side, cell by cell — and **every cell that says
+something names the test that proves it**
+([`docs/door-parity.md`](docs/door-parity.md)). The outer gate reads the
+matrix and checks two things: that a cell which says something names a
+test, and that the test it names is **there** — a file under a `tests`
+directory, with a function of that name in it. A named test does not drift
+when the code moves, and a line does.
+
+What is still **not** checked is the *cells* themselves — that is, the gate
+does not read a door and compare what it does with what the table says, and
+it does not check that a named test is *about* the cell it is in. That
 would be a check over behaviour, and it needs a harness that can drive all
 six doors at once: a crate of its own, three edits (the manifest, the
 layer table and the architecture document). It is **not** a defect:
@@ -132,6 +137,12 @@ These are the README's own honest notes, and they are still true of the tree:
   **allowed**: it changes the document and leaves no history, and the
   session judges it by the document and not by the flags. The two flags
   are consistent, and a run-time command declares both the same way.
+- **A session built by hand is not filtered by layer.** `Session::register`
+  refuses a command whose layer is not linked in, and every door builds its
+  session with the ecosystem's layers — but a session made from a registry
+  holds what it was given, and nothing checks the layer of a command that
+  was already there when the session was built. The doors do not do this:
+  they ask the ecosystem for the session.
 - **The `Either` is a compromise.** One parameter with two spellings of
   different kinds cannot be a single typed value, so the command is handed
   whichever half arrived and decides what to do with it.

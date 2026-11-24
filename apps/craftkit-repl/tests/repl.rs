@@ -208,7 +208,10 @@ fn the_undo_is_a_command() {
     repl.run(r#"node.add {"name": "box", "kind": "geometry.rect"}"#);
     assert_eq!(repl.session().document().nodes.len(), 1, "the node was added");
 
-    let outcome = repl.session_mut().execute("history.undo", &json!({})).expect("the undo runs");
-    assert!(outcome.message.contains("node.add"), "the undo says what it undid: {}", outcome.message);
+    // The door runs it: the line is the door's own, and the door has no
+    // undo of its own to fall back on.
+    let said = text(&repl.run("history.undo"));
+    assert!(!said.contains("refused"), "the undo ran: {said}");
+    assert!(said.contains("node.add"), "the undo says what it undid: {said}");
     assert_eq!(repl.session().document().nodes.len(), 0, "the node was not undone");
 }

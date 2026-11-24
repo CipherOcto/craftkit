@@ -184,10 +184,11 @@ impl Bridge {
     /// The **descriptor** gives the shape of a command, and the
     /// **session** says which commands there are: the list is read from
     /// the session the tools are run in, so a door never offers a tool the
-    /// session does not have — and never hides one it has.
+    /// session does not have.
     ///
     /// The list is **pruned** to what this door shows: the commands, the
-    /// effects and the tools. The registry stays whole, and a command
+    /// effects and the tools. A command outside the pruning is a command
+    /// this door does not show — and the registry stays whole. A command
     /// outside the pruning is **not runnable through this door** — the
     /// door runs only what it lists.
     fn tools(&self) -> Json {

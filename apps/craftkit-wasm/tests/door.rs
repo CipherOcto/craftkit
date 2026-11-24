@@ -62,6 +62,31 @@ fn the_plan_is_a_command_the_page_can_ask_for() {
     assert!(!answer.is_empty(), "the plan says something: {answer}");
 }
 
+/// The undo is a **command**, so the page can ask for it.
+///
+/// The browser door is the terminal door in a page, and the terminal door
+/// has no undo of its own: it asks `history.undo`, which is the same
+/// answer every other door gets.
+#[test]
+fn the_undo_is_a_command() {
+    ask(r#"node.add {"name": "box", "kind": "geometry.rect"}"#);
+    let answer = ask("history.undo");
+    assert!(!answer.contains("refused"), "the undo ran: {answer}");
+    assert!(answer.contains("node.add"), "the undo says what it undid: {answer}");
+}
+
+/// The journal is a **size**, and the size is the command's own.
+///
+/// The door reports how much the session is holding and not the entries
+/// themselves: a person at a prompt wants to know how much has happened.
+#[test]
+fn the_journal_is_a_size() {
+    ask(r#"node.add {"name": "box", "kind": "geometry.rect"}"#);
+    let answer = ask("memory");
+    assert!(answer.contains("journal:"), "the memory says the journal's size: {answer}");
+    assert!(!answer.contains("node.add"), "and not the entries themselves: {answer}");
+}
+
 /// An unknown command is refused, and the refusal is an answer.
 #[test]
 fn an_unknown_command_is_refused() {
