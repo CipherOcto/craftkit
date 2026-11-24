@@ -71243,9 +71243,11 @@ named none.
 - **The gate checks every cell, not only the citations it finds.** A cell
   that says something and names no test is a **problem**, and so is a
   citation whose file is not in the tree, is not under a `tests`
-  directory, or has no function of that name in it. The rule cannot pass
-  by saying less: a matrix with no table, or with no rows, is a problem
-  too.
+  directory, or has no **test** of that name in it — the attribute
+  `#[test]`, and not only a function with the right name, because a
+  helper function with the right name is not a proof. The rule cannot
+  pass by saying less: a matrix with no table, or with no rows, is a
+  problem too.
 - **The eight missing proofs are tests now.** The browser door's **undo**
   and the **journal's size**, the agent door's **plan**, **undo** and
   **journal**, and the bridge's **undo** each have a test in the door's own
@@ -71281,7 +71283,8 @@ named none.
 - **Five tests** — two in the browser door, two in the agent door and one
   in the bridge — and **one test strengthened** in the terminal door, and
   **one rule rewritten** in the outer gate, and a matrix that carries its
-  proofs in its cells.
+  proofs in its cells. (And, later, the rule tightened again: a proof
+  has to be a `#[test]`, and not only a function with the right name.)
 
 ### What it does not settle
 

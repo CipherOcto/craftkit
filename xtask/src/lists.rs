@@ -640,7 +640,7 @@ fn matrix_cell_problems(text: &str, find: impl Fn(&str) -> Option<std::path::Pat
                     ));
                     continue;
                 };
-                if !source.contains(&format!("fn {name}(")) {
+                if !has_test_function(&source, &name) {
                     problems.push(format!(
                         "docs/door-parity.md: line {}: names `{path}::{name}`, and that file has no \
                          such test",
@@ -671,6 +671,33 @@ struct MatrixCell {
     number: usize,
     /// What the cell says.
     text: String,
+}
+
+/// Whether a file has a **test** of that name in it.
+///
+/// A proof is a test, and not any function that happens to carry the
+/// name: the attribute is what makes it one, and the tree's tests put it
+/// on the line above the function.
+///
+/// The window is bounded: the attribute is a few lines above the
+/// function, and the tree puts a doc comment between them at most.
+fn has_test_function(source: &str, name: &str) -> bool {
+    let needle = format!("fn {name}(");
+    let mut from = 0;
+    while let Some(at) = source[from..].find(&needle) {
+        let start = from + at;
+        // The window is the last few hundred bytes before the function,
+        // moved forward to the start of a character.
+        let mut window = start.saturating_sub(400);
+        while window < start && !source.is_char_boundary(window) {
+            window += 1;
+        }
+        if source[window..start].contains("#[test]") {
+            return true;
+        }
+        from = start + needle.len();
+    }
+    false
 }
 
 /// The rows of the matrix table, under `## The matrix`.
@@ -1401,6 +1428,15 @@ mod tests {
 
     /// A matrix with **no table** is a problem: a rule that cannot fail
     /// is a rule that is not there.
+    /// A proof is a **test**, and not any function with that name.
+    #[test]
+    fn a_proof_must_be_a_test() {
+        let source = "fn helper() {}\n\n#[test]\nfn a_test() {}\n";
+        assert!(has_test_function(source, "a_test"), "the test is there");
+        assert!(!has_test_function(source, "helper"), "and the helper is not a test");
+        assert!(!has_test_function(source, "nothing"), "and there is no such test");
+    }
+
     #[test]
     fn a_matrix_with_no_table_is_a_problem() {
         let text = "# The doors\n\nThere is no table here.\n";
