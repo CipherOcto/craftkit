@@ -134,7 +134,7 @@ fn a_tool_says_whether_it_changes_the_document() {
 /// A command that joins the session while the program runs is a **tool**.
 ///
 /// The list is read when it is asked for, so the door never hides a
-/// command it can run — and never offers one it cannot.
+/// command the session has — and never offers one it does not.
 #[test]
 fn a_command_made_at_run_time_is_a_tool() {
     let mut server = Server::new(session());

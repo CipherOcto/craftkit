@@ -71148,6 +71148,10 @@ doors were reading a **snapshot**.
 - **The list changed shape once.** The bridge's tools are the session's
   commands in the registry's order and not the menu's order, and the
   agent door's tools are read when they are asked for.
+- **The bridge's pruning is a wall.** Its tool list is the commands, the
+  effects and the tools, and a command outside that set — an exporter,
+  say — is **refused** by `tools/call`. The bridge is a **proof** and not
+  a product, and the proof now runs only what it shows.
 - **A listed command can still be refused.** A command whose
   `enabled` predicate says it is not available right now — because
   there is nothing to mute, or nothing selected — is **listed** and

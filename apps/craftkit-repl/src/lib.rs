@@ -140,7 +140,13 @@ impl Repl {
     ///
     /// The list is read from the **session** the door drives, so a
     /// command that joins the session while the program runs is listed
-    /// with the rest — and the door never lists a command it cannot run.
+    /// with the rest — and the door never lists a command the session
+    /// does not have.
+    ///
+    /// A listed command can still be **refused**: a command whose
+    /// `enabled` predicate is false right now is refused when it is run,
+    /// and the predicate is over the session's state, so the state can
+    /// change between the list and the call.
     fn help(&self) -> Vec<String> {
         let mut commands: Vec<&CommandSpec> = self
             .session

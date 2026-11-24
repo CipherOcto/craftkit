@@ -214,9 +214,10 @@ fn main() {
 
     println!("\n── a command made while the program runs");
     // The command **joined the session that is running** at the top of
-    // this program: the registry is a value and it is open, and every
-    // door that lists the session's commands lists this one too — the
-    // menu and the manifest above both named it.
+    // this program — the registry is a value and it is open, and it was
+    // made after the program was built. Every door that lists the
+    // session's commands lists this one too: the menu and the manifest
+    // above both named it, and the command runs.
     match session.execute("runtime.echo", &json!({ "text": "made at run time" })) {
         Ok(outcome) => println!("   {}", outcome.message),
         Err(error) => println!("   refused: {error}"),

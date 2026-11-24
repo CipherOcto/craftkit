@@ -698,5 +698,6 @@ pub fn session_with(
         ecosystem.formats.clone(),
         ecosystem.migrations.clone(),
         ecosystem.evaluators.clone(),
-    ))
+    )
+    .with_layers(ecosystem.layers.clone()))
 }

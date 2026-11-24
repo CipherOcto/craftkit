@@ -58,19 +58,19 @@ rather than assuming one.
 
 | a2ui | craftkit | note |
 |------|----------|------|
-| P1 catalog | `CommandSpec` (`crates/craftkit-sdk/src/command.rs:71-137`) + `ParamDoc` (`crates/craftkit-sdk/src/error.rs:187-204`) + `Doc` (`crates/craftkit-sdk/src/params.rs:34-50`) | A typed, documented vocabulary |
+| P1 catalog | `CommandSpec` (`crates/craftkit-sdk/src/command.rs:71-137`) + `ParamDoc` (`crates/craftkit-sdk/src/error.rs:206-223`) + `Doc` (`crates/craftkit-sdk/src/params.rs:34-50`) | A typed, documented vocabulary |
 | P1 (compiled) | `crates/craftkit-derive/src/command.rs:383-431` writes the spec, the reader and the registration; `commands!` synthesises the same (macro at `crates/craftkit-derive/src/lib.rs:129-131`, expander at `crates/craftkit-derive/src/commands.rs:389`) | The catalog is **compiled from types**, so it cannot drift from them — a hand-written catalog can, and does |
-| P2 negotiation | `Contribution::capability()` (`crates/craftkit-sdk/src/contribution.rs:53`), `Registry::of_capability` / `of_area` (`:203-222`) | The grouping exists; the negotiation does not |
-| P3 protocol | `Session::execute` (`crates/craftkit-sdk/src/session.rs:890`); six doors and two transport libraries over one registry (§3.3) | One registry, several transports |
+| P2 negotiation | `Contribution::capability()` (`crates/craftkit-sdk/src/contribution.rs:53`), `Registry::of_capability` / `of_area` (`:211-229`) | The grouping exists; the negotiation does not |
+| P3 protocol | `Session::execute` (`crates/craftkit-sdk/src/session.rs:963`); six doors and two transport libraries over one registry (§3.3) | One registry, several transports |
 | P4 data model | `Document` (`crates/craftkit-sdk/src/document.rs:1591-1644`) — `nodes`, `relations`, opaque `Node.data`; the **plan** (`crates/craftkit-sdk/src/plan.rs:60-69`) | A derived-value surface exists; **no path language** |
 | P5 actions | `CommandSpec::run` — `CommandRun::Static` or `Dynamic` | A command *is* an action with parameters |
-| P6 resolution | `Projection` (`crates/craftkit-sdk/src/ecosystem.rs:392-398`) — *"what a front end shows and what an agent is told"* | The projection is where a2ui's resolver's job would sit: the views of one registry |
-| P7 formats | `craftkit-mcp`'s `schema_of` (`crates/craftkit-mcp/src/lib.rs:439-488`) emits real JSON Schema per command | One format exists |
+| P6 resolution | `Projection` (`crates/craftkit-sdk/src/ecosystem.rs:455-464`) — *"what a front end shows and what an agent is told"* | The projection is where a2ui's resolver's job would sit: the views of one registry |
+| P7 formats | `craftkit-mcp`'s `schema_of` (`crates/craftkit-mcp/src/lib.rs:455-461`) emits real JSON Schema per command | One format exists |
 | P8 skills | `skills/craftkit-editing/SKILL.md`, `skills/craftkit-checking/SKILL.md` — a **routing table** to `docs/recipes/` | The recipes are what can drift; the checking skill also quotes one live command id |
 | P9 evals | none | gap — but see §4's **O9** (the posture decision comes first) |
 | P10 blueprints | "arcs" + `cargo xtask new-arc` + `crates/craftkit-gates` | Same instinct, different vocabulary |
 
-The load-bearing line for everything below is `ecosystem.rs:392-398`:
+The load-bearing line for everything below is `ecosystem.rs:455-464`:
 
 > **One source.** A menu, a toolbar, a schema, a chord map and a document are
 > five views of the same registry, and this is where they are made.
@@ -90,13 +90,13 @@ Four mechanisms describe the same commands today:
 |---|---|---|---|---|
 | `xtask` index (`xtask/src/index.rs:129` `build`, `:172`, `:294`, `:468`; the record at `:32-58`) | **source text** — `commands!` tables, `#[command(…)]` attributes and macros parsed out of the files | no | **yes** — its scope *is* the plugin crates (`battery_names`, `xtask/src/index.rs:89-104`), so `hello.greet` and every other linked-in plugin command is in it | **no** — it reads source text, and a run-time command is written by hand |
 | MCP `tools/list` (`crates/craftkit-mcp/src/lib.rs:318-320`; the tool JSON at `:160-176`, the schema at `:455-460`) | the registry, **read when it is asked for** (`crates/craftkit-mcp/src/lib.rs:160`) | yes (JSON Schema) | yes | **yes** — a command that joins the session while the program runs is a tool from then on, and `tools/call` refuses anything outside the list (`crates/craftkit-mcp/src/lib.rs:338-340`) |
-| bridge `tools/list` (`apps/craftkit-bridge/src/lib.rs:189-212`) | the **live** session registry, and the SDK's descriptor | yes (craftkit's descriptor) | yes | **yes** — a command that joins the session while the program runs is a tool, and a command the door did not list is refused (`apps/craftkit-bridge/src/lib.rs:239-246`) |
+| bridge `tools/list` (`apps/craftkit-bridge/src/lib.rs:193-212`) | the **live** session registry, and the SDK's descriptor | yes (craftkit's descriptor) | yes | **yes** — a command that joins the session while the program runs is a tool, and a command the door did not list is refused (`apps/craftkit-bridge/src/lib.rs:243-248`) |
 | plugin catalogue (`crates/craftkit-sdk/src/plugin.rs:242-262`; the parameter descriptor at `:130-138`) | the plugin process | yes | — it *is* a plugin's own declaration | yes |
 
 And the doors that show **no parameters at all**: the repl's `help`
-(`apps/craftkit-repl/src/lib.rs:136-142` prints `area / id / doc`), the wasm
+(`apps/craftkit-repl/src/lib.rs:139-158` prints `area / id / doc`), the wasm
 page (*"Type a command's id — `help` lists them"*), and control's
-`engine.describe` (`crates/craftkit-control/src/lib.rs:663-684`).
+`engine.describe` (`crates/craftkit-control/src/lib.rs:659-684`).
 
 The **xtask index** cannot see a run-time command at all: it reads source
 text, and `KNOWN-GAPS.md` says *"A run-time command is written out by hand"*.
@@ -142,42 +142,44 @@ two of the doors use. `craftkit-control` has a row of its own in §3.3;
 `craftkit-mcp` appears inside the agent door's row, because it is what that
 door runs.
 
-**The gate knows about one door.**
+**The gate knows about one door.** At the time of this survey:
 
 ```rust
-pub const FRONT_ENDS: &[&str] = &["craftkit-window"];   // crates/craftkit-gates/src/lib.rs:274
+pub const FRONT_ENDS: &[&str] = &["craftkit-window"];   // crates/craftkit-gates/src/lib.rs:305
 ```
 
-The rule "a front end is thin" — one of `AGENTS.md`'s non-negotiables — reaches
-**one** of the six. The other five are not classified, so the rule does not
+The rule "a front end is thin" — one of `AGENTS.md`'s non-negotiables — reached
+**one** of the six. The other five were not classified, so the rule did not
 apply to them.
 
 **And widening the list is not the one-liner it looks like.** It is one line
 *of const*, and then:
 
-- **`craftkit-bridge` fails immediately.** `apps/craftkit-bridge/src/lib.rs:231`
-  reads `self.ecosystem.evaluators` in code, and `evaluators` is in
-  `FRONT_END_FORBIDDEN` (`:295`). The rule reads **code**, not strings and not
-  comments (`:292-294`), so a JSON key built from a field access is a hit.
-- **`craftkit-studio` fails harder, and two of its hits are real defects.**
-  `apps/craftkit-studio/src/main.rs:170` calls `session.undo()` directly —
+- **`craftkit-bridge` failed immediately.** `apps/craftkit-bridge/src/lib.rs`
+  read `self.ecosystem.evaluators` in code, and `evaluators` is in
+  `FRONT_END_FORBIDDEN` (`crates/craftkit-gates/src/lib.rs:336`). The rule reads
+  **code**, not strings and not comments (`:801`–`:802`), so a JSON key built
+  from a field access is a hit.
+- **`craftkit-studio` failed harder, and two of its hits were real defects.**
+  `apps/craftkit-studio/src/main.rs` called `session.undo()` directly —
   the gate's own words: *"`undo` and `redo` are the history's own doors … and
-  **everything** is a command"* (`:285-287`). And
-  `apps/craftkit-studio/src/main.rs:36` reads `ecosystem.evaluators.ids()` —
+  **everything** is a command"* (`crates/craftkit-gates/src/lib.rs:323`–`:325`).
+  And it read `ecosystem.evaluators.ids()` —
   *"`evaluators` is the evaluator's own registry: a front end that reaches it
-  is a front end that evaluates the document itself"* (`:280-281`). The
-  studio's other 24 hits are `document_mut` inside command **implementations**
+  is a front end that evaluates the document itself"*
+  (`crates/craftkit-gates/src/lib.rs:318`–`:320`). The
+  studio's other 24 hits were `document_mut` inside command **implementations**
   (`apps/craftkit-studio/src/commands.rs`) — legitimate under the house rules,
   but indistinguishable to a crate-wide text rule, because the gate scans
   `src/*.rs` and does not parse.
 
   **Four findings in all, not twenty-six.** The gate emits one finding per
-  *(file, name)* pair (`crates/craftkit-gates/src/lib.rs:636-651`), so the
+  *(file, name)* pair (`crates/craftkit-gates/src/lib.rs:803`–`:814`), so the
   studio yields three (`commands.rs`/`document_mut`, `main.rs`/`evaluators`,
   `main.rs`/`undo`) and the bridge one (`lib.rs`/`evaluators`). The 24 is the
   number of `document_mut` **occurrences**.
 - **`craftkit-repl`, `craftkit-mcp-server`, `craftkit-wasm`,
-  `craftkit-window`, `craftkit-mcp` and `craftkit-control` are clean** under
+  `craftkit-window`, `craftkit-mcp` and `craftkit-control` were clean** under
   the rule as written.
 
 So the honest statement is not "one line":
@@ -210,25 +212,26 @@ The SDK has a complete, deliberately agent-shaped prompt seam:
 - `crates/craftkit-sdk/src/prompt.rs` — *"a `Supplier`: where the answers come
   from — a person, **an agent**, a script, a file"* (`:26`), plus `MapSupplier`
   (`:79`) and the `Supplier` trait (`:67`);
-- `Session::execute_with` (`session.rs:766`) — *"run a command, and ask the
-  host for the parameters that are missing before it runs"*
-  (`crates/craftkit-sdk/src/prompt.rs:28-29`);
-- `Session::ask` / `answer` / `pending` / `cancel` (`session.rs:823`, `:852`,
-  `:842`, `:885`) — a command that asks mid-run is **stopped** with the
-  document restored, and re-runs when answered.
+- `Session::execute_with` (`crates/craftkit-sdk/src/session.rs:839`) — *"run a
+  command, and ask the host for the parameters that are missing before it
+  runs"* (`crates/craftkit-sdk/src/prompt.rs:28-30`);
+- `Session::ask` / `answer` / `pending` / `cancel`
+  (`crates/craftkit-sdk/src/session.rs:896`, `:925`, `:915`, `:958`) — a
+  command that asks mid-run is **stopped** with the document restored, and
+  re-runs when answered.
 
 But **no door's runtime code calls `execute_with`**, and the mid-run answer
 cycle is implemented in **two** transport libraries:
 
 | door | `execute` | mid-run answer cycle | `Supplier` |
 |---|---|---|---|
-| terminal (`craftkit-repl`) | ✔ (`:236`) | ✘ | ✘ |
-| window (`craftkit-window`) | ✔ (`:286`) | ✘ in the window itself — but it runs a `craftkit-control` server (`apps/craftkit-window/src/main.rs:121-132`), which does implement it | ✘ |
+| terminal (`craftkit-repl`) | ✔ (`apps/craftkit-repl/src/lib.rs:257`) | ✘ | ✘ |
+| window (`craftkit-window`) | ✔ (`apps/craftkit-window/src/lib.rs:304`) | ✘ in the window itself — but it runs a `craftkit-control` server (`apps/craftkit-window/src/main.rs:121-132`), which does implement it | ✘ |
 | studio (`craftkit-studio`) | ✔ | ✘ | ✘ |
-| agent door (`craftkit-mcp-server` → `craftkit-mcp`) | ✔ (`craftkit-mcp/src/lib.rs:339`) | ✔ (`:326-337`, calls `session.answer`) | ✘ |
-| bridge (`craftkit-bridge`) | ✔ (`:211`) | **✘** | ✘ |
+| agent door (`craftkit-mcp-server` → `craftkit-mcp`) | ✔ (`crates/craftkit-mcp/src/lib.rs:354`) | ✔ (`:344`–`:353`, calls `session.answer`) | ✘ |
+| bridge (`craftkit-bridge`) | ✔ (`apps/craftkit-bridge/src/lib.rs:228`) | **✘** | ✘ |
 | browser (`craftkit-wasm`, which runs the repl's logic) | ✔ | ✘ | ✘ |
-| — control transport (`craftkit-control`) | ✔ (`:709`) | ✔ (`:702-710`) | ✘ |
+| — control transport (`craftkit-control`) | ✔ (`crates/craftkit-control/src/lib.rs:709`) | ✔ (`:702`–`:710`) | ✘ |
 
 `craftkit-studio`'s own library says it plainly: it *"calls
 `Session::execute` and nothing else"*
@@ -255,16 +258,16 @@ address. But:
 
 ```rust
 pub const FRONT_END_FORBIDDEN: &[&str] =
-    &["document_mut", "evaluators", "Plan", "PlanItem", "undo", "redo"];
+    &["document_mut", "evaluators", "evaluate", "Plan", "PlanItem", "undo", "redo"];
 ```
 
 *"a front end that holds one is a front end that keeps a value the evaluator
-computes"* (`crates/craftkit-gates/src/lib.rs:282-284`) — but the same doc
+computes"* (`crates/craftkit-gates/src/lib.rs:320`–`:322`) — but the same doc
 comment is careful about what that means:
 
 > *"The plan itself is not forbidden: the session hands it out, and a front
 > end may read it. What it may not do is **keep** it."*
-> (`crates/craftkit-gates/src/lib.rs:289-290`)
+> (`crates/craftkit-gates/src/lib.rs:329`–`:330`)
 
 That is the shape of the constraint, and it is sharper than "never expose a
 `Plan`". The plan reaches a front end as **JSON** — through the `doc.plan`
@@ -293,23 +296,23 @@ These are not opportunities. They are the three house-rule violations the
 tree has today, and **§6.1** is where they are actionable — the file, the
 rule it breaks and how you know it is done.
 
-They are house-rule violations that exist **today**,
-independent of anything a2ui has to do with it. Each belongs in
+They were house-rule violations that existed **when this was written**,
+independent of anything a2ui has to do with it. Each belonged in
 `KNOWN-GAPS.md`, and each is a *defect* rather than a feature — which is a
 different kind of work, and one nobody has to approve.
 
-| # | where | what it does | the rule it breaks |
+| # | where (then) | what it did | the rule it broke |
 |---|---|---|---|
-| 1 | `apps/craftkit-studio/src/main.rs:170` | `match session.undo()` | *"…`undo` and `redo` are the history's own doors … and **everything** is a command"* (`crates/craftkit-gates/src/lib.rs:285-287`) |
-| 2 | `apps/craftkit-studio/src/main.rs:36` | `ecosystem.evaluators.ids()` | *"`evaluators` is the evaluator's own registry: a front end that reaches it is a front end that evaluates the document itself"* (`:280-281`) |
-| 3 | `apps/craftkit-window/src/lib.rs:201-209` | `pub fn plan(&self) -> Vec<PlanRow>` calls `self.session().evaluate()` and **keeps** the derived values | *"A front end … never calls the evaluator, never keeps a value the evaluator computes"* (`AGENTS.md`) |
+| 1 | `apps/craftkit-studio/src/main.rs` | `match session.undo()` | *"…`undo` and `redo` are the history's own doors … and **everything** is a command"* (`crates/craftkit-gates/src/lib.rs:323`–`:325`) |
+| 2 | `apps/craftkit-studio/src/main.rs` | `ecosystem.evaluators.ids()` | *"`evaluators` is the evaluator's own registry: a front end that reaches it is a front end that evaluates the document itself"* (`:318`–`:320`) |
+| 3 | `apps/craftkit-window/src/lib.rs` | `pub fn plan(&self) -> Vec<PlanRow>` called `self.session().evaluate()` and **kept** the derived values | *"A front end … never calls the evaluator, never keeps a value the evaluator computes"* (`AGENTS.md`) |
 
-Number 3 is the sharpest, because `craftkit-window` is the **one** crate the
-gate already trusts (`FRONT_ENDS`, `:274`) — and the gate misses it: the
-forbidden list names `evaluators`, `Plan` and `PlanItem`, while the window
-writes `evaluate()` and `PlanRow`. The gate reads **names**, and a name can
-be avoided without the behaviour being avoided. That is a limit of the rule
-as written, not a gap in the report.
+Number 3 was the sharpest, because `craftkit-window` was the **one** crate the
+gate already trusted (`FRONT_ENDS`, `crates/craftkit-gates/src/lib.rs:305`) —
+and the gate missed it: the forbidden list named `evaluators`, `Plan` and
+`PlanItem`, while the window wrote `evaluate()` and `PlanRow`. The gate reads
+**names**, and a name can be avoided without the behaviour being avoided. That
+is a limit of the rule as written, not a gap in the report.
 
 **All three are repaired** (README §1115): the studio undoes through
 `history.undo`, the studio's evaluators line is gone, and the window has
@@ -356,8 +359,8 @@ started at the registry.
 **painting seam** — every kind of node knows how it is painted, and the core
 never matches on a kind."* `Session::paint` walks the visible nodes and calls
 `(kind.paint)(node, document, canvas)` for each
-(`crates/craftkit-sdk/src/session.rs:394-399`); `paint_view` adds the
-selection's chrome (`:409-412`).
+(`crates/craftkit-sdk/src/session.rs:467`–`:473`); `paint_view` adds the
+selection's chrome (`:482`–`:485`).
 
 **That is a2ui's catalog role, exactly.** a2ui's catalog is a closed,
 host-owned set of renderable entries with a name and a label, that a
@@ -377,7 +380,7 @@ chooses the entry; craftkit's document contains it, and the model chooses
 | `Raster` | RGBA pixels with a background; the camera's zoom and offset applied; a PNG writer over it | `crates/craftkit-raster/src/raster.rs:282` |
 
 The window is a `Raster`: `session.paint_view(&mut raster)`
-(`apps/craftkit-window/src/lib.rs:462-467`, `:512-513`).
+(`apps/craftkit-window/src/lib.rs:485`, `:531`).
 
 **And two things the render story does not have.**
 
@@ -456,22 +459,22 @@ written by hand.
 
 **No `enabled` field — and that is not an oversight.** `CommandSpec::enabled`
 is `fn(&Session) -> bool` (`crates/craftkit-sdk/src/command.rs:71-137`),
-evaluated against a live session (`crates/craftkit-sdk/src/session.rs:903`),
+evaluated against a live session (`crates/craftkit-sdk/src/session.rs:976`),
 and a `Projection` holds only the ecosystem — there is no session in scope. So
 availability cannot be a field of a registry-level view at all.
 `Projection::manifest()` omits it for exactly this reason
-(`crates/craftkit-sdk/src/ecosystem.rs:563-589`). **"Nothing" is not a
+(`crates/craftkit-sdk/src/ecosystem.rs:714-731`). **"Nothing" is not a
 zero:** a command that is unavailable in *this* session is not a command with
 `enabled: false`; it is a command whose availability the **session** answers
 when the command is run.
 
-**First consumer:** `crates/craftkit-mcp/src/lib.rs:439-488`, whose
+**First consumer:** `crates/craftkit-mcp/src/lib.rs:455-461`, whose
 `schema_of` already builds the per-command JSON Schema — the catalog
 generalises it rather than replacing it.
 
 **It should carry the kinds too.** `Projection::manifest()` already
 publishes the kind catalogue alongside the commands
-(`crates/craftkit-sdk/src/ecosystem.rs:571-573`), and the catalog's shape
+(`crates/craftkit-sdk/src/ecosystem.rs:735`–`:739`), and the catalog's shape
 above already has a `"kinds"` array. A view that lists commands but not
 kinds is half the vocabulary — and the kinds are the half a renderer needs
 (§3.6).
@@ -480,9 +483,9 @@ kinds is half the vocabulary — and the kinds are the half a renderer needs
 preference.
 
 *In the SDK* (L2), beside `Projection::schema`
-(`crates/craftkit-sdk/src/ecosystem.rs:525-558`). Layering-clean —
+(`crates/craftkit-sdk/src/ecosystem.rs:558`–`:566`). Layering-clean —
 `craftkit-mcp` and `craftkit-control` are L3
-(`crates/craftkit-gates/src/lib.rs:219-220`) and may depend on L2 — and best
+(`crates/craftkit-gates/src/lib.rs:224`–`:225`) and may depend on L2 — and best
 for "one source", since the projection is already where the views are made.
 The cost is that the SDK's plugin-facing surface grows a method plugins do
 not need; it is a *view*, not a capability, so nothing is exposed that was
@@ -492,7 +495,7 @@ not already there.
 written.** The catalog crate would depend on the SDK (L2) and so must itself
 be L3+, but `craftkit-mcp` and `craftkit-control` are already L3 and may
 depend only on **strictly lower** layers (`AGENTS.md`; enforced at
-`crates/craftkit-gates/src/lib.rs:466`). An L3 crate depending on an L3 crate
+`crates/craftkit-gates/src/lib.rs:520`–`:528`). An L3 crate depending on an L3 crate
 fails the inner gate. This option therefore requires **promoting
 `craftkit-mcp` and `craftkit-control` to L4** — a change to the layer table,
 which the outer gate checks against the manifests.
@@ -520,7 +523,7 @@ carry the same *set*: they do not today, and should not. The MCP server
 builds its tools from `session.registry().all()` — commands only
 (`crates/craftkit-mcp/src/lib.rs:160-176`) — while the bridge builds its list
 from the session's registry pruned to `command`, `effect` and `tool`
-(`apps/craftkit-bridge/src/lib.rs:189-212`). O1 makes the **shape**
+(`apps/craftkit-bridge/src/lib.rs:193-212`). O1 makes the **shape**
 uniform; O2 then prunes each door's contents **on purpose**, and the parity
 that must hold is behavioural, not enumerative (O4.2). (Adding a method to the
 SDK also means `cargo xtask ci`, because the SDK is depended on by
@@ -639,8 +642,8 @@ choosing *widgets* — does not transfer.
 What does transfer is narrow and real:
 
 1. the model **selects commands** from the registry, in an order, with
-   labels — which is `Projection::menu_tree` (`ecosystem.rs:464`) with a
-   different author;
+   labels — which is `Projection::menu_tree`
+   (`crates/craftkit-sdk/src/ecosystem.rs:527`) with a different author;
 2. the model **pre-binds arguments** — which is `prompt::Supplier`, already
    written and already documented as an agent affordance.
 
@@ -756,9 +759,9 @@ a second place they live — against the "one source" discipline. So the
 catalog **reads** the constants and emits them.
 
 **But the one-home rule is a convention here, not something a gate holds.**
-The inner gate's prose check (`crates/craftkit-gates/src/lib.rs:816-826`)
+The inner gate's prose check (`crates/craftkit-gates/src/lib.rs:981`–`:993`)
 collects only `pub const MAX_*` whose name ends in `BYTES`, `MEMORY` or
-`STEPS` (`public_bounds`, `:851-867`) — and the tree has exactly three of
+`STEPS` (`public_bounds`, `:1016`–`:1030`) — and the tree has exactly three of
 those: `MAX_DOCUMENT_BYTES`, `MAX_SESSION_BYTES`, `MAX_HISTORY_BYTES`.
 `MAX_TEXT_CHARACTERS`, `MAX_JSON_NODES`, `MAX_JSON_DEPTH` and `MAX_NODES` are
 **not** covered by it. So for the bounds O8 is about, "one home" is a
@@ -772,11 +775,11 @@ the ranges it knows, only one is usable:
 
 | kind | bound the SDK knows | already in the schema? |
 |---|---|---|
-| `Doc::Text` | `MAX_TEXT_CHARACTERS` = 65 536 (`params.rs:206`) | no — **new** |
-| `Doc::NodeRef` | a `u64` | yes — `"minimum": 0` (`craftkit-mcp/src/lib.rs:447`) |
+| `Doc::Text` | `MAX_TEXT_CHARACTERS` = 65 536 (`crates/craftkit-sdk/src/params.rs:221`) | no — **new** |
+| `Doc::NodeRef` | a `u64` | yes — `"minimum": 0` (`crates/craftkit-sdk/src/schema.rs:55`) |
 | `Doc::Number` | none | no |
 | `Doc::Bool`, `Doc::NodeKind` | none | no |
-| `Doc::Json` | `MAX_JSON_NODES` = 1 000 000, `MAX_JSON_DEPTH` = 64 (`params.rs:293`, `:296`) | bounded by shape, not meaning — nothing an author can act on |
+| `Doc::Json` | `MAX_JSON_NODES` = 1 000 000, `MAX_JSON_DEPTH` = 64 (`crates/craftkit-sdk/src/params.rs:308`, `:311`) | bounded by shape, not meaning — nothing an author can act on |
 
 (The document's own node ceiling is a different and much smaller bound —
 `MAX_NODES` is 10 000, `crates/craftkit-sdk/src/document.rs:1310`.)
@@ -834,12 +837,13 @@ The opportunity is to extract the **stable contracts** (the shape of
 
 **The constraint.** A second document holding the same facts is a **second
 source** — against the tree's own discipline (*"One source … five views of the
-same registry"*, `ecosystem.rs:392-398`) and the outer gate's existing check
+same registry"*, `crates/craftkit-sdk/src/ecosystem.rs:455-464`) and the outer
+gate's existing check
 that prose links resolve. Extraction must **replace** prose, not sit beside
 it.
 
 **And one thing may not move.** The inner gate reads the bounds out of
-`root/README.md` (`crates/craftkit-gates/src/lib.rs:820`) and fails with "a
+`root/README.md` (`crates/craftkit-gates/src/lib.rs:986`) and fails with "a
 bound no document names" if a number is not there. So the README must keep
 the bounds, or the gate must be widened to read the new document — which is
 itself a change to the gate. The extraction is therefore **not** free, and it
@@ -1017,23 +1021,24 @@ language-agnostic corpus.
 
 ### 6.1 Defects — these wait for nobody
 
-Three house-rule violations exist today (§3.5). They are not opportunities,
-they are not a2ui's business, and they need no product decision. Each is
-small, each has a test, and each is the kind of thing the tree's own
-`KNOWN-GAPS.md` is for.
+Three house-rule violations existed when this was written (§3.5). They were
+not opportunities, they were not a2ui's business, and they needed no product
+decision. Each was small, each had a test, and each was the kind of thing the
+tree's own `KNOWN-GAPS.md` is for.
 
-| # | the change | the file | how you know it is done |
+| # | the change | the file (then) | how you know it is done |
 |---|------------|----------|--------------------|
-| D1 | the studio undoes through the **registry**, not through `session.undo()` | `apps/craftkit-studio/src/main.rs:170` | a studio test asserting the studio never names `undo`/`redo` — **not** the gate, which does not look at the studio at all |
-| D2 | the studio's `evaluators` line is dropped or read through a projection method — `projection().manifest()` already names every evaluator (`crates/craftkit-sdk/src/ecosystem.rs:577-578`) | `apps/craftkit-studio/src/main.rs:36` | a studio test asserting the studio never names `evaluators` |
-| D3 | the window's `plan()` stops calling the evaluator and **keeps** derived values — it reads them the way the rest of the tree does | `apps/craftkit-window/src/lib.rs:201-209` | `cargo test -p craftkit-gates` — the window **is** in `FRONT_ENDS`, so the gate sees it; and the forbidden list needs `evaluate`/`PlanRow` added, not only `Plan` |
+| D1 | the studio undoes through the **registry**, not through `session.undo()` | `apps/craftkit-studio/src/main.rs` | a studio test asserting the studio never names `undo`/`redo` — **not** the gate, which did not look at the studio at all |
+| D2 | the studio's `evaluators` line is dropped or read through a projection method — `projection().manifest()` already names every evaluator (`crates/craftkit-sdk/src/ecosystem.rs:741`–`:743`) | `apps/craftkit-studio/src/main.rs` | a studio test asserting the studio never names `evaluators` |
+| D3 | the window's `plan()` stops calling the evaluator and **keeps** derived values — it reads them the way the rest of the tree does | `apps/craftkit-window/src/lib.rs` | `cargo test -p craftkit-gates` — the window **is** in `FRONT_ENDS`, so the gate sees it; and the forbidden list needs `evaluate`/`PlanRow` added, not only `Plan` |
 
-**Why D1 and D2 have no gate test:** `FRONT_ENDS` holds only
-`craftkit-window` (`:274`), so `front_ends_are_thin` never looks at the
+**Why D1 and D2 had no gate test:** `FRONT_ENDS` held only
+`craftkit-window` (`crates/craftkit-gates/src/lib.rs:305`), so
+`front_ends_are_thin` never looked at the
 studio. The gate's own test —
 `crates/craftkit-gates/tests/tree.rs:22` (`the_tree_is_clean`), run by
-`cargo test -p craftkit-gates` — passes today *and* after D1 and D2 are
-fixed, which makes it a **vacuous** acceptance test for those two.
+`cargo test -p craftkit-gates` — passed then *and* after D1 and D2 were
+fixed, which made it a **vacuous** acceptance test for those two.
 
 It becomes the acceptance test for **D3** as soon as the forbidden list
 names `evaluate` and `PlanRow` — the window is already in `FRONT_ENDS`, so

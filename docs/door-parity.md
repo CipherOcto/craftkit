@@ -52,10 +52,10 @@ Each cell below was read in the code, and the line is where it was read.
 
 **The terminal door** — `apps/craftkit-repl/src/lib.rs`.
 `help` lists the commands by area and `commands` lists the ids, both
-read from the **session** the door drives (`:144`, `:160`);
-`run_command` runs any command by its id (`:223`); `plan` asks `doc.plan`
-(`:169`); `memory` reports the journal's **size** (`:191`); a refusal is
-answered with the refusal's own text (`:256`). There is no node list and
+read from the **session** the door drives (`:150`, `:166`);
+`run_command` runs any command by its id (`:229`); `plan` asks `doc.plan`
+(`:175`); `memory` reports the journal's **size** (`:197`); a refusal is
+answered with the refusal's own text (`:262`). There is no node list and
 no schema: a person at a prompt reads a line.
 
 **The window** — `apps/craftkit-window/src/lib.rs`.
@@ -82,13 +82,13 @@ every command is a tool.
 
 **The bridge** — `apps/craftkit-bridge/src/lib.rs`.
 `tools` is read from the **session** the tools run in, and every tool
-carries the SDK's **descriptor** (`:189`); `plan` asks the `doc.plan`
-command (`:276`); `journal` answers with the entries (`:288`); `resources`
+carries the SDK's **descriptor** (`:193`); `plan` asks the `doc.plan`
+command (`:280`); `journal` answers with the entries (`:292`); `resources`
 is the kinds, the formats and the **manifest**, whose commands are the
-session's (`:258`); `menu` is the menu tree of the **same** registry
-(`:297`); and `call` refuses a command the door did not list (`:214`,
-`:239`). Its protocol is **its own**, so its tools carry `parameters` and
-not `inputSchema`.
+session's (`:262`, `:271`); `menu` is the menu tree of the **same** registry
+(`:301`); and `call` refuses a command the door did not list (`:218`,
+`:224`–`:226`, `:243`). Its protocol is **its own**, so its tools carry
+`parameters` and not `inputSchema`.
 
 **The a2ui door** — `apps/craftkit-a2ui-server/src/lib.rs`.
 The methods are a2ui's own (`:459`–`:465`): `createSurface`,

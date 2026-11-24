@@ -101,7 +101,8 @@ fn a_tool_says_what_it_changes() {
 /// and can be run**.
 ///
 /// The door's list is read from the session its tools run in, so a door
-/// never offers a command it cannot run — and never hides one it can.
+/// never offers a command the session does not have — and never hides
+/// one it has.
 #[test]
 fn a_command_made_at_run_time_is_listed_and_can_be_run() {
     let mut bridge = bridge();
