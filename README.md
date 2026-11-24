@@ -4567,6 +4567,7 @@ so.
 | **the recipe says what the tree does** | **built.** The batteries the tree has are named in the recipe, and the gate says so when a name drifts (§1119) | §1119 |
 | **a command made while the program runs is declared** | **built.** The SDK writes the fields and the reader, and the bound on a run-time parameter is the SDK's (§1120) | §1120 |
 | **every door lists what the session has** | **built.** A session can gain a command while it runs, and every door reads its list from the session it runs the commands in (§1121) | §1121 |
+| **every cell of the parity matrix is proved** | **built.** The matrix names the test that proves each cell, and the outer gate says when a test it names is not there (§1122) | §1122 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71158,3 +71159,61 @@ doors were reading a **snapshot**.
   **refused when it is run**. The predicate is over the session's
   state, so the state can change between the list and the call; a door
   that hid such a command would hide it forever.
+
+## 1122. Every cell of the parity matrix is proved
+
+The **parity matrix** is the survey's O4.2: the six doors side by side,
+cell by cell, saying what each can do. It was written by hand, and a
+table that drifts is worse than no table — so the question is what keeps
+it true.
+
+**A line does not.** A cell that said "this was read at line 214" is
+true until the code moves, and then it is a sentence about nothing. Two
+verification rounds in this tree found exactly that: seven of the
+matrix's own citations landed on empty comment lines, and seventeen
+more were stale.
+
+**A named test does.** A test's *name* is stable: it changes when
+somebody renames it on purpose, and not when a line moves. So each cell
+now names the **test** that proves it, and the outer gate reads the
+matrix and checks that every test it names **exists**.
+
+### What was built
+
+- **The cells that had no proof now have one.** The terminal door and
+  the window had no test for the **undo being a command** — the claim
+  that a door never opens the history's own door. The agent door had no
+  test for a **call running** a command or for a **refusal being told**.
+  Each is a test now, in the door's own crate.
+- **The matrix names the tests.** Every cell that is a ✓ points at the
+  test that proves it, in the form `path::test_name`.
+- **The outer gate checks them.** A new rule in the `lists` phase reads
+  the matrix and says when a test it names is not in the tree.
+
+### What the port found
+
+- **A line is not evidence.** Seven of the matrix's own citations
+  landed on empty comment lines, and seventeen more were stale — a
+  table whose cells point at lines is a table that says nothing the
+  moment the code moves.
+- **Half the cells were claims and not proofs.** The undo cell, the
+  call cell and the refusal cell were read in the code and written down,
+  and no test said so. A claim that no test holds is a claim that is
+  true until the next change.
+
+### What it cost
+
+- **Three tests** — one in the terminal door, two in the window and the
+  agent door — and **one rule** in the outer gate, and a matrix that
+  names its proofs.
+
+### What it does not settle
+
+- **The cells themselves are still not checked.** The gate reads the
+  matrix and checks the *proofs* are there; it does not drive the six
+  doors and compare what they do with what the table says. That would be
+  a check over behaviour, and it needs a harness that can reach all six
+  doors at once — a crate of its own, three edits (the manifest, the
+  layer table and the architecture document).
+- **A negative cell has no proof to name.** "The terminal door has no
+  schema" is an absence, and an absence has no test to point at.

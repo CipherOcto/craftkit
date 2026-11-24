@@ -75,7 +75,7 @@ itself, and it has four honest limits:
 
 ---
 
-## 4. The doors are classified; the parity matrix is checked by hand
+## 4. The doors are classified; the parity matrix is kept by the gate
 
 The tree has **six doors**, and the rule "a front end is thin" now reaches
 all six (README §1116): the terminal door, the window, the browser door,
@@ -84,12 +84,18 @@ library and the control channel — are not doors, and the **studio** is a
 **host**: its entry point is a front end, and its library is a command
 book.
 
-**What is left of it is the parity matrix's keeping.** The table itself
-is written — the six doors side by side, cell by cell, with the line each
-cell was read in ([`docs/door-parity.md`](docs/door-parity.md)) — and
-nothing keeps it true: it is checked by hand, and the next cut, if there
-is one, is a check that reads the doors and compares. That is not a
-defect: nothing in the tree is broken by a table that drifts.
+**The parity matrix is kept, not kept by hand.** The table is written — the
+six doors side by side, cell by cell — and each cell names the **test**
+that proves it ([`docs/door-parity.md`](docs/door-parity.md)). The outer
+gate reads the matrix and checks that every test it names **exists**: a
+named test does not drift when the code moves, and a line does. What is
+still **not** checked is the *cells* themselves — that is, the gate does
+not read a door and compare what it does with what the table says. That
+would be a check over behaviour, and it needs a harness that can drive all
+six doors at once: a crate of its own, three edits (the manifest, the
+layer table and the architecture document). It is **not** a defect:
+nothing in the tree is broken by a table that drifts, and the cells that
+matter most are each proved by a test the tree runs.
 
 **And the bridge's protocol changed** when the bridge became thin:
 `resources/list` carries the **manifest** now and not the evaluator's ids,

@@ -195,3 +195,20 @@ fn the_door_lists_the_registry() {
     let real = repl.session().registry().len();
     assert_eq!(listed, real, "the door listed {listed} and the registry holds {real}");
 }
+
+/// The undo is a **command**, and the door runs it as one.
+///
+/// The house rule is that everything is a command: a front end does not
+/// open the history's own door. The door therefore has no `undo` of its
+/// own — it asks `history.undo`, which is the same answer every other
+/// door gets.
+#[test]
+fn the_undo_is_a_command() {
+    let mut repl = door();
+    repl.run(r#"node.add {"name": "box", "kind": "geometry.rect"}"#);
+    assert_eq!(repl.session().document().nodes.len(), 1, "the node was added");
+
+    let outcome = repl.session_mut().execute("history.undo", &json!({})).expect("the undo runs");
+    assert!(outcome.message.contains("node.add"), "the undo says what it undid: {}", outcome.message);
+    assert_eq!(repl.session().document().nodes.len(), 0, "the node was not undone");
+}

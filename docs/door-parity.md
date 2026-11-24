@@ -1,13 +1,16 @@
 # The doors, side by side
 
-What each of the tree's **six doors** can do, cell by cell, and where each
-cell was read.
+What each of the tree's **six doors** can do, cell by cell, and the
+**test** that proves each cell.
 
 This is the honest first cut of the survey's **parity matrix** (O4.2): a
 table, checked by hand. It is not a gate and it does not pretend to be
 one. A table that drifts is worse than no table, so the way to keep it
-true is to read it again — and the next cut, if there is one, is a check
-that a door's answer matches the cell.
+true is to read it again — and the way to keep a **cell** true is to name
+the test that proves it, because a named test does not drift when the
+code moves and a line does. The outer gate reads this table and checks
+that every test it names **exists**; what is not checked is the cells
+themselves, which would need a harness that drives all six doors at once.
 
 ## What a door is
 
@@ -48,54 +51,101 @@ never opens the door behind it.
 
 ## How each cell was checked
 
-Each cell below was read in the code, and the line is where it was read.
+Each cell below was **proved by a test**, and the test is named. A named
+test does not drift when the code moves; a line does, and a line that has
+moved is a line that says nothing. The outer gate checks that every test
+named here **exists** — so the table cannot claim a proof that is not there.
 
-**The terminal door** — `apps/craftkit-repl/src/lib.rs`.
+**The terminal door** — `apps/craftkit-repl`.
 `help` lists the commands by area and `commands` lists the ids, both
-read from the **session** the door drives (`:150`, `:166`);
-`run_command` runs any command by its id (`:229`); `plan` asks `doc.plan`
-(`:175`); `memory` reports the journal's **size** (`:197`); a refusal is
-answered with the refusal's own text (`:262`). There is no node list and
-no schema: a person at a prompt reads a line.
+read from the **session** the door drives
+(`apps/craftkit-repl/tests/repl.rs::help_lists_the_commands`,
+`apps/craftkit-repl/tests/repl.rs::every_listed_command_is_a_real_command`);
+`run_command` runs any command by its id
+(`apps/craftkit-repl/tests/repl.rs::a_command_runs_and_the_document_changes`);
+`plan` asks `doc.plan`
+(`apps/craftkit-repl/tests/repl.rs::plan_comes_from_the_command`);
+`memory` reports the journal's **size**
+(`apps/craftkit-repl/tests/repl.rs::memory_comes_from_the_command`);
+the undo is a **command**
+(`apps/craftkit-repl/tests/repl.rs::the_undo_is_a_command`); a refusal is
+answered with the refusal's own text
+(`apps/craftkit-repl/tests/repl.rs::an_unknown_command_is_refused`). There is
+no node list and no schema: a person at a prompt reads a line.
 
-**The window** — `apps/craftkit-window/src/lib.rs`.
-`commands` lists the commands and `commands_outside_panels` the ones no
-panel shows (`:132`, `:174`); `open` builds a **form** from the command's
-own parameters (`:237`); `run` runs it (`:283`); `tree` lists the nodes
-(`:191`); `plan` asks `doc.plan` (`:211`); the log holds what the window
-has to say (`:459`).
+**The window** — `apps/craftkit-window`.
+`commands` lists the commands
+(`apps/craftkit-window/tests/window.rs::the_window_shows_every_command`)
+and `commands_outside_panels` the ones no panel shows
+(`apps/craftkit-window/tests/window.rs::the_panels_are_shown_and_their_commands_once`);
+`open` builds a **form** from the command's own parameters
+(`apps/craftkit-window/tests/window.rs::the_form_is_the_commands_own_parameters`);
+`run` runs it
+(`apps/craftkit-window/tests/window.rs::the_window_runs_a_command_through_the_registry`);
+`tree` lists the nodes
+(`apps/craftkit-window/tests/window.rs::the_window_draws_the_document_through_the_kinds`);
+`plan` asks `doc.plan`
+(`apps/craftkit-window/tests/window.rs::the_plan_is_the_commands_work`);
+the undo is a **command**
+(`apps/craftkit-window/tests/window.rs::the_undo_is_a_command`); the log holds
+what the window has to say
+(`apps/craftkit-window/tests/window.rs::a_command_that_refuses_says_so`).
 
-**The browser door** — `apps/craftkit-wasm/src/lib.rs`.
-It holds the terminal door's `Repl` and runs it (`:95`, `:112`), so every
+**The browser door** — `apps/craftkit-wasm`.
+It holds the terminal door's `Repl` and runs it
+(`apps/craftkit-wasm/tests/door.rs::the_door_is_the_terminal_door`), so every
 cell of that row is that door's cell: the browser door is the terminal
-door in a page.
+door in a page
+(`apps/craftkit-wasm/tests/door.rs::the_door_lists_its_commands`,
+`apps/craftkit-wasm/tests/door.rs::a_command_runs_and_the_answer_comes_back`,
+`apps/craftkit-wasm/tests/door.rs::the_plan_is_a_command_the_page_can_ask_for`,
+`apps/craftkit-wasm/tests/door.rs::an_unknown_command_is_refused`).
 
-**The agent door** — `crates/craftkit-mcp/src/lib.rs`.
-The tools are made from the session's registry, one per command, and the
-list is **read when it is asked for** (`:160`); a tool's schema is the
-**JSON Schema**, and the mapping lives in the SDK
-(`craftkit_sdk::schema::to_json_schema`, `:460`); the methods are
-`tools/list`, `tools/call`, `prompts/list`, `prompts/get`,
-`resources/list`, `resources/read` and `completion/complete` (`:258`–`:321`).
-The plan, the undo and the journal are **tools like any other**, because
-every command is a tool.
+**The agent door** — `crates/craftkit-mcp`.
+The tools are made from the session's registry, one per command
+(`crates/craftkit-mcp/tests/tools.rs::the_tool_list_is_the_command_list`),
+and the list is **read when it is asked for**
+(`crates/craftkit-mcp/tests/tools.rs::a_command_made_at_run_time_is_a_tool`);
+a tool's schema is the **JSON Schema**, and the mapping lives in the SDK
+(`crates/craftkit-mcp/tests/tools.rs::a_tools_schema_is_the_json_schema_the_sdk_builds`);
+a call runs the command
+(`crates/craftkit-mcp/tests/tools.rs::a_tool_call_runs_the_command`) and a
+refusal is told
+(`crates/craftkit-mcp/tests/tools.rs::a_refused_call_says_so`). The plan, the
+undo and the journal are **tools like any other**, because every command is a
+tool.
 
-**The bridge** — `apps/craftkit-bridge/src/lib.rs`.
+**The bridge** — `apps/craftkit-bridge`.
 `tools` is read from the **session** the tools run in, and every tool
-carries the SDK's **descriptor** (`:193`); `plan` asks the `doc.plan`
-command (`:280`); `journal` answers with the entries (`:292`); `resources`
-is the kinds, the formats and the **manifest**, whose commands are the
-session's (`:262`, `:271`); `menu` is the menu tree of the **same** registry
-(`:301`); and `call` refuses a command the door did not list (`:218`,
-`:224`–`:226`, `:243`). Its protocol is **its own**, so its tools carry
-`parameters` and not `inputSchema`.
+carries the SDK's **descriptor**
+(`apps/craftkit-bridge/tests/bridge.rs::a_command_made_at_run_time_is_listed_and_can_be_run`,
+`apps/craftkit-bridge/tests/bridge.rs::the_tool_list_is_the_projection`);
+`plan` asks the `doc.plan` command
+(`apps/craftkit-bridge/tests/bridge.rs::the_plan_is_the_projects_plan`);
+`journal` answers with the entries
+(`apps/craftkit-bridge/tests/bridge.rs::the_journal_is_over_the_wire`);
+`resources` is the kinds, the formats and the **manifest**, whose commands
+are the session's
+(`apps/craftkit-bridge/tests/bridge.rs::the_manifest_names_the_sessions_commands`);
+`menu` is the menu tree of the **same** registry
+(`apps/craftkit-bridge/tests/bridge.rs::the_menu_and_the_tool_list_are_one_list`);
+and `call` runs only what it lists
+(`apps/craftkit-bridge/tests/bridge.rs::the_bridge_runs_only_what_it_lists`,
+`apps/craftkit-bridge/tests/bridge.rs::a_tool_call_runs_a_command`,
+`apps/craftkit-bridge/tests/bridge.rs::a_refused_call_says_so`). Its protocol
+is **its own**, so its tools carry `parameters` and not `inputSchema`.
 
-**The a2ui door** — `apps/craftkit-a2ui-server/src/lib.rs`.
-The methods are a2ui's own (`:459`–`:465`): `createSurface`,
-`updateComponents`, `updateDataModel`, `deleteSurface` and
-`callRendererFunction`, with `initialize` for the transport's handshake.
-Its vocabulary is **a2ui's**, not the kit's: it publishes a catalogue of
-a2ui's components, and a surface is a tree of those.
+**The a2ui door** — `apps/craftkit-a2ui-server`.
+The methods are a2ui's own
+(`apps/craftkit-a2ui-server/tests/door.rs::the_methods_are_a2uis`):
+`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface` and
+`callRendererFunction`, with `initialize` for the transport's handshake
+(`apps/craftkit-a2ui-server/tests/door.rs::the_handshake_is_two_way`). Its
+vocabulary is **a2ui's**, not the kit's: it publishes a catalogue of a2ui's
+components
+(`apps/craftkit-a2ui-server/tests/door.rs::the_catalogue_the_door_serves_is_the_layers_own`),
+and a surface is a tree of those
+(`apps/craftkit-a2ui-server/tests/door.rs::a_surface_that_carries_a_tree_gets_it_drawn`).
 
 ## What the matrix says
 

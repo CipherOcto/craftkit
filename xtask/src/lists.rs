@@ -540,6 +540,63 @@ pub fn broken_document_links(root: &Path) -> Result<Vec<String>, String> {
     Ok(problems)
 }
 
+/// Every test the **parity matrix** names is a test that exists.
+///
+/// The matrix is a claim about the doors, and a claim is worth only what
+/// proves it. The matrix names the **test** that proves each cell, and a
+/// named test does not drift when the code moves — a line does, and a
+/// line that has moved says nothing.
+///
+/// The citation is `path::test_name`: the file the test is in, and the
+/// test's name. The check is that the file is in the tree and that the
+/// file has a function of that name.
+pub fn the_matrix_names_tests_that_exist(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let matrix = root.join("docs/door-parity.md");
+    let Ok(text) = read_text(&matrix) else { return Ok(problems) };
+    for (number, path, name) in matrix_test_citations(&text) {
+        let file = root.join(&path);
+        let Ok(source) = read_rust(&file, Subject::Everything) else {
+            problems
+                .push(format!("docs/door-parity.md: line {number} names `{path}`, which is not in the tree"));
+            continue;
+        };
+        if !source.contains(&format!("fn {name}(")) {
+            problems.push(format!(
+                "docs/door-parity.md: line {number} names `{path}::{name}`, and that file has no such test"
+            ));
+        }
+    }
+    problems.sort();
+    Ok(problems)
+}
+
+/// The `path::test_name` citations in a piece of prose.
+///
+/// A citation is a path with a `/` in it, a `::`, and a name that looks
+/// like a Rust function: letters, digits and underscores.
+pub fn matrix_test_citations(text: &str) -> Vec<(usize, String, String)> {
+    let mut found = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let mut rest = line;
+        while let Some(open) = rest.find('`') {
+            let after = &rest[open + 1..];
+            let Some(close) = after.find('`') else { break };
+            let name = &after[..close];
+            if let Some((path, test)) = name.split_once("::") {
+                let looks_like_a_test = path.contains('/') && path.ends_with(".rs") && !path.contains(' ');
+                let looks_like_a_function =
+                    !test.is_empty() && test.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+                if looks_like_a_test && looks_like_a_function {
+                    found.push((number + 1, path.to_string(), test.to_string()));
+                }
+            }
+            rest = &after[close + 1..];
+        }
+    }
+    found
+}
+
 /// The `mod` groups of every crate root are sorted.
 pub fn the_mod_groups_are_sorted(root: &Path) -> Result<Vec<String>, String> {
     let mut problems = Vec::new();
@@ -968,6 +1025,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // Every document link in the prose points at a file that is in the tree.
     problems.extend(broken_document_links(root)?);
 
+    // Every test the parity matrix names is a test that exists.
+    problems.extend(the_matrix_names_tests_that_exist(root)?);
+
     // The `mod` groups are sorted.
     problems.extend(the_mod_groups_are_sorted(root)?);
 
@@ -1143,5 +1203,22 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let problems = every_gate_is_run(&root).expect("the tree is there");
         assert!(problems.is_empty(), "a gate is not run: {problems:?}");
+    }
+
+    #[test]
+    fn the_test_citations_are_read() {
+        let text = "see `apps/craftkit-bridge/tests/bridge.rs::a_refused_call_says_so` \
+                    and `crates/craftkit-mcp/src/lib.rs` and `no::such` and `a/b.rs::not a fn`";
+        let citations = matrix_test_citations(text);
+        assert_eq!(citations.len(), 1, "{citations:?}");
+        assert_eq!(citations[0].1, "apps/craftkit-bridge/tests/bridge.rs");
+        assert_eq!(citations[0].2, "a_refused_call_says_so");
+    }
+
+    #[test]
+    fn the_matrix_names_tests_that_are_there() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let problems = the_matrix_names_tests_that_exist(&root).expect("the tree is there");
+        assert!(problems.is_empty(), "the matrix names a test that is not there: {problems:?}");
     }
 }

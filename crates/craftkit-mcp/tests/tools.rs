@@ -154,3 +154,50 @@ fn a_command_made_at_run_time_is_a_tool() {
     let tool = server.tools().into_iter().find(|tool| tool.command == "runtime.echo");
     assert!(tool.is_some(), "the command is a tool: {:?}", server.tools());
 }
+
+/// A tool call **runs** the command.
+///
+/// The tool list is the command list, and a call is the command's own
+/// door: the same `Session::execute` every other door runs, and so the
+/// same refusals and the same undo.
+#[test]
+fn a_tool_call_runs_the_command() {
+    let mut server = Server::new(session());
+    let answer = server
+        .handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "craftkit_session_memory",
+                "arguments": {},
+            },
+        }))
+        .expect("the call is answered");
+    let result = &answer["result"];
+    assert_eq!(result["isError"], json!(false), "{answer}");
+    assert!(result["content"][0]["text"].as_str().is_some(), "{answer}");
+    let said = result["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(said.contains("byte(s)"), "the command's own answer came back: {said}");
+}
+
+/// A refusal is **told**, and the tool says it is an error.
+///
+/// The door does not swallow a refusal and does not answer with an empty
+/// success: the agent is told that the command refused, and why.
+#[test]
+fn a_refused_call_says_so() {
+    let mut server = Server::new(session());
+    let answer = server
+        .handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": { "name": "craftkit_no_such_command", "arguments": {} },
+        }))
+        .expect("the call is answered");
+    let result = &answer["result"];
+    assert_eq!(result["isError"], json!(true), "{answer}");
+    let said = result["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(said.contains("no.such.command"), "the refusal names the command: {said}");
+}

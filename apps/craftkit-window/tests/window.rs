@@ -569,3 +569,36 @@ fn the_channel_can_drag_in_the_document() {
     assert_eq!(rect.y, 20.0, "and up");
     server.shutdown();
 }
+
+/// The window's **form** is the command's own parameters.
+///
+/// The window does not publish a schema: it opens a command and asks it
+/// what it wants, and the fields it shows are the parameters the
+/// command declared. A person at a window fills in a form; an agent
+/// reads a schema; the two are not re-expressions of one another.
+#[test]
+fn the_form_is_the_commands_own_parameters() {
+    let mut window = window();
+    assert!(window.open("node.add"), "the command opens");
+    let form = window.form().expect("there is a form");
+    assert_eq!(form.id, "node.add", "the form is the command's");
+    assert!(!form.label.is_empty(), "the form has a label for the button");
+    let names: Vec<&str> = form.fields.iter().map(|field| field.name.as_str()).collect();
+    assert!(names.contains(&"kind"), "the form asks for the kind: {names:?}");
+    assert!(names.contains(&"name"), "the form asks for the name: {names:?}");
+}
+
+/// The undo is a **command**, and the window runs it as one.
+///
+/// The window does not open the history's own door: it asks
+/// `history.undo`, which is the same answer every other door gets.
+#[test]
+fn the_undo_is_a_command() {
+    let mut window = window();
+    window.run_id("node.add", json!({ "name": "box", "kind": "geometry.rect" })).expect("the node is added");
+    assert_eq!(window.session().document().nodes.len(), 1, "the node was added");
+
+    let outcome = window.run_id("history.undo", json!({})).expect("the undo runs");
+    assert!(outcome.message.contains("node.add"), "the undo says what it undid: {}", outcome.message);
+    assert_eq!(window.session().document().nodes.len(), 0, "the node was not undone");
+}
