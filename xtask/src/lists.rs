@@ -592,7 +592,13 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             continue;
         }
         for file in crate::index::rust_files(&directory.join("src")) {
-            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+            // **The production code only.** A rule written in a test is
+            // an example of one: the derive crate's own tests hold
+            // declarations in strings, and a reader that counted them
+            // would hold the tree to account for rules that do not ship.
+            let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Production) else {
+                continue;
+            };
             commands.extend(commands_at_the_start_of_a_line(&text));
             kinds.extend(crate::index::kinds_in(&text, &file, &name).into_iter().map(|kind| kind.id));
         }
@@ -1536,29 +1542,54 @@ mod tests {
 
     /// The kind of a **macro** is read from the call, and the call says
     /// what it is.
+    ///
+    /// **The whole pipeline, and not a hand-built definition.** A reader
+    /// that was handed the definition would prove nothing about the one
+    /// the tree uses, and the blind spot this test exists for was exactly
+    /// there: a macro that declares a kind and no command was not read at
+    /// all.
     #[test]
     fn the_kind_of_a_macro_is_read_from_its_call() {
         let source = "macro_rules! kind_of {\n    ($id:literal) => {\n        #[node_kind(kind = $id)]\n        pub struct K;\n    };\n}\nkind_of!(\"thing.shape\");\n";
         let kinds = crate::index::kinds_in(source, std::path::Path::new("src/lib.rs"), "thing");
         assert!(kinds.is_empty(), "the declaration alone is not a kind: {kinds:?}");
-        let mut arguments = std::collections::BTreeMap::new();
-        arguments.insert("id".to_string(), 0usize);
-        let macros = vec![crate::index::MacroDef {
-            name: "kind_of".to_string(),
-            arguments,
-            id: None,
-            label: None,
-            node_kind: Some(0),
-            evaluator: None,
-            doc: None,
-            example: false,
-            file: std::path::PathBuf::from("src/lib.rs"),
-            line: 1,
-        }];
+        let macros = crate::index::macro_definitions_in(source, std::path::Path::new("src/lib.rs"));
+        assert_eq!(macros.len(), 1, "the macro is read: {macros:?}");
+        assert_eq!(macros[0].node_kind, Some(0), "and the kind's id comes from its first argument");
         let kinds =
             crate::index::macro_kinds_in(source, std::path::Path::new("src/lib.rs"), "thing", &macros);
         assert_eq!(kinds.len(), 1, "{kinds:?}");
         assert_eq!(kinds[0].id, "thing.shape");
+    }
+
+    /// A macro that declares a kind and **no command** is still a macro
+    /// the tree writes its kinds with.
+    #[test]
+    fn a_macro_that_declares_only_a_kind_is_read() {
+        let source = "macro_rules! kind_of {\n    ($id:literal) => {\n        #[node_kind(kind = $id)]\n        pub struct K;\n    };\n}\nkind_of!(\"thing.shape\");\n";
+        let macros = crate::index::macro_definitions_in(source, std::path::Path::new("src/lib.rs"));
+        assert_eq!(macros.len(), 1, "the macro is read: {macros:?}");
+        assert_eq!(macros[0].id, None, "and it declares no command");
+        assert_eq!(macros[0].node_kind, Some(0), "but it declares a kind");
+    }
+
+    /// A kind written in a **test** is not a kind the tree has.
+    ///
+    /// The derive crate's own tests hold a declaration in a string, and a
+    /// reader that counted it would hold the tree to account for a kind
+    /// that does not ship.
+    #[test]
+    fn a_kind_written_in_a_test_is_not_a_kind_the_tree_has() {
+        let root = crate::temp::dir("lists-kind-in-a-test").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        let source = "#[cfg(test)]\nmod tests {\n    #[test]\n    fn a_test() {\n        let source = r#\"\n#[node_kind(kind = \"thing.example\")]\npub struct K;\n\"#;\n    }\n}\n";
+        std::fs::write(crate_directory.join("src").join("lib.rs"), source).expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "a kind in a test is not a kind: {problems:?}");
     }
 
     /// And the attribute in a **comment** is an example, and not a

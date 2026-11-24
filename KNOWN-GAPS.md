@@ -198,6 +198,13 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The reader that finds the kinds is a reader too** (§1134): it reads the
+  kinds a battery writes **through a macro** — the macro's pattern says
+  which argument the kind's id is, and the call says what it is — and it
+  reads the production code only, so that a kind written in a test is not
+  a kind the tree has. A kind declared in a way the reader does not see is
+  a kind the gate cannot hold to account, and the gate's own tests are the
+  only thing that says the reader sees what it says it sees.
 - **A session built by hand is not filtered by layer.** `Session::register`
   refuses a command whose layer is not linked in, and every door builds its
   session with the ecosystem's layers — but a session made from a registry

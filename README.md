@@ -71932,43 +71932,58 @@ A **kind** is what the document may hold: `art.project`, `cad.drawing`,
 `prose.list`, `numeric.angle`. It is a rule the kit publishes as much as a
 command is — the kind says what a node of that kind is worth, and the plan
 and the drawing read it. §1133 made every **command** run by a test; the
-**kinds** were the same rule left half-stated, and **twenty** of them were
-named by no test at all.
+**kinds** were the same rule left half-stated, and **twenty-four** of them
+were named by no test at all.
 
 ### What was built
 
-- **Twenty kinds are named by a test.** Each test creates a node of the kind
-  through a command and says what the plan says the node means: a project
-  says its frame rate and its scenes, a box says its two lengths and the
-  area they make, an equation says its text and its parts, a ruler says the
-  scale it counts by. The tests live with the battery that owns the kind —
-  `crates/craftkit-plugin-art/tests/kinds.rs` and one such file in each of
-  the batteries that has a kind of its own, and one in the SDK for the
-  kit's own `core.layer`.
+- **Twenty-four kinds are named by a test.** Each test creates a node of the
+  kind through a command and says what the plan says the node means: a
+  project says its frame rate and its scenes, a box says its two lengths
+  and the area they make, an equation says its text and its parts, a ruler
+  says the scale it counts by. The tests live with the battery that owns
+  the kind — `crates/craftkit-plugin-art/tests/kinds.rs` and one such file
+  in each of the batteries that has a kind of its own, and one in the SDK
+  for the kit's own `core.layer`. Three kinds that belong to a battery
+  whose own test already covered them — an ellipse, a dimension, a
+  routing — are named by a test in the file that covers them.
 - **The outer gate says so.** The `lists` phase now reads every kind the
   tree declares — the batteries' kinds through the index, which knows the
   macros they are written with, and the kit's own from the crates that are
   not batteries — and says a kind that no test names.
-- **The gate bites.** Three tests in the xtask: a kind that no test names
-  is caught, a kind a test names is not, and the kind of a macro is read
-  from its call.
+- **The gate bites.** Four tests in the xtask: a kind that no test names is
+  caught, a kind a test names is not, the kind of a macro is read from its
+  call, and a kind written in a test is not a kind the tree has.
 
 ### What the port found
 
 - **A kind was a rule with no proof.** The house's prose said every rule has
-  a test, and the gate said it of commands alone. Twenty kinds could have
-  meant anything, and nothing said so: `art.project` and `art.scene`,
-  `cad.drawing`, `core.layer`, `film.caption`, `fx.marker` and `fx.mask`,
-  `grid.scenario`, `layout.document`, `layout.style`, `layout.bookmark`,
-  `layout.article`, `layout.guide`, `layout.spread`, `numeric.angle`,
-  `numeric.box`, `pdf.info`, `prose.block.equation`, `prose.list` and
-  `sound.ruler`.
+  a test, and the gate said it of commands alone. Twenty-four kinds could
+  have meant anything, and nothing said so: `art.project` and `art.scene`,
+  `cad.drawing`, `cad.entity.dimension`, `cad.entity.ellipse`, `core.layer`,
+  `film.caption`, `fx.marker`, `fx.mask`, `grid.scenario`,
+  `layout.article`, `layout.bookmark`, `layout.document`, `layout.guide`,
+  `layout.spread`, `layout.style`, `numeric.angle`, `numeric.box`,
+  `pdf.info`, `prose.block.equation`, `prose.list`, `sound.routing`,
+  `sound.ruler` and `vector.totalarea`.
+- **A macro that declares only a kind was invisible.** A battery writes a
+  family of kinds through a macro — `art_kind!` says `kind = $kind` — and
+  such a macro has no `#[command(` in it. The reader stopped at the
+  command, so the kinds such a macro writes were never counted: the gate
+  was blind to **twenty-three** of the tree's hundred and twelve battery
+  kinds, and `cad.entity.ellipse` was a kind no test named and no gate
+  could see.
+- **A kind written in a test was a kind the tree did not have.** The
+  derive crate's own tests hold a declaration in a string, and the reader
+  counted it. The kinds are now read from the **production** code, where a
+  rule the tree ships lives.
 
 ### What it cost
 
-- **One rule** in the outer gate, **twenty tests** for the twenty kinds,
-  **three tests** for the rule, and the index's `Kind` and the two places it
-  reads them.
+- **One rule** in the outer gate, **twenty-four tests** for the twenty-four
+  kinds — twenty-one in the `kinds.rs` files and three in the files that
+  already covered a dimension, a routing and a total area — **four tests**
+  for the rule, and the index's `Kind` and the two places it reads them.
 
 ### What it does not settle
 
@@ -71980,3 +71995,6 @@ named by no test at all.
   are the ones that do the first.
 - **The rule is about the tree's own tests.** A kind that only a program
   outside the tree holds is a kind the rule does not see.
+- **The reader is a reader.** A kind declared in a way it does not see is a
+  kind the rule does not hold to account, and the rule's own tests are the
+  only thing that says it sees what it says it sees.

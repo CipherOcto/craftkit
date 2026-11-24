@@ -164,22 +164,34 @@ pub fn build(root: &Path) -> Result<Index, String> {
         // **The macros of the battery are read first.** A macro may be
         // called in a file other than the one it is written in, so the
         // definitions are gathered before the calls are read.
+        //
+        // **The kinds are read from the production code.** A kind is a
+        // rule the tree has, and a rule written in a test is an example
+        // of one: the derive crate's own test holds a declaration in a
+        // string, and a reader that counted it would hold the tree to
+        // account for a kind that does not ship.
         let mut macros = Vec::new();
         let mut texts = Vec::new();
+        let mut kinds_texts = Vec::new();
         for file in &files {
             let text = crate::tree::read_rust(file, crate::tree::Subject::Everything)
                 .map_err(|e| format!("could not read {}: {e}", file.display()))?;
+            let production = crate::tree::read_rust(file, crate::tree::Subject::Production)
+                .map_err(|e| format!("could not read {}: {e}", file.display()))?;
             let relative = relative_to(root, file);
-            macros.extend(macro_definitions_in(&text, &relative));
-            texts.push((text, relative));
+            macros.extend(macro_definitions_in(&production, &relative));
+            texts.push((text, relative.clone()));
+            kinds_texts.push((production, relative));
         }
         for (text, relative) in texts {
             index.commands.extend(commands_in(&text, &relative, &battery));
             index.commands.extend(table_commands_in(&text, &relative, &battery));
             index.commands.extend(macro_commands_in(&text, &relative, &battery, &macros));
+            index.bounds.extend(bounds_in(&text, &relative, &battery));
+        }
+        for (text, relative) in kinds_texts {
             index.kinds.extend(kinds_in(&text, &relative, &battery));
             index.kinds.extend(macro_kinds_in(&text, &relative, &battery, &macros));
-            index.bounds.extend(bounds_in(&text, &relative, &battery));
         }
     }
     index.commands.sort_by(|a, b| a.id.cmp(&b.id));
@@ -363,18 +375,36 @@ fn macro_definition_of(
         arguments.insert(variable, position);
     }
     // The command the macro declares: its attribute and its documentation.
-    let command_at = body.find("#[command(")?;
-    let (block, _) = block_of(body, command_at + "#[command(".len())?;
-    let id_variable = metavariable_of(&block, "id")?;
-    let label_variable = metavariable_of(&block, "label");
-    let id = arguments.get(&id_variable).copied();
-    let label = label_variable.and_then(|variable| arguments.get(&variable).copied());
+    //
+    // **A macro may declare a kind and no command.** A battery writes a
+    // family of kinds through a macro — `art_kind!` says `kind = $kind` —
+    // and such a macro has no `#[command(` in it at all. A reader that
+    // stopped at the command would see no kinds there, and a kind the
+    // reader cannot see is a kind the gate cannot hold to account.
+    let command_at = body.find("#[command(");
+    let block = match command_at {
+        Some(at) => block_of(body, at + "#[command(".len()).map(|(block, _)| block),
+        None => None,
+    };
+    let id = block.as_deref().and_then(|block| metavariable_of(block, "id"));
+    let label = block.as_deref().and_then(|block| metavariable_of(block, "label"));
+    let id = id.and_then(|variable| arguments.get(&variable).copied());
+    let label = label.and_then(|variable| arguments.get(&variable).copied());
     // A macro may declare a **kind** as well: a node kind says `kind =`,
     // and an evaluator says `id =` in an attribute of its own.
     let node_kind = kind_position(body, "#[node_kind(", "kind", &arguments);
     let evaluator = kind_position(body, "#[evaluator(", "id", &arguments);
+    // A macro that declares neither a command nor a kind is not one of
+    // the tree's rules, and it is not read.
+    if block.is_none() && node_kind.is_none() && evaluator.is_none() {
+        return None;
+    }
     // The documentation is above the derive, inside the macro's body.
-    let derive_at = body.find("#[derive(Command)]").unwrap_or(command_at);
+    let derive_at = body
+        .find("#[derive(Command)]")
+        .or_else(|| body.find("#[derive(NodeKind)]"))
+        .or(command_at)
+        .unwrap_or(0);
     let doc = doc_above(body, derive_at);
     let line = text[..body_start].lines().count().max(1);
     Some(MacroDef {
@@ -385,7 +415,7 @@ fn macro_definition_of(
         node_kind,
         evaluator,
         doc,
-        example: has_flag(&block, "example"),
+        example: block.as_deref().is_some_and(|block| has_flag(block, "example")),
         file: file.to_path_buf(),
         line,
     })

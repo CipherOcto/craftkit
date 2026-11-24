@@ -50,3 +50,39 @@ fn a_drawing_means_its_layers_and_its_blocks() {
     assert_eq!(said["layers"], json!(0), "the drawing says how many layers it holds");
     assert_eq!(said["blocks"], json!(0), "and how many blocks");
 }
+
+/// An **ellipse** is a kind, and it means its geometry and the extents
+/// it covers.
+///
+/// The extents are **derived**: they are worked out from the geometry
+/// every time, and they are never stored.
+#[test]
+fn an_ellipse_means_its_geometry_and_the_extents_it_covers() {
+    let mut session = session();
+    let outcome =
+        session.execute("cad.drawing.add", &json!({ "name": "the plan" })).expect("the drawing is added");
+    let drawing = outcome.data["id"].as_u64().expect("the drawing has an id");
+    let outcome = session
+        .execute("cad.block.add", &json!({ "drawing": drawing, "name": "the model" }))
+        .expect("the block is added");
+    let block = outcome.data["id"].as_u64().expect("the block has an id");
+    let outcome = session
+        .execute(
+            "cad.entity.ellipse.add",
+            &json!({
+                "block": block,
+                "name": "the ellipse",
+                "center": { "x": 0.0, "y": 0.0 },
+                "major": { "x": 10.0, "y": 0.0 },
+                "ratio": 0.5,
+            }),
+        )
+        .expect("the ellipse is added");
+    let ellipse = outcome.data["id"].as_u64().expect("the ellipse has an id");
+    let node = session.document().node(ellipse).expect("the ellipse is there");
+    assert_eq!(node.kind, "cad.entity.ellipse", "the node is an ellipse");
+    let said = said_of(&session, ellipse);
+    assert_eq!(said["geometry"]["ratio"], json!(0.5), "the ellipse says its geometry");
+    assert_eq!(said["extents"]["max"]["x"], json!(10.0), "and the extents it covers");
+    assert_eq!(said["extents"]["max"]["y"], json!(5.0), "which are derived from it");
+}
