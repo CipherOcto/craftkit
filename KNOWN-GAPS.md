@@ -198,6 +198,19 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The art battery clamps where the house says refuse** (§1142): a rate
+  outside the domain's bounds is **clamped** to the bound, and the tree
+  has a test that says so. The house rule says an out-of-range
+  parameter is an error and not a silently clamped value, and this is
+  the one place the tree does not do it. The behaviour is the
+  application's own and is deliberate; changing it is a decision and not
+  a fix, and it is recorded here rather than made quietly.
+- **A cap in a private module is textually public and practically
+  private** (§1142): the batteries' caps are `pub const` inside private
+  modules, so the outer gate reads the text and sees a promise while no
+  caller can name the number. The rule of §1141 therefore reaches the
+  **kit** and not the batteries, and the batteries prove their caps by a
+  test beside them instead.
 - **A limit of the kit that no test names is caught** (§1141): the same
   rule, read over the **kit's own public limits** — the constants whose
   names say they are one, `MAX_…` and `…_LIMIT` — and the rule is about

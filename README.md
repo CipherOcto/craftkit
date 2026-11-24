@@ -4592,6 +4592,7 @@ so.
 | **every bound the tree promises is named by a test** | **built.** The outer gate reads every promise bound the tree declares and says the ones that no test names (§1139) | §1139 |
 | **the reader reads a specification and not a mention of one** | **built.** The reader that finds the evaluators, layers and formats reads the specification and not the type that names it (§1140) | §1140 |
 | **every limit the kit keeps is named by a test** | **built.** The outer gate reads every limit the kit declares and says the ones that no test names (§1141) | §1141 |
+| **every limit a battery keeps is proved by the battery's own test** | **built.** The layout, film and fx batteries each prove their caps by exceeding them (§1142) | §1142 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72364,3 +72365,59 @@ were named by no test at all.
 - **A limit that cannot bite is still a limit in the code.** The answer
   bound is unreachable, and the tree says so rather than changing the
   kit's behaviour to make it reachable.
+
+## 1142. Every limit a battery keeps is proved by the battery's own test
+
+§1141 held the **kit's** limits to a test. The batteries keep their own
+caps — the items a group may hold, the weight a stroke may have, the
+cues a caption file may carry — and **none** of them had a test that
+exceeded one. The layout, film and fx batteries now prove theirs, and
+the proof found a hole.
+
+### What was built
+
+- **The layout battery proves its caps.** Four tests: a group of more
+  than a thousand items is refused, a stroke weight over the limit is
+  refused, a bookmark name over the limit is refused, and a link target
+  over the limit is refused.
+- **The film battery proves its caps.** Three tests: a caption file with
+  more than ten thousand cues is refused, a cue whose text is over four
+  thousand characters is refused, and a cue that is later than a year is
+  refused.
+- **The fx battery proves its cap.** One test: an expression over a
+  thousand characters is refused.
+
+### What the port found
+
+- **A link target was never checked for length.** The layout battery
+  says why a target may not be opened, and it asked the scheme first:
+  a target that may be opened was returned as good **before** the length
+  was looked at. So `MAX_TARGET` never applied to the targets it was
+  there for — an `https` link of any length at all was written into the
+  document. The length is now checked first, and the test proves it.
+- **A cap in a private module is textually public and practically
+  private.** The batteries' caps are `pub const` inside private modules:
+  the outer gate reads the text and sees a promise, and no caller can
+  name the number. The rule of §1141 therefore reaches the **kit** and
+  not the batteries, and the batteries prove their caps the way the
+  batteries prove everything else — by a test beside them.
+
+### What it cost
+
+- **Three test files** of four, three and one tests, **one change** in
+  the layout battery's link check, and the claim row above.
+
+### What it does not settle
+
+- **The batteries are not all done.** The prose, grid and pdf batteries
+  keep many caps of their own, and this arc reached three batteries of
+  sixteen.
+- **The art battery clamps where the house says refuse.** A rate outside
+  the domain's bounds is **clamped**, not refused — deliberately, and
+  with a test of its own that says so. The house rule says an
+  out-of-range parameter is an error, and this is the one place the tree
+  does not do it. It is recorded in `KNOWN-GAPS.md` rather than changed
+  here: the behaviour is the application's, and changing it is a
+  decision, not a fix.
+- **The rule is still about the name.** A cap that is named by a test is
+  named; the gate cannot see whether the test **exceeded** it.

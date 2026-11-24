@@ -62,11 +62,15 @@ pub fn may_be_opened(target: &str) -> bool {
 /// refusal that does not say why is a refusal the caller cannot act
 /// on.
 pub fn why_not(target: &str) -> Option<String> {
-    if may_be_opened(target) {
-        return None;
-    }
+    // **The length comes first.** A target that may be opened is a target
+    // that is kept, and a target that is kept is a target that is in the
+    // document: a link of any length at all would be a hole, and the
+    // hole is in the door that says "this may be opened".
     if target.chars().count() > MAX_TARGET {
         return Some(format!("a target is at most {MAX_TARGET} characters long"));
+    }
+    if may_be_opened(target) {
+        return None;
     }
     let scheme = target.split_once(':').map(|(scheme, _)| scheme.to_ascii_lowercase());
     match scheme.as_deref() {
