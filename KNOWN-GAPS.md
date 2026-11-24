@@ -198,6 +198,30 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **An evaluator that no test names is caught** (§1138): the same rule, read
+  over the tree's **evaluators** — the gestures about the whole document —
+  and the rule is about the **name**, so an evaluator named in a comment
+  is an evaluator the gate counts. An evaluator is also a **kind**, so the
+  kinds' rule held it to account twice; the evaluator's own rule is what
+  holds the kit's own node count, which is written as a static and is not
+  a kind at all.
+- **A layer that no test names is caught** (§1138): the same rule, read
+  over the tree's **layers** — the groups of contributions that depend on
+  each other — and the rule is about the **name**. The core layer is
+  written as a static and is read as one.
+- **A format that no test names is caught** (§1138): the same rule, read
+  over the tree's **formats** — the versions of the document format — and
+  a format's name is its **tag**, not a word of its own.
+- **The reader of the layers, formats and evaluators is a reader too**
+  (§1138): it reads a static that writes its specification as
+  `id: "…"` or `tag: "…"`, and it reads the **production code** only. A
+  static that writes its name another way is a specification the gate
+  cannot see, and nothing says so.
+- **Every evaluator is proved beside the battery that owns it** (§1138):
+  all eighteen of the tree's evaluators are proved by a test beside the
+  battery that owns them. What the proof says is the **answer** — the
+  area, the count, the end of a track — and not that the evaluator
+  answers every document it could be given.
 - **A tool that no test names is caught** (§1137): the same rule, read over
   the tree's **tools** — a gesture that runs a command — and the rule is
   about the **name**, so a tool named in a comment is a tool the gate

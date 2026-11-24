@@ -90,6 +90,12 @@ pub struct Index {
     pub panels: Vec<Panel>,
     /// Every tool, sorted by id.
     pub tools: Vec<Tool>,
+    /// Every evaluator, sorted by id.
+    pub evaluators: Vec<Evaluator>,
+    /// Every layer, sorted by id.
+    pub layers: Vec<Layer>,
+    /// Every format, sorted by id.
+    pub formats: Vec<Format>,
     /// The files of each battery's source, by battery.
     pub modules: BTreeMap<String, Vec<PathBuf>>,
     /// The files of each battery's tests, by battery.
@@ -97,6 +103,205 @@ pub struct Index {
     /// The public bounds the batteries declare: the name, the value and the
     /// file.
     pub bounds: Vec<Bound>,
+}
+
+/// A field of a **struct literal**: `name: "value"`.
+///
+/// A static that carries its own specification writes its fields with a
+/// colon, and the tree's readers have to read both spellings: an
+/// attribute's `name = "value"` and a literal's `name: "value"`.
+pub fn field_colon(block: &str, name: &str) -> Option<String> {
+    let needle = format!("{name}: \"");
+    let at = block.find(&needle)?;
+    let rest = &block[at + needle.len()..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+/// The **evaluators** a file declares.
+///
+/// An evaluator is a gesture about the **whole document**: it may look at
+/// every node, count them, and say something about the whole. It is
+/// written two ways — an attribute on a type, and a static that carries
+/// the specification itself — and the reader reads both.
+pub fn evaluators_in(text: &str, file: &Path, crate_name: &str) -> Vec<Evaluator> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find("#[evaluator(") {
+        let start = offset + at;
+        let Some((block, end)) = block_of(text, start + "#[evaluator(".len()) else { break };
+        let line_start = text[..start].rfind('\n').map(|at| at + 1).unwrap_or(0);
+        if text[line_start..start].trim().is_empty()
+            && let Some(id) = field(&block, "id")
+        {
+            found.push(Evaluator {
+                id,
+                file: file.to_path_buf(),
+                line: text[..start].lines().count().max(1),
+                crate_name: crate_name.to_string(),
+            });
+        }
+        offset = end;
+    }
+    found.extend(specs_in(text, "EvaluatorSpec", "id").into_iter().map(|(id, line)| Evaluator {
+        id,
+        file: file.to_path_buf(),
+        line,
+        crate_name: crate_name.to_string(),
+    }));
+    found
+}
+
+/// The **layers** a file declares.
+///
+/// A layer is a group of contributions that depend on each other, and it
+/// is written two ways — an attribute on a type, and a static that carries
+/// the specification itself — and the reader reads both.
+pub fn layers_in(text: &str, file: &Path, crate_name: &str) -> Vec<Layer> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find("#[layer(") {
+        let start = offset + at;
+        let Some((block, end)) = block_of(text, start + "#[layer(".len()) else { break };
+        let line_start = text[..start].rfind('\n').map(|at| at + 1).unwrap_or(0);
+        if text[line_start..start].trim().is_empty()
+            && let Some(id) = field(&block, "id")
+        {
+            found.push(Layer {
+                id,
+                file: file.to_path_buf(),
+                line: text[..start].lines().count().max(1),
+                crate_name: crate_name.to_string(),
+            });
+        }
+        offset = end;
+    }
+    found.extend(specs_in(text, "LayerSpec", "id").into_iter().map(|(id, line)| Layer {
+        id,
+        file: file.to_path_buf(),
+        line,
+        crate_name: crate_name.to_string(),
+    }));
+    found
+}
+
+/// The **formats** a file declares.
+///
+/// A format is a version of the document format: it has a tag, a version
+/// and a layer, and it is written as a static that carries the
+/// specification itself.
+pub fn formats_in(text: &str, file: &Path, crate_name: &str) -> Vec<Format> {
+    specs_in(text, "FormatSpec", "tag")
+        .into_iter()
+        .map(|(id, line)| Format { id, file: file.to_path_buf(), line, crate_name: crate_name.to_string() })
+        .collect()
+}
+
+/// The **specifications** a file writes as statics: `pub static X: Spec { … }`.
+///
+/// The **name** of the specification is the field the reader is told to
+/// read — an evaluator's id, a layer's id, a format's tag — and a static
+/// that does not carry that field is not one of them. The line is the
+/// line the static is on.
+fn specs_in(text: &str, spec: &str, field_name: &str) -> Vec<(String, usize)> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find(spec) {
+        let start = offset + at;
+        let Some(brace) = text[start..].find('{') else { break };
+        let Some((block, end)) = brace_block_of(text, start + brace + 1) else { break };
+        if let Some(id) = field_colon(&block, field_name) {
+            found.push((id, text[..start].lines().count().max(1)));
+        }
+        offset = end;
+    }
+    found
+}
+
+/// The **block** a brace opens, and where it ends.
+///
+/// The same walk as `block_of`, for the braces of a struct literal: the
+/// depth is counted, a string is not a brace, and a character literal is
+/// skipped whole.
+fn brace_block_of(text: &str, body_start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut depth = 1usize;
+    let mut at = body_start;
+    let mut in_string = false;
+    let mut escaped = false;
+    while at < bytes.len() {
+        let c = bytes[at] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                '"' => in_string = true,
+                '\'' => {
+                    if let Some(step) = the_character(bytes, at) {
+                        at += step;
+                        continue;
+                    }
+                }
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some((text[body_start..at].to_string(), at + 1));
+                    }
+                }
+                _ => {}
+            }
+        }
+        at += 1;
+    }
+    None
+}
+
+/// One **evaluator** the tree declares: a gesture about the whole
+/// document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Evaluator {
+    /// The evaluator's id: `<area>.<thing>`.
+    pub id: String,
+    /// The file the evaluator is written in, relative to the root.
+    pub file: PathBuf,
+    /// The line the evaluator is on.
+    pub line: usize,
+    /// The crate the evaluator belongs to.
+    pub crate_name: String,
+}
+
+/// One **layer** the tree declares: a group of contributions that depend
+/// on each other.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Layer {
+    /// The layer's id: a word.
+    pub id: String,
+    /// The file the layer is written in, relative to the root.
+    pub file: PathBuf,
+    /// The line the layer is on.
+    pub line: usize,
+    /// The crate the layer belongs to.
+    pub crate_name: String,
+}
+
+/// One **format** the tree declares: a version of the document format.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Format {
+    /// The format's tag: `<family>/<version>`.
+    pub id: String,
+    /// The file the format is written in, relative to the root.
+    pub file: PathBuf,
+    /// The line the format is on.
+    pub line: usize,
+    /// The crate the format belongs to.
+    pub crate_name: String,
 }
 
 /// One **tool** the tree declares: a gesture that runs a command.
@@ -261,12 +466,18 @@ pub fn build(root: &Path) -> Result<Index, String> {
             index.kinds.extend(macro_kinds_in(&text, &relative, &battery, &macros));
             index.panels.extend(panels_in(&text, &relative, &battery));
             index.tools.extend(tools_in(&text, &relative, &battery));
+            index.evaluators.extend(evaluators_in(&text, &relative, &battery));
+            index.layers.extend(layers_in(&text, &relative, &battery));
+            index.formats.extend(formats_in(&text, &relative, &battery));
         }
     }
     index.commands.sort_by(|a, b| a.id.cmp(&b.id));
     index.kinds.sort_by(|a, b| a.id.cmp(&b.id));
     index.panels.sort_by(|a, b| a.id.cmp(&b.id));
     index.tools.sort_by(|a, b| a.id.cmp(&b.id));
+    index.evaluators.sort_by(|a, b| a.id.cmp(&b.id));
+    index.layers.sort_by(|a, b| a.id.cmp(&b.id));
+    index.formats.sort_by(|a, b| a.id.cmp(&b.id));
     index.bounds.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(index)
 }

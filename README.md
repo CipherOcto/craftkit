@@ -4585,6 +4585,10 @@ so.
 | **a panel shows only its own layer's commands** | **built.** The ecosystem refuses a panel or tool that names a command of a layer it does not require (§1136) | §1136 |
 | **every tool is named by a test** | **built.** The outer gate reads every tool the tree declares and says the ones that no test names (§1137) | §1137 |
 | **every tool runs the command it says** | **built.** Each tool is proved by a test in its own battery: the tool is there, and the command it runs is linked in and of its own layer (§1137) | §1137 |
+| **every evaluator is named by a test** | **built.** The outer gate reads every evaluator the tree declares and says the ones that no test names (§1138) | §1138 |
+| **every layer is named by a test** | **built.** The outer gate reads every layer the tree declares and says the ones that no test names (§1138) | §1138 |
+| **every format is named by a test** | **built.** The outer gate reads every format the tree declares and says the ones that no test names (§1138) | §1138 |
+| **every evaluator is proved by a test in the battery that owns it** | **built.** All eighteen of the tree's evaluators are proved by a test beside the battery that owns them (§1138) | §1138 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72151,3 +72155,60 @@ tree's three tools were named by no test.
   §1136's are.
 - **The rule is about the tree's own tests.** A tool that only a program
   outside the tree holds is a tool the rule does not see.
+
+## 1138. Every evaluator is proved by the battery that owns it
+
+An **evaluator** is a gesture about the **whole document**: it may look at
+every node, count them, find the ones that overlap, and say something
+about the whole. It is a rule the kit publishes as much as a command or a
+kind is — and **nine** of the tree's eighteen evaluators were proved only
+by the studio's tests, not by a test beside the battery that owns them.
+
+### What was built
+
+- **Every evaluator is proved by a test in the battery that owns it.**
+  Nine test files: one for each of the batteries that had an evaluator
+  with no proof of its own (film, fx, geometry, grid, layout, numeric,
+  pdf, sound), and one in the kit's own crate for the node count. Each
+  says what the evaluator is — that it is there, in its battery's layer,
+  and what it says about a document of that battery's own nodes.
+- **The outer gate now reads the three registries the rule did not
+  cover.** An **evaluator**, a **layer** and a **format** are read the
+  way a command is read, and the `lists` phase says the ones that no
+  test names. All **eighteen** evaluators, **eighteen** layers and
+  **ten** formats were already named by a test; the rule is what holds
+  them there.
+
+### What the port found
+
+- **A rule that is proved elsewhere is proved in the wrong place.** The
+  studio's tests read every evaluator and said what it meant, and the
+  batteries that owned the evaluators said nothing. A battery carried on
+  its own — a plugin, a library linked into someone else's program —
+  would have brought an evaluator with no test beside it, and the test
+  that proved it was three crates away and about a door.
+- **The reader had to learn a second spelling.** A layer and a format
+  are written as **statics** that carry their own specification, and an
+  evaluator is written both ways: as an attribute on a type and as a
+  static. The reader now reads both, and it reads the production code
+  only — so a layer written in a test is not a layer the tree has.
+
+### What it cost
+
+- **Nine test files** (two or three tests each), **six tests** for the
+  gate's three new rules, **one test** for the readers themselves, and
+  the index's `Evaluator`, `Layer` and `Format` with the readers that
+  find them.
+
+### What it does not settle
+
+- **The rule is still about the name.** A layer named in a comment is a
+  layer the gate counts, as §1133's, §1134's, §1135's, §1136's and
+  §1137's are.
+- **The reader is a reader too.** It reads a static's specification when
+  the static writes its name as `id: "…"` or `tag: "…"`; a static that
+  writes it another way is a specification the gate cannot see, and
+  nothing says so.
+- **A test beside the battery is still a test of the tree.** A battery
+  whose evaluator is proved only outside the tree is a battery the rule
+  does not see, and the rule says nothing about the tree's own users.

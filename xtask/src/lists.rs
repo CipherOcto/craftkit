@@ -584,6 +584,9 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     let mut migrations: Vec<String> = Vec::new();
     let mut panels: Vec<String> = Vec::new();
     let mut tools: Vec<String> = Vec::new();
+    let mut evaluators: Vec<String> = Vec::new();
+    let mut layers: Vec<String> = Vec::new();
+    let mut formats: Vec<String> = Vec::new();
     let index = crate::index::build(root)?;
     commands.extend(index.commands.iter().map(|command| command.id.clone()));
     kinds.extend(index.kinds.iter().map(|kind| kind.id.clone()));
@@ -609,6 +612,9 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             );
             panels.extend(crate::index::panels_in(&text, &file, &name).into_iter().map(|panel| panel.id));
             tools.extend(crate::index::tools_in(&text, &file, &name).into_iter().map(|tool| tool.id));
+            evaluators.extend(crate::index::evaluators_in(&text, &file, &name).into_iter().map(|e| e.id));
+            layers.extend(crate::index::layers_in(&text, &file, &name).into_iter().map(|l| l.id));
+            formats.extend(crate::index::formats_in(&text, &file, &name).into_iter().map(|f| f.id));
         }
     }
     // Every test file in the tree, and what it says.
@@ -628,6 +634,12 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     panels.dedup();
     tools.sort();
     tools.dedup();
+    evaluators.sort();
+    evaluators.dedup();
+    layers.sort();
+    layers.dedup();
+    formats.sort();
+    formats.dedup();
     let mut problems = Vec::new();
     for command in commands {
         if tests.iter().any(|body| names_it(body, &command)) {
@@ -667,6 +679,30 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
         }
         problems.push(format!(
             "the tool `{tool}` is named by no test: every tool the tree has is named by a test"
+        ));
+    }
+    for evaluator in evaluators {
+        if tests.iter().any(|body| names_it(body, &evaluator)) {
+            continue;
+        }
+        problems.push(format!(
+            "the evaluator `{evaluator}` is named by no test: every evaluator the tree has is named by a test"
+        ));
+    }
+    for layer in layers {
+        if tests.iter().any(|body| names_it(body, &layer)) {
+            continue;
+        }
+        problems.push(format!(
+            "the layer `{layer}` is named by no test: every layer the tree has is named by a test"
+        ));
+    }
+    for format in formats {
+        if tests.iter().any(|body| names_it(body, &format)) {
+            continue;
+        }
+        problems.push(format!(
+            "the format `{format}` is named by no test: every format the tree has is named by a test"
         ));
     }
     Ok(problems)
@@ -1649,6 +1685,167 @@ mod tests {
         .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// An **evaluator** that no test names is caught.
+    #[test]
+    fn an_evaluator_that_no_test_names_is_caught() {
+        let root = crate::temp::dir("lists-evaluator").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[evaluator(id = \"thing.total\", label = \"Total\", layer = \"core\")]\npub struct E;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        // An evaluator is also a kind — it evaluates the whole document —
+        // so the tree holds it to account twice.
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(
+            problems.iter().any(|problem| problem.contains("the evaluator `thing.total`")),
+            "{problems:?}"
+        );
+    }
+
+    /// And an evaluator a test names is **not** caught.
+    #[test]
+    fn an_evaluator_that_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-evaluator-named").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[evaluator(id = \"thing.total\", label = \"Total\", layer = \"core\")]\npub struct E;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let evaluator = \"thing.total\"; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// A **layer** that no test names is caught.
+    #[test]
+    fn a_layer_that_no_test_names_is_caught() {
+        let root = crate::temp::dir("lists-layer").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[layer(id = \"thing\", name = \"Thing\", requires(\"core\"))]\npub struct L;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("thing"), "{problems:?}");
+    }
+
+    /// And a layer a test names is **not** caught.
+    #[test]
+    fn a_layer_that_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-layer-named").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[layer(id = \"thing\", name = \"Thing\", requires(\"core\"))]\npub struct L;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let layer = \"thing\"; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// A **format** that no test names is caught.
+    #[test]
+    fn a_format_that_no_test_names_is_caught() {
+        let root = crate::temp::dir("lists-format").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "pub static FORMAT_ONE: FormatSpec = FormatSpec { tag: \"thing/1\", version: 1 };\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("thing/1"), "{problems:?}");
+    }
+
+    /// And a format a test names is **not** caught.
+    #[test]
+    fn a_format_that_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-format-named").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "pub static FORMAT_ONE: FormatSpec = FormatSpec { tag: \"thing/1\", version: 1 };\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let format = \"thing/1\"; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// The readers see the tree's **own** layers, formats and evaluators.
+    ///
+    /// A reader that found nothing would make the rules above vacuous:
+    /// the tree's own layers and formats would be held to nothing. The
+    /// **kit's own** crates are read here, because the index is the
+    /// batteries' index and the kit is not a battery.
+    #[test]
+    fn the_readers_see_the_tree_own_layers_formats_and_evaluators() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let sdk = root.join("crates").join("craftkit-sdk").join("src");
+        let read = |name: &str| {
+            let path = sdk.join(name);
+            let text = std::fs::read_to_string(&path).unwrap_or_default();
+            (text, path)
+        };
+        let (text, path) = read("seams.rs");
+        let layers = crate::index::layers_in(&text, &path, "craftkit-sdk");
+        assert!(layers.iter().any(|layer| layer.id == "core"), "the core layer is read: {layers:?}");
+        let (text, path) = read("format.rs");
+        let formats = crate::index::formats_in(&text, &path, "craftkit-sdk");
+        assert!(formats.iter().any(|format| format.id == "craftkit/2"), "a format is read: {formats:?}");
+        let (text, path) = read("evaluator.rs");
+        let evaluators = crate::index::evaluators_in(&text, &path, "craftkit-sdk");
+        assert!(
+            evaluators.iter().any(|evaluator| evaluator.id == "core.nodecount"),
+            "an evaluator is read: {evaluators:?}"
+        );
+        // And the tree's counts are the ones the README states.
+        assert_eq!(layers.len(), 1, "the kit has one layer of its own: {layers:?}");
+        assert_eq!(formats.len(), 10, "the kit has ten formats: {formats:?}");
+        assert_eq!(evaluators.len(), 1, "the kit has one evaluator of its own: {evaluators:?}");
+        let index = crate::index::build(&root).expect("the tree is indexed");
+        assert_eq!(index.layers.len(), 17, "the batteries have seventeen layers");
+        assert_eq!(index.evaluators.len(), 17, "the batteries have seventeen evaluators");
     }
 
     /// A **tool** that no test names is caught.
