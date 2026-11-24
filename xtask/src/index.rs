@@ -208,8 +208,20 @@ fn specs_in(text: &str, spec: &str, field_name: &str) -> Vec<(String, usize)> {
     let mut offset = 0usize;
     while let Some(at) = text[offset..].find(spec) {
         let start = offset + at;
-        let Some(brace) = text[start..].find('{') else { break };
-        let Some((block, end)) = brace_block_of(text, start + brace + 1) else { break };
+        let after = start + spec.len();
+        // **The specification, and not a mention of it.** A type
+        // annotation — `Registry<EvaluatorSpec>` — names the
+        // specification without being one, and a reader that read the
+        // block after the mention would read a field that belongs to
+        // something else entirely.
+        let rest = &text[after..];
+        let trimmed = rest.trim_start();
+        if !trimmed.starts_with('{') {
+            offset = after;
+            continue;
+        }
+        let brace = after + (rest.len() - trimmed.len());
+        let Some((block, end)) = brace_block_of(text, brace + 1) else { break };
         if let Some(id) = field_colon(&block, field_name) {
             found.push((id, text[..start].lines().count().max(1)));
         }

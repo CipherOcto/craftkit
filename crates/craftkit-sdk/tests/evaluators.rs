@@ -42,5 +42,6 @@ fn the_node_count_evaluator_counts_the_nodes() {
     let plan = session.evaluate();
     let item = plan.items.iter().find(|item| item.kind == "core.count").expect("the plan has the count");
     let nodes = item.value["nodes"].as_u64().expect("the count is a number");
-    assert!(nodes >= 1, "the document holds at least the layer it added: {nodes}");
+    let held = session.document().nodes.len() as u64;
+    assert_eq!(nodes, held, "the count is the number of nodes the document holds");
 }

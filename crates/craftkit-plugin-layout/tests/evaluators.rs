@@ -76,14 +76,28 @@ fn the_frames_evaluator_says_the_frames_of_a_story() {
         .expect("the document is added");
     let document = outcome.data["id"].as_u64().expect("the document has an id");
     let outcome = session
+        .execute("layout.spread.add", &json!({ "document": document, "name": "the spread" }))
+        .expect("the spread is added");
+    let spread = outcome.data["id"].as_u64().expect("the spread has an id");
+    let outcome = session
+        .execute("layout.item.add", &json!({ "spread": spread, "name": "the item" }))
+        .expect("the item is added");
+    let item = outcome.data["id"].as_u64().expect("the item has an id");
+    let outcome = session
         .execute(
             "layout.story.add",
             &json!({ "document": document, "name": "the story", "text": "a line of text" }),
         )
         .expect("the story is added");
     let story = outcome.data["id"].as_u64().expect("the story has an id");
+    session
+        .execute("layout.item.story", &json!({ "item": item, "story": story }))
+        .expect("the story is set in the item");
     let plan = session.evaluate();
-    let item = plan.items.iter().find(|item| item.kind == "layout.frames").expect("the plan has the frames");
-    assert_eq!(item.node, story, "the item is about the story");
-    assert!(item.value["frames"].is_array(), "the frames are a list: {item:?}");
+    let item_of_the_plan =
+        plan.items.iter().find(|item| item.kind == "layout.frames").expect("the plan has the frames");
+    assert_eq!(item_of_the_plan.node, story, "the item is about the story");
+    let frames = item_of_the_plan.value["frames"].as_array().expect("the frames are a list");
+    assert_eq!(frames.len(), 1, "the story is set in one frame: {item_of_the_plan:?}");
+    assert_eq!(frames[0]["item"], json!(item), "and it is that item");
 }

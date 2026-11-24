@@ -1883,14 +1883,15 @@ mod tests {
     /// A reader that found nothing would make the rules above vacuous:
     /// the tree's own layers and formats would be held to nothing. The
     /// **kit's own** crates are read here, because the index is the
-    /// batteries' index and the kit is not a battery.
+    /// batteries' index and the kit is not a battery. The text is the
+    /// **production** text, because that is what the rules read.
     #[test]
     fn the_readers_see_the_tree_own_layers_formats_and_evaluators() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let sdk = root.join("crates").join("craftkit-sdk").join("src");
         let read = |name: &str| {
             let path = sdk.join(name);
-            let text = std::fs::read_to_string(&path).unwrap_or_default();
+            let text = crate::tree::read_rust(&path, crate::tree::Subject::Production).unwrap_or_default();
             (text, path)
         };
         let (text, path) = read("seams.rs");
@@ -1912,6 +1913,24 @@ mod tests {
         let index = crate::index::build(&root).expect("the tree is indexed");
         assert_eq!(index.layers.len(), 17, "the batteries have seventeen layers");
         assert_eq!(index.evaluators.len(), 17, "the batteries have seventeen evaluators");
+    }
+
+    /// A **mention** of a specification is not a specification.
+    ///
+    /// The kit's own session holds a registry of evaluators and a
+    /// registry of layers, and it says so in a **type**. A reader that
+    /// read the block after the mention would read a field of something
+    /// else, and would report an evaluator and a layer that are not
+    /// there.
+    #[test]
+    fn a_type_that_mentions_a_specification_is_not_a_specification() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let path = root.join("crates").join("craftkit-sdk").join("src").join("session.rs");
+        let text = crate::tree::read_rust(&path, crate::tree::Subject::Production).unwrap_or_default();
+        let evaluators = crate::index::evaluators_in(&text, &path, "craftkit-sdk");
+        assert!(evaluators.is_empty(), "the session declares no evaluator: {evaluators:?}");
+        let layers = crate::index::layers_in(&text, &path, "craftkit-sdk");
+        assert!(layers.is_empty(), "the session declares no layer: {layers:?}");
     }
 
     /// A **tool** that no test names is caught.

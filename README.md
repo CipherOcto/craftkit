@@ -4590,6 +4590,7 @@ so.
 | **every format is named by a test** | **built.** The outer gate reads every format the tree declares and says the ones that no test names (§1138) | §1138 |
 | **every evaluator is proved by a test in the battery that owns it** | **built.** All eighteen of the tree's evaluators are proved by a test beside the battery that owns them (§1138) | §1138 |
 | **every bound the tree promises is named by a test** | **built.** The outer gate reads every promise bound the tree declares and says the ones that no test names (§1139) | §1139 |
+| **the reader reads a specification and not a mention of one** | **built.** The reader that finds the evaluators, layers and formats reads the specification and not the type that names it (§1140) | §1140 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72162,8 +72163,9 @@ tree's three tools were named by no test.
 An **evaluator** is a gesture about the **whole document**: it may look at
 every node, count them, find the ones that overlap, and say something
 about the whole. It is a rule the kit publishes as much as a command or a
-kind is — and **nine** of the tree's eighteen evaluators were proved only
-by the studio's tests, not by a test beside the battery that owns them.
+kind is — and **ten** of the tree's eighteen evaluators had no proof of
+their own beside the battery that owns them: **nine** were proved by the
+studio's tests, and **one** — the sound timeline — by nobody.
 
 ### What was built
 
@@ -72176,9 +72178,10 @@ by the studio's tests, not by a test beside the battery that owns them.
 - **The outer gate now reads the three registries the rule did not
   cover.** An **evaluator**, a **layer** and a **format** are read the
   way a command is read, and the `lists` phase says the ones that no
-  test names. All **eighteen** evaluators, **eighteen** layers and
-  **ten** formats were already named by a test; the rule is what holds
-  them there.
+  test names. The tree has **eighteen** evaluators, **eighteen** layers
+  and **ten** formats. The layers and the formats were all named by a
+  test already; **eight** of the evaluators were named by no test at all,
+  and they are named now.
 
 ### What the port found
 
@@ -72188,11 +72191,12 @@ by the studio's tests, not by a test beside the battery that owns them.
   its own — a plugin, a library linked into someone else's program —
   would have brought an evaluator with no test beside it, and the test
   that proved it was three crates away and about a door.
-- **The reader had to learn a second spelling.** A layer and a format
-  are written as **statics** that carry their own specification, and an
-  evaluator is written both ways: as an attribute on a type and as a
-  static. The reader now reads both, and it reads the production code
-  only — so a layer written in a test is not a layer the tree has.
+- **The reader had to learn a second spelling.** A **format** is written
+  as a static that carries its own specification, and so is the core
+  **layer**; the other layers and the other evaluators are written as an
+  attribute on a type. The reader now reads both spellings, and it reads
+  the production code only — so a layer written in a test is not a layer
+  the tree has.
 
 ### What it cost
 
@@ -72209,7 +72213,9 @@ by the studio's tests, not by a test beside the battery that owns them.
 - **The reader is a reader too.** It reads a static's specification when
   the static writes its name as `id: "…"` or `tag: "…"`; a static that
   writes it another way is a specification the gate cannot see, and
-  nothing says so.
+  nothing says so. A **mention** of a specification is not a
+  specification either: the reader reads the block that opens after the
+  name, and a type annotation that names a specification is not one.
 - **A test beside the battery is still a test of the tree.** A battery
   whose evaluator is proved only outside the tree is a battery the rule
   does not see, and the rule says nothing about the tree's own users.
@@ -72259,3 +72265,48 @@ those promises to the **prose**; this arc holds them to a **test** — and
   keeps.
 - **The rule is about the tree's own tests.** A promise that only a
   program outside the tree checks is a promise the rule does not see.
+
+## 1140. The reader reads a specification and not a mention of one
+
+An **evaluator**, a **layer** and a **format** are read out of the tree
+by the outer gate, so that the rule "every one of them is named by a
+test" can hold them to account. The reader had a defect, and a verifier
+found it: it read a **mention** of a specification as if it were the
+specification.
+
+### What was built
+
+- **The reader reads a specification and not a mention of one.** The
+  kit's own session holds a registry of evaluators and a registry of
+  layers, and it says so in a **type**. The reader took the name, looked
+  forward for the next brace, and read a field of something else
+  entirely — so the gate's registries held an evaluator and a layer
+  named `session` that are not there.
+- **A test says so.** One test reads the kit's own session and says that
+  it declares no evaluator and no layer; the reader's own test now reads
+  the **production** text, because that is what the rules read.
+
+### What the port found
+
+- **The gate was green for the wrong reason.** The rule passed because
+  some test in the tree happens to contain the word `session` — and the
+  rule is about the **name**. A reader that reports what is not there
+  passes for the same reason a reader that misses what is there fails:
+  the name is the whole of the rule.
+- **The counts in §1138 were the tree's counts, not the gate's.** The
+  tree has eighteen evaluators and eighteen layers; the gate read
+  nineteen and nineteen.
+
+### What it cost
+
+- **One test**, one change in the reader, and one change in the reader's
+  own test.
+
+### What it does not settle
+
+- **The rule is still about the name.** A reader that reads the tree's
+  declarations cannot tell a declaration from a mention in prose, and
+  the rule does not say which is which.
+- **The reader reads one spelling of a specification.** A static that
+  writes its name another way is a specification the gate cannot see,
+  and nothing says so.

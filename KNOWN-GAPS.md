@@ -223,7 +223,12 @@ These are the README's own honest notes, and they are still true of the tree:
   (§1138): it reads a static that writes its specification as
   `id: "…"` or `tag: "…"`, and it reads the **production code** only. A
   static that writes its name another way is a specification the gate
-  cannot see, and nothing says so.
+  cannot see, and nothing says so. A **mention** of a specification is
+  not one either: the reader reads the block that opens after the name,
+  and a type annotation that names a specification — the kit's own
+  session holds a registry of evaluators and says so in a type — is not
+  a specification. The reader said otherwise once, and the gate reported
+  an evaluator and a layer that are not there (§1140).
 - **Every evaluator is proved beside the battery that owns it** (§1138):
   all eighteen of the tree's evaluators are proved by a test beside the
   battery that owns them. What the proof says is the **answer** — the
