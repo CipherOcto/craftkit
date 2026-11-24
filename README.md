@@ -71497,11 +71497,15 @@ that the six doors **agree**.
 
 - **A program that drives the doors and compares their answers.** The new
   application `apps/craftkit-parity` asks each of five doors the same
-  three questions — *which commands do you list*, *what do you say when
-  you run this command*, *what do you say when the command is not there*
-  — and compares the answers, one door against another.
+  five questions — *which commands do you list*, *what do you say when
+  you run this command*, *what plan do you publish*, *what do you say
+  when you undo it*, *what do you say when the command is not there* —
+  and compares the answers, one door against another.
 - **They agree.** The same commands, the same message for the same
-  command, and every door names the command it refused.
+  command, the same plan published, the same word for the undo, and every
+  door names the command it refused. The **plan** and the **undo** are
+  the two the matrix calls "as a command": the plan is the command's work
+  and not the door's, and the undo is a command like any other.
 - **The harness bites.** Two doors that answer differently are a
   difference; a door that could not be built is a difference too; a door
   that **listed nothing** or **said nothing** is a difference; and a door
@@ -71513,6 +71517,10 @@ that the six doors **agree**.
   a2ui's own vocabulary — a catalogue of a2ui's components and not a
   list of the kit's commands — so there is nothing to compare. Its own
   tests hold it to that.
+- **The agent door is asked through its transport.** The door is the
+  application; the application serves the transport's answers over the
+  wire without changing them, so the harness asks the library the
+  application runs. The other four doors are asked directly.
 
 ### What the port found
 
@@ -71531,7 +71539,7 @@ that the six doors **agree**.
   workspace's manifest is a glob, so a new application under `apps/` is a
   member without a line of edit — the survey's "three edits" are four
   tables and a document.
-- **Nine tests**: five about the doors and four about the comparison
+- **Twelve tests**: seven about the doors and five about the comparison
   itself, so the harness is proved to bite before it is proved to pass.
 
 ### What it does not settle
@@ -71539,6 +71547,11 @@ that the six doors **agree**.
 - **The matrix's cells are still read by a person.** The harness compares
   the doors with each other; it does not read the prose and check a cell
   against a door.
+- **Five of the matrix's columns are compared and three are not.** The
+  harness compares the list, the run, the plan, the undo and the
+  refusal; the **schema** is the agent door's own shape, the **journal**
+  is a size in two doors and a list in two others, and the **tree** is
+  the window's. Each of those is proved by the door's own test.
 - **The a2ui door is compared on its own terms**, by its own tests.
 - **Five doors are compared, and the sixth is not** — the a2ui door — so
   "the doors agree" is a claim about five of the six.

@@ -79,3 +79,34 @@ fn the_command_is_one_the_doors_know() {
     assert!(!first.listed.iter().any(|id| id == UNKNOWN), "and {UNKNOWN} is not");
     assert!(ARGUMENTS.contains("geometry.rect"), "the arguments are the kind's own");
 }
+
+/// And they agree about **the plan**.
+///
+/// The plan is the **command's** work and not the door's, so five doors
+/// asked for it publish the same plan: the same document, read the same
+/// way.
+#[test]
+fn the_doors_publish_the_same_plan() {
+    let report = compare();
+    let first = first(&report);
+    for answer in report.answers.iter().skip(1) {
+        assert_eq!(
+            answer.planned, first.planned,
+            "{} and {} published different plans",
+            first.door, answer.door
+        );
+    }
+}
+
+/// And they agree about **the undo**.
+///
+/// The undo is a command like any other, and it says the same thing
+/// wherever it runs.
+#[test]
+fn the_doors_say_the_same_thing_when_they_undo() {
+    let report = compare();
+    let first = first(&report);
+    for answer in report.answers.iter().skip(1) {
+        assert_eq!(answer.undone, first.undone, "{} and {} undid differently", first.door, answer.door);
+    }
+}

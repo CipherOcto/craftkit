@@ -14,9 +14,10 @@ that is in the tree.
 
 And **one program compares the doors with each other**: the parity
 harness (`apps/craftkit-parity`) drives five of the six doors with the same
-three questions — which commands do you list, what do you say when you run
-this command, what do you say when the command is not there — and says
-where they differ. What the gate does **not** do is read this table and
+five questions — which commands do you list, what do you say when you run
+this command, what plan do you publish, what do you say when you undo it,
+what do you say when the command is not there — and says where they
+differ. What the gate does **not** do is read this table and
 check a cell against a door: the cells are still read by a person.
 
 ## What a door is

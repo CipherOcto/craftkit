@@ -101,9 +101,9 @@ it does not check that a named test is *about* the cell it is in.
 
 **The doors are compared with each other, though.** The parity harness
 (`apps/craftkit-parity`, §1128) drives five of the six doors with the same
-three questions and says where they differ: the same commands listed, the
-same message for the same command, and every door naming the command it
-refused. It is the harness the survey asked for — a crate of its own and
+five questions and says where they differ: the same commands listed, the
+same message for the same command, the same plan published, the same word
+for the undo, and every door naming the command it refused. It is the harness the survey asked for — a crate of its own and
 **four** tables to change, not three: the tree's own layer table, the
 outer gate's table, the architecture document and the README. The
 **a2ui door** is not in it, because it speaks a2ui's own vocabulary and
