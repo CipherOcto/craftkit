@@ -241,6 +241,14 @@ The README is a build log, written in order, and some of its early sentences
 have been overtaken by later sections. The ones that matter to a reader who
 comes to the tree cold:
 
+- **"A commit points at the section that describes it."** `CONTRIBUTING.md`
+  says the message ends with the README section's number — `feat(cad): the
+  table of a drawing — §1600` — and 542 of the tree's 602 commits carry
+  one. The **twenty commits of the a2ui arc** carry none: they say
+  `feat(v2): <what it does>` and name what they touch instead. The rule is
+  still the house's, and it is followed from here; the history is not
+  rewritten.
+
 - **"There is no numeric core."** There is now `craftkit-numeric`, a typed
   value (a length in millimetres, an angle in radians), at L3, because a
   length can be a command's parameter and that means speaking the SDK's own
