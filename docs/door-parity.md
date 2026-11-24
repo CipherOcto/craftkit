@@ -22,8 +22,10 @@ the doors with that as well: the session is the truth behind the doors, so
 two doors that are wrong in the same way are still wrong. A door that does
 not prune its list must list **everything** the session has, and the
 bridge — which runs only what it lists — is the one door that prunes. It
-does not read this table and check a cell against a door: the cells are
-still read by a person.
+reads **this table** as well: a cell whose **mark** says a door does a
+thing the door did not do is a difference, and the difference names the
+line. What it does not do is read the **words** in a cell and check them —
+only a reader does that.
 
 ## What a door is
 

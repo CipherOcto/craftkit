@@ -120,7 +120,9 @@ says otherwise.
 **And the matrix's marks are live** (§1132): the harness reads
 `docs/door-parity.md` and compares each cell's **mark** with what the
 door did, so a cell that says a door publishes a plan and the door
-published none is a difference that names its line.
+published none is a difference that names its line. And a door that does
+not prune its list must list **everything** the session has: the
+**bridge** — which runs only what it lists — is the one door that prunes.
 
 What is left is the **words** in a cell read by a person, and that is
 **not** a defect: the harness knows the tick and the dash and not whether

@@ -71771,7 +71771,8 @@ the same way agree with each other**.
     publishes;
   - **the undo**: the word the door says when it undoes is the
     session's;
-  - **the refusal**: the refusal names the command that is not there.
+  - **the refusal**: the refusal names the command that is not there —
+    and so does the session's own refusal, for the truth is the truth.
 - **A door that prunes may list less.** The bridge runs only what it
   lists, so it lists only what it runs: pruning is that door's own
   business, and it is the one door that says so. What is a difference is
@@ -71799,8 +71800,9 @@ the same way agree with each other**.
 
 ### What it cost
 
-- **One struct**, **one function**, **one comparison** and **six
-  tests**: five in the crate and one in the harness's own test file.
+- **One struct**, **two functions** — the session's own answers, and the
+  comparison — and **six tests**: five in the crate and one in the
+  harness's own test file.
 
 ### What it does not settle
 
@@ -71810,9 +71812,11 @@ the same way agree with each other**.
   of its own, and the harness asks one of its own, so that the truth is
   asked of the same code the doors run — and not of the door's session,
   which the door holds.
-- **The matrix's cells are still read by a person.** The harness
-  compares the doors with each other and with the session; it does not
-  read the prose and check a cell against a door (§1128).
+- **The matrix's cells were still read by a person.** That was true when
+  this section was written: the harness compared the doors with each
+  other and with the session, and it did not read the prose and check a
+  cell against a door (§1128). The **marks** are checked now (§1132) —
+  and the words in a cell are still a reader's job.
 
 ## 1132. The matrix's marks are live
 
@@ -71834,7 +71838,8 @@ a matrix does not run the doors.
   published none is a difference, and the difference says the **line**
   the claim is on and the **question** it answers.
 - **Every door the harness drives has a row.** A door the matrix does
-  not name is a door nobody reads about, and that is a difference too.
+  not name is a door nobody reads about, and that is one difference — and
+  not one per question.
 - **The harness bites.** Five unit tests read a matrix of their own — a
   table without its heading is not a matrix, the rows and the columns
   are read, a stale cell is a difference, a true cell is not, and a door

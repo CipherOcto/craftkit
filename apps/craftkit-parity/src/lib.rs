@@ -534,6 +534,15 @@ fn the_differences_from_the_matrix(answers: &[Answer], matrix: &Matrix) -> Vec<S
     let mut differences = Vec::new();
     for answer in answers {
         let observed = what_was_seen(answer);
+        // A door the matrix does not name is a door nobody reads about:
+        // that is **one** difference, and not one per question.
+        if !matrix.rows.iter().any(|row| row.door == answer.door) {
+            differences.push(format!(
+                "docs/door-parity.md: the matrix has no row for {}, and the matrix is the claim",
+                answer.door
+            ));
+            continue;
+        }
         for question in QUESTIONS {
             let Some(cell) = matrix.cell(&answer.door, question) else {
                 differences.push(format!(
@@ -1215,7 +1224,8 @@ mod tests {
             refused: format!("there is no command `{UNKNOWN}`"),
         };
         let differences = the_differences_from_the_matrix(&[answer], &matrix);
-        assert_eq!(differences.len(), QUESTIONS.len(), "{differences:?}");
+        assert_eq!(differences.len(), 1, "{differences:?}");
+        assert!(differences[0].contains("no row for"), "{differences:?}");
     }
 
     /// A door that agrees with the session is **not** a difference.
