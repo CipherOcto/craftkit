@@ -83,19 +83,12 @@ impl Doc {
     /// **One table, and everything reads it.** The schema an agent is
     /// told says this type, and the session refuses a value that is not
     /// of it, so the two cannot disagree: there is one answer to "what
-    /// shape is this parameter" and it is here.
+    /// shape is this parameter" and it is [`Doc::shape`].
     ///
     /// [`Doc::Json`] has **no** type: it is the door out, and a value of
     /// any shape is of that kind.
     pub fn json_type(self) -> Option<&'static str> {
-        match self {
-            Doc::Number => Some("number"),
-            Doc::Text => Some("string"),
-            Doc::Bool => Some("boolean"),
-            Doc::NodeRef => Some("integer"),
-            Doc::NodeKind => Some("string"),
-            Doc::Json => None,
-        }
+        self.shape().json_type()
     }
 
     /// Whether a value is of this kind.
@@ -108,13 +101,68 @@ impl Doc {
     /// **The raw door takes anything.** [`Doc::Json`] is the kind that
     /// says so.
     pub fn accepts(self, value: &Json) -> bool {
+        self.shape().accepts(value)
+    }
+
+    /// The **shape** of this kind.
+    ///
+    /// One table: the schema says what the shape is, and the session
+    /// refuses a value that is not of it, so the two cannot drift.
+    fn shape(self) -> Shape {
         match self {
-            Doc::Number => value.is_number(),
-            Doc::Text => value.is_string(),
-            Doc::Bool => value.is_boolean(),
-            Doc::NodeRef => value.is_u64(),
-            Doc::NodeKind => value.is_string(),
-            Doc::Json => true,
+            Doc::Number => Shape::Number,
+            Doc::Text => Shape::Text,
+            Doc::Bool => Shape::Bool,
+            Doc::NodeRef => Shape::NodeRef,
+            Doc::NodeKind => Shape::NodeKind,
+            Doc::Json => Shape::Any,
+        }
+    }
+}
+
+/// The **shape** of a value of a kind.
+///
+/// The shape is what a schema says and what the session accepts, and it
+/// is **one** answer to both questions: a table that answered them
+/// separately would be two tables, and two tables drift.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Shape {
+    /// A number: any finite JSON number.
+    Number,
+    /// A text: a string.
+    Text,
+    /// A yes or a no: a boolean.
+    Bool,
+    /// A node's id: a whole number that is not negative.
+    NodeRef,
+    /// A kind's name: a string.
+    NodeKind,
+    /// The raw door: anything at all.
+    Any,
+}
+
+impl Shape {
+    /// The JSON type a **schema** gives this shape.
+    fn json_type(self) -> Option<&'static str> {
+        match self {
+            Shape::Number => Some("number"),
+            Shape::Text => Some("string"),
+            Shape::Bool => Some("boolean"),
+            Shape::NodeRef => Some("integer"),
+            Shape::NodeKind => Some("string"),
+            Shape::Any => None,
+        }
+    }
+
+    /// Whether a value is of this shape.
+    fn accepts(self, value: &Json) -> bool {
+        match self {
+            Shape::Number => value.is_number(),
+            Shape::Text => value.is_string(),
+            Shape::Bool => value.is_boolean(),
+            Shape::NodeRef => value.is_u64(),
+            Shape::NodeKind => value.is_string(),
+            Shape::Any => true,
         }
     }
 }
