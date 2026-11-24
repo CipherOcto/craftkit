@@ -204,6 +204,15 @@ pub fn compare() -> Report {
         Ok(truth) => differences.extend(the_differences_from_the_session(&answers, &truth)),
         Err(error) => differences.push(format!("the session could not be asked: {error}")),
     }
+    // And the **matrix** is the claim the doors are held to: a cell that
+    // says a door does a thing the door did not do is a document that
+    // lies.
+    match the_matrix() {
+        Some(matrix) => differences.extend(the_differences_from_the_matrix(&answers, &matrix)),
+        None => {
+            differences.push("the matrix could not be read: docs/door-parity.md is the claim".to_string())
+        }
+    }
     Report { answers, differences }
 }
 
@@ -392,6 +401,179 @@ fn the_differences_in_what_they_said(answers: &[Answer]) -> Vec<String> {
     differences
 }
 
+/// What one cell of the matrix says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Cell {
+    /// The column the cell is in — the question it answers.
+    pub column: String,
+    /// The cell's own text, mark and all.
+    pub text: String,
+    /// The line the cell is on.
+    pub line: usize,
+}
+
+impl Cell {
+    /// Whether the cell says the door **does** it.
+    ///
+    /// A tick is a tick: the cell says the door does the thing, and the
+    /// words after it say how. A dash is the door that does not.
+    pub fn says_it_does(&self) -> bool {
+        self.text.trim_start().starts_with('✓')
+    }
+}
+
+/// One row of the matrix: a door, and its cells.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatrixRow {
+    /// The door's name, as the row names it.
+    pub door: String,
+    /// The line the row is on.
+    pub line: usize,
+    /// The row's cells, in the order of the columns.
+    pub cells: Vec<Cell>,
+}
+
+/// The matrix of the doors, as the document writes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Matrix {
+    /// The rows, in the order of the document.
+    pub rows: Vec<MatrixRow>,
+}
+
+impl Matrix {
+    /// The cell that answers a **question** for a **door**.
+    pub fn cell(&self, door: &str, column: &str) -> Option<&Cell> {
+        let row = self.rows.iter().find(|row| row.door == door)?;
+        row.cells.iter().find(|cell| cell.column == column)
+    }
+}
+
+/// The path of the matrix document.
+fn the_matrix_path() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/door-parity.md")
+}
+
+/// The matrix, as the document writes it.
+///
+/// The table is found by its **heading**, and the heading is what says
+/// which table is the matrix: a document may hold several tables, and
+/// only one of them is the claim about the doors.
+pub fn the_matrix() -> Option<Matrix> {
+    let text = std::fs::read_to_string(the_matrix_path()).ok()?;
+    matrix_of(&text)
+}
+
+/// The matrix of a piece of text.
+///
+/// A **function of its own**, so that a test can ask what happens when
+/// the matrix is broken — a reader that cannot fail is a reader that is
+/// not there.
+pub fn matrix_of(text: &str) -> Option<Matrix> {
+    let mut after = false;
+    let mut header: Vec<String> = Vec::new();
+    let mut rows: Vec<MatrixRow> = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        if line.starts_with("## ") {
+            after = line.trim() == "## The matrix";
+            header.clear();
+            continue;
+        }
+        if !after {
+            continue;
+        }
+        let trimmed = line.trim();
+        if !trimmed.starts_with('|') {
+            if rows.is_empty() {
+                continue;
+            }
+            break;
+        }
+        if trimmed.starts_with("|---") {
+            continue;
+        }
+        let cells = trimmed.strip_prefix('|')?.strip_suffix('|')?;
+        let parts: Vec<String> = cells.split('|').map(|cell| cell.trim().to_string()).collect();
+        if header.is_empty() {
+            // The header row: the columns are the questions.
+            header = parts;
+            continue;
+        }
+        let Some(first) = parts.first() else { continue };
+        // The row names the door, and then the crate: "the terminal door —
+        // `apps/craftkit-repl`". The door is the name before the dash.
+        let door = first.split('—').next().unwrap_or(first).trim().to_string();
+        let mut row_cells = Vec::new();
+        for (index, part) in parts.iter().skip(1).enumerate() {
+            let Some(column) = header.get(index + 1) else { continue };
+            row_cells.push(Cell { column: column.clone(), text: part.clone(), line: number + 1 });
+        }
+        rows.push(MatrixRow { door, line: number + 1, cells: row_cells });
+    }
+    if rows.is_empty() { None } else { Some(Matrix { rows }) }
+}
+
+/// The questions the harness asks, and the columns they answer.
+///
+/// The five are the five the harness asks of every door, and the columns
+/// are the matrix's own names for them.
+const QUESTIONS: &[&str] =
+    &["lists the commands", "runs a command", "the plan", "the undo", "a refusal is told"];
+
+/// The differences between the matrix and what the doors **did**.
+///
+/// The matrix is the claim and the harness is the fact: a cell that says
+/// a door does a thing the door did not do is a **stale cell**, and a
+/// stale cell is a document that lies. The gate reads the cells and
+/// checks that each one names a test; this reads them and checks that
+/// each one is **true**.
+///
+/// The words in a cell are still read by a person — the harness knows
+/// that a door publishes a plan, and not whether the cell's words are
+/// the right ones. What it knows is the **mark**: the tick and the dash.
+fn the_differences_from_the_matrix(answers: &[Answer], matrix: &Matrix) -> Vec<String> {
+    let mut differences = Vec::new();
+    for answer in answers {
+        let observed = what_was_seen(answer);
+        for question in QUESTIONS {
+            let Some(cell) = matrix.cell(&answer.door, question) else {
+                differences.push(format!(
+                    "docs/door-parity.md: the matrix has no cell for `{}` of {}, and the matrix is \
+                     the claim",
+                    question, answer.door
+                ));
+                continue;
+            };
+            let Some(seen) = observed.iter().find(|(name, _)| name == question).map(|(_, seen)| *seen) else {
+                continue;
+            };
+            if seen == cell.says_it_does() {
+                continue;
+            }
+            differences.push(format!(
+                "docs/door-parity.md: line {}: the cell of `{}` says `{}`, and {} {}",
+                cell.line,
+                question,
+                cell.text,
+                answer.door,
+                if seen { "did it" } else { "did not do it" },
+            ));
+        }
+    }
+    differences
+}
+
+/// What the harness **saw**, question by question.
+fn what_was_seen(answer: &Answer) -> Vec<(String, bool)> {
+    vec![
+        ("lists the commands".to_string(), !answer.listed.is_empty()),
+        ("runs a command".to_string(), answer.ran.is_ok()),
+        ("the plan".to_string(), answer.planned.is_ok()),
+        ("the undo".to_string(), answer.undone.is_ok()),
+        ("a refusal is told".to_string(), answer.refused.contains(UNKNOWN)),
+    ]
+}
+
+/// What a door said, or that it refused.
 /// What a door said, or that it refused.
 fn said(ran: &Result<String, String>) -> String {
     match ran {
@@ -741,6 +923,15 @@ fn without_the_doors_own_prefix(message: &str) -> String {
 mod tests {
     use super::*;
 
+    /// A matrix, for the tests to break on purpose.
+    const THE_MATRIX: &str = "\
+## The matrix
+
+| door | lists the commands | runs a command | the plan | the undo | a refusal is told | the journal |
+|---|---|---|---|---|---|---|
+| the terminal door — `apps/craftkit-repl` | ✓ `help` | ✓ `run` | ✓ as a command | ✓ as a command | ✓ | — |
+";
+
     /// Two doors that answer differently **are** a difference.
     ///
     /// The harness has to bite: a comparison that cannot fail is not a
@@ -950,6 +1141,81 @@ mod tests {
         let differences = the_differences_from_the_session(&[answer], &truth);
         assert_eq!(differences.len(), 1, "{differences:?}");
         assert!(differences[0].contains("does not prune"), "{differences:?}");
+    }
+
+    /// A matrix is read by its **heading**, and a heading that is not
+    /// there is a matrix that is not there.
+    #[test]
+    fn a_matrix_without_its_heading_is_no_matrix() {
+        let text = "| door | the plan |\n|---|---|\n| the terminal door | ✓ |\n";
+        assert!(matrix_of(text).is_none(), "a table that is not the matrix is not the matrix");
+    }
+
+    /// And the rows of the matrix are the doors, and the cells are the
+    /// columns.
+    #[test]
+    fn a_matrix_is_read_by_its_rows_and_its_columns() {
+        let matrix = matrix_of(THE_MATRIX).expect("the matrix is read");
+        let cell = matrix.cell("the terminal door", "the plan").expect("the cell is there");
+        assert!(cell.says_it_does(), "the cell says the door does it: {}", cell.text);
+        let cell = matrix.cell("the terminal door", "the journal").expect("the cell is there");
+        assert!(!cell.says_it_does(), "and the dash is a door that does not: {}", cell.text);
+    }
+
+    /// A cell that says the door does a thing the door **did not** do is
+    /// a stale cell, and a stale cell is a difference.
+    #[test]
+    fn a_stale_cell_is_a_difference() {
+        let matrix = matrix_of(THE_MATRIX).expect("the matrix is read");
+        let answer = Answer {
+            door: "the terminal door".to_string(),
+            listed: vec!["one".to_string()],
+            prunes: false,
+            ran: Ok("the same".to_string()),
+            planned: Err("the door published no plan".to_string()),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_from_the_matrix(&[answer], &matrix);
+        assert_eq!(differences.len(), 1, "{differences:?}");
+        assert!(differences[0].contains("the plan"), "{differences:?}");
+    }
+
+    /// And a cell that says the door does a thing the door **did** do is
+    /// not a difference.
+    #[test]
+    fn a_cell_that_is_true_is_not_a_difference() {
+        let matrix = matrix_of(THE_MATRIX).expect("the matrix is read");
+        let answer = Answer {
+            door: "the terminal door".to_string(),
+            listed: vec!["one".to_string()],
+            prunes: false,
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_from_the_matrix(&[answer], &matrix);
+        assert!(differences.is_empty(), "{differences:?}");
+    }
+
+    /// A door the matrix does not have a row for is a difference: the
+    /// matrix is the claim, and a claim about a door that is not in the
+    /// matrix is a claim nobody can check.
+    #[test]
+    fn a_door_the_matrix_does_not_name_is_a_difference() {
+        let matrix = matrix_of(THE_MATRIX).expect("the matrix is read");
+        let answer = Answer {
+            door: "a door the matrix does not name".to_string(),
+            listed: vec!["one".to_string()],
+            prunes: false,
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_from_the_matrix(&[answer], &matrix);
+        assert_eq!(differences.len(), QUESTIONS.len(), "{differences:?}");
     }
 
     /// A door that agrees with the session is **not** a difference.

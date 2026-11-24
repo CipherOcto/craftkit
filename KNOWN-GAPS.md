@@ -96,9 +96,10 @@ test, and that the test it names is **there** — a file under a `tests`
 directory, with a function of that name in it. A named test does not drift
 when the code moves, and a line does.
 
-What is still **not** checked is the *cells* themselves — that is, the gate
-does not read a door and compare what it does with what the table says, and
-it does not check that a named test is *about* the cell it is in.
+What is still **not** checked by the gate is the *cells* themselves — that
+is, the gate does not read a door and compare what it does with what the
+table says, and it does not check that a named test is *about* the cell it
+is in. The **harness** checks the marks (§1132); the gate does not.
 
 **The doors are compared with each other, though.** The parity harness
 (`apps/craftkit-parity`, §1128) drives five of the six doors with the same
@@ -116,9 +117,18 @@ with each other and the **first** door is the anchor — so two doors that
 are wrong in the same way agree with each other, and the session is what
 says otherwise.
 
-What is left is a **cell** read by a person, and that is **not** a defect:
-nothing in the tree is broken by a table that drifts, and the cells that
-matter most are each proved by a test the tree runs.
+**And the matrix's marks are live** (§1132): the harness reads
+`docs/door-parity.md` and compares each cell's **mark** with what the
+door did, so a cell that says a door publishes a plan and the door
+published none is a difference that names its line.
+
+What is left is the **words** in a cell read by a person, and that is
+**not** a defect: the harness knows the tick and the dash and not whether
+"✓ as a command" and "✓ the size only" are the right words, and the three
+columns it does not ask about — the schema, the journal and the document's
+tree — are still a reader's job. Nothing in the tree is broken by a table
+that drifts, and the cells that matter most are each proved by a test the
+tree runs.
 
 **And the bridge's protocol changed** when the bridge became thin:
 `resources/list` carries the **manifest** now and not the evaluator's ids,

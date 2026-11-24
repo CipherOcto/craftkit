@@ -150,13 +150,18 @@ handshake.
   check that a named test is *about* the cell it is in — that is still a
   reader's job.
 - **The harness compares the doors with each other, and with the
-  session, and not with this table.** It drives five of the six doors and
-  says where they differ, and it asks a **session of its own** the same
-  questions — the session is the truth behind the doors, so a door that
-  says something the session does not say is a difference even when
-  every other door says it too. It does not read a cell and check it
-  against a door. The a2ui door is not in it at all: it speaks a2ui's
-  own vocabulary, and there is nothing to compare.
+  session, and reads this table's marks.** It drives five of the six
+  doors and says where they differ, and it asks a **session of its own**
+  the same questions — the session is the truth behind the doors, so a
+  door that says something the session does not say is a difference even
+  when every other door says it too. A door that does not prune its list
+  must list **everything** the session has, and the bridge — which runs
+  only what it lists — is the one door that prunes. It reads this table
+  as well: a cell whose **mark** says a door does a thing the door did
+  not do is a difference, and the difference names the line. What it does
+  not do is read the **words** in a cell and check them — only a reader
+  does that. The a2ui door is not in it at all: it speaks a2ui's own
+  vocabulary, and there is nothing to compare.
 - **A negative cell has no proof to name.** "The terminal door has no
   schema" is an absence, and an absence has no test to point at.
 - **The a2ui door cannot undo and cannot read the plan.** a2ui has no

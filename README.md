@@ -4577,6 +4577,7 @@ so.
 | **a pair says what each spelling takes** | **built.** The declaration requires the second spelling's kind, the plugin protocol carries it, and the schema publishes the pair as required (§1129) | §1129 |
 | **a test file is a test the tree runs** | **built.** The tree's own gate says when a test file is one cargo never compiles, and when it is a copy of another (§1130) | §1130 |
 | **the doors are compared with the session** | **built.** The harness asks a session of its own the same questions, and a door that says something else is a difference even when every other door says it too (§1131) | §1131 |
+| **the matrix's marks are live** | **built.** The harness reads the matrix and compares each cell's mark with what the door did, so a cell that lies is a difference that names its line (§1132) | §1132 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71812,3 +71813,57 @@ the same way agree with each other**.
 - **The matrix's cells are still read by a person.** The harness
   compares the doors with each other and with the session; it does not
   read the prose and check a cell against a door (§1128).
+
+## 1132. The matrix's marks are live
+
+The parity matrix is the **claim** about the doors: a table of what each
+door does, cell by cell, and every cell that says something names the
+test that proves it. The gate reads the cells and checks that each one
+names a test that is in the tree. What nothing did was check that the
+cell is **true** — the marks were read by a person, and a person reading
+a matrix does not run the doors.
+
+### What was built
+
+- **The harness reads the matrix.** The document `docs/door-parity.md`
+  is the claim, and the harness reads the table under `## The matrix`:
+  the rows are the doors, and the columns are the questions.
+- **A stale cell is a difference.** For each of the five questions the
+  harness asks, the **mark** in the cell is compared with what the door
+  actually did: a cell that says the door publishes a plan and the door
+  published none is a difference, and the difference says the **line**
+  the claim is on and the **question** it answers.
+- **Every door the harness drives has a row.** A door the matrix does
+  not name is a door nobody reads about, and that is a difference too.
+- **The harness bites.** Five unit tests read a matrix of their own — a
+  table without its heading is not a matrix, the rows and the columns
+  are read, a stale cell is a difference, a true cell is not, and a door
+  the matrix does not name is a difference — and one test says that the
+  tree's matrix says what the tree's doors did.
+
+### What the port found
+
+- **The marks were a reader's job.** The gate knew that each cell names
+  a test; nothing knew that the cell is **true** of the door it names. A
+  door that stopped publishing a plan would have left the matrix saying
+  it does, and the only thing that would have noticed was a person
+  reading a table.
+
+### What it cost
+
+- **One reader**, **one comparison**, **five questions**, and **six
+  tests**: five in the crate and one in the harness's own test file.
+
+### What it does not settle
+
+- **The words in a cell are still read by a person.** The harness knows
+  the **mark** — the tick and the dash — and not whether the cell's
+  prose is the right prose. "✓ as a command" and "✓ the size only" are
+  both ticks, and only a reader tells them apart.
+- **Three columns are still read by a person.** The harness does not ask
+  about the **schema**, the **journal** or the **document's tree**, so
+  it cannot check those marks: the first is the agent door's own shape,
+  the second is a size in two doors and a list in two others, and the
+  third is the window's.
+- **The a2ui row is not checked at all.** The a2ui door is not in the
+  harness, because it speaks a2ui's own vocabulary.

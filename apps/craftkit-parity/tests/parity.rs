@@ -5,7 +5,7 @@
 //! other half of that claim: the doors are **one kit with six faces**, so
 //! what one face says, the others say as well.
 
-use craftkit_parity::{ARGUMENTS, Answer, COMMAND, UNKNOWN, compare, the_session};
+use craftkit_parity::{ARGUMENTS, Answer, COMMAND, UNKNOWN, compare, the_matrix, the_session};
 
 /// The first door's answer.
 ///
@@ -123,6 +123,27 @@ fn the_doors_agree_with_the_session() {
             answer.door
         );
         assert_eq!(answer.undone, truth.undone, "{} and the session undid differently", answer.door);
+    }
+}
+
+/// And the **matrix** says what the doors did.
+///
+/// The matrix is the claim and the harness is the fact: a cell that says
+/// a door does a thing the door did not do is a document that lies, and
+/// the difference says which line the lie is on.
+#[test]
+fn the_matrix_says_what_the_doors_did() {
+    let matrix = the_matrix().expect("the matrix is read");
+    let report = compare();
+    assert!(report.differences.is_empty(), "the doors and the matrix differ: {:#?}", report.differences);
+    // And every door the harness drives has a row of its own: a door
+    // the matrix does not name is a door nobody reads about.
+    for answer in &report.answers {
+        assert!(
+            matrix.rows.iter().any(|row| row.door == answer.door),
+            "the matrix has no row for {}",
+            answer.door
+        );
     }
 }
 
