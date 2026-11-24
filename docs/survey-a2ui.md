@@ -758,6 +758,10 @@ the ranges it knows, only one is usable:
 So O8, as it survives, is **one `maxLength` in one schema**. That is worth
 doing and it is not an opportunity in its own right.
 
+**It is done** (README §1117). The SDK's one generator reads
+`MAX_TEXT_CHARACTERS` and emits it as `maxLength` — the number is read, not
+copied, so the schema and the reader cannot disagree.
+
 **Cost.** Small, and it rides on O1.
 
 ### O9 · Evals — a dependency decision first, not an arc
@@ -1031,7 +1035,7 @@ not a front end.
 | 1 | **O1** the catalog, in the SDK | **small** — one method, three call sites | **yes** | `Projection::catalog()` exists, and a test asserts that both doors' `tools/list` are **derived from it** rather than built by hand (the two lists differ on purpose — see O2) |
 | 2 | **O2** prune the agent-facing view | **small**, and only once O1 exists | **yes** | the agent-facing list equals the pruned set, asserted by a test |
 | 3 | **O5** model picks commands, pre-binds params | **small, *if* scoped this way**; large if scoped as a "surface" | **yes** | a door calls `execute_with` with a `Supplier` fed by the model's own output |
-| 4 | **O8** bounds derived into the catalog | **small** — in practice one `maxLength` | **yes** | the text bound appears in the schema the agent is told |
+| 4 | **O8** bounds derived into the catalog | **small** — in practice one `maxLength` | **yes** | the text bound appears in the schema the agent is told — **done** (README §1117): `maxLength`, read from the SDK's own `MAX_TEXT_CHARACTERS` |
 | 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it — **done** (README §1116) |
 | 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table checked by hand | no | the table exists, and every row has been checked by hand — **done** ([`door-parity.md`](door-parity.md)): the six doors side by side, cell by cell, with the line each cell was read in |
 | 7 | **O3** recipe **claim** check | **small**, but it is a judgement, not a link — the link half is already done by `cargo xtask lists` (`xtask/src/lists.rs:55`) | no | a named claim in a recipe is checked against the tree, and a broken claim is reported |

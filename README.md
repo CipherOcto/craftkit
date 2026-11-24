@@ -70886,3 +70886,46 @@ are doors — and so the rule applied to a crate that was never a door.
   doors and compares.
 - **The bridge's shape changed**, and a shape that other programs read
   is a promise. It is a proof, and the proof is the thing that changed.
+
+## 1117. The agent is told the bound
+
+The schema an agent is told said what a parameter **takes** and not how
+much of it. A text was a string, and the string could be as long as the
+agent liked — until the reader refused it, which is a refusal too late.
+
+### What was built
+
+- **The text bound is in the schema.** A `text` parameter now carries
+  `"maxLength"`, and the number is **read** from the SDK's own
+  `MAX_TEXT_CHARACTERS` — not copied into the schema, read out of the
+  constant the reader enforces. A schema that declared its own copy
+  would be a second place the number lives, and the two would drift.
+- **Only the text.** The other bounds the SDK knows are either shape
+  (`"minimum": 0` for a node reference) or nothing an author can act
+  on (the depth and the node count of a JSON payload).
+
+### What the port found
+
+- **A bound the model is told is not the same as a bound that is
+  enforced.** The bound was always enforced — `Text` refuses a string
+  that is too long — and the schema simply did not say so. Telling the
+  model the bound *before* it proposes a value is the whole difference.
+- **The schema and the reader cannot disagree**, because the schema
+  reads the constant the reader uses. That is what "one source" means
+  in practice: one number, in one place, read twice.
+
+### What it cost
+
+- **One line** in the SDK's one generator, and **one test**.
+
+### What it does not settle
+
+- **The descriptor does not carry the bound.** The bridge publishes a
+  **descriptor** — a description of a command's shape — and the SDK says
+  the two views are not re-expressions of one another. A descriptor that
+  grew a schema's fields would be the bridge's own answer, and the
+  agent door that publishes a schema publishes this one.
+- **The bounds that are not text are not in the schema**, and the tree's
+  own gate does not hold the numbers that are in it: the gate's rule
+  covers the byte, memory and step bounds, and a text bound is a
+  convention the prose upholds.
