@@ -7,12 +7,12 @@
 //! an agent drives it.
 //!
 //! The point is not the protocol. The point is that **both front ends read
-//! the same projection and call the same door**:
+//! the same registry and call the same door**:
 //!
 //! - the studio's toolbar is a view of the registry, and this server's
-//!   tool list is a view of the registry — the same
-//!   [`Projection`](craftkit_sdk::Projection), so a command that a plugin
-//!   adds is in both without anybody writing it down twice;
+//!   tool list is a view of the registry — the same **session**, so a
+//!   command that a plugin adds, or that joins the session while the
+//!   program runs, is in both without anybody writing it down twice;
 //! - the studio's buttons call `Session::execute`, and this server's calls
 //!   call `Session::execute` — the same door, so the same refusals and the
 //!   same undo.
@@ -37,18 +37,21 @@
 //! | Method | What it does |
 //! |---|---|
 //! | `initialize` | what this server is |
-//! | `tools/list` | the commands, as tools: the projection |
+//! | `tools/list` | the commands, as tools: the session's registry |
 //! | `tools/call` | run one command: the session |
 //! | `resources/list` | the kinds, the formats and the manifest |
 //! | `plan` | what the document means right now: the `doc.plan` command |
 //! | `shutdown` | stop |
 //!
-//! # Why the tools are the projection
+//! # Why the tools are the registry
 //!
-//! Because a tool list is a menu. The projection is what makes the
-//! studio's menu, so the projection is what makes this list, and a command
-//! that a plugin adds is in both because it is in the **registry** — not
+//! Because a tool list is a menu, and a menu is a view of the registry.
+//! The list is read from the **session the tools run in**, so a command
+//! that joins the session while the program runs is in the list — not
 //! because two lists were edited.
+//!
+//! And the door runs only what it lists: a command the tool list did not
+//! name is refused, so the list an agent read is the list it can call.
 
 #![deny(
     clippy::unwrap_used,
@@ -178,14 +181,15 @@ impl Bridge {
 
     /// The commands, as tools.
     ///
-    /// The **projection** gives the shape of a command, and the
+    /// The **descriptor** gives the shape of a command, and the
     /// **session** says which commands there are: the list is read from
-    /// the session the tools are run in, so a door never offers a tool it
-    /// cannot run — and never hides one it can.
+    /// the session the tools are run in, so a door never offers a tool the
+    /// session does not have — and never hides one it has.
     ///
     /// The list is **pruned** to what this door shows: the commands, the
-    /// effects and the tools. The registry stays whole, and every door
-    /// may still reach every command.
+    /// effects and the tools. The registry stays whole, and a command
+    /// outside the pruning is **not runnable through this door** — the
+    /// door runs only what it lists.
     fn tools(&self) -> Json {
         let tools: Vec<Json> = self
             .session
@@ -207,12 +211,19 @@ impl Bridge {
     }
 
     /// Run one command.
+    ///
+    /// Only a command the door **lists** can be run: the tool list is
+    /// what an agent was told, and running something that was not on it
+    /// is running a command the door did not offer.
     fn call(&mut self, request: &Request) -> Result<Json, String> {
         let name = request
             .params
             .get("name")
             .and_then(|name| name.as_str())
             .ok_or_else(|| "a call needs the name of the command".to_string())?;
+        if !self.offers(name) {
+            return Err(format!("there is no tool `{name}`"));
+        }
         let arguments = request.params.get("arguments").cloned().unwrap_or_else(|| json!({}));
         match self.session.execute(name, &arguments) {
             Ok(outcome) => Ok(json!({
@@ -224,6 +235,19 @@ impl Bridge {
         }
     }
 
+    /// Whether this door offers a command.
+    ///
+    /// The **same** set as the tool list: the commands, the effects and
+    /// the tools. A command outside it is not on the list, and a door
+    /// that ran it would be running something it did not offer.
+    fn offers(&self, id: &str) -> bool {
+        self.session
+            .registry()
+            .all()
+            .iter()
+            .any(|command| command.id == id && matches!(command.capability, "command" | "effect" | "tool"))
+    }
+
     /// The kinds, the formats and the **manifest**.
     ///
     /// The manifest is the projection's own door: it names every command,
@@ -231,6 +255,10 @@ impl Bridge {
     /// itself. The bridge does not reach into a registry of its own to
     /// find the evaluator's ids — a front end that does that has a second
     /// path into the design.
+    ///
+    /// The **commands** in it are the session's: a command that joined the
+    /// session while the program runs is in the manifest, because the
+    /// manifest and the tool list are the same list.
     fn resources(&self) -> Json {
         let projection = self.ecosystem.projection();
         json!({
@@ -240,7 +268,7 @@ impl Bridge {
                 "layer": kind.layer,
             })).collect::<Vec<_>>(),
             "formats": self.ecosystem.formats.ids(),
-            "manifest": projection.manifest(),
+            "manifest": projection.manifest_with(self.session.registry()),
         })
     }
 
@@ -267,11 +295,11 @@ impl Bridge {
 
     /// The **menu**, as a tree.
     ///
-    /// The same view the studio's menu is made of, so the two cannot
-    /// disagree.
+    /// The same view the studio's menu is made of, and made of the
+    /// **session** the commands run in — so the menu and the tool list
+    /// come from one registry, and the two cannot disagree.
     fn menu(&self) -> Json {
-        let projection = self.ecosystem.projection();
-        let tree = projection.menu_tree(&["command", "effect", "tool"]);
+        let tree = self.session.registry().menu_tree(&["command", "effect", "tool"]);
         json!({ "menu": tree.iter().map(MenuNode::to_json).collect::<Vec<_>>() })
     }
 }

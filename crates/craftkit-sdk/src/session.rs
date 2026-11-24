@@ -59,6 +59,7 @@ use crate::plan::{self, Plan};
 use crate::plugins::PluginLibraries;
 use crate::prompt::Question;
 use crate::resume::Pending;
+use crate::seams::{CORE_LAYER, LayerSpec};
 use crate::select::Selected;
 use crate::tasks::TaskRegistry;
 
@@ -91,6 +92,17 @@ pub const SESSION_SNAPSHOT_DOCUMENTS: usize = 1;
 /// How many documents a session holds at once.
 pub const SESSION_DOCUMENTS: usize =
     SESSION_OWN_DOCUMENTS + SESSION_SNAPSHOT_DOCUMENTS + crate::history::HISTORY_EXPANSION;
+
+/// The layers a session made by hand knows.
+///
+/// The **core** and nothing else: the core is the layer every other
+/// layer may depend on, and it is always linked in. A session made
+/// from an ecosystem knows that ecosystem's layers instead.
+fn core_layers() -> Registry<LayerSpec> {
+    let mut layers = Registry::new();
+    let _ = layers.register(CORE_LAYER);
+    layers
+}
 
 /// How much memory the documents a session holds may take.
 ///
@@ -151,6 +163,11 @@ pub struct Session {
     formats: Registry<FormatSpec>,
     migrations: Registry<MigrationSpec>,
     evaluators: Registry<EvaluatorSpec>,
+    /// The layers this session knows.
+    ///
+    /// A command that joins the session has to be in a layer that is
+    /// linked in, and this is where the session keeps what it knows.
+    layers: Registry<LayerSpec>,
     document: Document,
     selection: Vec<Selected>,
     history: History,
@@ -199,6 +216,7 @@ impl Session {
             formats: Registry::new(),
             migrations: Registry::new(),
             evaluators: Registry::new(),
+            layers: core_layers(),
             document: Document::new("untitled"),
             selection: Vec::new(),
             history: History::new(Document::new("untitled")),
@@ -257,10 +275,19 @@ impl Session {
     /// is refused: two commands with one id are two commands, and the
     /// registry is right to say so.
     ///
-    /// The command's **parameters** are checked as they are registered: an
-    /// id that is not well formed is refused before anything is made.
+    /// The command's **id** is checked, and its **layer** is checked: a
+    /// command in a layer that is not linked in is refused, exactly as it
+    /// would be if the ecosystem had been built with it. The **kind** of
+    /// the parameters is the command's own business — the body reads
+    /// them, and the body is the one that knows.
     pub fn register(&mut self, spec: CommandSpec) -> Result<(), EngineError> {
         let id = spec.id;
+        if self.layers.get(spec.layer).is_none() {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("there is no layer called `{}`", spec.layer),
+            });
+        }
         self.commands
             .register(spec)
             .map_err(|error| EngineError::Failed { id: id.to_string(), message: error.to_string() })
@@ -269,6 +296,33 @@ impl Session {
     /// The node kinds this session knows.
     pub fn kinds(&self) -> &Registry<NodeKindSpec> {
         &self.kinds
+    }
+
+    /// The layers this session knows.
+    ///
+    /// A command that joins the session has to be in a layer that is
+    /// linked in, and this is the list it is checked against.
+    pub fn layers(&self) -> &Registry<LayerSpec> {
+        &self.layers
+    }
+
+    /// The session, with the **layers** of an ecosystem.
+    ///
+    /// A session made by hand knows the **core** layer and nothing else:
+    /// the core is always linked in. A session made from an ecosystem
+    /// knows that ecosystem's layers, and a command in a layer that is
+    /// not there is refused.
+    ///
+    /// The **core** is always among them: it is the layer every other
+    /// layer may depend on, and it is in the binary whether anything
+    /// else is or not.
+    pub fn with_layers(mut self, layers: Registry<LayerSpec>) -> Self {
+        let mut layers = layers;
+        if layers.get(CORE_LAYER.id).is_none() {
+            let _ = layers.register(CORE_LAYER);
+        }
+        self.layers = layers;
+        self
     }
 
     /// The document, to read.

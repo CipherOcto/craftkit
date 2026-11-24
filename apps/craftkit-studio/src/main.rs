@@ -38,17 +38,28 @@ fn main() {
     // manifest below carries every evaluator with its layer and its line
     // about itself. That is the door: what the agent is told.
 
+    // The session is made **first**, because it is the registry the
+    // program runs: a command that joins the session while it runs is in
+    // the menu below, because the menu is a view of the session and not
+    // of the ecosystem it was made from.
+    let mut session = ecosystem.session();
+
+    // The run-time command joins the session **now**, so that the menu
+    // and the manifest below are the lists the program is really
+    // running.
+    if let Err(error) = session.register(craftkit_studio::commands::runtime_echo()) {
+        eprintln!("the run-time command could not join the session: {error}");
+    }
+
     println!("\n── the manifest (what an agent is told)");
-    for line in ecosystem.projection().manifest() {
+    for line in ecosystem.projection().manifest_with(session.registry()) {
         println!("   {line}");
     }
 
     println!("\n── the menu, by capability");
-    for entry in ecosystem.projection().menu(&["command", "effect"]) {
+    for entry in session.registry().menu(&["command", "effect"]) {
         println!("   {:<8} {:<22} {:<40} {}", entry.area, entry.id, entry.label, entry.doc);
     }
-
-    let mut session = ecosystem.session();
 
     println!("\n── a command from a plugin");
     match session.execute("hello.greet", &json!({ "name": "world", "loudly": true })) {
@@ -106,7 +117,7 @@ fn main() {
     }
 
     println!("\n── the menu, as a tree");
-    for part in ecosystem.projection().menu_tree(&["command", "effect"]) {
+    for part in session.registry().menu_tree(&["command", "effect"]) {
         print_menu(&part, 1);
     }
 
@@ -202,14 +213,12 @@ fn main() {
     }
 
     println!("\n── a command made while the program runs");
-    // The command **joins the session that is running**: the registry is
-    // a value and it is open, and every door that lists the session's
-    // commands lists this one too.
-    match session.register(craftkit_studio::commands::runtime_echo()) {
-        Ok(()) => match session.execute("runtime.echo", &json!({ "text": "made at run time" })) {
-            Ok(outcome) => println!("   {}", outcome.message),
-            Err(error) => println!("   refused: {error}"),
-        },
+    // The command **joined the session that is running** at the top of
+    // this program: the registry is a value and it is open, and every
+    // door that lists the session's commands lists this one too — the
+    // menu and the manifest above both named it.
+    match session.execute("runtime.echo", &json!({ "text": "made at run time" })) {
+        Ok(outcome) => println!("   {}", outcome.message),
         Err(error) => println!("   refused: {error}"),
     }
 }

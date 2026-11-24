@@ -89,3 +89,48 @@ fn a_run_time_command_refuses_a_missing_parameter() {
     let error = session.execute("runtime.echo", &json!({})).expect_err("the text is missing");
     assert!(error.to_string().contains("text"), "{error}");
 }
+
+/// A refusal says **which** parameter was refused.
+///
+/// A refusal that does not name the parameter is a refusal the caller
+/// has to guess about, and the reader knows the name it read from.
+#[test]
+fn a_refusal_names_the_parameter() {
+    let (_, mut session) = runtime_echo();
+    let error = session.execute("runtime.echo", &json!({ "text": 42 })).expect_err("a number is not a text");
+    let message = error.to_string();
+    assert!(message.contains("text"), "the refusal names the parameter: {message}");
+    assert!(message.contains("expected a string"), "and says what was wrong: {message}");
+}
+
+/// A command that joins a session has to be in a layer that is **linked
+/// in**.
+///
+/// The ecosystem refuses a contribution in a layer that is not there, and
+/// the session refuses a command that joins it in one.
+#[test]
+fn a_command_joins_only_in_a_layer_that_is_linked_in() {
+    let mut session = Session::new(craftkit_sdk::Registry::new(), craftkit_sdk::Registry::new());
+    let mut command = CommandSpec::dynamic(
+        "runtime.echo",
+        "Echo",
+        "runtime",
+        "Say the text back.",
+        vec![ParamDoc::dynamic("text", Doc::Text, true, "What to say.")],
+        |_session, params| {
+            let text = params.param::<Text>("text", "runtime.echo")?;
+            Ok(Outcome::new(text.0))
+        },
+    );
+    command.layer = "not-a-layer";
+    let error = session.register(command).expect_err("there is no such layer");
+    assert!(error.to_string().contains("not-a-layer"), "{error}");
+}
+
+/// The core is linked in, so a command in the core joins.
+#[test]
+fn a_command_joins_in_the_core_layer() {
+    let mut session = Session::new(craftkit_sdk::Registry::new(), craftkit_sdk::Registry::new());
+    let (command, _) = runtime_echo();
+    session.register(command).expect("the core is linked in");
+}

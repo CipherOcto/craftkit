@@ -45,6 +45,25 @@ impl ParamError {
     pub fn is_missing(&self) -> bool {
         self.missing
     }
+
+    /// The error, with the **parameter's name** on it.
+    ///
+    /// A reader that refuses a value knows the name it read it from, and
+    /// a refusal that does not say the name is a refusal the caller has
+    /// to guess about. This is where the name goes on.
+    ///
+    /// An error that **already** names a parameter keeps its own name:
+    /// the reader is the one that knows, and the reader's word wins.
+    pub fn named(self, name: &str) -> Self {
+        if !self.key.is_empty() {
+            return self;
+        }
+        ParamError {
+            key: name.to_string(),
+            message: format!("`{name}`: {}", self.message),
+            missing: self.missing,
+        }
+    }
 }
 
 impl std::fmt::Display for ParamError {

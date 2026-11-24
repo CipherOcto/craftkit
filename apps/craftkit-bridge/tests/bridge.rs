@@ -127,6 +127,50 @@ fn a_command_made_at_run_time_is_listed_and_can_be_run() {
     assert_eq!(answer["result"]["content"][0]["text"], "hello", "{answer}");
 }
 
+/// The menu and the tool list are **one list**.
+///
+/// The bridge draws its menu from the session the commands run in, so a
+/// command that joins the session while the program runs is in the menu
+/// and in the tools — and the two never disagree.
+#[test]
+fn the_menu_and_the_tool_list_are_one_list() {
+    let mut bridge = bridge();
+    let command = CommandSpec::dynamic(
+        "runtime.echo",
+        "Echo",
+        "runtime",
+        "Say the text back.",
+        vec![ParamDoc::dynamic("text", Doc::Text, true, "What to say.")],
+        |_session, params| {
+            let text = params.param::<Text>("text", "runtime.echo")?;
+            Ok(Outcome::new(text.0))
+        },
+    );
+    bridge.session().register(command).expect("the command joins the session");
+
+    let menu = ask(&mut bridge, "menu", Json::Null);
+    let mut listed = Vec::new();
+    flatten(&menu["result"]["menu"], &mut listed);
+    assert!(listed.iter().any(|id| id == "runtime.echo"), "the menu names it: {listed:?}");
+
+    let tools = ask(&mut bridge, "tools/list", Json::Null);
+    let tools = tools["result"]["tools"].as_array().expect("there are tools");
+    assert!(tools.iter().any(|tool| tool["id"] == "runtime.echo"), "{tools:?}");
+}
+
+/// Every command of a menu, by its id.
+fn flatten(part: &Json, out: &mut Vec<String>) {
+    let Some(part) = part.as_array() else { return };
+    for part in part {
+        for command in part["commands"].as_array().into_iter().flatten() {
+            if let Some(id) = command["id"].as_str() {
+                out.push(id.to_string());
+            }
+        }
+        flatten(&part["children"], out);
+    }
+}
+
 /// The resources are the kinds, the formats and the **manifest**: the
 /// rest of the registry, read through the projection's own door.
 ///
@@ -255,4 +299,66 @@ fn the_journal_is_over_the_wire() {
     let entries = answer["result"]["entries"].as_array().expect("there are entries");
     assert!(!entries.is_empty(), "{answer}");
     assert_eq!(entries[0]["id"], json!("geometry.rectangle"), "{answer}");
+}
+
+/// The manifest names the **session's** commands.
+///
+/// The manifest is what an agent is told, and the tool list is what it
+/// may call: a command that joined the session while the program runs
+/// is in both, and the two views are one list.
+#[test]
+fn the_manifest_names_the_sessions_commands() {
+    let mut bridge = bridge();
+    let command = CommandSpec::dynamic(
+        "runtime.echo",
+        "Echo",
+        "runtime",
+        "Say the text back.",
+        vec![ParamDoc::dynamic("text", Doc::Text, true, "What to say.")],
+        |_session, params| {
+            let text = params.param::<Text>("text", "runtime.echo")?;
+            Ok(Outcome::new(text.0))
+        },
+    );
+    bridge.session().register(command).expect("the command joins the session");
+
+    let answer = ask(&mut bridge, "resources/list", Json::Null);
+    let manifest = answer["result"]["manifest"].as_array().expect("there is a manifest");
+    assert!(
+        manifest.iter().any(|line| line.as_str().unwrap_or_default().contains("runtime.echo")),
+        "{manifest:?}"
+    );
+}
+
+/// The door runs only what it lists.
+///
+/// A command the door did not offer is refused, so the list an agent
+/// read is the list it can call.
+#[test]
+fn the_bridge_runs_only_what_it_lists() {
+    let mut bridge = bridge();
+    let mut command = CommandSpec::dynamic(
+        "runtime.echo",
+        "Echo",
+        "runtime",
+        "Say the text back.",
+        vec![ParamDoc::dynamic("text", Doc::Text, true, "What to say.")],
+        |_session, params| {
+            let text = params.param::<Text>("text", "runtime.echo")?;
+            Ok(Outcome::new(text.0))
+        },
+    );
+    // A capability the door does not show: it is not on the list, so it
+    // is not runnable.
+    command.capability = "exporter";
+    bridge.session().register(command).expect("the command joins the session");
+
+    let tools = ask(&mut bridge, "tools/list", Json::Null);
+    let tools = tools["result"]["tools"].as_array().expect("there are tools");
+    assert!(!tools.iter().any(|tool| tool["id"] == "runtime.echo"), "{tools:?}");
+
+    let answer =
+        ask(&mut bridge, "tools/call", json!({ "name": "runtime.echo", "arguments": { "text": "hi" } }));
+    let message = answer["error"]["message"].as_str().unwrap_or_default().to_string();
+    assert!(message.contains("runtime.echo"), "{answer}");
 }

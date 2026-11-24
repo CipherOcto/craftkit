@@ -325,6 +325,9 @@ impl Ecosystem {
     }
 
     /// A session over this ecosystem.
+    ///
+    /// The session knows the ecosystem's **layers**, so a command that
+    /// joins it is checked against them.
     pub fn session(&self) -> Session {
         Session::with_formats(
             self.commands.clone(),
@@ -333,6 +336,7 @@ impl Ecosystem {
             self.migrations.clone(),
             self.evaluators.clone(),
         )
+        .with_layers(self.layers.clone())
     }
 
     /// The views of this ecosystem.
@@ -344,6 +348,59 @@ impl Ecosystem {
 impl Default for Ecosystem {
     fn default() -> Self {
         Ecosystem::new()
+    }
+}
+
+impl Registry<CommandSpec> {
+    /// The menu bar of **these** commands, as a tree.
+    ///
+    /// The projection's menu is this menu: the projection is a view of
+    /// the ecosystem, and a door that holds a **session** — a registry
+    /// that grew while the program ran — needs the same view of it. Two
+    /// doors that draw two different menus are two doors that disagree.
+    pub fn menu_tree(&self, capabilities: &[&str]) -> Vec<MenuNode> {
+        let mut roots: Vec<MenuNode> = Vec::new();
+        for command in self.all() {
+            if !capabilities.contains(&command.capability) {
+                continue;
+            }
+            let entry = MenuEntry {
+                area: command.area,
+                id: command.id,
+                label: command.label,
+                doc: command.doc,
+                capability: command.capability,
+                shortcut: command.shortcut,
+            };
+            let path: Vec<&'static str> =
+                if command.menu.is_empty() { vec![command.area] } else { command.menu.to_vec() };
+            insert_command(&mut roots, &path, entry);
+        }
+        sort_nodes(&mut roots);
+        roots
+    }
+
+    /// These commands, grouped into a menu by area.
+    ///
+    /// Only the capabilities asked for: a toolbar wants `tool` and
+    /// `command`, and a file menu wants `exporter` and `importer`.
+    pub fn menu(&self, capabilities: &[&str]) -> Vec<MenuEntry> {
+        let mut entries: Vec<MenuEntry> = Vec::new();
+        for command in self.all() {
+            if !capabilities.contains(&command.capability) {
+                continue;
+            }
+            entries.push(MenuEntry {
+                area: command.area,
+                id: command.id,
+                label: command.label,
+                doc: command.doc,
+                capability: command.capability,
+                shortcut: command.shortcut,
+            });
+        }
+        entries.sort_by(|left, right| left.area.cmp(right.area).then_with(|| left.id.cmp(right.id)));
+        entries
     }
 }
 
@@ -468,25 +525,7 @@ impl<'a> Projection<'a> {
     /// the same every time: a menu that reorders itself between two runs
     /// is a menu nobody can learn.
     pub fn menu_tree(&self, capabilities: &[&str]) -> Vec<MenuNode> {
-        let mut roots: Vec<MenuNode> = Vec::new();
-        for command in self.ecosystem.commands.all() {
-            if !capabilities.contains(&command.capability) {
-                continue;
-            }
-            let entry = MenuEntry {
-                area: command.area,
-                id: command.id,
-                label: command.label,
-                doc: command.doc,
-                capability: command.capability,
-                shortcut: command.shortcut,
-            };
-            let path: Vec<&'static str> =
-                if command.menu.is_empty() { vec![command.area] } else { command.menu.to_vec() };
-            insert_command(&mut roots, &path, entry);
-        }
-        sort_nodes(&mut roots);
-        roots
+        self.ecosystem.commands.menu_tree(capabilities)
     }
 
     /// The commands, grouped into a menu by area.
@@ -494,22 +533,7 @@ impl<'a> Projection<'a> {
     /// Only the capabilities asked for: a toolbar wants `tool` and
     /// `command`, and a file menu wants `exporter` and `importer`.
     pub fn menu(&self, capabilities: &[&str]) -> Vec<MenuEntry> {
-        let mut entries: Vec<MenuEntry> = Vec::new();
-        for command in self.ecosystem.commands.all() {
-            if !capabilities.contains(&command.capability) {
-                continue;
-            }
-            entries.push(MenuEntry {
-                area: command.area,
-                id: command.id,
-                label: command.label,
-                doc: command.doc,
-                capability: command.capability,
-                shortcut: command.shortcut,
-            });
-        }
-        entries.sort_by(|left, right| left.area.cmp(right.area).then_with(|| left.id.cmp(right.id)));
-        entries
+        self.ecosystem.commands.menu(capabilities)
     }
 
     /// The tools, in order.
@@ -688,8 +712,21 @@ impl<'a> Projection<'a> {
     ///
     /// This is what an agent is told about the program it is driving.
     pub fn manifest(&self) -> Vec<String> {
+        self.manifest_with(&self.ecosystem.commands)
+    }
+
+    /// The manifest, with the **commands of a registry**.
+    ///
+    /// The commands are the one contribution that can arrive while the
+    /// program runs, so the manifest is told about them twice: this is
+    /// the one a door that holds a **session** uses, and the commands it
+    /// names are the ones the door can run.
+    ///
+    /// The other contributions are the ecosystem's — a kind, a tool, an
+    /// evaluator, a panel — and they are the same in both.
+    pub fn manifest_with(&self, commands: &Registry<CommandSpec>) -> Vec<String> {
         let mut lines: Vec<String> = Vec::new();
-        for command in self.ecosystem.commands.all() {
+        for command in commands.all() {
             lines.push(format!(
                 "command {} ({}) in {} — {}",
                 command.id, command.capability, command.layer, command.doc

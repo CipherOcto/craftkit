@@ -188,7 +188,7 @@ pub trait ParamKind: Sized {
     /// kind that can be absent overrides this.
     fn read(params: &Params<'_>, name: &str) -> Result<Self, ParamError> {
         match params.get(name) {
-            Some(value) => Self::from_json(value),
+            Some(value) => Self::from_json(value).map_err(|error| error.named(name)),
             None => Err(ParamError::missing(name)),
         }
     }
@@ -363,7 +363,7 @@ impl<T: ParamKind> ParamKind for Option<T> {
 
     fn read(params: &Params<'_>, name: &str) -> Result<Self, ParamError> {
         match params.get(name) {
-            Some(value) => T::from_json(value).map(Some),
+            Some(value) => T::from_json(value).map(Some).map_err(|error| error.named(name)),
             None => Ok(None),
         }
     }
@@ -409,10 +409,10 @@ impl<A: ParamKind, B: ParamKind> Either<A, B> {
     /// Neither half is required on its own, so the error names both.
     pub fn read_either(params: &Params<'_>, first: &str, second: &str) -> Result<Self, ParamError> {
         if let Some(value) = params.get(first) {
-            return A::from_json(value).map(Either::Left);
+            return A::from_json(value).map(Either::Left).map_err(|error| error.named(first));
         }
         if let Some(value) = params.get(second) {
-            return B::from_json(value).map(Either::Right);
+            return B::from_json(value).map(Either::Right).map_err(|error| error.named(second));
         }
         Err(ParamError::new(first, format!("`{first}` is required, or `{second}` instead of it")))
     }
