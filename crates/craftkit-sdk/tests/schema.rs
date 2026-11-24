@@ -45,6 +45,19 @@ fn every_kind_of_parameter_says_what_it_takes() {
     assert_eq!(properties["raw"]["description"], json!("Any value."));
 }
 
+/// A **text** is bounded, and the schema says by how much.
+///
+/// The bound is the SDK's own, and the schema **reads** it: a schema that
+/// declared a copy of the number would be a second place the number
+/// lives. Telling the model the bound before it proposes a value is the
+/// whole difference.
+#[test]
+fn a_text_says_the_bound_it_has() {
+    let schema = to_json_schema(&[ParamDoc::required("name", Doc::Text, "What it is called.")]);
+    let properties = schema["properties"].as_object().expect("the schema has properties");
+    assert_eq!(properties["name"]["maxLength"], json!(craftkit_sdk::params::MAX_TEXT_CHARACTERS));
+}
+
 /// A required parameter is required, and an optional one is not.
 #[test]
 fn the_required_list_holds_the_required_parameters() {

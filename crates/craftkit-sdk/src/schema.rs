@@ -44,7 +44,13 @@ pub fn to_json_schema(params: &[ParamDoc]) -> Json {
     for param in params {
         let mut schema = match param.kind {
             Doc::Number => json!({ "type": "number" }),
-            Doc::Text => json!({ "type": "string" }),
+            // A **text** is bounded, and the schema says so: the bound is
+            // the SDK's own (`MAX_TEXT_CHARACTERS`), read here and not
+            // restated, so the schema and the reader cannot disagree.
+            // Telling the model the bound before it proposes a value is
+            // the whole difference — a refusal after the fact is a
+            // refusal too late.
+            Doc::Text => json!({ "type": "string", "maxLength": crate::params::MAX_TEXT_CHARACTERS }),
             Doc::Bool => json!({ "type": "boolean" }),
             Doc::NodeRef => json!({ "type": "integer", "minimum": 0 }),
             Doc::NodeKind => json!({ "type": "string" }),
