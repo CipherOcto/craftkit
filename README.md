@@ -71911,8 +71911,9 @@ the tree could not say which of its commands no test runs.
 
 ### What it cost
 
-- **One check** in the outer gate, **eight tests** for the commands,
-  **four tests** for the check, and two helpers made public.
+- **One check** in the outer gate, **sixteen tests** for the commands
+  (eight commands, and some of them more than once), **four tests** for
+  the check, and two helpers made public.
 
 ### What it does not settle
 

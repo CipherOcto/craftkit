@@ -624,17 +624,12 @@ pub fn entry_of(block: &str, name: &str) -> Option<String> {
     None
 }
 
-/// The body of an attribute, and where it ends.
+/// The **block** of an attribute, and where it ends.
 ///
 /// **The parentheses are counted, and the strings are skipped.** An
 /// attribute may hold a path — `menu("Edit", "Trim")` — and the `)` of the
 /// path is not the end of the attribute. A reader that stopped at the first
 /// `)` would read half an attribute and call it the whole.
-/// The **block** of an attribute, and where it ends.
-///
-/// The attribute may hold a path — `menu("Edit", "Trim")` — and the `)` of
-/// the path is not the end of the attribute. A reader that stopped at the
-/// first `)` would read half an attribute and call it the whole.
 pub fn block_of(text: &str, body_start: usize) -> Option<(String, usize)> {
     let bytes = text.as_bytes();
     let mut depth = 1usize;
@@ -731,7 +726,6 @@ pub fn has_row_flag(row: &str, flag: &str) -> bool {
     depth == 0 && word == flag
 }
 
-/// A field of an attribute block: `name = "value"`.
 /// A field of an attribute block: `name = "value"`.
 pub fn field(block: &str, name: &str) -> Option<String> {
     let needle = format!("{name} = \"");

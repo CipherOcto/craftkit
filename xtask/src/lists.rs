@@ -1430,7 +1430,7 @@ mod tests {
     /// and a test that does not name it.
     #[test]
     fn a_command_that_no_test_names_is_caught() {
-        let root = std::env::temp_dir().join("craftkit-xtask-command-test");
+        let root = crate::temp::dir("lists-command").expect("a temporary folder");
         let crate_directory = root.join("crates").join("craftkit-thing");
         std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
         std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
@@ -1444,13 +1444,12 @@ mod tests {
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(problems[0].contains("thing.add"), "{problems:?}");
-        std::fs::remove_dir_all(&root).ok();
     }
 
     /// And a command that a test names is **not** caught.
     #[test]
     fn a_command_that_a_test_names_is_not_caught() {
-        let root = std::env::temp_dir().join("craftkit-xtask-command-test-named");
+        let root = crate::temp::dir("lists-command-named").expect("a temporary folder");
         let crate_directory = root.join("crates").join("craftkit-thing");
         std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
         std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
@@ -1466,7 +1465,6 @@ mod tests {
         .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert!(problems.is_empty(), "{problems:?}");
-        std::fs::remove_dir_all(&root).ok();
     }
 
     /// A name that is **part** of a longer name is not a name.
