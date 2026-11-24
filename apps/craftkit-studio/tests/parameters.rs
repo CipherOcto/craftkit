@@ -85,3 +85,17 @@ fn every_alternative_is_named() {
         }
     }
 }
+
+/// The two spellings of a parameter are **two kinds**, and the schema
+/// publishes each one with its own shape.
+///
+/// `node.mute` takes a node's id or a node's name, and a schema that
+/// says the name is a number is a schema that lies.
+#[test]
+fn the_two_spellings_are_published_with_their_own_shapes() {
+    let ecosystem = craftkit_studio::ecosystem().expect("the ecosystem is not a mess");
+    let schema = ecosystem.projection().json_schema("node.mute").expect("the schema is there");
+    let properties = schema["properties"].as_object().expect("the properties");
+    assert_eq!(properties["node"]["type"], craftkit_sdk::serde_json::json!("integer"), "{schema}");
+    assert_eq!(properties["node_name"]["type"], craftkit_sdk::serde_json::json!("string"), "{schema}");
+}

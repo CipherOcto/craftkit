@@ -129,8 +129,9 @@ These are the README's own honest notes, and they are still true of the tree:
   command cannot be refused this way — the compiler writes the reader and
   the declaration from the same struct. What is **not** checked is the
   **required** flag (a body that ignores a parameter it declared is not
-  visible to the engine) and the **other spelling** of a parameter with
-  two (the second spelling's kind is not in the declaration).
+  visible to the engine). The **other spelling** of a parameter with two
+  carries its own kind now, and the schema publishes each spelling with
+  its own shape (§1125).
 - **`mutates` and `undoable` are two flags, and the derive refuses only
   one combination.** A command that is undoable and does **not** change
   the document is refused by the macro — there is nothing to undo. A

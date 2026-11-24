@@ -91,6 +91,35 @@ fn a_parameter_with_a_second_spelling_offers_both() {
     assert!(schema.get("required").is_none());
 }
 
+/// The two spellings are **two kinds**, and each is published with its
+/// own shape.
+///
+/// A node's id is a number and a node's name is a text, and a schema that
+/// says a name is a number is a schema that lies.
+#[test]
+fn the_two_spellings_are_published_with_their_own_shapes() {
+    let schema =
+        to_json_schema(&[ParamDoc::either("node", Doc::NodeRef, "Which node.", "node_name")
+            .with_alternative_kind(Doc::Text)]);
+    let properties = schema["properties"].as_object().expect("the schema has properties");
+    assert_eq!(properties["node"]["type"], json!("integer"), "the id is a number: {schema}");
+    assert_eq!(properties["node_name"]["type"], json!("string"), "and the name is a text: {schema}");
+    // And the name's bound is the SDK's own.
+    assert_eq!(
+        properties["node_name"]["maxLength"],
+        json!(craftkit_sdk::params::MAX_TEXT_CHARACTERS),
+        "{schema}"
+    );
+}
+
+/// And a spelling with no kind of its own keeps the first one's shape.
+#[test]
+fn a_spelling_with_no_kind_of_its_own_keeps_the_first_shape() {
+    let schema = to_json_schema(&[ParamDoc::either("node", Doc::NodeRef, "Which node.", "node_name")]);
+    let properties = schema["properties"].as_object().expect("the schema has properties");
+    assert_eq!(properties["node_name"]["type"], json!("integer"), "{schema}");
+}
+
 /// A plugin's own kind says its name and its unit.
 #[test]
 fn a_plugins_kind_carries_its_name_and_its_unit() {

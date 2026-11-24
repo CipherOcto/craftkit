@@ -150,7 +150,10 @@ enum Shape {
     /// An `Option<T>`: the parameter is optional.
     Optional(syn::Type),
     /// An `Either<A, B>`: one parameter, two spellings.
-    Either(syn::Type),
+    ///
+    /// Both halves are kept: the first is the parameter's own spelling
+    /// and the second is the other one, and each has a kind of its own.
+    Either(syn::Type, Box<syn::Type>),
 }
 
 /// The last segment of a type's path, if it has one.
@@ -160,19 +163,26 @@ fn last_segment(ty: &syn::Type) -> Option<&Ident> {
     Some(&segment.ident)
 }
 
+/// The generic arguments of a type, if it has any.
+fn arguments_of(ty: &syn::Type) -> Vec<&syn::Type> {
+    let syn::Type::Path(path) = ty else { return Vec::new() };
+    let Some(segment) = path.path.segments.last() else { return Vec::new() };
+    let syn::PathArguments::AngleBracketed(arguments) = &segment.arguments else {
+        return Vec::new();
+    };
+    arguments
+        .args
+        .iter()
+        .filter_map(|argument| match argument {
+            syn::GenericArgument::Type(ty) => Some(ty),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The first generic argument of a type, if it has one.
 fn first_argument(ty: &syn::Type) -> Option<&syn::Type> {
-    let syn::Type::Path(path) = ty else { return None };
-    let segment = path.path.segments.last()?;
-    match &segment.arguments {
-        syn::PathArguments::AngleBracketed(arguments) => {
-            arguments.args.iter().find_map(|argument| match argument {
-                syn::GenericArgument::Type(ty) => Some(ty),
-                _ => None,
-            })
-        }
-        _ => None,
-    }
+    arguments_of(ty).first().copied()
 }
 
 /// How a field's type is shaped.
@@ -182,10 +192,13 @@ fn shape_of(ty: &syn::Type) -> Shape {
             Some(inner) => Shape::Optional(inner.clone()),
             None => Shape::Plain,
         },
-        Some("Either") => match first_argument(ty) {
-            Some(inner) => Shape::Either(inner.clone()),
-            None => Shape::Plain,
-        },
+        Some("Either") => {
+            let arguments = arguments_of(ty);
+            match (arguments.first(), arguments.get(1)) {
+                (Some(left), Some(right)) => Shape::Either((*left).clone(), Box::new((*right).clone())),
+                _ => Shape::Plain,
+            }
+        }
         _ => Shape::Plain,
     }
 }
@@ -273,7 +286,7 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
         let help = doc_of(&field.attrs);
 
         let (read, declaration) = match (&param.alternative, &shape) {
-            (Some(alternative), Shape::Either(left)) => {
+            (Some(alternative), Shape::Either(left, right)) => {
                 let alternative_value = alternative.value();
                 if names.contains(&alternative_value) {
                     return Err(Error::new(
@@ -302,7 +315,8 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
                     )
                     .with_type_name(<#left as #sdk::ParamKind>::NAME)
                     .with_unit(<#left as #sdk::ParamKind>::UNIT)
-                    .with_accepts_text(<#left as #sdk::ParamKind>::ACCEPTS_TEXT)),
+                    .with_accepts_text(<#left as #sdk::ParamKind>::ACCEPTS_TEXT)
+                    .with_alternative_kind(<#right as #sdk::ParamKind>::DOC)),
                 )
             }
             (Some(_), _) => {
@@ -314,7 +328,7 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
                     ),
                 ));
             }
-            (None, Shape::Either(_)) => {
+            (None, Shape::Either(_, _)) => {
                 return Err(Error::new(
                     field_name.span(),
                     format!(

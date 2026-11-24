@@ -4570,6 +4570,7 @@ so.
 | **every cell of the parity matrix is proved** | **built.** The matrix names the test that proves each cell, and the outer gate says when a test it names is not there (§1122) | §1122 |
 | **every cell of the matrix names its proof** | **built.** A cell that says something names the test that proves it, and the outer gate says when it does not (§1123) | §1123 |
 | **a run-time command's declaration is checked** | **built.** The session refuses a value that is not of the kind the command declared, and the schema says the shapes the reader takes (§1124) | §1124 |
+| **the two spellings of a parameter are two kinds** | **built.** Each spelling is published with its own shape, and the check reads the same answer (§1125) | §1125 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71339,10 +71340,51 @@ a number, and nothing refuses it".
 - **The `required` flag is still not checked against the body.** A body
   that ignores a parameter it declared is not visible to the engine: the
   caller is asked for a value nobody reads, and nothing says so.
-- **The other spelling of a parameter with two is not checked.** The
-  second spelling's kind is not in the declaration, so there is nothing
-  to check it against — the schema publishes it with the first
-  spelling's shape, and that is the next thing to fix.
+- **The other spelling of a parameter with two was not checked.** It is
+  now: the declaration carries the second spelling's kind, and the schema
+  publishes each spelling with its own shape (§1125).
 - **The declaration is checked against the call, not against the body.**
   A command that declares a text and reads a text is fine; one that
   declares a text and never reads it is invisible.
+
+## 1125. The other spelling publishes its own kind
+
+A parameter with two spellings — `node` and `node_name` — is **two
+kinds**: a node's id is a number and a node's name is a text. §1124
+checked the first spelling against the call and left the second one out,
+because the declaration did not say what it was.
+
+### What was built
+
+- **The declaration carries the other spelling's kind.** The two spellings
+  are two kinds, and each one is published with **its own** shape: `node`
+  is an integer and `node_name` is a string, with the text's own bound.
+- **The check reads it too.** A value under the other spelling is
+  checked against that spelling's kind, so the boundary is the same on
+  both sides of the pair.
+- **The derive writes it from the type it already had.** An `Either<A, B>`
+  has two halves, and the second half's kind is now in the declaration —
+  the macro was reading one half and throwing the other away.
+
+### What the port found
+
+- **The schema said a name was a number.** The alternative was published
+  as a copy of the first spelling: the same type, the same title and the
+  same unit. An agent was told to send a number for a name, and the only
+  thing that said otherwise was the reader.
+
+### What it cost
+
+- **One field** in the declaration, **one builder**, **one branch** in the
+  schema, **one step** in the check, and the derive reading the second
+  half of an `Either`.
+
+### What it does not settle
+
+- **The `required` flag is still not checked against the body** (§1124).
+- **A subprocess plugin's parameters have no second kind.** The plugin
+  protocol carries one kind per parameter, so a plugin's other spelling
+  keeps the first spelling's shape — and the protocol would have to grow
+  a field to say otherwise.
+- **The declaration is still checked against the call, and not against the
+  body** (§1124).

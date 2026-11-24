@@ -444,6 +444,9 @@ impl LoadedPlugin {
                 // A plugin's kinds are the **core's** kinds, and a core
                 // kind takes its own shape and nothing else.
                 accepts_text: false,
+                // And the other spelling of a plugin's parameter has the
+                // same kind: the protocol does not carry a second one.
+                alternative_kind: None,
             })
             .collect();
         let params: &'static [ParamDoc] = Box::leak(params.into_boxed_slice());

@@ -222,6 +222,13 @@ pub struct ParamDoc {
     pub type_name: Option<&'static str>,
     /// The **unit** the value is in, when the kind has one.
     pub unit: Option<&'static str>,
+    /// The kind of the **other spelling**, when the parameter has one.
+    ///
+    /// A parameter with two spellings has two kinds: `node` is a node's
+    /// id and `node_name` is a name. The declaration says so, and the
+    /// schema publishes each spelling with its own shape — so the shape
+    /// that is told is the shape that is taken.
+    pub alternative_kind: Option<Doc>,
     /// Whether the kind takes a **string** as well as its own shape.
     ///
     /// A length is a number, and `25mm` is a length too: the string is
@@ -249,6 +256,7 @@ impl ParamDoc {
             required,
             help: crate::plugin::leak(help.to_string()),
             alternative: None,
+            alternative_kind: None,
             type_name: None,
             unit: None,
             accepts_text: false,
@@ -263,6 +271,7 @@ impl ParamDoc {
             required: true,
             help,
             alternative: None,
+            alternative_kind: None,
             type_name: None,
             unit: None,
             accepts_text: false,
@@ -277,6 +286,7 @@ impl ParamDoc {
             required: false,
             help,
             alternative: None,
+            alternative_kind: None,
             type_name: None,
             unit: None,
             accepts_text: false,
@@ -295,6 +305,15 @@ impl ParamDoc {
     /// The parameter with the **unit** on it.
     pub const fn with_unit(mut self, unit: Option<&'static str>) -> Self {
         self.unit = unit;
+        self
+    }
+
+    /// The parameter with the **other spelling's** kind on it.
+    ///
+    /// The two spellings of a parameter are two kinds, and each one is
+    /// published with its own shape.
+    pub const fn with_alternative_kind(mut self, kind: Doc) -> Self {
+        self.alternative_kind = Some(kind);
         self
     }
 
@@ -323,6 +342,7 @@ impl ParamDoc {
             required: false,
             help,
             alternative: Some(alternative),
+            alternative_kind: None,
             type_name: None,
             unit: None,
             accepts_text: false,

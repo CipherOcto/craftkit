@@ -30,6 +30,40 @@ use crate::error::ParamDoc;
 use crate::params::Doc;
 use crate::serde_json::{Value as Json, json};
 
+/// The shape of one kind, as a schema says it.
+///
+/// The **type** comes from the SDK's own table of kinds, and the schema
+/// and the engine's refusal read the same table — so the shape an agent
+/// is told and the shape the session accepts are one answer.
+///
+/// A kind that takes a **string** as well — a length, which may be
+/// written `25` or `25mm` — says **both** shapes. The schema is what
+/// the reader takes, and the reader takes both.
+///
+/// A **text** is bounded, and the schema says so: the bound is the SDK's
+/// own (`MAX_TEXT_CHARACTERS`), read here and not restated, so the schema
+/// and the reader cannot disagree. Telling the model the bound before it
+/// proposes a value is the whole difference — a refusal after the fact is
+/// a refusal too late. And a node's id is a whole number that is not
+/// negative, and the schema says so.
+fn shape_of(kind: Doc, accepts_text: bool) -> Json {
+    let mut schema = match kind.json_type() {
+        Some(kind) => json!({ "type": kind }),
+        // The raw door has no type: a value of any shape is of it.
+        None => json!({}),
+    };
+    if accepts_text && let Some(shape) = kind.json_type() {
+        schema["type"] = json!([shape, "string"]);
+    }
+    if kind == Doc::Text {
+        schema["maxLength"] = json!(crate::params::MAX_TEXT_CHARACTERS);
+    }
+    if kind == Doc::NodeRef {
+        schema["minimum"] = json!(0);
+    }
+    schema
+}
+
 /// A command's parameters, as a JSON Schema.
 ///
 /// The types come from the command's own declaration, so the schema cannot
@@ -46,33 +80,7 @@ pub fn to_json_schema(params: &[ParamDoc]) -> Json {
         // schema and the engine's refusal read the same table — so the
         // shape an agent is told and the shape the session accepts are
         // one answer.
-        let mut schema = match param.kind.json_type() {
-            Some(kind) => json!({ "type": kind }),
-            // The raw door has no type: a value of any shape is of it.
-            None => json!({}),
-        };
-        // A kind that takes a **string** as well — a length, which may be
-        // written `25` or `25mm` — says **both** shapes. The schema is
-        // what the reader takes, and the reader takes both.
-        if param.accepts_text
-            && let Some(kind) = param.kind.json_type()
-        {
-            schema["type"] = json!([kind, "string"]);
-        }
-        // A **text** is bounded, and the schema says so: the bound is
-        // the SDK's own (`MAX_TEXT_CHARACTERS`), read here and not
-        // restated, so the schema and the reader cannot disagree.
-        // Telling the model the bound before it proposes a value is
-        // the whole difference — a refusal after the fact is a
-        // refusal too late.
-        if param.kind == Doc::Text {
-            schema["maxLength"] = json!(crate::params::MAX_TEXT_CHARACTERS);
-        }
-        // A node's id is a whole number that is not negative, and the
-        // schema says so.
-        if param.kind == Doc::NodeRef {
-            schema["minimum"] = json!(0);
-        }
+        let mut schema = shape_of(param.kind, param.accepts_text);
         let description = param.help.trim();
         if !description.is_empty() {
             schema["description"] = Json::String(description.to_string());
@@ -88,12 +96,13 @@ pub fn to_json_schema(params: &[ParamDoc]) -> Json {
             schema["unit"] = Json::String(unit.to_string());
         }
         if let Some(alternative) = param.alternative {
-            // The **alternative** is the same prop written another way,
-            // so it is published with the **same type** — and not as a
-            // string whatever the prop is. A number written two ways is
-            // two numbers, and a schema that says otherwise is a schema
-            // that lies.
-            let mut other = schema.clone();
+            // The **alternative** is the same parameter written another
+            // way, and the two ways are **two kinds**: `node` is a
+            // node's id and `node_name` is a name. So the alternative is
+            // published with **its own** shape — the one its reader
+            // takes — and not with the first spelling's. A schema that
+            // says a name is a number is a schema that lies.
+            let mut other = shape_of(param.alternative_kind.unwrap_or(param.kind), false);
             other["description"] =
                 Json::String(format!("{description} (the other spelling of `{}`)", param.name));
             properties.insert(alternative.to_string(), other);

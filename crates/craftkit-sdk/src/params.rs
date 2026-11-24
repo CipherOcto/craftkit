@@ -213,18 +213,30 @@ impl<'a> Params<'a> {
             if doc.kind.accepts(value) || (doc.accepts_text && value.is_string()) {
                 continue;
             }
-            return Err(ParamError::new(
-                doc.name,
-                format!(
-                    "`{}` is declared as {} and the value is {}",
-                    doc.name,
-                    doc.kind.json_name(),
-                    json_type_name(value)
-                ),
-            ));
+            return Err(wrong_kind(doc.name, doc.kind, value));
+        }
+        // The **other spelling** is another kind, and the declaration says
+        // which one.
+        for doc in docs {
+            let (Some(alternative), Some(kind)) = (doc.alternative, doc.alternative_kind) else {
+                continue;
+            };
+            let Some(value) = self.get(alternative) else { continue };
+            if kind.accepts(value) {
+                continue;
+            }
+            return Err(wrong_kind(alternative, kind, value));
         }
         Ok(())
     }
+}
+
+/// The refusal for a value that is not of the kind it was declared as.
+fn wrong_kind(name: &str, kind: Doc, value: &Json) -> ParamError {
+    ParamError::new(
+        name,
+        format!("`{name}` is declared as {} and the value is {}", kind.json_name(), json_type_name(value)),
+    )
 }
 
 /// A type that knows how to read itself, and what it is.
