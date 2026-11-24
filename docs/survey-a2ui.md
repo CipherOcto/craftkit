@@ -268,7 +268,7 @@ comment is careful about what that means:
 
 > *"The plan itself is not forbidden: the session hands it out, and a front
 > end may read it. What it may not do is **keep** it."*
-> (`crates/craftkit-gates/src/lib.rs:329`–`:330`)
+> (`crates/craftkit-gates/src/lib.rs:330`–`:332`)
 
 That is the shape of the constraint, and it is sharper than "never expose a
 `Plan`". The plan reaches a front end as **JSON** — through the `doc.plan`
@@ -354,7 +354,7 @@ started at the registry.
   One further kind exists only in an integration test (`test.panic.kind`,
   `apps/craftkit-studio/tests/guard.rs:14`) and is not shipped.)
 - `Projection::manifest()` already publishes them: `"node kind {kind} in
-  {layer} — {label}"` (`crates/craftkit-sdk/src/ecosystem.rs:571-573`).
+  {layer} — {label}"` (`crates/craftkit-sdk/src/ecosystem.rs:735`–`:737`).
 
 **The painting seam.** `crates/craftkit-raster/src/lib.rs:5`: *"The kit has a
 **painting seam** — every kind of node knows how it is painted, and the core
@@ -484,7 +484,7 @@ kinds is half the vocabulary — and the kinds are the half a renderer needs
 preference.
 
 *In the SDK* (L2), beside `Projection::schema`
-(`crates/craftkit-sdk/src/ecosystem.rs:558`–`:566`). Layering-clean —
+(`crates/craftkit-sdk/src/ecosystem.rs:559`–`:566`). Layering-clean —
 `craftkit-mcp` and `craftkit-control` are L3
 (`crates/craftkit-gates/src/lib.rs:224`–`:225`) and may depend on L2 — and best
 for "one source", since the projection is already where the views are made.
@@ -1121,7 +1121,7 @@ O1–O2, O5 and O8 are worth doing at all:
   product that wants an agent to drive it), O1, O2, O5 and O8 are the
   package.
 - **If the target is a person at a window**, the window already builds a form
-  from `spec.params` (`apps/craftkit-window/src/lib.rs:219-286`) and the agent
+  from `spec.params` (`apps/craftkit-window/src/lib.rs:237`–`:262`) and the agent
   doors already work; most of this document is unnecessary.
 - **If the target is a downstream scaffold**, the right output of this
   exercise is a **recipe** (`docs/recipes/`) describing the pattern, and no
