@@ -81,7 +81,11 @@ pub struct Answer {
     /// The ids the door lists, in the order it lists them.
     pub listed: Vec<String>,
     /// What the door said when it ran [`COMMAND`].
-    pub ran: String,
+    ///
+    /// The [`Err`] is the door **refusing** the command: five doors that
+    /// all refuse the same command agree about nothing, and a refusal is
+    /// not a parity.
+    pub ran: Result<String, String>,
     /// What the door said when it was asked for [`UNKNOWN`].
     pub refused: String,
 }
@@ -118,7 +122,46 @@ pub fn compare() -> Report {
         }
     }
     differences.extend(the_differences_among_them(&answers));
+    differences.extend(the_differences_in_what_they_said(&answers));
     Report { answers, differences }
+}
+
+/// The differences in what the doors said **on their own**.
+///
+/// A door that said nothing has not agreed with anybody: the comparison
+/// of two empty answers is a comparison of nothing, and the harness has
+/// to say so rather than pass.
+///
+/// And a door that **refused** the command has not run it: five doors
+/// that all refuse the same command agree about nothing.
+fn the_differences_in_what_they_said(answers: &[Answer]) -> Vec<String> {
+    let mut differences = Vec::new();
+    for answer in answers {
+        if answer.listed.is_empty() {
+            differences.push(format!("{} listed nothing at all", answer.door));
+        }
+        match &answer.ran {
+            Ok(message) if message.is_empty() => {
+                differences.push(format!("{} said nothing when it ran {COMMAND}", answer.door));
+            }
+            Ok(_) => {}
+            Err(message) => {
+                differences.push(format!("{} did not run {COMMAND}: {message}", answer.door));
+            }
+        }
+        if answer.refused.is_empty() {
+            differences.push(format!("{} said nothing when it refused {UNKNOWN}", answer.door));
+        }
+    }
+    differences
+}
+
+/// What a door said, or that it refused.
+fn said(ran: &Result<String, String>) -> String {
+    match ran {
+        Ok(message) => message.clone(),
+        Err(message) => format!("refused: {message}"),
+    }
 }
 
 /// The differences between the doors, one line each.
@@ -145,11 +188,24 @@ fn the_differences_among_them(answers: &[Answer]) -> Vec<String> {
                 if extra.is_empty() { "nothing else".to_string() } else { extra.join(", ") },
             ));
         }
-        if first.ran != answer.ran {
-            differences.push(format!(
-                "{} and {} answered differently to {COMMAND}: `{}` and `{}`",
-                first.door, answer.door, first.ran, answer.ran
-            ));
+        match (&first.ran, &answer.ran) {
+            (Ok(mine), Ok(theirs)) => {
+                if mine != theirs {
+                    differences.push(format!(
+                        "{} and {} answered differently to {COMMAND}: `{}` and `{}`",
+                        first.door, answer.door, mine, theirs
+                    ));
+                }
+            }
+            _ => {
+                differences.push(format!(
+                    "{} and {} did not both run {COMMAND}: `{}` and `{}`",
+                    first.door,
+                    answer.door,
+                    said(&first.ran),
+                    said(&answer.ran)
+                ));
+            }
         }
         // The **words** of a refusal are the door's own: the terminal
         // door says "refused", the bridge says "tool" and the agent
@@ -173,7 +229,7 @@ fn the_differences_among_them(answers: &[Answer]) -> Vec<String> {
 fn terminal() -> Result<Answer, String> {
     let mut repl = craftkit_repl::Repl::new(ecosystem()?);
     let listed = lines(&repl.run("commands"));
-    let ran = first_line_of(&repl.run(&format!("{COMMAND} {ARGUMENTS}")));
+    let ran = ran_of(first_line_of(&repl.run(&format!("{COMMAND} {ARGUMENTS}"))));
     let refused = without_the_doors_own_prefix(&first_line_of(&repl.run(UNKNOWN)));
     Ok(Answer { door: "the terminal door".to_string(), listed, ran, refused })
 }
@@ -184,8 +240,8 @@ fn window() -> Result<Answer, String> {
         craftkit_window::Window::new().map_err(|error| format!("the window could not be built: {error}"))?;
     let listed: Vec<String> = window.commands().iter().map(|command| command.id.to_string()).collect();
     let ran = match window.run_id(COMMAND, from_str(ARGUMENTS).unwrap_or(Json::Null)) {
-        Ok(outcome) => outcome.message,
-        Err(error) => error.to_string(),
+        Ok(outcome) => Ok(outcome.message),
+        Err(error) => Err(error.to_string()),
     };
     let refused = match window.run_id(UNKNOWN, json!({})) {
         Ok(outcome) => outcome.message,
@@ -199,7 +255,7 @@ fn browser() -> Result<Answer, String> {
     let mut door = craftkit_wasm::Door::new()
         .map_err(|error| format!("the browser door could not be built: {error}"))?;
     let listed: Vec<String> = door.run("commands").lines().map(|line| line.to_string()).collect();
-    let ran = first_line(&door.run(&format!("{COMMAND} {ARGUMENTS}")));
+    let ran = ran_of(first_line(&door.run(&format!("{COMMAND} {ARGUMENTS}"))));
     let refused = without_the_doors_own_prefix(&first_line(&door.run(UNKNOWN)));
     Ok(Answer { door: "the browser door".to_string(), listed, ran, refused })
 }
@@ -208,10 +264,7 @@ fn browser() -> Result<Answer, String> {
 fn agent() -> Result<Answer, String> {
     let mut server = craftkit_mcp::Server::new(ecosystem()?.session());
     let listed: Vec<String> = server.tools().iter().map(|tool| tool.command.clone()).collect();
-    let ran = match call(&mut server, COMMAND, from_str(ARGUMENTS).unwrap_or(Json::Null)) {
-        Ok(text) => text,
-        Err(message) => message,
-    };
+    let ran = call(&mut server, COMMAND, from_str(ARGUMENTS).unwrap_or(Json::Null));
     let refused = match call(&mut server, UNKNOWN, json!({})) {
         Ok(text) => text,
         Err(message) => message,
@@ -231,12 +284,8 @@ fn bridge() -> Result<Answer, String> {
         })
         .unwrap_or_default();
     let arguments: Json = from_str(ARGUMENTS).unwrap_or(Json::Null);
-    let ran = match answer_of(
-        &bridge.handle(&request("tools/call", json!({ "name": COMMAND, "arguments": arguments }))),
-    ) {
-        Ok(text) => text,
-        Err(message) => message,
-    };
+    let ran =
+        answer_of(&bridge.handle(&request("tools/call", json!({ "name": COMMAND, "arguments": arguments }))));
     let refused = match answer_of(
         &bridge.handle(&request("tools/call", json!({ "name": UNKNOWN, "arguments": {} }))),
     ) {
@@ -296,6 +345,18 @@ fn lines(reply: &craftkit_repl::Reply) -> Vec<String> {
     }
 }
 
+/// The answer of a door that speaks in **lines**.
+///
+/// The terminal door says "refused: there is no command `x`" when the
+/// command did not run, and the browser door is the terminal door in a
+/// page — so the word is how the two say that nothing ran.
+fn ran_of(message: String) -> Result<String, String> {
+    match message.strip_prefix("refused: ") {
+        Some(refused) => Err(refused.to_string()),
+        None => Ok(message),
+    }
+}
+
 /// The first line of the terminal door's answer.
 fn first_line_of(reply: &craftkit_repl::Reply) -> String {
     match reply {
@@ -338,17 +399,46 @@ mod tests {
         let first = Answer {
             door: "the first door".to_string(),
             listed: vec!["one".to_string()],
-            ran: "the same".to_string(),
+            ran: Ok("the same".to_string()),
             refused: format!("there is no command `{UNKNOWN}`"),
         };
         let second = Answer {
             door: "the second door".to_string(),
             listed: vec!["two".to_string()],
-            ran: "something else".to_string(),
+            ran: Ok("something else".to_string()),
             refused: "refused".to_string(),
         };
         let differences = the_differences_among_them(&[first, second]);
         assert_eq!(differences.len(), 3, "{differences:?}");
+    }
+
+    /// A door that said **nothing** is a difference.
+    ///
+    /// Two doors that both list nothing agree about nothing, and a
+    /// harness that says they agree is a harness that passes.
+    #[test]
+    fn a_door_that_said_nothing_is_a_difference() {
+        let answer = Answer {
+            door: "a door".to_string(),
+            listed: Vec::new(),
+            ran: Ok(String::new()),
+            refused: String::new(),
+        };
+        let differences = the_differences_in_what_they_said(&[answer]);
+        assert_eq!(differences.len(), 3, "{differences:?}");
+    }
+
+    /// A door that **refused** the command is a difference.
+    #[test]
+    fn a_door_that_refused_the_command_is_a_difference() {
+        let answer = Answer {
+            door: "a door".to_string(),
+            listed: vec!["one".to_string()],
+            ran: Err("there is no command `node.add`".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_in_what_they_said(&[answer]);
+        assert_eq!(differences.len(), 1, "{differences:?}");
     }
 
     /// Two doors that answer the same are **not** a difference.
@@ -357,7 +447,7 @@ mod tests {
         let answer = || Answer {
             door: "a door".to_string(),
             listed: vec!["one".to_string(), "two".to_string()],
-            ran: "the same".to_string(),
+            ran: Ok("the same".to_string()),
             refused: format!("there is no command `{UNKNOWN}`"),
         };
         let differences = the_differences_among_them(&[answer(), answer()]);

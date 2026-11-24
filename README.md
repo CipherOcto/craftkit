@@ -71503,9 +71503,12 @@ that the six doors **agree**.
 - **They agree.** The same commands, the same message for the same
   command, and every door names the command it refused.
 - **The harness bites.** Two doors that answer differently are a
-  difference; a door that could not be built is a difference too. The
-  program **never crashes** and never guesses: it reports, and a
-  difference is a question for a person.
+  difference; a door that could not be built is a difference too; a door
+  that **listed nothing** or **said nothing** is a difference; and a door
+  that **refused** the command is a difference, because five doors that
+  all refuse the same command agree about nothing. The program **never
+  crashes** and never guesses: it reports, and a difference is a
+  question for a person.
 - **The a2ui door is not in it**, and that is not an oversight: it speaks
   a2ui's own vocabulary — a catalogue of a2ui's components and not a
   list of the kit's commands — so there is nothing to compare. Its own
@@ -71522,12 +71525,14 @@ that the six doors **agree**.
 
 ### What it cost
 
-- **One application**, **four edits** — the tree's own layer table, the
-  outer gate's table, the architecture document and this file — and **one
-  library** of about three hundred lines with **seven tests**: five about
-  the doors and two about the comparison itself. The workspace's manifest
-  is a glob, so a new application under `apps/` is a member without a
-  line of edit: the survey's three edits are four.
+- **One application** and **eight files beside it**: the tree's own layer
+  table, the outer gate's table, the architecture document, this file,
+  the KNOWN-GAPS, the matrix, the survey and the lock file. The
+  workspace's manifest is a glob, so a new application under `apps/` is a
+  member without a line of edit — the survey's "three edits" are four
+  tables and a document.
+- **Nine tests**: five about the doors and four about the comparison
+  itself, so the harness is proved to bite before it is proved to pass.
 
 ### What it does not settle
 
@@ -71537,3 +71542,9 @@ that the six doors **agree**.
 - **The a2ui door is compared on its own terms**, by its own tests.
 - **Five doors are compared, and the sixth is not** — the a2ui door — so
   "the doors agree" is a claim about five of the six.
+- **The browser door is the terminal door's own code**, so the two
+  agreeing is the truth and not a discovery: the page runs the prompt.
+- **The bridge prunes its list and the others do not**, so the lists are
+  equal only because every command in the tree has the `command`
+  capability. A command with another capability is the day the two
+  lists part company, and the harness will say so.

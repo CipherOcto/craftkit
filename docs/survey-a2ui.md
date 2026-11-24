@@ -633,7 +633,9 @@ names the test that proves it** — and the outer gate checks that a cell
 names a test and that the test is there (README §1122, and §1123 for the
 repair). A named test does not drift when the code moves, which a line
 does. What is not checked is the **cells themselves**: the harness that
-drives all six doors at once is still a project.
+drives the doors and compares them with each other is built (README
+§1128), and it compares the doors with each other and not with the
+cells.
 
 **Why it matters.** The tree's own rule says a front end reads the engine's
 state and acts through the registry. A matrix is how that rule stops being a
@@ -1173,4 +1175,7 @@ evaluator's registry, and the window calls the evaluator and keeps what it
 computed. Those are defects, and they wait for nobody.
 
 **Door *parity* is a separate matter** — that is O4, and it waits for a
-product question like the rest of the adjacent six.
+product question like the rest of the adjacent six. (The first cut of it
+is done: the matrix is written and kept by a rule in the outer gate, and
+the five doors that speak the kit's vocabulary are compared with each
+other by a program — README §1122, §1123 and §1128.)

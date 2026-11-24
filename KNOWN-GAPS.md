@@ -46,9 +46,11 @@ itself, and it has four honest limits:
 - **It reads text, not cargo.** It parses the manifests and the crate roots.
   That is what makes it fast and hermetic, and what makes a manifest written
   in a form the reader does not know read as *no dependencies at all*.
-- **The table of layers is written by hand.** A new crate is a two-step change:
-  the crate, and the table. A table generated from the manifests cannot catch a
-  manifest that is wrong.
+- **The table of layers is written by hand.** A new crate is a change to the
+  crate **and** to the table, and the outer gate keeps a second table that has
+  to agree with the first: the tree's own (`crates/craftkit-gates`), the outer
+  one (`xtask/src/layers.rs`) and the architecture document. A table generated
+  from the manifests cannot catch a manifest that is wrong.
 - **It does not hold the list of crates that may hold `unsafe`.** That list is
   in `crates/craftkit-alloc/tests/gate.rs`, which reads the whole workspace and
   says so.
@@ -75,7 +77,7 @@ itself, and it has four honest limits:
 
 ---
 
-## 4. The doors are classified; the parity matrix is kept by the gate
+## 4. The doors are classified; the matrix is kept by the gate, and the doors are compared by a program
 
 The tree has **six doors**, and the rule "a front end is thin" now reaches
 all six (README §1116): the terminal door, the window, the browser door,
@@ -102,10 +104,10 @@ it does not check that a named test is *about* the cell it is in.
 three questions and says where they differ: the same commands listed, the
 same message for the same command, and every door naming the command it
 refused. It is the harness the survey asked for — a crate of its own and
-**four** edits, not three: the tree's own layer table, the outer gate's
-table, the architecture document and the README. The **a2ui door** is not
-in it, because it speaks a2ui's own vocabulary and there is nothing to
-compare.
+**four** tables to change, not three: the tree's own layer table, the
+outer gate's table, the architecture document and the README. The
+**a2ui door** is not in it, because it speaks a2ui's own vocabulary and
+there is nothing to compare.
 
 What is left is a **cell** read by a person, and that is **not** a defect:
 nothing in the tree is broken by a table that drifts, and the cells that
