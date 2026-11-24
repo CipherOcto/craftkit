@@ -75,6 +75,12 @@ itself, and it has four honest limits:
 - **The deny attribute is a lint, not a proof.** `forbid(unsafe_code)` holds
   the code; a `no_mangle` that the platform looks up by name is the one
   exception, and it is named, in one list, with one marked place each.
+- **The digest checks the README's last section.** The house's four
+  headings came with §62, and every section from §115 on has all four of
+  them; the fifteen sections before that are the old tree's, and the
+  digest does not go back for them. A section written in the middle of
+  the README would not be checked either — and sections are written at
+  the end.
 
 ---
 
