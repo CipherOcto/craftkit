@@ -184,8 +184,11 @@ These are the README's own honest notes, and they are still true of the tree:
 - **The bridge is a proof, not a product.** It speaks JSON-RPC over stdio
   because that is the cheapest way to show a second front end over the same
   registry.
-- **The plan is a value, not a drawing.** Nothing renders it, and nothing
-  checks it against a rule.
+- **The plan is a value, and the window draws it.** The window shows the
+  plan's items — the node, the kind and the value — and the plan itself
+  is the **command's** work (`doc.plan`) and not the door's. What nothing
+  does is **check** a plan against a rule: the items are what the
+  command said, and there is no rule that says what a plan must hold.
 - **The third door does not exist on the web.** A subprocess plugin needs a
   process, and `wasm32-unknown-unknown` has none.
 - **The document model is still small.** The *seam* is the thing being
@@ -227,6 +230,11 @@ comes to the tree cold:
 - **"The front ends are not built."** The terminal door, the agent door
   (`apps/craftkit-mcp-server`), the bridge, the browser door and the window
   are all built, and all of them reach the same registry.
+- **"The plan is a value, not a drawing."** The **window draws it** now:
+  the plan's items — the node, the kind and the value — are on the
+  window's own panel, and the plan is still the command's work
+  (`doc.plan`) and not the door's. What nothing does is **check** a plan
+  against a rule (§5).
 
 When the README and the code disagree, the **code** is right, and this file
 records the difference rather than the README's history.
