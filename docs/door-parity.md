@@ -43,7 +43,7 @@ never opens the door behind it.
 | the window | ✓ by area, and the panels | — a **form** per command | ✓ | ✓ as a command | ✓ as a command | — the window's own log | ✓ | ✓ |
 | the browser door | ✓ the terminal door's | — | ✓ | ✓ as a command | ✓ as a command | the size only | — | ✓ |
 | the agent door | ✓ `tools/list`, one tool per command | ✓ the **JSON Schema** | ✓ `tools/call` | ✓ as a command | ✓ as a command | ✓ as a command | — | ✓ |
-| the bridge | ✓ `tools/list`, from the projection | a **descriptor**, not a schema | ✓ `tools/call` | ✓ the `plan` method | ✓ as a command | ✓ the `journal` method | — | ✓ |
+| the bridge | ✓ `tools/list`, from the live session | a **descriptor**, not a schema | ✓ `tools/call`, and only what it lists | ✓ the `plan` method | ✓ as a command | ✓ the `journal` method | — | ✓ |
 | the a2ui door | a2ui's **catalogue** | a2ui's own | ✓ a renderer function | — | — | — | the **surfaces** | ✓ |
 
 ## How each cell was checked
@@ -83,13 +83,15 @@ every command is a tool.
 **The bridge** — `apps/craftkit-bridge/src/lib.rs`.
 `tools` is read from the **session** the tools run in, and every tool
 carries the SDK's **descriptor** (`:189`); `plan` asks the `doc.plan`
-command (`:246`); `journal` answers with the entries (`:258`); `resources`
-is the kinds, the formats and the **manifest** (`:228`); `menu` is the
-menu tree (`:266`). Its protocol is **its own**, so its tools carry
-`parameters` and not `inputSchema`.
+command (`:276`); `journal` answers with the entries (`:288`); `resources`
+is the kinds, the formats and the **manifest**, whose commands are the
+session's (`:258`); `menu` is the menu tree of the **same** registry
+(`:297`); and `call` refuses a command the door did not list (`:214`,
+`:239`). Its protocol is **its own**, so its tools carry `parameters` and
+not `inputSchema`.
 
 **The a2ui door** — `apps/craftkit-a2ui-server/src/lib.rs`.
-The methods are a2ui's own (`:458`–`:464`): `createSurface`,
+The methods are a2ui's own (`:459`–`:465`): `createSurface`,
 `updateComponents`, `updateDataModel`, `deleteSurface` and
 `callRendererFunction`, with `initialize` for the transport's handshake.
 Its vocabulary is **a2ui's**, not the kit's: it publishes a catalogue of
@@ -104,14 +106,18 @@ a2ui's components, and a surface is a tree of those.
 - **The plan is a command, and the undo is a command.** Every door that
   has a plan asks `doc.plan`, and no door opens the history's own door.
   That is the rule "everything is a command" reaching the surface.
-- **Every door lists what it can run.** The list is read from the
+- **Every door lists what the session has.** The list is read from the
   session the commands run in, so a command that joins the session while
   the program runs is listed with the rest — and a door never offers a
-  command it cannot run.
+  command the session does not have. A listed command can still be
+  **refused**: a command whose `enabled` predicate is false right now
+  is refused when it is run, and the predicate is over the session's
+  state, so the state can change between the list and the call.
 - **Only the agent door publishes a JSON Schema**, because only an agent
   reads one; a person at a window gets a **form** built from the same
-  parameters. The bridge publishes a **descriptor** — the projection's own
-  shape — and the SDK says the two are not re-expressions of one another.
+  parameters. The bridge publishes a **descriptor** — the SDK's own shape
+  for one command — and the SDK says the two are not re-expressions of
+  one another.
 - **The tree is the window's.** The window shows the nodes; the other
   doors show the plan or the commands, and a program that wants the nodes
   asks for them.

@@ -111,6 +111,21 @@ These are the README's own honest notes, and they are still true of the tree:
   SDK writes the fields and the reader (§1120), and what is left is the
   leak: a run-time command's names are `&'static str` and a name that
   arrives at run time cannot be static, so each one is leaked once.
+- **A run-time command's declaration is not checked against its body.** A
+  compiled command's parameters are the struct's fields, so the compiler
+  writes the reader and the declaration from the same thing. A run-time
+  command's declaration is written by hand, so the **kind** and the
+  **required** flag it says can disagree with what the body reads: a
+  command can declare a text and read a number, and nothing refuses it.
+  The value is still read by the SDK's reader and refused by the SDK's
+  rules; what is not checked is the *declaration's* truth.
+- **`mutates` and `undoable` are two flags, and the derive refuses only
+  one combination.** A command that is undoable and does **not** change
+  the document is refused by the macro — there is nothing to undo. A
+  command that changes the document and says nothing about undoing is
+  **allowed**: it changes the document and leaves no history, and the
+  session judges it by the document and not by the flags. The two flags
+  are consistent, and a run-time command declares both the same way.
 - **The `Either` is a compromise.** One parameter with two spellings of
   different kinds cannot be a single typed value, so the command is handed
   whichever half arrived and decides what to do with it.
@@ -201,9 +216,9 @@ so that it is not rediscovered as a surprise:
   panel does when the registry moves under it. What is closed is the
   **sharpest case**: a session can gain a command while it runs, and
   every door reads its list from the session it runs the commands in, so
-  a door never offers a command it cannot run (§1121). What is left is
-  the *panel's* side: a drawing that was made before the command
-  arrived.
+  a door never offers a command the session does not have (§1121). What
+  is left is the *panel's* side: a drawing that was made before the
+  command arrived.
 - **O7 — a path resolves to a plain value, inside the SDK.** The a2ui
   layer resolves its own paths and the door gets plain values, and the
   gate refuses a front end that names the plan — so the *constraint*

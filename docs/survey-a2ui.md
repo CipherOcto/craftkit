@@ -89,8 +89,8 @@ Four mechanisms describe the same commands today:
 | mechanism | built from | params? | linked-in plugin commands? | run-time (subprocess) commands? |
 |---|---|---|---|---|
 | `xtask` index (`xtask/src/index.rs:129` `build`, `:172`, `:294`, `:468`; the record at `:32-58`) | **source text** — `commands!` tables, `#[command(…)]` attributes and macros parsed out of the files | no | **yes** — its scope *is* the plugin crates (`battery_names`, `xtask/src/index.rs:89-104`), so `hello.greet` and every other linked-in plugin command is in it | **no** — it reads source text, and a run-time command is written by hand |
-| MCP `tools/list` (`crates/craftkit-mcp/src/lib.rs:303-305`; the tool JSON at `:115-123`, the schema at `:439-488`) | the registry, **taken once** at `Server::new` (`:142-154`) | yes (JSON Schema) | yes | **no** — the list is fixed at startup, and `tools/call` refuses anything outside it (`:323-325`) |
-| bridge `tools/list` (`apps/craftkit-bridge/src/lib.rs:183-201`) | the **live** ecosystem projection | yes (craftkit's descriptor) | yes | **no** — it never loads one; *if* one were loaded later it would be **listed and then refused**, because the bridge calls a **snapshot** session (`:122`) |
+| MCP `tools/list` (`crates/craftkit-mcp/src/lib.rs:318-320`; the tool JSON at `:160-176`, the schema at `:455-460`) | the registry, **read when it is asked for** (`crates/craftkit-mcp/src/lib.rs:160`) | yes (JSON Schema) | yes | **yes** — a command that joins the session while the program runs is a tool from then on, and `tools/call` refuses anything outside the list (`crates/craftkit-mcp/src/lib.rs:338-340`) |
+| bridge `tools/list` (`apps/craftkit-bridge/src/lib.rs:189-212`) | the **live** session registry, and the SDK's descriptor | yes (craftkit's descriptor) | yes | **yes** — a command that joins the session while the program runs is a tool, and a command the door did not list is refused (`apps/craftkit-bridge/src/lib.rs:239-246`) |
 | plugin catalogue (`crates/craftkit-sdk/src/plugin.rs:242-262`; the parameter descriptor at `:130-138`) | the plugin process | yes | — it *is* a plugin's own declaration | yes |
 
 And the doors that show **no parameters at all**: the repl's `help`
@@ -104,13 +104,11 @@ It **does** see the linked-in plugins' commands — its scope *is* the plugin
 crates (`battery_names`, `xtask/src/index.rs:89-104`), parsed out of their
 `#[command(…)]` attributes.
 
-**The MCP door misses them too, for a different reason.** It builds its tool
-list **once**, at `Server::new` (`crates/craftkit-mcp/src/lib.rs:142-154`), and
-`tools/call` refuses anything outside that list (`:323-325`). Both doors take
-`ecosystem.session()`, which **clones** the registries
-(`crates/craftkit-sdk/src/ecosystem.rs:322-330`), while a run-time command is
-registered into the **ecosystem's** registry
-(`apps/craftkit-studio/src/lib.rs:62-68`).
+**The MCP door missed them too, for a different reason.** It built its tool
+list **once**, at `Server::new`, and `tools/call` refused anything outside
+that list. Both doors took `ecosystem.session()`, which **clones** the
+registries (`crates/craftkit-sdk/src/ecosystem.rs:331`), while a run-time
+command was registered into the **ecosystem's** registry.
 
 Neither agent app ever loads a subprocess plugin — both build their ecosystem
 from the inventory (`apps/craftkit-mcp-server/src/main.rs:45`,
@@ -118,6 +116,13 @@ from the inventory (`apps/craftkit-mcp-server/src/main.rs:45`,
 does not currently reach. But the shape is there, and it is where O6 bites:
 **if a door loaded a plugin, the MCP door would neither list the command nor
 run it, and the bridge would list it and then refuse it.**
+
+**Since this was written.** Both agent doors now read the **live** registry:
+the MCP server's tools are read when they are asked for, and the bridge's are
+read from the session it runs the commands in (README §1121). A command that
+joins a session while the program runs is a tool in both, and the bridge
+refuses a command it did not list — so the list an agent read is the list it
+can call.
 
 ### 3.2 Six doors, and the gate knows about one
 
@@ -513,9 +518,9 @@ test asserting that **both doors' `tools/list` are generated from the one
 `Projection::catalog()`**, rather than each built by hand. Not that they
 carry the same *set*: they do not today, and should not. The MCP server
 builds its tools from `session.registry().all()` — commands only
-(`crates/craftkit-mcp/src/lib.rs:142-154`) — while the bridge builds its list
-from `projection.menu(&["command", "effect", "tool"])` — commands, effects and
-tools (`apps/craftkit-bridge/src/lib.rs:183-201`). O1 makes the **shape**
+(`crates/craftkit-mcp/src/lib.rs:160-176`) — while the bridge builds its list
+from the session's registry pruned to `command`, `effect` and `tool`
+(`apps/craftkit-bridge/src/lib.rs:189-212`). O1 makes the **shape**
 uniform; O2 then prunes each door's contents **on purpose**, and the parity
 that must hold is behavioural, not enumerative (O4.2). (Adding a method to the
 SDK also means `cargo xtask ci`, because the SDK is depended on by
@@ -679,6 +684,11 @@ that both **sees and can run** a command registered after start-up; the
 bridge's live listing already sees one, but refuses it. That is the whole of
 O6's argument, and it does not depend on "disappeared" ever being possible.
 
+**Since this was written.** The two agent doors read the **live** registry:
+a command that joins a session while the program runs is a tool in both, and
+the bridge refuses a command it did not list (README §1121). The sharpest
+case is closed; the *panel's* side is not.
+
 **The direction that exists.** `Registry<T>` is grow-only, so the only
 direction that can happen today is **"appeared"**. There is no "disappeared":
 a command cannot be removed from the registry, so the reconciliation case
@@ -699,8 +709,9 @@ and a reconciliation step**, which is a smaller and more honest claim.
 **The sharpest case is closed** (README §1121). A session can gain a
 command while it runs (`Session::register`), and every door reads its
 list from the session it runs the commands in — so the bridge no longer
-lists a command it then refuses, and the agent door's list is read when
-it is asked for. What is left is the *panel's* side: a drawing made
+lists a command it then refuses, the agent door's list is read when
+it is asked for, and the bridge's manifest names the session's commands
+too. What is left is the *panel's* side: a drawing made
 before the command arrived, and the **version counter** that says so.
 
 ### O7 · Paths that resolve to plain values, inside the SDK
@@ -1054,7 +1065,7 @@ not a front end.
 | 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it — **done** (README §1116) |
 | 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table checked by hand | no | the table exists, and every row has been checked by hand — **done** ([`door-parity.md`](door-parity.md)): the six doors side by side, cell by cell, with the line each cell was read in |
 | 7 | **O3** recipe **claim** check | **small**, but it is a judgement, not a link — the link half is already done by `cargo xtask lists` (`xtask/src/lists.rs:55`) | no | a named claim in a recipe is checked against the tree, and a broken claim is reported — **done** (README §1119): the battery list is checked by the tree's own gate, on a stated line |
-| 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it — **the sharp case is closed** (README §1121): a session can gain a command while it runs, and every door lists what it can run; what is left is the panel's own reconciliation |
+| 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it — **the sharp case is closed** (README §1121): a session can gain a command while it runs, and every door lists what the session has; what is left is the panel's own reconciliation |
 | 9 | **O7** paths resolving inside the SDK | **large**, and architecture-defining | no | a path resolves to a plain JSON value inside the SDK, and no front end names a `Plan` — **its constraint holds**: the a2ui layer resolves the paths and the door gets plain values, and the gate refuses a front end that names the plan (§1115); the general API in the SDK is not built |
 | 10 | **O11** the a2ui compat layer — **scope superseded by [`a2ui-compat-layer.md`](a2ui-compat-layer.md)** | **medium** — three crates (L3, L4, an app), eleven components, one new derive macro, **the SVG path-data reader promoted to L2** (and it learns arcs), and **changes to the SDK, to the derive crate and to the vector plugin**; **no** change to the raster or the window | **yes** | yes — an a2ui-speaking agent can drive craftkit |
 | — | **O9** evals | **blocked on a posture decision** — the tree has no outbound network and no secret-management story; that is a decision memo, not an opportunity | measures the claim | — |

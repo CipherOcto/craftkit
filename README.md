@@ -4566,7 +4566,7 @@ so.
 | **the agent is told what changes** | **built.** The vocabulary and the descriptor carry the command's own promise, and the agent door's hint is read and not guessed (§1118) | §1118 |
 | **the recipe says what the tree does** | **built.** The batteries the tree has are named in the recipe, and the gate says so when a name drifts (§1119) | §1119 |
 | **a command made while the program runs is declared** | **built.** The SDK writes the fields and the reader, and the bound on a run-time parameter is the SDK's (§1120) | §1120 |
-| **every door lists what it can run** | **built.** A session can gain a command while it runs, and every door reads its list from the session it runs the commands in (§1121) | §1121 |
+| **every door lists what the session has** | **built.** A session can gain a command while it runs, and every door reads its list from the session it runs the commands in (§1121) | §1121 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71042,6 +71042,15 @@ from, so it reads its own parameter."* Both halves of that are closed.
   remembered.
 - **The studio's run-time command is a declaration.** It was sixteen
   fields and a hand-rolled reader; it is five lines and a typed read.
+- **The refusal names the parameter.** A value that is the wrong shape
+  is refused by the SDK's reader, and the refusal says **which**
+  parameter was wrong: `` `text`: expected a string ``. A refusal that
+  does not name the parameter is a refusal the caller has to guess
+  about.
+- **The studio's command trims.** `"  hi  "` says `"hi"`, and a text
+  that is only whitespace is refused: there was no text. The trim is
+  the command's own business, and it is stated here because it is
+  visible — the same text does not come back.
 
 ### What the port found
 
@@ -71069,12 +71078,12 @@ from, so it reads its own parameter."* Both halves of that are closed.
   struct, and a run-time command has no struct; the declaration is the
   next best thing and not the same thing.
 
-## 1121. Every door lists what it can run
+## 1121. Every door lists what the session has
 
-A door that offers a command it cannot run is a door that lies, and a
-door that hides a command it can run is a door that is quiet. The
-registry is open — a command can join a session while the program runs
-— and the doors were reading a **snapshot**.
+A door that offers a command it does not have is a door that lies, and a
+door that hides a command it has is a door that is quiet. The registry
+is open — a command can join a session while the program runs — and the
+doors were reading a **snapshot**.
 
 ### What was built
 
@@ -71092,6 +71101,24 @@ registry is open — a command can join a session while the program runs
   the session, and the two were two answers to "which commands are
   there"; the ecosystem is what the session was made from, and the door
   keeps the one it can run.
+- **The menu is the same view of the same registry.** The SDK's menu is
+  a view of a **registry** and not of an ecosystem, so a door's menu and
+  a door's tool list come from the same registry — the **studio's** menu
+  is the session's, and not the ecosystem's.
+- **The bridge's manifest names the session's commands.** The manifest
+  is what an agent is told, and a command that joined the session while
+  the program runs is in it — the manifest and the tool list are one
+  list.
+- **The bridge runs only what it lists.** A command that the door did
+  not offer is refused, so the list an agent read is the list it can
+  call.
+- **A command joins a session only in a layer that is linked in.** The
+  session knows the ecosystem's layers, and a command in a layer that
+  is not there is refused — the same check the ecosystem makes, and the
+  same reason.
+- **A refusal names the parameter.** A value that is the wrong shape is
+  refused by the SDK's reader, and the refusal says **which** parameter
+  was wrong.
 
 ### What the port found
 
@@ -71101,6 +71128,11 @@ registry is open — a command can join a session while the program runs
 - **A snapshot is a lie with a timestamp.** Every door read its list
   when it was built, and a registry that is open means a list that is
   out of date the moment it is written.
+- **Two lists that disagreed were not the same list.** The bridge's
+  tools and its manifest were read from two different registries, and
+  the studio's menu came from the ecosystem while the studio ran in
+  the session: three views of "what can run", and no two of them
+  agreed.
 
 ### What it cost
 
@@ -71116,3 +71148,9 @@ registry is open — a command can join a session while the program runs
 - **The list changed shape once.** The bridge's tools are the session's
   commands in the registry's order and not the menu's order, and the
   agent door's tools are read when they are asked for.
+- **A listed command can still be refused.** A command whose
+  `enabled` predicate says it is not available right now — because
+  there is nothing to mute, or nothing selected — is **listed** and
+  **refused when it is run**. The predicate is over the session's
+  state, so the state can change between the list and the call; a door
+  that hid such a command would hide it forever.
