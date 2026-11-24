@@ -160,7 +160,8 @@ These are the README's own honest notes, and they are still true of the tree:
 - **A test file that is a copy of another is caught; a copy that differs
   by a byte is not.** The rule compares the bytes, and an empty test file
   is not caught either — it carries no test, so a copy of one is
-  nothing (§1130).
+  nothing (§1130). The rule reads the crates and the **xtask**, and not
+  anything else.
 - **A session built by hand is not filtered by layer.** `Session::register`
   refuses a command whose layer is not linked in, and every door builds its
   session with the ecosystem's layers — but a session made from a registry

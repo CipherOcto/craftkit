@@ -583,13 +583,18 @@ pub fn check(root: &Path) -> Vec<Finding> {
 /// ways that happens, and both are visible in the tree as text.
 ///
 /// - **A file in a directory under `tests/`.** Cargo compiles the files
-///   that are **directly** under a crate's `tests/`, and the one file in
-///   a directory it compiles is that directory's `main.rs`. A file in
-///   `tests/somewhere/thing.rs` is a file the tree never runs, and it is
-///   a file nobody notices.
+///   that are **directly** under a crate's `tests/`, and the `main.rs` of
+///   a directory that is directly under it. A file in
+///   `tests/somewhere/else/thing.rs` is a file the tree never runs, and
+///   it is a file nobody notices.
 /// - **A copy of a test.** Two test files with the same bytes are one
 ///   test and one copy — and the copy is either run twice, for nothing,
 ///   or not at all.
+///
+/// The rule knows the two ways cargo compiles a file of its own accord:
+/// the `main.rs` of a directory under `tests/`, and a `[[test]]` a
+/// manifest declares with a `path`. A file that is one of those is a
+/// test, and the rule leaves it alone.
 ///
 /// The rule is about the **tests directory**, and not about the source:
 /// a module under `src/` that is not used is the compiler's business,
@@ -597,8 +602,11 @@ pub fn check(root: &Path) -> Vec<Finding> {
 fn every_test_file_is_a_test(root: &Path, findings: &mut Vec<Finding>) {
     // Every test file the tree has, and the bytes it holds.
     let mut seen: Vec<(PathBuf, Vec<u8>)> = Vec::new();
-    for crate_ in crates(root) {
-        let tests = crate_.dir.join("tests");
+    for (name, dir) in test_crates(root) {
+        // The targets the manifest declares: a manifest may name a test
+        // of its own, and that file is a test wherever it is.
+        let declared = declared_test_targets(&dir);
+        let tests = dir.join("tests");
         let Ok(entries) = std::fs::read_dir(&tests) else { continue };
         for entry in entries.filter_map(|entry| entry.ok()) {
             let path = entry.path();
@@ -606,14 +614,14 @@ fn every_test_file_is_a_test(root: &Path, findings: &mut Vec<Finding>) {
             // and nothing else.
             if path.is_dir() {
                 let mut files = Vec::new();
-                rust_files_under(&path, &mut files);
-                for file in files {
-                    if file.file_name().and_then(|name| name.to_str()) == Some("main.rs") {
+                test_files_under(&path, 0, &mut files);
+                for (file, is_target) in files {
+                    if is_target || declared.contains(&file) {
                         continue;
                     }
                     findings.push(Finding {
                         rule: "test-file",
-                        crate_: crate_.name.clone(),
+                        crate_: name.clone(),
                         message: format!(
                             "{} is a test file the tree never runs: cargo compiles the files that \
                              are directly under `tests/`, and the `main.rs` of a directory, and \
@@ -635,7 +643,7 @@ fn every_test_file_is_a_test(root: &Path, findings: &mut Vec<Finding>) {
             if let Some((first, _)) = seen.iter().find(|(_, other)| other == &bytes) {
                 findings.push(Finding {
                     rule: "test-file",
-                    crate_: crate_.name.clone(),
+                    crate_: name.clone(),
                     message: format!(
                         "{} is a copy of {}: one test and one copy, and a copy is not a test",
                         path.display(),
@@ -649,20 +657,74 @@ fn every_test_file_is_a_test(root: &Path, findings: &mut Vec<Finding>) {
     }
 }
 
-/// The Rust files under a directory, and under the directories in it.
-fn rust_files_under(dir: &Path, out: &mut Vec<PathBuf>) {
+/// The crates whose **tests** the rule reads.
+///
+/// The tree's crates are under `crates/` and `apps/`, and the **xtask**
+/// is the one that is not — it is the gate's own tool, and it has tests
+/// of its own, and a rule that read the tree and not the xtask would be
+/// a rule with a hole in it.
+fn test_crates(root: &Path) -> Vec<(String, PathBuf)> {
+    let mut out: Vec<(String, PathBuf)> =
+        crates(root).into_iter().map(|crate_| (crate_.name, crate_.dir)).collect();
+    let xtask = root.join("xtask");
+    if xtask.join("Cargo.toml").exists() {
+        let name = std::fs::read_to_string(xtask.join("Cargo.toml"))
+            .ok()
+            .and_then(|manifest| package_name(&manifest))
+            .unwrap_or_else(|| "xtask".to_string());
+        out.push((name, xtask));
+    }
+    out
+}
+
+/// The test targets a manifest declares of its own.
+///
+/// A `[[test]]` with a `path` names a file cargo compiles whatever the
+/// layout says, so the rule leaves that file alone.
+fn declared_test_targets(dir: &Path) -> Vec<PathBuf> {
+    let Ok(manifest) = std::fs::read_to_string(dir.join("Cargo.toml")) else { return Vec::new() };
+    let mut out = Vec::new();
+    let mut in_test = false;
+    for line in manifest.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_test = line == "[[test]]";
+            continue;
+        }
+        if !in_test {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=')
+            && key.trim() == "path"
+        {
+            out.push(dir.join(value.trim().trim_matches('"')));
+        }
+    }
+    out
+}
+
+/// The Rust files under a directory under `tests/`, and whether each one
+/// is a target cargo compiles.
+///
+/// Cargo compiles the files that are **directly** under `tests/`, and
+/// the `main.rs` of a directory that is directly under it. A file deeper
+/// than that is not a target — so `depth` counts the directories between
+/// the file and `tests/`, and only a `main.rs` at depth zero is one.
+fn test_files_under(dir: &Path, depth: usize, out: &mut Vec<(PathBuf, bool)>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for entry in entries.filter_map(|entry| entry.ok()) {
         let path = entry.path();
         if path.is_dir() {
-            rust_files_under(&path, out);
+            test_files_under(&path, depth + 1, out);
             continue;
         }
-        if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
-            out.push(path);
+        if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
+            continue;
         }
+        let is_target = depth == 0 && path.file_name().and_then(|name| name.to_str()) == Some("main.rs");
+        out.push((path, is_target));
     }
-    out.sort();
+    out.sort_by(|one, other| one.0.cmp(&other.0));
 }
 
 /// The recipe that names the batteries.

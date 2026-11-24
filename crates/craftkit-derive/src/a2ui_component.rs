@@ -1057,6 +1057,25 @@ pub struct TextComponent {
         assert!(message.contains("needs the other spelling"), "{message}");
     }
 
+    /// An `Either` is **two** kinds: a pair that names one of them is
+    /// not a pair, and the declaration would have to guess what the
+    /// other spelling takes.
+    #[test]
+    fn an_either_needs_two_types() {
+        let message = refuse(
+            r#"
+#[derive(A2uiComponent)]
+#[a2ui_component(name = "Text", table = "a::defs", shapes = "a::schema")]
+pub struct TextComponent {
+    /// The text to show.
+    #[param(or = "content")]
+    pub text: Either<Text>,
+}
+"#,
+        );
+        assert!(message.contains("needs two types"), "{message}");
+    }
+
     /// And a prop that is **not** an `Either` may not have one.
     #[test]
     fn a_prop_that_is_not_an_either_may_not_have_another_spelling() {

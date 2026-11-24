@@ -99,6 +99,61 @@ fn a_main_rs_in_a_directory_under_tests_is_not_caught() {
     assert!(findings.is_empty(), "the gate found: {}", findings.join("\n     "));
 }
 
+/// A `main.rs` **deeper** than that is not a target: cargo compiles the
+/// `main.rs` of a directory that is directly under `tests/`, and not the
+/// `main.rs` of a directory inside that one.
+#[test]
+fn a_main_rs_two_directories_down_is_caught() {
+    let tree = Tree::new("deep-main");
+    tree.crate_with_a_test("#[test]\nfn a_file() {}\n");
+    let deep = tree.root.join("crates").join("thing").join("tests").join("one").join("two");
+    std::fs::create_dir_all(&deep).expect("the directory is made");
+    std::fs::write(deep.join("main.rs"), "#[test]\nfn another() {}\n").expect("the file is written");
+    let findings = findings_of(&tree.root, "test-file");
+    assert_eq!(findings.len(), 1, "the gate found: {findings:?}");
+    assert!(findings[0].contains("never runs"), "the finding says: {}", findings[0]);
+}
+
+/// A test the **manifest declares** is a test cargo compiles, wherever it
+/// is: the rule leaves it alone.
+#[test]
+fn a_test_target_the_manifest_declares_is_not_caught() {
+    let tree = Tree::new("declared");
+    tree.crate_with_a_test("#[test]\nfn a_file() {}\n");
+    let nested = tree.root.join("crates").join("thing").join("tests").join("somewhere");
+    std::fs::create_dir_all(&nested).expect("the directory is made");
+    std::fs::write(nested.join("declared.rs"), "#[test]\nfn another() {}\n").expect("the file is written");
+    let manifest = tree.root.join("crates").join("thing").join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("the manifest is read");
+    std::fs::write(
+        &manifest,
+        format!("{text}\n[[test]]\nname = \"declared\"\npath = \"tests/somewhere/declared.rs\"\n"),
+    )
+    .expect("the manifest is written");
+    let findings = findings_of(&tree.root, "test-file");
+    assert!(findings.is_empty(), "the gate found: {}", findings.join("\n     "));
+}
+
+/// The **xtask** is a crate of the tree, and its tests are read too: a
+/// rule that read the tree and not the xtask would be a rule with a hole
+/// in it.
+#[test]
+fn the_xtasks_own_tests_are_read() {
+    let tree = Tree::new("xtask");
+    tree.crate_with_a_test("#[test]\nfn a_file() {}\n");
+    let xtask = tree.root.join("xtask");
+    std::fs::create_dir_all(xtask.join("src")).expect("the directory is made");
+    std::fs::create_dir_all(xtask.join("tests").join("somewhere")).expect("the directory is made");
+    std::fs::write(xtask.join("Cargo.toml"), "[package]\nname = \"xtask\"\nversion = \"0.1.0\"\n")
+        .expect("the manifest is written");
+    std::fs::write(xtask.join("src").join("lib.rs"), format!("{DENY}\n")).expect("the source is written");
+    std::fs::write(xtask.join("tests").join("somewhere").join("other.rs"), "#[test]\nfn another() {}\n")
+        .expect("the file is written");
+    let findings = findings_of(&tree.root, "test-file");
+    assert_eq!(findings.len(), 1, "the gate found: {findings:?}");
+    assert!(findings[0].contains("xtask"), "the finding names the crate: {}", findings[0]);
+}
+
 /// A test file that is a **copy** of another is caught: one test and one
 /// copy, and a copy is not a test.
 #[test]

@@ -71584,8 +71584,8 @@ one macro.
 
 - **A pair says what each spelling takes.** `ParamDoc::either` takes the
   second spelling's **kind** as an argument, and it is a required one: a
-  declaration of a pair cannot leave it out. There is no second way to
-  say it — the builder that set it on its own is gone.
+  pair declared with `either` cannot leave it out, and the builder that
+  set it on its own is gone.
 - **A kind that takes a string says so for each spelling.** The second
   spelling's leniency is the same truth as the first's, and it is carried
   the same way: the check and the schema read it, and a length written
@@ -71625,16 +71625,33 @@ one macro.
 - **The plugin's catalogue could not say what its parameters took.** One
   kind per parameter and no leniency: a plugin's length was a number, and
   the plugin's reader would have taken `25mm` as well.
+- **Two of the promises had no test, and the bill was wrong.** A second
+  reading of the arc against the code found that the a2ui refusal and
+  the plugin's wire were untested, and that the cost said "one field on
+  the wire" where it was three, and "one line in the session" where it
+  was a restructure. The tests are there now, and the counts are the
+  counts the tree has.
 
 ### What it cost
 
 - **One required argument** and **one field** in the declaration, **one
-  builder** removed, **one field** on the plugin's wire and **one** on its
-  reader, **one step** in the derive and **one** in the a2ui derive, **one
-  branch** in the schema, **one line** in the session, and **six tests**.
+  builder** removed, **three fields** on the plugin's wire and **three**
+  on its reader, **a step in each of the two derives**, **one branch** in
+  the schema, **a restructure of the session's prompt path**, and **ten
+  tests**: six at the boundary and the schema, three on the wire, and one
+  in the a2ui derive.
 
 ### What it does not settle
 
+- **An older plugin's other spelling is not checked.** The host reads
+  what the catalogue says, and a catalogue that does not say is a
+  catalogue the host cannot check: the second spelling keeps the first's
+  shape and nothing refuses it. The protocol grew the field; a peer that
+  has not grown it is a peer the host cannot check.
+- **A declaration written by hand may leave the second kind out.** The
+  fields are public, so a `ParamDoc` built with a struct literal can say
+  `alternative_kind: None`, and the schema then publishes the second
+  spelling with the first one's shape. The constructors do not allow it.
 - **A compiled command is refused only when the kind says so.** The
   compiler writes the declaration and the reader from the same struct, so
   the two cannot disagree — but a kind's `ACCEPTS_TEXT` is a **convention**
@@ -71655,9 +71672,8 @@ one macro.
 The tree's own gate had eight rules, and one of the things no rule said
 was this: **a file that looks like a test and is not one is a lie about
 coverage**. A reader counts the test files and believes the count, and
-cargo compiles the files that are *directly* under a crate's `tests/` and
-nothing else — so a file in a directory under `tests/` is a file the tree
-never runs.
+cargo compiles the files that are *directly* under a crate's `tests/` —
+so a file in a directory under `tests/` is a file the tree never runs.
 
 ### What was built
 
@@ -71665,14 +71681,21 @@ never runs.
   is a file the tree runs: a `.rs` file under a crate's `tests/` that
   cargo does not compile is a finding, and so is a test file that is a
   **copy** of another one.
-- **The rule knows cargo's one exception.** Cargo compiles the files
-  directly under `tests/` **and** the `main.rs` of a directory under it —
-  so a directory's `main.rs` is a test, and the rule leaves it alone.
-- **The gate bites.** Six tests break a tree on purpose — a file in a
-  directory, a copy in the same crate, a copy in another crate, a file
-  that differs, an empty file, a directory's `main.rs` — and say that
-  the gate finds each one and leaves the others alone; the seventh says
-  the tree itself is clean.
+- **The rule knows the two ways cargo compiles a file of its own
+  accord.** Cargo compiles the files directly under `tests/` **and** the
+  `main.rs` of a directory that is directly under it — so a directory's
+  `main.rs` is a test, and the rule leaves it alone. A `[[test]]` a
+  manifest declares with a `path` is a test too, and the rule reads the
+  manifest and leaves that one alone as well.
+- **The rule reads the xtask as well.** The xtask is the tree's own tool
+  and it has tests of its own, and a rule that read the crates and not
+  the xtask would be a rule with a hole in it.
+- **The gate bites.** Nine tests break a tree on purpose — a file in a
+  directory, a `main.rs` two directories down, a target the manifest
+  declares, a copy in the same crate, a copy in another crate, a file
+  that differs, an empty file, a directory's `main.rs`, and a file in the
+  xtask — and say that the gate finds each one and leaves the others
+  alone; the tenth says the tree itself is clean.
 - **The four places that name the gate's rules say it.** The gate's own
   doc, `AGENTS.md`, the architecture document and the KNOWN-GAPS all
   list what the gate checks, and all four now say the ninth thing.
@@ -71690,11 +71713,17 @@ never runs.
   repository, and a file that is not a member of anything is not a fact
   it holds either. A file that is written and forgotten is not a thing a
   gate can see on its own (§873 is about the same thing, for the disk).
+- **The first version of the rule had three holes, and a verifier found
+  them.** It left a `main.rs` alone at **any** depth, when cargo compiles
+  only the `main.rs` of a directory that is directly under `tests/`; it
+  reported a target the manifest declares as a file that is never run;
+  and it did not read the xtask at all. The rule is fixed, and each of
+  the three has a test.
 
 ### What it cost
 
 - **One rule** in the tree's own gate, **one file** deleted, **one test
-  file** with seven tests, and **four** sentences in the prose that names
+  file** with ten tests, and **four** sentences in the prose that names
   the gate's rules.
 
 ### What it does not settle
@@ -71704,9 +71733,11 @@ never runs.
 - **An empty test file is not caught.** It carries no test, so a copy of
   one is nothing — but an empty file is also not a test, and the compiler
   is happy with it.
-- **A test file that is a target in another way is not caught**: a
-  `[[test]]` named in a manifest is a target whatever its name is, and
-  the rule reads the tree's layout and not the manifests' targets.
-- **The rule is about the tree's own tests.** A test that is written and
-  never run is the same lie in a different place, and nothing here can
-  see it.
+- **A copy in a directory is one finding, not two.** A file that cargo
+  does not compile is reported as such, and the rule does not also say
+  that it is a copy — the copy is only worth saying about a file the
+  tree runs.
+- **The rule reads the crates and the xtask.** A crate outside
+  `crates/`, `apps/` and `xtask/` is not read, and a test that is
+  written and never run is the same lie in a different place, and
+  nothing here can see it.
