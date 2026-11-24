@@ -17,8 +17,11 @@ harness (`apps/craftkit-parity`) drives five of the six doors with the same
 five questions — which commands do you list, what do you say when you run
 this command, what plan do you publish, what do you say when you undo it,
 what do you say when the command is not there — and says where they
-differ. What the gate does **not** do is read this table and
-check a cell against a door: the cells are still read by a person.
+differ. It asks a **session of its own** the same questions, and compares
+the doors with that as well: the session is the truth behind the doors, so
+two doors that are wrong in the same way are still wrong. What the gate
+does **not** do is read this table and check a cell against a door: the
+cells are still read by a person.
 
 ## What a door is
 
@@ -144,11 +147,14 @@ handshake.
   that every cell names a test and that the test is there. It does not
   check that a named test is *about* the cell it is in — that is still a
   reader's job.
-- **The harness compares the doors with each other, and not with this
-  table.** It drives five of the six doors and says where they differ;
-  it does not read a cell and check it against a door. The a2ui door is
-  not in it at all: it speaks a2ui's own vocabulary, and there is
-  nothing to compare.
+- **The harness compares the doors with each other, and with the
+  session, and not with this table.** It drives five of the six doors and
+  says where they differ, and it asks a **session of its own** the same
+  questions — the session is the truth behind the doors, so a door that
+  says something the session does not say is a difference even when
+  every other door says it too. It does not read a cell and check it
+  against a door. The a2ui door is not in it at all: it speaks a2ui's
+  own vocabulary, and there is nothing to compare.
 - **A negative cell has no proof to name.** "The terminal door has no
   schema" is an absence, and an absence has no test to point at.
 - **The a2ui door cannot undo and cannot read the plan.** a2ui has no

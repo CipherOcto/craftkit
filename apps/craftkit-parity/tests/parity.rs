@@ -5,7 +5,7 @@
 //! other half of that claim: the doors are **one kit with six faces**, so
 //! what one face says, the others say as well.
 
-use craftkit_parity::{ARGUMENTS, Answer, COMMAND, UNKNOWN, compare};
+use craftkit_parity::{ARGUMENTS, Answer, COMMAND, UNKNOWN, compare, the_session};
 
 /// The first door's answer.
 ///
@@ -95,6 +95,34 @@ fn the_doors_publish_the_same_plan() {
             "{} and {} published different plans",
             first.door, answer.door
         );
+    }
+}
+
+/// And they agree with the **session** — the truth behind them.
+///
+/// Two doors that are wrong in the same way agree with each other, so
+/// the harness asks the session as well: every command a door lists is
+/// one the session has, and the answer the door gives, the plan it
+/// publishes and the word it says when it undoes are the session's.
+#[test]
+fn the_doors_agree_with_the_session() {
+    let truth = the_session().expect("the session answers");
+    let report = compare();
+    for answer in &report.answers {
+        for id in &answer.listed {
+            assert!(
+                truth.listed.contains(id),
+                "{} lists `{id}`, and the session has no such command",
+                answer.door
+            );
+        }
+        assert_eq!(answer.ran, truth.ran, "{} and the session answered differently", answer.door);
+        assert_eq!(
+            answer.planned, truth.planned,
+            "{} and the session published different plans",
+            answer.door
+        );
+        assert_eq!(answer.undone, truth.undone, "{} and the session undid differently", answer.door);
     }
 }
 

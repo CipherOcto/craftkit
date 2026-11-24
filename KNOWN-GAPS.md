@@ -110,6 +110,12 @@ outer gate's table, the architecture document and the README. The
 **a2ui door** is not in it, because it speaks a2ui's own vocabulary and
 there is nothing to compare.
 
+**And the doors are compared with the session** (§1131): the harness asks
+a session of its own the same questions, because the doors are compared
+with each other and the **first** door is the anchor — so two doors that
+are wrong in the same way agree with each other, and the session is what
+says otherwise.
+
 What is left is a **cell** read by a person, and that is **not** a defect:
 nothing in the tree is broken by a table that drifts, and the cells that
 matter most are each proved by a test the tree runs.
@@ -244,10 +250,10 @@ comes to the tree cold:
 - **"A commit points at the section that describes it."** `CONTRIBUTING.md`
   says the message ends with the README section's number — `feat(cad): the
   table of a drawing — §1600` — and 542 of the tree's 602 commits carry
-  one. The **twenty commits of the a2ui arc** carry none: they say
-  `feat(v2): <what it does>` and name what they touch instead. The rule is
-  still the house's, and it is followed from here; the history is not
-  rewritten.
+  one. The **twenty-three commits of the a2ui arc** carry none: they say
+  `feat(v2): <what it does>` and name what they touch instead. The rule
+  is still the house's, and it is followed from the **next** commit; the
+  history is not rewritten.
 
 - **"There is no numeric core."** There is now `craftkit-numeric`, a typed
   value (a length in millimetres, an angle in radians), at L3, because a

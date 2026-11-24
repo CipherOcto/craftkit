@@ -141,6 +141,31 @@ impl Report {
     }
 }
 
+/// What the **session** says — the truth behind the doors.
+///
+/// The doors are compared with each other, and **two doors that are
+/// wrong in the same way agree with each other**: the terminal door is
+/// the one every other door is compared with, so a terminal door that
+/// drifted would drag the others with it and the harness would be
+/// silent.
+///
+/// The session is what the doors are doors *of*, so the session is the
+/// anchor: a door that says something the session does not say is a
+/// difference, even when every other door says it too.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Truth {
+    /// The ids the session has, in the order it has them.
+    pub listed: Vec<String>,
+    /// What the session said when it ran [`COMMAND`].
+    pub ran: Result<String, String>,
+    /// The plan the session published, as the data of [`PLAN`].
+    pub planned: Result<Json, String>,
+    /// What the session said when it undid the command.
+    pub undone: Result<String, String>,
+    /// What the session said when it was asked for [`UNKNOWN`].
+    pub refused: String,
+}
+
 /// Drive every door and compare their answers.
 ///
 /// The program **never crashes**: a door that could not be built is a
@@ -156,7 +181,142 @@ pub fn compare() -> Report {
     }
     differences.extend(the_differences_among_them(&answers));
     differences.extend(the_differences_in_what_they_said(&answers));
+    // The doors are compared with the **session** as well: the session is
+    // the truth behind them, and two doors that are wrong together are
+    // still wrong.
+    match the_session() {
+        Ok(truth) => differences.extend(the_differences_from_the_session(&answers, &truth)),
+        Err(error) => differences.push(format!("the session could not be asked: {error}")),
+    }
     Report { answers, differences }
+}
+
+/// The session's own answers.
+///
+/// The session is a **session of its own**: a door holds one, and the
+/// session the harness asks is a sixth one, so that the truth is asked
+/// of the same code the doors run.
+pub fn the_session() -> Result<Truth, String> {
+    let mut session = ecosystem()?.session();
+    let listed =
+        session.registry().all().iter().map(|command| command.id.to_string()).collect::<Vec<String>>();
+    let arguments = from_str(ARGUMENTS).unwrap_or(Json::Null);
+    let ran = match session.execute(COMMAND, &arguments) {
+        Ok(outcome) => Ok(outcome.message),
+        Err(error) => Err(error.to_string()),
+    };
+    let planned = match session.execute(PLAN, &json!({})) {
+        Ok(outcome) => Ok(outcome.data),
+        Err(error) => Err(error.to_string()),
+    };
+    let undone = match session.execute(UNDO, &json!({})) {
+        Ok(outcome) => Ok(outcome.message),
+        Err(error) => Err(error.to_string()),
+    };
+    let refused = match session.execute(UNKNOWN, &json!({})) {
+        Ok(outcome) => outcome.message,
+        Err(error) => error.to_string(),
+    };
+    Ok(Truth { listed, ran, planned, undone, refused })
+}
+
+/// The differences between a door and the **session**.
+///
+/// Three things are compared:
+///
+/// - **the list**: every command a door lists is one the session has. A
+///   door may list **fewer** — the bridge prunes its list — and that is
+///   not a difference; a door that lists a command the session does not
+///   have is a door that offers something there is not;
+/// - **the run**: the door said what the session said;
+/// - **the refusal**: the door's refusal **names** the command that is
+///   not there, as the session's does — the words are the door's own,
+///   because every door says "refused", "tool" or "command".
+fn the_differences_from_the_session(answers: &[Answer], truth: &Truth) -> Vec<String> {
+    let mut differences = Vec::new();
+    for answer in answers {
+        for id in &answer.listed {
+            if !truth.listed.contains(id) {
+                differences
+                    .push(format!("{} lists `{id}`, and the session has no such command", answer.door));
+            }
+        }
+        match (&answer.ran, &truth.ran) {
+            (Ok(door_message), Ok(session_message)) => {
+                if door_message != session_message {
+                    differences.push(format!(
+                        "{} said `{}` when it ran {COMMAND}, and the session said `{}`",
+                        answer.door, door_message, session_message
+                    ));
+                }
+            }
+            (Ok(door_message), Err(session_message)) => {
+                differences.push(format!(
+                    "{} ran {COMMAND} and said `{}`, and the session refused it: `{}`",
+                    answer.door, door_message, session_message
+                ));
+            }
+            (Err(door_message), Ok(session_message)) => {
+                differences.push(format!(
+                    "{} refused {COMMAND} and said `{}`, and the session ran it and said `{}`",
+                    answer.door, door_message, session_message
+                ));
+            }
+            (Err(door_message), Err(session_message)) => {
+                differences.push(format!(
+                    "{} and the session both refused {COMMAND}, and said different things: `{}` \
+                     and `{}`",
+                    answer.door, door_message, session_message
+                ));
+            }
+        }
+        if !answer.refused.contains(UNKNOWN) {
+            differences.push(format!(
+                "{} refused `{}` without naming it: `{}`",
+                answer.door, UNKNOWN, answer.refused
+            ));
+        }
+        // The **plan** is the command's work, and the session's plan is
+        // the plan the doors publish.
+        match (&answer.planned, &truth.planned) {
+            (Ok(door_plan), Ok(session_plan)) => {
+                if door_plan != session_plan {
+                    differences.push(format!(
+                        "{} published a plan the session did not publish: `{}` and `{}`",
+                        answer.door, door_plan, session_plan
+                    ));
+                }
+            }
+            _ => {
+                differences.push(format!(
+                    "{} and the session did not both publish a plan: `{}` and `{}`",
+                    answer.door,
+                    answer.planned.as_ref().err().cloned().unwrap_or_default(),
+                    truth.planned.as_ref().err().cloned().unwrap_or_default(),
+                ));
+            }
+        }
+        // And the **undo** is a command like any other.
+        match (&answer.undone, &truth.undone) {
+            (Ok(door_message), Ok(session_message)) => {
+                if door_message != session_message {
+                    differences.push(format!(
+                        "{} said `{}` when it undid, and the session said `{}`",
+                        answer.door, door_message, session_message
+                    ));
+                }
+            }
+            _ => {
+                differences.push(format!(
+                    "{} and the session did not both undo: `{}` and `{}`",
+                    answer.door,
+                    answer.undone.as_ref().err().cloned().unwrap_or_default(),
+                    truth.undone.as_ref().err().cloned().unwrap_or_default(),
+                ));
+            }
+        }
+    }
+    differences
 }
 
 /// The differences in what the doors said **on their own**.
@@ -642,6 +802,102 @@ mod tests {
             refused: format!("there is no command `{UNKNOWN}`"),
         };
         let differences = the_differences_among_them(&[answer(), answer()]);
+        assert!(differences.is_empty(), "{differences:?}");
+    }
+
+    /// The **session** is the truth behind the doors, and a door that
+    /// lists a command the session does not have is a difference — even
+    /// when every other door lists it too.
+    #[test]
+    fn a_door_that_lists_what_the_session_does_not_have_is_a_difference() {
+        let truth = Truth {
+            listed: vec!["one".to_string()],
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let answer = Answer {
+            door: "a door".to_string(),
+            listed: vec!["one".to_string(), "two".to_string()],
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_from_the_session(&[answer], &truth);
+        assert_eq!(differences.len(), 1, "{differences:?}");
+        assert!(differences[0].contains("the session has no such command"), "{differences:?}");
+    }
+
+    /// A door that says something the session does not say is a
+    /// difference: two doors that are wrong in the same way agree with
+    /// each other, and the session is what says otherwise.
+    #[test]
+    fn a_door_that_says_something_else_is_a_difference() {
+        let truth = Truth {
+            listed: vec!["one".to_string()],
+            ran: Ok("the session's answer".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let answer = Answer {
+            door: "a door".to_string(),
+            listed: vec!["one".to_string()],
+            ran: Ok("the door's own answer".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_from_the_session(&[answer], &truth);
+        assert_eq!(differences.len(), 1, "{differences:?}");
+        assert!(differences[0].contains("the session said"), "{differences:?}");
+    }
+
+    /// A door that **lists fewer** than the session is not a difference:
+    /// the bridge prunes its list, and pruning is the door's own
+    /// business.
+    #[test]
+    fn a_door_that_lists_less_than_the_session_is_not_a_difference() {
+        let truth = Truth {
+            listed: vec!["one".to_string(), "two".to_string()],
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let answer = Answer {
+            door: "a door".to_string(),
+            listed: vec!["one".to_string()],
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_from_the_session(&[answer], &truth);
+        assert!(differences.is_empty(), "{differences:?}");
+    }
+
+    /// A door that agrees with the session is **not** a difference.
+    #[test]
+    fn a_door_that_agrees_with_the_session_is_not_a_difference() {
+        let truth = Truth {
+            listed: vec!["one".to_string()],
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let answer = Answer {
+            door: "a door".to_string(),
+            listed: vec!["one".to_string()],
+            ran: Ok("the same".to_string()),
+            planned: Ok(json!({ "items": [] })),
+            undone: Ok("undid".to_string()),
+            refused: format!("there is no command `{UNKNOWN}`"),
+        };
+        let differences = the_differences_from_the_session(&[answer], &truth);
         assert!(differences.is_empty(), "{differences:?}");
     }
 }

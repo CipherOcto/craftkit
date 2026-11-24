@@ -4576,6 +4576,7 @@ so.
 | **the doors are compared, one against another** | **built.** One program drives five doors with the same questions and says where they differ (§1128) | §1128 |
 | **a pair says what each spelling takes** | **built.** The declaration requires the second spelling's kind, the plugin protocol carries it, and the schema publishes the pair as required (§1129) | §1129 |
 | **a test file is a test the tree runs** | **built.** The tree's own gate says when a test file is one cargo never compiles, and when it is a copy of another (§1130) | §1130 |
+| **the doors are compared with the session** | **built.** The harness asks a session of its own the same questions, and a door that says something else is a difference even when every other door says it too (§1131) | §1131 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71746,3 +71747,58 @@ runs.
   `crates/`, `apps/` and `xtask/` is not read, and a test that is
   written and never run is the same lie in a different place, and
   nothing here can see it.
+
+## 1131. The doors are compared with the session, and not only with each other
+
+The parity harness compares the doors with each other, and the **first**
+door is the one every other door is compared with: the terminal door is
+the kit's own face. So a terminal door that drifted would drag the others
+with it, and the harness would be quiet — **two doors that are wrong in
+the same way agree with each other**.
+
+### What was built
+
+- **The session is the anchor.** The harness asks a session of its own
+  the same five questions, and every door's answer is compared with the
+  session's as well as with the other doors'.
+- **Five things are compared.** Every command a door lists is one the
+  session has; the answer the door gives is the answer the session gives;
+  the plan the door publishes is the plan the session publishes; the word
+  the door says when it undoes is the session's; and the refusal names
+  the command that is not there.
+- **A door that lists fewer is not a difference.** The bridge prunes its
+  list, and pruning is the door's own business — what is a difference is
+  a door that lists a command the session does not have.
+- **The harness bites.** Four unit tests break the comparison on purpose:
+  a door that lists what the session does not have, a door that says
+  something else, a door that lists less, and a door that agrees. And a
+  door test says that the doors of the tree agree with the session of the
+  tree.
+
+### What the port found
+
+- **The comparison had no anchor.** The harness could only say that the
+  doors agree with each other, and the first of them was the anchor — so
+  the claim "the doors agree" was a claim about five doors and one of
+  them.
+- **The tree's own doors were right, and the harness could not have
+  said so.** The session's answer, the session's plan and the session's
+  undo are the same words the doors published, and the comparison is now
+  what says it.
+
+### What it cost
+
+- **One struct**, **one function**, **one comparison** and **five
+  tests**: four in the crate and one in the door's own file.
+
+### What it does not settle
+
+- **The a2ui door is still not in it.** It speaks a2ui's own vocabulary,
+  and there is nothing to compare.
+- **The session the harness asks is a sixth session.** A door holds one
+  of its own, and the harness asks one of its own, so that the truth is
+  asked of the same code the doors run — and not of the door's session,
+  which the door holds.
+- **The matrix's cells are still read by a person.** The harness
+  compares the doors with each other and with the session; it does not
+  read the prose and check a cell against a door (§1128).
