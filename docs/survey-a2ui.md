@@ -626,6 +626,13 @@ wasm exports over a memory boundary. That is a **project**, not a task, and
 the honest first cut is the matrix itself, written as a table and checked by
 hand, before it becomes code.
 
+**Since this was written.** The first cut is done
+([`door-parity.md`](door-parity.md)), and each cell names the **test** that
+proves it — and the outer gate checks that every test the matrix names
+exists (README §1122). A named test does not drift when the code moves,
+which a line does. What is not checked is the **cells themselves**: the
+harness that drives all six doors at once is still a project.
+
 **Why it matters.** The tree's own rule says a front end reads the engine's
 state and acts through the registry. A matrix is how that rule stops being a
 text grep.

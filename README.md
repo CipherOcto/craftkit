@@ -70885,11 +70885,13 @@ are doors — and so the rule applied to a crate that was never a door.
 
 ### What it does not settle
 
-- **The parity matrix is a table, checked by hand.** The six doors are
-  written side by side in [`docs/door-parity.md`](docs/door-parity.md),
-  cell by cell, with the line each cell was read in — and nothing keeps
-  it true. The next cut, if there is one, is a check that reads the
-  doors and compares.
+- **The parity matrix is a table, and the gate keeps its proofs.** The
+  six doors are written side by side in
+  [`docs/door-parity.md`](docs/door-parity.md), cell by cell, and each
+  cell names the **test** that proves it — the outer gate says when a
+  test it names is not there (§1122). What is not checked is the cells
+  themselves, which would need a harness that drives all six doors at
+  once.
 - **The bridge's shape changed**, and a shape that other programs read
   is a promise. It is a proof, and the proof is the thing that changed.
 
