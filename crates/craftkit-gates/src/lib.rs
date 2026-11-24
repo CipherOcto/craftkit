@@ -616,7 +616,10 @@ fn every_test_file_is_a_test(root: &Path, findings: &mut Vec<Finding>) {
                 let mut files = Vec::new();
                 test_files_under(&path, 0, &mut files);
                 for (file, is_target) in files {
-                    if is_target || declared.contains(&file) {
+                    // The manifest's paths are canonical, so this one is
+                    // too: `./tests/x.rs` and `tests/x.rs` are one file.
+                    let canonical = file.canonicalize().unwrap_or_else(|_| file.clone());
+                    if is_target || declared.contains(&canonical) {
                         continue;
                     }
                     findings.push(Finding {
@@ -624,8 +627,8 @@ fn every_test_file_is_a_test(root: &Path, findings: &mut Vec<Finding>) {
                         crate_: name.clone(),
                         message: format!(
                             "{} is a test file the tree never runs: cargo compiles the files that \
-                             are directly under `tests/`, and the `main.rs` of a directory, and \
-                             nothing else",
+                             are directly under `tests/`, and the `main.rs` of a directory that \
+                             is directly under it, and nothing else",
                             file.display()
                         ),
                     });
@@ -680,7 +683,13 @@ fn test_crates(root: &Path) -> Vec<(String, PathBuf)> {
 /// The test targets a manifest declares of its own.
 ///
 /// A `[[test]]` with a `path` names a file cargo compiles whatever the
-/// layout says, so the rule leaves that file alone.
+/// layout says, and so does the `[target.'cfg(…)'.test]` form of the
+/// same thing. The rule leaves those files alone.
+///
+/// The paths are **canonicalised** before they are compared: a manifest
+/// may write `./tests/x.rs`, and that is the same file as
+/// `tests/x.rs`, and a rule that says otherwise would report a file that
+/// is a test.
 fn declared_test_targets(dir: &Path) -> Vec<PathBuf> {
     let Ok(manifest) = std::fs::read_to_string(dir.join("Cargo.toml")) else { return Vec::new() };
     let mut out = Vec::new();
@@ -688,7 +697,8 @@ fn declared_test_targets(dir: &Path) -> Vec<PathBuf> {
     for line in manifest.lines() {
         let line = line.trim();
         if line.starts_with('[') {
-            in_test = line == "[[test]]";
+            // `[[test]]`, and the `cfg` form of a target.
+            in_test = line == "[[test]]" || (line.starts_with("[target.") && line.ends_with(".test]"));
             continue;
         }
         if !in_test {
@@ -697,7 +707,10 @@ fn declared_test_targets(dir: &Path) -> Vec<PathBuf> {
         if let Some((key, value)) = line.split_once('=')
             && key.trim() == "path"
         {
-            out.push(dir.join(value.trim().trim_matches('"')));
+            let path = dir.join(value.trim().trim_matches('"'));
+            if let Ok(canonical) = path.canonicalize() {
+                out.push(canonical);
+            }
         }
     }
     out

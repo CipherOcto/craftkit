@@ -134,6 +134,48 @@ fn a_test_target_the_manifest_declares_is_not_caught() {
     assert!(findings.is_empty(), "the gate found: {}", findings.join("\n     "));
 }
 
+/// The **cfg** form of a target is a target too, and the rule reads it.
+#[test]
+fn a_cfg_target_the_manifest_declares_is_not_caught() {
+    let tree = Tree::new("cfg");
+    tree.crate_with_a_test("#[test]\nfn a_file() {}\n");
+    let nested = tree.root.join("crates").join("thing").join("tests").join("somewhere");
+    std::fs::create_dir_all(&nested).expect("the directory is made");
+    std::fs::write(nested.join("declared.rs"), "#[test]\nfn another() {}\n").expect("the file is written");
+    let manifest = tree.root.join("crates").join("thing").join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("the manifest is read");
+    std::fs::write(
+        &manifest,
+        format!(
+            "{text}\n[target.'cfg(unix)'.test]\nname = \"declared\"\npath = \
+             \"tests/somewhere/declared.rs\"\n"
+        ),
+    )
+    .expect("the manifest is written");
+    let findings = findings_of(&tree.root, "test-file");
+    assert!(findings.is_empty(), "the gate found: {}", findings.join("\n     "));
+}
+
+/// A manifest may write its path as `./tests/x.rs`, and that is the same
+/// file as `tests/x.rs`: a rule that says otherwise reports a test.
+#[test]
+fn a_declared_path_written_with_a_dot_is_the_same_file() {
+    let tree = Tree::new("dot");
+    tree.crate_with_a_test("#[test]\nfn a_file() {}\n");
+    let nested = tree.root.join("crates").join("thing").join("tests").join("somewhere");
+    std::fs::create_dir_all(&nested).expect("the directory is made");
+    std::fs::write(nested.join("declared.rs"), "#[test]\nfn another() {}\n").expect("the file is written");
+    let manifest = tree.root.join("crates").join("thing").join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("the manifest is read");
+    std::fs::write(
+        &manifest,
+        format!("{text}\n[[test]]\nname = \"declared\"\npath = \"./tests/somewhere/declared.rs\"\n"),
+    )
+    .expect("the manifest is written");
+    let findings = findings_of(&tree.root, "test-file");
+    assert!(findings.is_empty(), "the gate found: {}", findings.join("\n     "));
+}
+
 /// The **xtask** is a crate of the tree, and its tests are read too: a
 /// rule that read the tree and not the xtask would be a rule with a hole
 /// in it.

@@ -71638,8 +71638,8 @@ one macro.
   builder** removed, **three fields** on the plugin's wire and **three**
   on its reader, **a step in each of the two derives**, **one branch** in
   the schema, **a restructure of the session's prompt path**, and **ten
-  tests**: six at the boundary and the schema, three on the wire, and one
-  in the a2ui derive.
+  tests**: nine new and one rewritten — six at the boundary and the
+  schema, three on the wire, and one in the a2ui derive.
 
 ### What it does not settle
 
@@ -71673,7 +71673,9 @@ The tree's own gate had eight rules, and one of the things no rule said
 was this: **a file that looks like a test and is not one is a lie about
 coverage**. A reader counts the test files and believes the count, and
 cargo compiles the files that are *directly* under a crate's `tests/` —
-so a file in a directory under `tests/` is a file the tree never runs.
+and the `main.rs` of a directory that is directly under it, and nothing
+else — so a file in a directory under `tests/` is a file the tree never
+runs.
 
 ### What was built
 
@@ -71685,17 +71687,20 @@ so a file in a directory under `tests/` is a file the tree never runs.
   accord.** Cargo compiles the files directly under `tests/` **and** the
   `main.rs` of a directory that is directly under it — so a directory's
   `main.rs` is a test, and the rule leaves it alone. A `[[test]]` a
-  manifest declares with a `path` is a test too, and the rule reads the
-  manifest and leaves that one alone as well.
+  manifest declares with a `path` is a test too, and so is the `cfg`
+  form of one; the rule reads the manifest and leaves those alone as
+  well.
 - **The rule reads the xtask as well.** The xtask is the tree's own tool
   and it has tests of its own, and a rule that read the crates and not
   the xtask would be a rule with a hole in it.
-- **The gate bites.** Nine tests break a tree on purpose — a file in a
-  directory, a `main.rs` two directories down, a target the manifest
-  declares, a copy in the same crate, a copy in another crate, a file
-  that differs, an empty file, a directory's `main.rs`, and a file in the
-  xtask — and say that the gate finds each one and leaves the others
-  alone; the tenth says the tree itself is clean.
+- **The gate bites.** Eleven tests break a tree on purpose: **five** say
+  that a file the tree never runs is found — a file in a directory, a
+  `main.rs` two directories down, a file in the xtask, a copy in the same
+  crate and a copy in another — and **six** say that a file the tree
+  does run is left alone — a directory's `main.rs`, a target the
+  manifest declares, the same target in its `cfg` form, a declared path
+  written with a dot, two files that differ, and an empty file. The
+  twelfth says the tree itself is clean.
 - **The four places that name the gate's rules say it.** The gate's own
   doc, `AGENTS.md`, the architecture document and the KNOWN-GAPS all
   list what the gate checks, and all four now say the ninth thing.
@@ -71723,8 +71728,8 @@ so a file in a directory under `tests/` is a file the tree never runs.
 ### What it cost
 
 - **One rule** in the tree's own gate, **one file** deleted, **one test
-  file** with ten tests, and **four** sentences in the prose that names
-  the gate's rules.
+  file** with twelve tests, and **four** sentences in the prose that
+  names the gate's rules.
 
 ### What it does not settle
 
