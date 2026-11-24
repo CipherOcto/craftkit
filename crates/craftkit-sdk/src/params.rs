@@ -196,6 +196,36 @@ impl<'a> Params<'a> {
         Ok(())
     }
 
+    /// Refuse a call that did not give a **required** parameter.
+    ///
+    /// The declaration says the parameter is required, and the caller
+    /// did not give it, so the call is refused at the boundary — with the
+    /// reader's own words, so that the refusal reads the same wherever
+    /// it comes from.
+    ///
+    /// A parameter with **two spellings** is required as a pair: either
+    /// spelling is enough, and neither on its own is.
+    pub fn deny_missing_required(&self, docs: &[ParamDoc]) -> Result<(), ParamError> {
+        for doc in docs {
+            if !doc.needed() {
+                continue;
+            }
+            if self.get(doc.name).is_some() {
+                continue;
+            }
+            match doc.alternative {
+                Some(alternative) => {
+                    if self.get(alternative).is_some() {
+                        continue;
+                    }
+                    return Err(missing_param(doc.name, Some(alternative)));
+                }
+                None => return Err(missing_param(doc.name, None)),
+            }
+        }
+        Ok(())
+    }
+
     /// Refuse a value that is **not the kind** the command declared.
     ///
     /// The declaration is what an agent is told, and the reader is what the
@@ -520,6 +550,18 @@ impl<A: ParamKind, B: ParamKind> Either<A, B> {
         if let Some(value) = params.get(second) {
             return B::from_json(value).map(Either::Right).map_err(|error| error.named(second));
         }
-        Err(ParamError::new(first, format!("`{first}` is required, or `{second}` instead of it")))
+        Err(missing_param(first, Some(second)))
+    }
+}
+
+/// The refusal for a parameter that was **not given**.
+///
+/// The message is the **reader's** message, so a call refused at the
+/// boundary reads the same as a call refused by the body: one truth for
+/// "you did not give me that".
+pub fn missing_param(name: &str, alternative: Option<&str>) -> ParamError {
+    match alternative {
+        Some(second) => ParamError::new(name, format!("`{name}` is required, or `{second}` instead of it")),
+        None => ParamError::missing(name),
     }
 }

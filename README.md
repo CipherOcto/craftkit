@@ -4571,6 +4571,7 @@ so.
 | **every cell of the matrix names its proof** | **built.** A cell that says something names the test that proves it, and the outer gate says when it does not (§1123) | §1123 |
 | **a run-time command's declaration is checked** | **built.** The session refuses a value that is not of the kind the command declared, and the schema says the shapes the reader takes (§1124) | §1124 |
 | **the two spellings of a parameter are two kinds** | **built.** Each spelling is published with its own shape, and the check reads the same answer (§1125) | §1125 |
+| **a required parameter the caller did not give is refused** | **built.** The boundary checks the required flag, and the refusal is the reader's own words (§1126) | §1126 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71388,3 +71389,45 @@ because the declaration did not say what it was.
   a field to say otherwise.
 - **The declaration is still checked against the call, and not against the
   body** (§1124).
+
+## 1126. A required parameter the caller did not give is refused
+
+§1124 checked the **kind** of a value against the declaration, and the
+**required** flag was still the declaration's own business: a command
+could say a parameter was required, the caller could leave it out, and
+the body — which might never read it — would not say anything.
+
+### What was built
+
+- **The boundary checks the required flag.** A parameter the declaration
+  says is required, and the call did not give, is refused **before** the
+  command runs.
+- **The refusal is the reader's own words.** The message a caller gets
+  from the boundary and the message it gets from the body are the same
+  words — one truth for "you did not give me that" — so nothing changed
+  for a caller and the refusal reads the same wherever it comes from.
+- **A pair is required as a pair.** A parameter with two spellings needs
+  either one; neither on its own is enough, and the refusal says both.
+
+### What the port found
+
+- **The flag was checked against nothing.** The KNOWN-GAPS said the
+  declaration's "required" flag could disagree with what the body reads,
+  and the honest reading was worse than that: a run-time command could
+  declare a parameter required and never read it, and the caller was
+  asked for a value nobody wanted.
+
+### What it cost
+
+- **One method** on the parameters, **one call** in the session, **one
+  helper** shared with the reader, and **three tests**.
+
+### What it does not settle
+
+- **A body that ignores a parameter it declared is still not visible.**
+  The check is against the **call**: the caller gave the value, the body
+  did not read it, and the engine cannot see that.
+- **A subprocess plugin's parameters are the plugin's own.** The check is
+  on the call the plugin is handed, and the plugin's body reads it.
+- **The declaration is still checked against the call, and not against
+  the body** (§1124).

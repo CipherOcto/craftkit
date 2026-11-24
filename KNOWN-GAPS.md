@@ -127,9 +127,11 @@ These are the README's own honest notes, and they are still true of the tree:
   that is not of the kind the command declared, so a command that declares
   a text and reads a number is refused at the door (§1124). A compiled
   command cannot be refused this way — the compiler writes the reader and
-  the declaration from the same struct. What is **not** checked is the
-  **required** flag (a body that ignores a parameter it declared is not
-  visible to the engine). The **other spelling** of a parameter with two
+  the declaration from the same struct. The **required** flag is checked
+  against the **call** (§1126): a parameter the declaration says is
+  required and the caller did not give is refused. What is **not** checked
+  is the flag against the **body**: a body that ignores a parameter it
+  declared is not visible to the engine. The **other spelling** of a parameter with two
   carries its own kind now, and the schema publishes each spelling with
   its own shape (§1125).
 - **`mutates` and `undoable` are two flags, and the derive refuses only

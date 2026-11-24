@@ -987,6 +987,14 @@ impl Session {
             self.note(format!("{id}: refused ({error})"));
             return Err(error);
         }
+        // The **required** parameter the caller did not give is refused
+        // here, and not by the body: the declaration is a promise about
+        // the call, and the call has to keep it.
+        if let Err(source) = params.deny_missing_required(spec.params) {
+            let error = EngineError::Param { id: id.to_string(), source };
+            self.note(format!("{id}: refused ({error})"));
+            return Err(error);
+        }
         // The value is of the kind the command **declared**. A command
         // that was compiled cannot disagree — the compiler wrote the
         // declaration and the reader from the same struct — and a command

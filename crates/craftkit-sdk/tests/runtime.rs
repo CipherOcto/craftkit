@@ -7,7 +7,7 @@
 //! SDK's reader.
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{CommandSpec, Doc, EngineError, Number, Outcome, ParamDoc, Session, Text};
+use craftkit_sdk::{CommandSpec, Doc, Either, EngineError, Number, Outcome, ParamDoc, Session, Text};
 
 /// A command made at run time, and the session it is in.
 fn runtime_echo() -> (CommandSpec, Session) {
@@ -193,4 +193,75 @@ fn a_command_joins_in_the_core_layer() {
     let mut session = Session::new(craftkit_sdk::Registry::new(), craftkit_sdk::Registry::new());
     let (command, _) = runtime_echo();
     session.register(command).expect("the core is linked in");
+}
+
+/// A **required** parameter the caller did not give is refused.
+///
+/// The declaration says the parameter is required, and the call did not
+/// give it — so the call is refused at the boundary, with the reader's
+/// own words.
+#[test]
+fn a_required_parameter_that_was_not_given_is_refused() {
+    let (_, mut session) = runtime_echo();
+    let error = session.execute("runtime.echo", &json!({})).expect_err("the text is required");
+    assert!(matches!(error, EngineError::Param { .. }), "{error:?}");
+    assert!(error.to_string().contains("is required"), "{error}");
+}
+
+/// An **optional** parameter the caller did not give is not a refusal.
+///
+/// The declaration says the parameter is optional, and the body does not
+/// read it, so the call runs.
+#[test]
+fn an_optional_parameter_that_was_not_given_is_not_a_refusal() {
+    let mut commands = craftkit_sdk::Registry::new();
+    let command = CommandSpec::dynamic(
+        "runtime.quiet",
+        "Quiet",
+        "runtime",
+        "Say nothing much.",
+        vec![ParamDoc::dynamic("text", Doc::Text, false, "What to say, if anything.")],
+        |_session, _params| Ok(Outcome::new("said nothing")),
+    );
+    commands.register(command).expect("the command is registered");
+    let mut session = Session::new(commands, craftkit_sdk::Registry::new());
+
+    let outcome = session.execute("runtime.quiet", &json!({})).expect("the command runs");
+    assert_eq!(outcome.message, "said nothing");
+}
+
+/// A parameter with **two spellings** is required as a pair.
+///
+/// Either spelling is enough, and neither on its own is.
+#[test]
+fn a_pair_of_spellings_is_required_as_a_pair() {
+    let mut commands = craftkit_sdk::Registry::new();
+    let command = CommandSpec::dynamic(
+        "runtime.pair",
+        "Pair",
+        "runtime",
+        "Take one of two.",
+        vec![ParamDoc::either("node", Doc::Text, "The node's id.", "node_name")],
+        |_session, params| {
+            let either = Either::<Text, Text>::read_either(params, "node", "node_name")
+                .map_err(|error| EngineError::Param { id: "runtime.pair".to_string(), source: error })?;
+            let text = match either {
+                Either::Left(text) => text,
+                Either::Right(text) => text,
+            };
+            Ok(Outcome::new(text.0))
+        },
+    );
+    commands.register(command).expect("the command is registered");
+    let mut session = Session::new(commands, craftkit_sdk::Registry::new());
+
+    // Either spelling is enough.
+    let outcome = session.execute("runtime.pair", &json!({ "node": "box" })).expect("the command runs");
+    assert_eq!(outcome.message, "box");
+    let outcome = session.execute("runtime.pair", &json!({ "node_name": "box" })).expect("the command runs");
+    assert_eq!(outcome.message, "box");
+
+    // And neither is a refusal.
+    let error = session.execute("runtime.pair", &json!({})).expect_err("the pair is required");
+    assert!(error.to_string().contains("or `node_name` instead of it"), "{error}");
 }
