@@ -4562,6 +4562,8 @@ so.
 | **the door speaks a2ui** | **built.** The method names are a2ui's, the handshake is two-way, and a catalogue the door does not serve is refused (§1114) | §1114 |
 | **the tree keeps its own house rules** | **built.** The studio undoes through `history.undo`, the window asks `doc.plan`, and the gate reads the studio's entry point (§1115) | §1115 |
 | **the six doors are classified** | **built.** The gate reads all six, the studio's entry point among them, and the bridge asks `doc.plan` like every other door (§1116) | §1116 |
+| **the agent is told the bound** | **built.** The schema carries the text bound, read from the SDK's own constant and not copied into it (§1117) | §1117 |
+| **the agent is told what changes** | **built.** The vocabulary and the descriptor carry the command's own promise, and the agent door's hint is read and not guessed (§1118) | §1118 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70929,3 +70931,48 @@ agent liked — until the reader refused it, which is a refusal too late.
   own gate does not hold the numbers that are in it: the gate's rule
   covers the byte, memory and step bounds, and a text bound is a
   convention the prose upholds.
+
+## 1118. The agent is told what changes the document
+
+Every tool the agent door published said it might change the document.
+Seventy-six commands, one answer, and the answer was wrong for most of
+them: `doc.plan`, `history.tree`, `journal.list` and `session.memory`
+read the document and change nothing.
+
+### What was built
+
+- **The command's own promise is published.** A command in the
+  **vocabulary** says whether it changes the document and whether a run
+  pushes an undo entry, and the **descriptor** — the bridge's view of a
+  command — says it too. The numbers are read out of the command's
+  declaration, not guessed and not restated.
+- **The agent door's hint is that promise.** `readOnlyHint` was a
+  constant `false`, which is a hint that says nothing; it is now the
+  command's own `mutates`, so an agent that reads the tool list knows
+  which tools write.
+
+### What the port found
+
+- **The promise was already kept.** A command that says it does not
+  change the document and changes it is **refused**, and the document is
+  put back — the session keeps the promise, and nobody was told it.
+- **A hint that is false for everything is not a hint.** The door
+  published `false` for seventy-six tools because there was nothing to
+  publish, and an agent reading it learned nothing at all.
+- **Nothing needed pruning.** Every command in the tree has the
+  `command` capability, so the agent-facing list is the whole list: the
+  pruning the survey asked for has nothing to prune, and the a2ui door's
+  catalogue negotiation is the pruning that is real.
+
+### What it cost
+
+- **Two fields** in the SDK's two views, **one field** in the agent
+  door, and **three tests**.
+
+### What it does not settle
+
+- **The a2ui door says nothing of this**, because a2ui's components have
+  no such promise: they are a tree of widgets, and what they change is
+  the surface they are on.
+- **The catalogue is not a menu.** It lists everything the registry
+  holds, and a door that wants a menu asks the projection for one.

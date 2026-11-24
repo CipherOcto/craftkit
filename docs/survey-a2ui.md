@@ -1032,8 +1032,8 @@ not a front end.
 
 | # | Opportunity | Cost, honestly | Serves §7's claim? | **Done when** |
 |---|-------------|------|------|------|
-| 1 | **O1** the catalog, in the SDK | **small** — one method, three call sites | **yes** | `Projection::catalog()` exists, and a test asserts that both doors' `tools/list` are **derived from it** rather than built by hand (the two lists differ on purpose — see O2) |
-| 2 | **O2** prune the agent-facing view | **small**, and only once O1 exists | **yes** | the agent-facing list equals the pruned set, asserted by a test |
+| 1 | **O1** the catalog, in the SDK | **small** — one method, three call sites | **yes** | `Projection::catalog()` exists, and a test asserts that both doors' `tools/list` are **derived from it** rather than built by hand (the two lists differ on purpose — see O2) — **done in its substance** (README §1118): the one canonical view carries the command's own promise, and the two agent doors publish their protocol's shape from the same registry |
+| 2 | **O2** prune the agent-facing view | **small**, and only once O1 exists | **yes** | the agent-facing list equals the pruned set, asserted by a test — **nothing to prune**: every command in the tree has the `command` capability, so the agent-facing list is the whole list; the pruning that is real is the a2ui door's catalogue negotiation (§1114) |
 | 3 | **O5** model picks commands, pre-binds params | **small, *if* scoped this way**; large if scoped as a "surface" | **yes** | a door calls `execute_with` with a `Supplier` fed by the model's own output |
 | 4 | **O8** bounds derived into the catalog | **small** — in practice one `maxLength` | **yes** | the text bound appears in the schema the agent is told — **done** (README §1117): `maxLength`, read from the SDK's own `MAX_TEXT_CHARACTERS` |
 | 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it — **done** (README §1116) |
