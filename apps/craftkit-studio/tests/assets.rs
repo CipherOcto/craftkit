@@ -41,6 +41,77 @@ fn the_same_file_twice_is_refused() {
     assert!(error.to_string().contains("already needs"), "{error}");
 }
 
+/// The document **says** which files it needs.
+///
+/// The command is a query: it does not change the document, and it
+/// answers with the list the document holds.
+#[test]
+fn the_document_lists_the_files_it_needs() {
+    let mut session = ecosystem().session();
+    session
+        .execute("doc.asset.add", &json!({ "path": "sounds/kick.wav", "kind": "audio" }))
+        .expect("the asset is added");
+    session
+        .execute("doc.asset.add", &json!({ "path": "sounds/snare.wav", "kind": "audio", "length": 1024 }))
+        .expect("the asset is added");
+    let outcome = session.execute("doc.assets", &json!({})).expect("the assets are read");
+    assert_eq!(outcome.data["assets"][0]["path"], json!("sounds/kick.wav"));
+    assert_eq!(outcome.data["assets"][0]["kind"], json!("audio"));
+    assert_eq!(outcome.data["assets"][0]["length"], json!(null), "nobody has read that one");
+    assert_eq!(outcome.data["assets"][1]["path"], json!("sounds/snare.wav"));
+    assert_eq!(outcome.data["assets"][1]["length"], json!(1024));
+}
+
+/// A document that needs nothing says so.
+#[test]
+fn a_document_that_needs_nothing_says_so() {
+    let mut session = ecosystem().session();
+    let outcome = session.execute("doc.assets", &json!({})).expect("the assets are read");
+    assert_eq!(outcome.data["assets"], json!([]));
+    assert!(outcome.message.contains("0 file(s)"), "{}", outcome.message);
+}
+
+/// The document does not need a file **any more**.
+///
+/// And the file it does not need is the one it refuses to take away.
+#[test]
+fn the_document_does_not_need_a_file_any_more() {
+    let mut session = ecosystem().session();
+    session
+        .execute("doc.asset.add", &json!({ "path": "sounds/kick.wav", "kind": "audio" }))
+        .expect("the asset is added");
+    let outcome = session
+        .execute("doc.asset.remove", &json!({ "path": "sounds/kick.wav" }))
+        .expect("the asset is gone");
+    assert_eq!(outcome.data["removed"], json!(1));
+    let outcome = session.execute("doc.assets", &json!({})).expect("the assets are read");
+    assert_eq!(outcome.data["assets"], json!([]), "the document needs nothing now");
+}
+
+/// A file the document does not need cannot be taken away.
+#[test]
+fn a_file_the_document_does_not_need_is_refused() {
+    let mut session = ecosystem().session();
+    let error = session
+        .execute("doc.asset.remove", &json!({ "path": "sounds/kick.wav" }))
+        .expect_err("there is no such file");
+    assert!(error.to_string().contains("does not need"), "{error}");
+}
+
+/// And the file comes back with the undo.
+#[test]
+fn the_file_comes_back_with_the_undo() {
+    let mut session = ecosystem().session();
+    session
+        .execute("doc.asset.add", &json!({ "path": "sounds/kick.wav", "kind": "audio" }))
+        .expect("the asset is added");
+    session.execute("doc.asset.remove", &json!({ "path": "sounds/kick.wav" })).expect("the asset is gone");
+    session.undo().expect("the removal is undone");
+    let assets = &session.document().assets;
+    assert_eq!(assets.len(), 1, "the document needs the file again: {assets:?}");
+    assert_eq!(assets[0].path, "sounds/kick.wav");
+}
+
 /// The assets survive the file.
 #[test]
 fn the_assets_survive_the_file() {

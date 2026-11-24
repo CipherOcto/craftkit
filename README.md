@@ -4578,6 +4578,7 @@ so.
 | **a test file is a test the tree runs** | **built.** The tree's own gate says when a test file is one cargo never compiles, and when it is a copy of another (§1130) | §1130 |
 | **the doors are compared with the session** | **built.** The harness asks a session of its own the same questions, and a door that says something else is a difference even when every other door says it too (§1131) | §1131 |
 | **the matrix's marks are live** | **built.** The harness reads the matrix and compares each cell's mark with what the door did, so a cell that lies is a difference that names its line (§1132) | §1132 |
+| **every command is run by a test** | **built.** The outer gate reads every command the tree declares and says the ones that no test names (§1133) | §1133 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71872,3 +71873,53 @@ a matrix does not run the doors.
   third is the window's.
 - **The a2ui row is not checked at all.** The a2ui door is not in the
   harness, because it speaks a2ui's own vocabulary.
+
+## 1133. Every command is run by a test
+
+The tree has over a thousand commands, and **eight** of them were named
+by no test: `doc.rename`, `doc.assets`, `doc.asset.remove`,
+`task.cancel`, `task.fail`, `tool.held`, `clap.detach` and
+`clap.transport.meter`. A command is a rule the kit publishes: it is a
+thing a door can run, and a door runs it. A command that no test names
+is a command that nothing proves works — and the tree's rule is that
+every rule has a test.
+
+Nothing held that fact. The index knows every command the batteries
+declare, and the tests are files on disk, but no rule joined the two, so
+the tree could not say which of its commands no test runs.
+
+### What was built
+
+- **Eight commands are run by a test.** The assets are listed and taken
+  away, the tasks are called off and failed, the document is renamed,
+  the hand says what is in it, and the plugin is detached and its meter
+  is set.
+- **The outer gate says so.** The `lists` phase now reads every command
+  the tree declares — the batteries' rows through the index, which knows
+  the macros they are written with, and the kit's own from the crates
+  that are not batteries — and says a command that no test names.
+- **The gate bites.** Four tests in the xtask: a command that no test
+  names is caught, a command a test names is not, a name that is part of
+  a longer one is not a name, and an attribute in a comment is an
+  example and not a command.
+
+### What the port found
+
+- **The tree could not say which of its commands no test runs.** The
+  rule was in the house's prose — "every rule has a test" — and in no
+  gate, and eight commands had slipped through the gap.
+
+### What it cost
+
+- **One check** in the outer gate, **eight tests** for the commands,
+  **four tests** for the check, and two helpers made public.
+
+### What it does not settle
+
+- **A test file that names a command is not a test that runs it.** The
+  rule is about the **name**: a test behind a feature flag, or one that
+  is skipped, still names the command.
+- **A command that a test runs without naming it is not counted.** A
+  test that runs every command in a loop proves them all and names none.
+- **The rule is about the tree's own tests.** A command that only a
+  program outside the tree runs is a command the rule does not see.

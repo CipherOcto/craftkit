@@ -274,6 +274,72 @@ fn the_tempo_changes_and_the_transport_follows() {
     assert_eq!(tempos[1].get("bpm").and_then(|bpm| bpm.as_f64()), Some(60.0));
 }
 
+/// The **meter** changes, and the transport follows.
+///
+/// A meter is how many beats are in a bar and what a beat is worth, and
+/// it changes like the tempo does: at a tick.
+#[cfg(all(feature = "clap", unix))]
+#[test]
+fn the_meter_changes_and_the_transport_follows() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    session.execute("clap.attach", &json!({ "path": library_path() })).expect("the plugin is attached");
+    let node = session.document().nodes.first().expect("there is a node").id;
+
+    // Three beats in a bar, and a beat is a half note.
+    let outcome = session
+        .execute(
+            "clap.transport.meter",
+            &json!({ "node": node, "tick": 0, "numerator": 3, "denominator": 2 }),
+        )
+        .expect("the meter is set");
+    let transport = outcome.data.get("transport").expect("there is a transport");
+    assert_eq!(
+        transport.get("meter").and_then(|meter| meter.as_array()).map(|meter| meter.to_vec()),
+        Some(vec![json!(3), json!(2)]),
+        "three beats in a bar, and a beat is a half note"
+    );
+
+    // And the document holds the map, and not the number it worked out.
+    let node = session.document().node(node).expect("the node is there");
+    let meters = node
+        .data
+        .get("transport")
+        .and_then(|transport| transport.get("meters"))
+        .and_then(|meters| meters.as_array())
+        .expect("there are meter events");
+    assert_eq!(meters.len(), 1, "the map has one event: the change itself");
+    assert_eq!(meters[0].get("numerator").and_then(|n| n.as_u64()), Some(3));
+    assert_eq!(meters[0].get("denominator").and_then(|d| d.as_u64()), Some(2));
+}
+
+/// A plugin is **detached**, and it is out of the document.
+///
+/// The state goes with it, because the state is the plugin's.
+#[cfg(all(feature = "clap", unix))]
+#[test]
+fn a_plugin_is_detached_from_the_document() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    session.execute("clap.attach", &json!({ "path": library_path() })).expect("the plugin is attached");
+    let node = session.document().nodes.first().expect("there is a node").id;
+
+    let outcome = session.execute("clap.detach", &json!({ "node": node })).expect("the plugin is detached");
+    assert_eq!(outcome.data["id"], json!(node));
+    assert!(session.document().node(node).is_none(), "the node is out of the document");
+}
+
+/// And a node that is not a plugin cannot be detached.
+#[cfg(all(feature = "clap", unix))]
+#[test]
+fn a_node_that_is_not_a_plugin_is_not_detached() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    session
+        .execute("node.add", &json!({ "name": "a box", "kind": "geometry.rect" }))
+        .expect("the node is added");
+    let node = session.document().nodes.first().expect("there is a node").id;
+    let error = session.execute("clap.detach", &json!({ "node": node })).expect_err("it is not a plugin");
+    assert!(error.to_string().contains("not a plugin"), "{error}");
+}
+
 /// Where there is no shared library, the door **refuses**, and says why.
 ///
 /// This test runs on every target that is not unix, so the door is not

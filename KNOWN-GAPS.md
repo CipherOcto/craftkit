@@ -186,6 +186,12 @@ These are the README's own honest notes, and they are still true of the tree:
   is not caught either — it carries no test, so a copy of one is
   nothing (§1130). The rule reads the crates and the **xtask**, and not
   anything else.
+- **A command that no test names is caught** (§1133): the outer gate reads
+  every command the tree declares — the batteries' rows through the index,
+  which knows the macros they are written with, and the kit's own from the
+  crates that are not batteries — and says the ones that no test names.
+  The rule is about the **name**: a test behind a feature flag still names
+  the command, and a test that runs every command in a loop names none.
 - **A session built by hand is not filtered by layer.** `Session::register`
   refuses a command whose layer is not linked in, and every door builds its
   session with the ecosystem's layers — but a session made from a registry

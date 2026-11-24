@@ -49,6 +49,67 @@ fn a_task_moves_from_pending_to_running_to_done() {
     assert_eq!(task["result"]["url"], json!("https://example/x"));
 }
 
+/// A task is **called off**.
+///
+/// The task is not finished: it is cancelled, and a cancelled task is a
+/// task that will not run.
+#[test]
+fn a_task_is_called_off() {
+    let (mut session, id) = with_a_task();
+    session.execute("task.cancel", &json!({ "task": id })).expect("the task is called off");
+    let outcome = session.execute("task.list", &json!({})).expect("the tasks are read");
+    assert_eq!(outcome.data["tasks"][0]["state"], json!("cancelled"));
+}
+
+/// A task that is finished cannot be called off: the state of a task is a
+/// fact, and not a wish.
+#[test]
+fn a_finished_task_is_not_called_off() {
+    let (mut session, id) = with_a_task();
+    session.execute("task.start", &json!({ "task": id })).expect("the task starts");
+    session.execute("task.complete", &json!({ "task": id, "result": "done" })).expect("the task is done");
+    let error = session
+        .execute("task.cancel", &json!({ "task": id }))
+        .expect_err("a finished task is not called off");
+    assert!(error.to_string().contains("finished"), "{error}");
+}
+
+/// A task **fails**, and says why.
+///
+/// The message is the task's own: it is what the door shows when
+/// somebody asks what happened.
+#[test]
+fn a_task_fails_and_says_why() {
+    let (mut session, id) = with_a_task();
+    session.execute("task.start", &json!({ "task": id })).expect("the task starts");
+    session
+        .execute("task.fail", &json!({ "task": id, "message": "the provider said no" }))
+        .expect("the task fails");
+    let outcome = session.execute("task.list", &json!({})).expect("the tasks are read");
+    assert_eq!(outcome.data["tasks"][0]["state"], json!("failed"));
+    assert_eq!(outcome.data["tasks"][0]["message"], json!("the provider said no"));
+}
+
+/// And a task that is finished does not fail again.
+#[test]
+fn a_finished_task_does_not_fail_again() {
+    let (mut session, id) = with_a_task();
+    session.execute("task.start", &json!({ "task": id })).expect("the task starts");
+    session.execute("task.complete", &json!({ "task": id, "result": "done" })).expect("the task is done");
+    let error = session
+        .execute("task.fail", &json!({ "task": id, "message": "too late" }))
+        .expect_err("a finished task does not fail");
+    assert!(error.to_string().contains("finished"), "{error}");
+}
+
+/// A task that is not there cannot be called off.
+#[test]
+fn a_task_that_is_not_there_is_refused() {
+    let mut session = ecosystem().session();
+    let error = session.execute("task.cancel", &json!({ "task": 404 })).expect_err("there is no such task");
+    assert!(error.to_string().contains("404"), "{error}");
+}
+
 /// A task may be finished **without this process having started it**.
 ///
 /// That is the whole point: the event that says it is done may come from

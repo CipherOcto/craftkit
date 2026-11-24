@@ -558,6 +558,134 @@ pub fn broken_document_links(root: &Path) -> Result<Vec<String>, String> {
 /// the row names** — the door's own crate, and the transport's crate for
 /// the agent door — unless it starts at the root, and then it is the tree's
 /// own path.
+/// Every command the tree has is **run by a test**.
+///
+/// A command is a rule the kit publishes: it is a thing a door can run,
+/// and a door runs it. A command that no test names is a command that
+/// nothing proves works, and the tree's rule is that every rule has a
+/// test.
+///
+/// The check is about the **name**: a command's id must be named in a
+/// test file of the tree, as a name of its own and not as part of a
+/// longer one — `task.list` is not named by a test that says
+/// `task.list.all`.
+///
+/// The commands of the **batteries** are read by the index, which knows
+/// the macros a battery writes its rows with; the kit's own commands are
+/// read from the crates that are not batteries, where the attribute is
+/// at the start of its line.
+pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String> {
+    let mut commands: Vec<String> = Vec::new();
+    let index = crate::index::build(root)?;
+    commands.extend(index.commands.iter().map(|command| command.id.clone()));
+    for directory in crate_directories(root) {
+        let name = directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+        // The batteries are the index's own, and the index knows the
+        // macros they write their rows with.
+        if name.starts_with("craftkit-plugin-") {
+            continue;
+        }
+        for file in crate::index::rust_files(&directory.join("src")) {
+            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+            commands.extend(commands_at_the_start_of_a_line(&text));
+        }
+    }
+    // Every test file in the tree, and what it says.
+    let mut tests: Vec<String> = Vec::new();
+    for directory in crate_directories(root) {
+        for file in crate::index::rust_files(&directory.join("tests")) {
+            tests.push(std::fs::read_to_string(&file).unwrap_or_default());
+        }
+    }
+    commands.sort();
+    commands.dedup();
+    let mut problems = Vec::new();
+    for command in commands {
+        if tests.iter().any(|body| names_it(body, &command)) {
+            continue;
+        }
+        problems.push(format!(
+            "the command `{command}` is run by no test: every command the tree has is run by a test"
+        ));
+    }
+    Ok(problems)
+}
+
+/// The crate **directories** of the tree: every directory under `crates/`
+/// and `apps/`, plus the xtask.
+///
+/// The crate roots are the files; this is the folders, and a folder is
+/// what holds a crate's tests.
+fn crate_directories(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for group in ["crates", "apps"] {
+        let Ok(entries) = std::fs::read_dir(root.join(group)) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                out.push(path);
+            }
+        }
+    }
+    let xtask = root.join("xtask");
+    if xtask.is_dir() {
+        out.push(xtask);
+    }
+    out.sort();
+    out
+}
+
+/// The ids of the commands a file declares, where the attribute is at the
+/// start of its line.
+///
+/// The attribute is at the start of its line when it is a **declaration**;
+/// an attribute in a comment or in a string is an example of one, and the
+/// example is not a command.
+fn commands_at_the_start_of_a_line(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find("#[command(") {
+        let start = offset + at;
+        let Some((block, end)) = crate::index::block_of(text, start + "#[command(".len()) else { break };
+        // The attribute is the first thing on its line: what is before it
+        // on that line is nothing.
+        let line_start = text[..start].rfind('\n').map(|at| at + 1).unwrap_or(0);
+        if text[line_start..start].trim().is_empty()
+            && let Some(id) = crate::index::field(&block, "id")
+        {
+            found.push(id);
+        }
+        offset = end;
+    }
+    found
+}
+
+/// Whether a piece of text **names** a command.
+///
+/// The name is a name of its own: the characters around it are not part
+/// of an id, so `task.list` is not named by a test that says
+/// `task.list.all`.
+fn names_it(body: &str, id: &str) -> bool {
+    let mut start = 0usize;
+    while let Some(at) = body[start..].find(id) {
+        let at = start + at;
+        let before = body[..at].chars().next_back();
+        let after = body[at + id.len()..].chars().next();
+        if is_not_part_of_an_id(before) && is_not_part_of_an_id(after) {
+            return true;
+        }
+        start = at + 1;
+    }
+    false
+}
+
+/// Whether a character is not part of a command's id.
+fn is_not_part_of_an_id(character: Option<char>) -> bool {
+    character.is_none_or(|character| {
+        !character.is_ascii_lowercase() && !character.is_ascii_digit() && character != '.'
+    })
+}
+
 pub fn every_matrix_cell_names_a_test(root: &Path) -> Result<Vec<String>, String> {
     let matrix = root.join("docs/door-parity.md");
     let text = read_text(&matrix).map_err(|error| format!("could not read docs/door-parity.md: {error}"))?;
@@ -1205,6 +1333,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // Every cell of the parity matrix names a test, and the test is there.
     problems.extend(every_matrix_cell_names_a_test(root)?);
 
+    // Every command the tree has is run by a test.
+    problems.extend(every_command_is_run_by_a_test(root)?);
+
     // The `mod` groups are sorted.
     problems.extend(the_mod_groups_are_sorted(root)?);
 
@@ -1291,6 +1422,68 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let problems = the_xtask_carries_the_house_deny(&root).expect("the xtask is there");
         assert!(problems.is_empty(), "the xtask does not carry the house lints: {problems:?}");
+    }
+
+    /// A command that no test names is **caught**.
+    ///
+    /// The tree the test builds is a small one: a crate with a command
+    /// and a test that does not name it.
+    #[test]
+    fn a_command_that_no_test_names_is_caught() {
+        let root = std::env::temp_dir().join("craftkit-xtask-command-test");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[derive(Command)]\n#[command(id = \"thing.add\")]\npub struct Add;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("thing.add"), "{problems:?}");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// And a command that a test names is **not** caught.
+    #[test]
+    fn a_command_that_a_test_names_is_not_caught() {
+        let root = std::env::temp_dir().join("craftkit-xtask-command-test-named");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[derive(Command)]\n#[command(id = \"thing.add\")]\npub struct Add;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { session.execute(\"thing.add\", &json!({})); }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// A name that is **part** of a longer name is not a name.
+    #[test]
+    fn a_name_that_is_part_of_a_longer_one_is_not_a_name() {
+        assert!(!names_it("the command task.list.all is run", "task.list"));
+        assert!(names_it("the command task.list is run", "task.list"));
+    }
+
+    /// And the attribute in a **comment** is an example, and not a
+    /// command.
+    #[test]
+    fn an_attribute_in_a_comment_is_not_a_command() {
+        let source = "//! #[command(id = \"thing.example\")]\n";
+        assert!(commands_at_the_start_of_a_line(source).is_empty());
+        let source = "#[command(id = \"thing.real\")]\n";
+        assert_eq!(commands_at_the_start_of_a_line(source), vec!["thing.real".to_string()]);
     }
 
     #[test]

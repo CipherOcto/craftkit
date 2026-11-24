@@ -22,6 +22,27 @@ fn a_node(session: &mut craftkit_sdk::Session, name: &str) -> u64 {
         .expect("there is an id")
 }
 
+/// The **document** is renamed, and the new name is the document's name.
+///
+/// The document has a name of its own, and it is not a node: it is the
+/// thing the nodes are in.
+#[test]
+fn the_document_is_renamed() {
+    let mut session = session();
+    session.execute("doc.rename", &json!({ "name": "the drawing" })).expect("the document is renamed");
+    assert_eq!(session.document().name, "the drawing");
+}
+
+/// And the old name comes back with the undo.
+#[test]
+fn the_document_is_renamed_again_with_the_undo() {
+    let mut session = session();
+    let before = session.document().name.clone();
+    session.execute("doc.rename", &json!({ "name": "the drawing" })).expect("the document is renamed");
+    session.undo().expect("the rename is undone");
+    assert_eq!(session.document().name, before, "the document has its name back");
+}
+
 /// A node is **renamed**, and the new name is the node's name.
 #[test]
 fn a_node_is_renamed() {

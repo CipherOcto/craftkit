@@ -1604,6 +1604,24 @@ fn the_tool_in_the_hand_is_the_sessions_state() {
     assert_eq!(session.tool(), None);
 }
 
+/// The door can **ask** what is in the hand.
+///
+/// The tool in the hand is the session's state and not the document's,
+/// and the command that says so is a query: it does not change
+/// anything.
+#[test]
+fn the_door_says_what_is_in_the_hand() {
+    let mut session = ecosystem().session();
+    let outcome = session.execute("tool.held", &json!({})).expect("the hand is read");
+    assert_eq!(outcome.data["tool"], json!(null), "there is no tool in the hand");
+    assert!(outcome.message.contains("no tool in the hand"), "{}", outcome.message);
+
+    session.execute("tool.hold", &json!({ "tool": "tool.rect" })).expect("the tool is held");
+    let outcome = session.execute("tool.held", &json!({})).expect("the hand is read");
+    assert_eq!(outcome.data["tool"], json!("tool.rect"));
+    assert!(outcome.message.contains("tool.rect"), "{}", outcome.message);
+}
+
 /// Holding a tool does not change the document, so it leaves no history.
 #[test]
 fn holding_a_tool_leaves_no_history() {
