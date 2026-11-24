@@ -42,8 +42,9 @@ There are two gate systems in this tree, and they are not the same thing.
 - **The tree's own gate** is `crates/craftkit-gates`. It is a crate with a
   function `check(root) -> Vec<Finding>`, and it knows this tree: it checks the
   house deny attribute, the layering, "a plugin is a plugin", the front end is
-  thin, "the bounds are named in the prose", "a battery is a table" and "a test
-  does not litter". Run it with `cargo test -p craftkit-gates`.
+  thin, "the bounds are named in the prose", "a battery is a table", "a test
+  does not litter" and "every test file is a test the tree runs". Run it with
+  `cargo test -p craftkit-gates`.
 - **The outer gate** is `xtask/`, reached as `cargo xtask <command>`. Its
   commands are `doctor`, `ci`, `layers`, `assets`, `cleanroom`, `lists`, `web`,
   `wasm`, `deny`, `bundle`, `verify` and `lsp`. `cargo xtask ci` is the whole

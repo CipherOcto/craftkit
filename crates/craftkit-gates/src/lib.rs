@@ -9,7 +9,7 @@
 //! therefore **rules and not gates**: they were true, and nothing said
 //! so.
 //!
-//! This crate is the gate. It has eight rules:
+//! This crate is the gate. It has nine rules:
 //!
 //! 1. **The deny attribute is the house one.** Every crate root carries
 //!    the same six lints, in the same order, so that a deny list that
@@ -44,6 +44,10 @@
 //!    to a crate that is not there: the batteries the tree has are named
 //!    in the recipe that adds one, and the recipe names no battery the
 //!    tree does not have.
+//! 9. **Every test file is a test the tree runs.** A file under a
+//!    crate's `tests/` that cargo does not compile is a file that looks
+//!    like coverage and is not, and a test file that is a copy of
+//!    another is a copy and not a test.
 //!
 //! # The rule that moved, and why
 //!
@@ -566,7 +570,99 @@ pub fn check(root: &Path) -> Vec<Finding> {
     // Rule 8: the recipes say what the tree does.
     recipes_name_the_batteries(root, &mut findings);
 
+    // Rule 9: every test file is a test the tree runs.
+    every_test_file_is_a_test(root, &mut findings);
+
     findings
+}
+
+/// Rule 9: **every test file is a test the tree runs**.
+///
+/// A file that looks like a test and is not one is a lie about coverage:
+/// a reader counts the test files and believes the count. There are two
+/// ways that happens, and both are visible in the tree as text.
+///
+/// - **A file in a directory under `tests/`.** Cargo compiles the files
+///   that are **directly** under a crate's `tests/`, and the one file in
+///   a directory it compiles is that directory's `main.rs`. A file in
+///   `tests/somewhere/thing.rs` is a file the tree never runs, and it is
+///   a file nobody notices.
+/// - **A copy of a test.** Two test files with the same bytes are one
+///   test and one copy — and the copy is either run twice, for nothing,
+///   or not at all.
+///
+/// The rule is about the **tests directory**, and not about the source:
+/// a module under `src/` that is not used is the compiler's business,
+/// and it says so.
+fn every_test_file_is_a_test(root: &Path, findings: &mut Vec<Finding>) {
+    // Every test file the tree has, and the bytes it holds.
+    let mut seen: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+    for crate_ in crates(root) {
+        let tests = crate_.dir.join("tests");
+        let Ok(entries) = std::fs::read_dir(&tests) else { continue };
+        for entry in entries.filter_map(|entry| entry.ok()) {
+            let path = entry.path();
+            // A directory under `tests/`: cargo compiles its `main.rs`
+            // and nothing else.
+            if path.is_dir() {
+                let mut files = Vec::new();
+                rust_files_under(&path, &mut files);
+                for file in files {
+                    if file.file_name().and_then(|name| name.to_str()) == Some("main.rs") {
+                        continue;
+                    }
+                    findings.push(Finding {
+                        rule: "test-file",
+                        crate_: crate_.name.clone(),
+                        message: format!(
+                            "{} is a test file the tree never runs: cargo compiles the files that \
+                             are directly under `tests/`, and the `main.rs` of a directory, and \
+                             nothing else",
+                            file.display()
+                        ),
+                    });
+                }
+                continue;
+            }
+            if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
+                continue;
+            }
+            let Ok(bytes) = std::fs::read(&path) else { continue };
+            // An empty file carries no test, so a copy of one is nothing.
+            if bytes.is_empty() {
+                continue;
+            }
+            if let Some((first, _)) = seen.iter().find(|(_, other)| other == &bytes) {
+                findings.push(Finding {
+                    rule: "test-file",
+                    crate_: crate_.name.clone(),
+                    message: format!(
+                        "{} is a copy of {}: one test and one copy, and a copy is not a test",
+                        path.display(),
+                        first.display()
+                    ),
+                });
+                continue;
+            }
+            seen.push((path.clone(), bytes));
+        }
+    }
+}
+
+/// The Rust files under a directory, and under the directories in it.
+fn rust_files_under(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let path = entry.path();
+        if path.is_dir() {
+            rust_files_under(&path, out);
+            continue;
+        }
+        if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
+            out.push(path);
+        }
+    }
+    out.sort();
 }
 
 /// The recipe that names the batteries.

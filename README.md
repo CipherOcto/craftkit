@@ -4575,6 +4575,7 @@ so.
 | **a panel is a contribution, and the kit's own list is live** | **built.** A command that joins the session while the window is open is a button with the rest (§1127) | §1127 |
 | **the doors are compared, one against another** | **built.** One program drives five doors with the same questions and says where they differ (§1128) | §1128 |
 | **a pair says what each spelling takes** | **built.** The declaration requires the second spelling's kind, the plugin protocol carries it, and the schema publishes the pair as required (§1129) | §1129 |
+| **a test file is a test the tree runs** | **built.** The tree's own gate says when a test file is one cargo never compiles, and when it is a copy of another (§1130) | §1130 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71648,3 +71649,64 @@ one macro.
   (§1124).
 - **The declaration is still checked against the call, and not against the
   body** (§1124).
+
+## 1130. A test file is a test the tree runs
+
+The tree's own gate had eight rules, and one of the things no rule said
+was this: **a file that looks like a test and is not one is a lie about
+coverage**. A reader counts the test files and believes the count, and
+cargo compiles the files that are *directly* under a crate's `tests/` and
+nothing else — so a file in a directory under `tests/` is a file the tree
+never runs.
+
+### What was built
+
+- **The tree's own gate has a ninth rule.** Every test file in the tree
+  is a file the tree runs: a `.rs` file under a crate's `tests/` that
+  cargo does not compile is a finding, and so is a test file that is a
+  **copy** of another one.
+- **The rule knows cargo's one exception.** Cargo compiles the files
+  directly under `tests/` **and** the `main.rs` of a directory under it —
+  so a directory's `main.rs` is a test, and the rule leaves it alone.
+- **The gate bites.** Six tests break a tree on purpose — a file in a
+  directory, a copy in the same crate, a copy in another crate, a file
+  that differs, an empty file, a directory's `main.rs` — and say that
+  the gate finds each one and leaves the others alone; the seventh says
+  the tree itself is clean.
+- **The four places that name the gate's rules say it.** The gate's own
+  doc, `AGENTS.md`, the architecture document and the KNOWN-GAPS all
+  list what the gate checks, and all four now say the ninth thing.
+
+### What the port found
+
+- **The tree had one such file, and every gate was green.**
+  `apps/craftkit-hello-server/tests/tests/door.rs` was a byte-for-byte
+  copy of `apps/craftkit-hello-server/tests/door.rs`, in a directory
+  cargo does not compile. It had been in the tree since the day the v2
+  tree became the repository root, and it looked like a test the whole
+  time.
+- **Nothing in the tree could see it.** The gate reads the crates, but no
+  rule asked what cargo would compile; the outer gate reads the
+  repository, and a file that is not a member of anything is not a fact
+  it holds either. A file that is written and forgotten is not a thing a
+  gate can see on its own (§873 is about the same thing, for the disk).
+
+### What it cost
+
+- **One rule** in the tree's own gate, **one file** deleted, **one test
+  file** with seven tests, and **four** sentences in the prose that names
+  the gate's rules.
+
+### What it does not settle
+
+- **A copy that differs by a byte is not caught.** The rule compares the
+  bytes, so a copy with one changed line is a copy the rule cannot see.
+- **An empty test file is not caught.** It carries no test, so a copy of
+  one is nothing — but an empty file is also not a test, and the compiler
+  is happy with it.
+- **A test file that is a target in another way is not caught**: a
+  `[[test]]` named in a manifest is a target whatever its name is, and
+  the rule reads the tree's layout and not the manifests' targets.
+- **The rule is about the tree's own tests.** A test that is written and
+  never run is the same lie in a different place, and nothing here can
+  see it.

@@ -17,7 +17,8 @@ The tree has **two** gates, and they do not overlap.
 - The **inner** gate is `crates/craftkit-gates`. It knows about the crates: the
   house deny attribute, the layering, what a plugin may depend on, the bounds
   the README names, that a battery declares its commands as rows of a table,
-  and that a test does not litter. It runs as `cargo test -p craftkit-gates`.
+  that every test file is a test the tree runs, and that a test does not
+  litter. It runs as `cargo test -p craftkit-gates`.
 - The **outer** gate is `xtask/`. It knows about the **repository**: the layer
   table in `docs/architecture.md` and the inner gate's own table agree, every
   gate the tree names is actually run, every document link in the prose points
@@ -156,6 +157,10 @@ These are the README's own honest notes, and they are still true of the tree:
   **allowed**: it changes the document and leaves no history, and the
   session judges it by the document and not by the flags. The two flags
   are consistent, and a run-time command declares both the same way.
+- **A test file that is a copy of another is caught; a copy that differs
+  by a byte is not.** The rule compares the bytes, and an empty test file
+  is not caught either — it carries no test, so a copy of one is
+  nothing (§1130).
 - **A session built by hand is not filtered by layer.** `Session::register`
   refuses a command whose layer is not linked in, and every door builds its
   session with the ecosystem's layers — but a session made from a registry

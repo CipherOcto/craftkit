@@ -330,7 +330,10 @@ camera rather than hand-rolling its own input.
   declares its commands as rows of a table, and not as structs with
   `#[derive(Command)]`) and "a test does not litter" (a test may not name
   the temporary directory: the **scratch** is the way, and it hands a path
-  back when the thread that asked for it ends). The rule that **the numbers
+  back when the thread that asked for it ends) and "every test file is a test
+  the tree runs" (a file under a crate's `tests/` that cargo does not
+  compile is a file that looks like coverage and is not, and a test file
+  that is a copy of another is not a test). The rule that **the numbers
   agree with the prose**
   lives where the code is — `apps/craftkit-studio/tests/bounds.rs` — because
   it compares the README's number with the constant the compiler has already
