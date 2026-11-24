@@ -25,7 +25,7 @@
 
 use serde_json::Value as Json;
 
-use crate::error::ParamError;
+use crate::error::{EngineError, ParamError};
 
 /// The documented type of a parameter.
 ///
@@ -109,6 +109,21 @@ impl<'a> Params<'a> {
             Some(Json::Null) => None,
             other => other,
         }
+    }
+
+    /// A parameter, read with the SDK's **reader**.
+    ///
+    /// **The kind and the bound are the SDK's.** A text that is too long
+    /// is refused here and not by the author of the command, and a number
+    /// that is not a number is refused in the same way.
+    ///
+    /// The error says **which command** refused the value, so the
+    /// command's id is the second thing the caller says. A command that
+    /// was compiled does not say it: the macro writes the reader and
+    /// knows the id. A command that was **made while the program runs**
+    /// says it itself.
+    pub fn param<T: ParamKind>(&self, name: &str, id: &str) -> Result<T, EngineError> {
+        T::read(self, name).map_err(|source| EngineError::Param { id: id.to_string(), source })
     }
 
     /// Refuse a key that is not one of the names.

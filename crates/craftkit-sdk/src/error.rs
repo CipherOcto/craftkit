@@ -206,6 +206,27 @@ pub struct ParamDoc {
 }
 
 impl ParamDoc {
+    /// A parameter of a command that is **made while the program runs**.
+    ///
+    /// A parameter's names are `&'static str`, and a name that arrives
+    /// at run time cannot be static: the two are **leaked**, once each,
+    /// which is the same trade [`crate::CommandSpec::dynamic`] makes.
+    ///
+    /// The **kind** and the **help** are the SDK's own: the help is what
+    /// an agent is told about the parameter, and the kind is what the
+    /// reader refuses.
+    pub fn dynamic(name: &str, kind: Doc, required: bool, help: &str) -> Self {
+        ParamDoc {
+            name: crate::plugin::leak(name.to_string()),
+            kind,
+            required,
+            help: crate::plugin::leak(help.to_string()),
+            alternative: None,
+            type_name: None,
+            unit: None,
+        }
+    }
+
     /// A required parameter.
     pub const fn required(name: &'static str, kind: Doc, help: &'static str) -> Self {
         ParamDoc { name, kind, required: true, help, alternative: None, type_name: None, unit: None }

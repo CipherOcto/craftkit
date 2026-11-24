@@ -158,6 +158,60 @@ impl Contribution for CommandSpec {
 }
 
 impl CommandSpec {
+    /// A command that is **made while the program runs**.
+    ///
+    /// The derive writes a command's declaration from its **struct**; a
+    /// command that arrives after the program was built has no struct,
+    /// and this is what it has instead. The sixteen fields are written
+    /// here, once, and the caller says only what is its own: the id, the
+    /// label, the area, the line about it, the parameters and the body.
+    ///
+    /// **The names are owned, and they are leaked.** A command's metadata
+    /// is `&'static str`, and a name that arrives at run time cannot be
+    /// static. The leak is bounded — one string per name, once — and it
+    /// is the same trade the plugin loader makes.
+    ///
+    /// **The parameters are read with the SDK's own reader.** The body is
+    /// handed the [`Params`] and reads its parameter with
+    /// [`crate::ParamKind::read`], so the kind and the bound are the
+    /// SDK's and not the author's: a text that is too long is refused
+    /// because the SDK refuses it, and not because the author remembered.
+    ///
+    /// The flags are the house defaults: the command does not change the
+    /// document, it is undoable only if it says so, and it is written in
+    /// the journal. The caller that wants otherwise says so on the
+    /// command it is given back.
+    pub fn dynamic(
+        id: &str,
+        label: &str,
+        area: &str,
+        doc: &str,
+        params: Vec<ParamDoc>,
+        run: impl Fn(&mut Session, &Params<'_>) -> Result<Outcome, EngineError> + Send + Sync + 'static,
+    ) -> CommandSpec {
+        let params: &'static [ParamDoc] = Box::leak(params.into_boxed_slice());
+        let menu: &'static [&'static str] =
+            Box::leak(vec![crate::plugin::leak(area.to_string())].into_boxed_slice());
+        CommandSpec {
+            id: crate::plugin::leak(id.to_string()),
+            label: crate::plugin::leak(label.to_string()),
+            area: crate::plugin::leak(area.to_string()),
+            capability: "command",
+            layer: "core",
+            icon: "",
+            doc: crate::plugin::leak(doc.to_string()),
+            shortcut: None,
+            menu,
+            params,
+            mutates: false,
+            example: false,
+            undoable: false,
+            journal: true,
+            enabled: crate::always,
+            run: CommandRun::Dynamic(Arc::new(run)),
+        }
+    }
+
     /// The parameter names, for the engine's refusal of an unknown key.
     ///
     /// The **alternative spelling** is one of them: a caller may give

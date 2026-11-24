@@ -6,8 +6,7 @@
 
 use craftkit_derive::{Command, Panel};
 use craftkit_sdk::{
-    Bool, CommandRun, CommandSpec, Doc, Either, EngineError, NodeRef, Number, Outcome, ParamDoc, Rect,
-    Session, Text,
+    Bool, CommandSpec, Doc, Either, EngineError, NodeRef, Number, Outcome, ParamDoc, Rect, Session, Text,
 };
 
 /// Give the document a name.
@@ -808,43 +807,36 @@ fn has_nodes(session: &Session) -> bool {
     !session.document().nodes.is_empty()
 }
 
-/// The parameters of the command made at run time.
-static ECHO_PARAMS: &[ParamDoc] = &[ParamDoc::required("text", Doc::Text, "What to say.")];
-
 /// A command that exists only while the program runs.
 ///
 /// There is no macro here: a command made at run time has no struct to
-/// derive from, so it is written out. It reads its own parameter, because
-/// nothing reads it for it — which is the price of a command that is not
-/// there at compile time.
+/// derive from. It is **declared** all the same — the SDK writes the
+/// fields, and the body reads its parameter with the SDK's reader, so
+/// the kind and the bound are the SDK's and not this program's.
+///
+/// What is left for the caller is what is its own: the icon, and the
+/// fact that this command does not go in the journal.
 pub fn runtime_echo() -> CommandSpec {
-    CommandSpec {
-        id: "runtime.echo",
-        label: "Echo",
-        area: "runtime",
-        capability: "command",
-        layer: "core",
-        icon: "echo",
-        doc: "Say the text back.",
-        shortcut: None,
-        menu: &["runtime"],
-        params: ECHO_PARAMS,
-        mutates: false,
-        example: false,
-        undoable: false,
-        journal: false,
-        enabled: craftkit_sdk::always,
-        run: CommandRun::Dynamic(std::sync::Arc::new(|_session, params| {
-            let text = params.get("text").and_then(|value| value.as_str()).unwrap_or_default();
-            match text {
+    let mut command = CommandSpec::dynamic(
+        "runtime.echo",
+        "Echo",
+        "runtime",
+        "Say the text back.",
+        vec![ParamDoc::dynamic("text", Doc::Text, true, "What to say.")],
+        |_session, params| {
+            let text = params.param::<Text>("text", "runtime.echo")?;
+            match text.0.trim() {
                 "" => Err(EngineError::Failed {
                     id: "runtime.echo".to_string(),
                     message: "there was no text".to_string(),
                 }),
                 text => Ok(Outcome::new(text.to_string())),
             }
-        })),
-    }
+        },
+    );
+    command.icon = "echo";
+    command.journal = false;
+    command
 }
 
 /// Put the selected nodes in a group.

@@ -238,6 +238,40 @@ fn a_command_made_at_run_time_can_be_run() {
     assert_eq!(outcome.message, "hello");
 }
 
+/// The parameter of a run-time command is read by the **SDK's reader**.
+///
+/// The command was made while the program ran, and it has no struct to
+/// derive from — so the bound on its text is the SDK's and not the
+/// author's, exactly as it is for a command that was compiled.
+#[test]
+fn the_parameter_of_a_run_time_command_is_read_by_the_sdk() {
+    let mut commands = ecosystem().commands;
+    commands.register(craftkit_studio::commands::runtime_echo()).expect("the command is registered");
+
+    let mut session = Session::new(commands, ecosystem().kinds);
+    let too_long = "x".repeat(craftkit_sdk::params::MAX_TEXT_CHARACTERS + 1);
+    let error =
+        session.execute("runtime.echo", &json!({ "text": too_long })).expect_err("the text is too long");
+    assert!(error.to_string().contains("longer"), "{error}");
+
+    // And the value that is long enough is said back.
+    let outcome = session
+        .execute("runtime.echo", &json!({ "text": "x".repeat(craftkit_sdk::params::MAX_TEXT_CHARACTERS) }))
+        .expect("the command runs");
+    assert_eq!(outcome.message.len(), craftkit_sdk::params::MAX_TEXT_CHARACTERS);
+}
+
+/// A run-time command that says nothing is refused, and it says why.
+#[test]
+fn a_run_time_command_that_says_nothing_is_refused() {
+    let mut commands = ecosystem().commands;
+    commands.register(craftkit_studio::commands::runtime_echo()).expect("the command is registered");
+
+    let mut session = Session::new(commands, ecosystem().kinds);
+    let error = session.execute("runtime.echo", &json!({ "text": "   " })).expect_err("there was no text");
+    assert!(error.to_string().contains("no text"), "{error}");
+}
+
 /// A command that changes the document can be undone, and one that does not
 /// leaves no entry.
 #[test]
