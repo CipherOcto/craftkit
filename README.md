@@ -4564,6 +4564,7 @@ so.
 | **the six doors are classified** | **built.** The gate reads all six, the studio's entry point among them, and the bridge asks `doc.plan` like every other door (§1116) | §1116 |
 | **the agent is told the bound** | **built.** The schema carries the text bound, read from the SDK's own constant and not copied into it (§1117) | §1117 |
 | **the agent is told what changes** | **built.** The vocabulary and the descriptor carry the command's own promise, and the agent door's hint is read and not guessed (§1118) | §1118 |
+| **the recipe says what the tree does** | **built.** The batteries the tree has are named in the recipe, and the gate says so when a name drifts (§1119) | §1119 |
 
 ### The list of things that are honestly not there: empty
 
@@ -70976,3 +70977,44 @@ read the document and change nothing.
   the surface they are on.
 - **The catalogue is not a menu.** It lists everything the registry
   holds, and a door that wants a menu asks the projection for one.
+
+## 1119. The recipe says what the tree does
+
+The recipe that tells a person how to add a battery names the batteries
+that are there. The list had drifted: the **a2ui battery** was in the
+tree and not in the recipe, and it was the one battery that did not
+follow the convention — no pinned registry, and no place in the studio.
+
+### What was built
+
+- **The list is checked.** Every battery the tree has is named in the
+  recipe, and the recipe names no battery the tree does not have. The
+  rule is **stated** and not guessed: the recipe says which line carries
+  the list, and the gate reads that line.
+- **The a2ui battery is a battery like any other.** The studio links it
+  behind a feature, the way it links the other batteries, and its
+  registry is **pinned** like the other eight: every command of it, with
+  its label, its area, its capability, its layer, its icon, its
+  documentation, its chord, its menu path, its parameters and its flags.
+
+### What the port found
+
+- **A claim about the tree is a fact about the tree.** The recipe's list
+  was a fact, and it was wrong: nineteen batteries, eighteen names. The
+  outer gate checks the recipe's **links**; nothing checked the claim.
+- **A battery that does not follow the convention is a battery nobody
+  knows how to add a command to.** The pinned registry is how a battery's
+  commands are held still, and the a2ui battery had nothing holding it.
+
+### What it cost
+
+- **One rule** in the tree's own gate, **three gate tests**, **one
+  feature** in the studio and **one pinned file**.
+
+### What it does not settle
+
+- **The other claims the recipes make are prose.** The studio's features,
+  the agent door's batteries and the pinned registries are true today,
+  and only the links are checked.
+- **The rule reads one list.** A recipe that named a second list of
+  crates would need a second stated line, and there is not one.
