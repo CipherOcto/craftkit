@@ -232,14 +232,17 @@ so that it is not rediscovered as a surprise:
 
 - **O6 — the registry reconciles against itself.** The registry grows
   while a program runs, and a panel that was drawn before a plugin
-  arrived does not know about it. The remedy is a **version counter**
-  and a reconciliation step: **medium**, and a decision about what a
-  panel does when the registry moves under it. What is closed is the
-  **sharpest case**: a session can gain a command while it runs, and
-  every door reads its list from the session it runs the commands in, so
-  a door never offers a command the session does not have (§1121). What
-  is left is the *panel's* side: a drawing that was made before the
-  command arrived.
+  arrived does not know about it. The remedy the survey proposed was a
+  **version counter** and a reconciliation step. The **sharpest case**
+  was closed first: a session can gain a command while it runs, and every
+  door reads its list from the session it runs the commands in, so a door
+  never offers a command the session does not have (§1121). The **panel's
+  side** is closed too (§1127): a panel is a battery's **contribution** —
+  a fixed set of the commands that battery brought — and the commands
+  that are not a panel's are the kit's own, read from the session every
+  time the window draws. A command that arrives while the program runs is
+  a button with the rest, and a version counter would be a way of
+  noticing what the window already notices.
 - **O7 — a path resolves to a plain value, inside the SDK.** The a2ui
   layer resolves its own paths and the door gets plain values, and the
   gate refuses a front end that names the plan — so the *constraint*

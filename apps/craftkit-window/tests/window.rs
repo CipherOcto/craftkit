@@ -6,6 +6,7 @@
 //! and the only way it changes anything is the session's one way in.
 
 use craftkit_sdk::serde_json::json;
+use craftkit_sdk::{CommandSpec, Outcome};
 use craftkit_window::Window;
 
 /// A window over the kit.
@@ -601,4 +602,41 @@ fn the_undo_is_a_command() {
     let outcome = window.run_id("history.undo", json!({})).expect("the undo runs");
     assert!(outcome.message.contains("node.add"), "the undo says what it undid: {}", outcome.message);
     assert_eq!(window.session().document().nodes.len(), 0, "the node was not undone");
+}
+
+/// A command that joins the session while the window is open is in the
+/// window's list.
+///
+/// The window has no list of its own: it reads the session's registry
+/// every time it draws, so a command that arrives while the program runs
+/// is a button with the rest.
+///
+/// A **panel** is a battery's own window of commands — a contribution, and
+/// a fixed set — so the new command is in the kit's own list and not in a
+/// panel. That is the whole of what a panel is: the batteries' commands,
+/// and the kit's own for everything else.
+#[test]
+fn a_command_that_joins_the_session_is_in_the_windows_list() {
+    let window = window();
+    let command = CommandSpec::dynamic(
+        "runtime.wave",
+        "Wave",
+        "runtime",
+        "Say hello.",
+        Vec::new(),
+        |_session, _params| Ok(Outcome::new("hello")),
+    );
+    {
+        let mut session = window.session();
+        session.register(command).expect("the command joins the session");
+    }
+
+    let ids: Vec<&str> = window.commands().iter().map(|command| command.id).collect();
+    assert!(ids.contains(&"runtime.wave"), "the command is in the list: {ids:?}");
+
+    // And it is in the kit's own list, and not in a panel.
+    let outside: Vec<&str> = window.commands_outside_panels().iter().map(|command| command.id).collect();
+    assert!(outside.contains(&"runtime.wave"), "and it is the kit's own: {outside:?}");
+    let in_panels: Vec<String> = window.panels().iter().flat_map(|panel| panel.commands.clone()).collect();
+    assert!(!in_panels.iter().any(|id| id == "runtime.wave"), "and not in a panel: {in_panels:?}");
 }

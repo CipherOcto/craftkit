@@ -4572,6 +4572,7 @@ so.
 | **a run-time command's declaration is checked** | **built.** The session refuses a value that is not of the kind the command declared, and the schema says the shapes the reader takes (§1124) | §1124 |
 | **the two spellings of a parameter are two kinds** | **built.** Each spelling is published with its own shape, and the check reads the same answer (§1125) | §1125 |
 | **a required parameter the caller did not give is refused** | **built.** The boundary checks the required flag, and the refusal is the reader's own words (§1126) | §1126 |
+| **a panel is a contribution, and the kit's own list is live** | **built.** A command that joins the session while the window is open is a button with the rest (§1127) | §1127 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71434,3 +71435,49 @@ the body — which might never read it — would not say anything.
   on the call the plugin is handed, and the plugin's body reads it.
 - **The declaration is still checked against the call, and not against
   the body** (§1124).
+
+## 1127. A panel is a contribution, and the kit's own list is live
+
+The survey's **O6** said the registry grows while a program runs, and
+that "a panel that was drawn before a plugin arrived does not know about
+it" — and proposed a **version counter** and a reconciliation step for it.
+
+### What was built
+
+- **A panel is a battery's contribution, and a fixed set.** A panel names
+  the commands that battery brought; the commands that are not a panel's
+  are the kit's own.
+- **The kit's own list is live.** The window reads the session's registry
+  every time it draws, so a command that arrives while the program runs
+  is a button with the rest — and the test says so: a command that joins
+  the session is in the window's list and in the kit's own list, and not
+  in a panel.
+- **So the counter would notice what the window already notices.** The
+  survey proposed a version counter for a panel that had been drawn
+  before the command arrived; the window draws its lists from the
+  session, so there is no drawing to be out of date.
+
+### What the port found
+
+- **The gap was a panel, and a panel is not that.** The survey's case was
+  a drawing made before the command arrived, and the window's drawing is
+  the **document** — a new command does not change the document, and the
+  chrome around it is built afresh each frame.
+- **The two lists are not the same list, and should not be.** The
+  batteries' commands are in the panels, and everything else is the kit's
+  own: a command that joins the session is not a battery's, so it is in
+  the kit's list.
+
+### What it cost
+
+- **One test** in the window, and **two paragraphs** of prose — the
+  survey's row and this file's gaps — saying what a panel is.
+
+### What it does not settle
+
+- **The registry has no version counter**, and nothing in the tree needs
+  one. A front end that caches its list would need it, and that is a
+  front end this tree has not written.
+- **A subprocess plugin's commands join the session when the plugin is
+  loaded**, and that is the sharp case: the doors list what the session
+  has either way (§1121).
