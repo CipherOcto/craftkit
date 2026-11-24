@@ -84,6 +84,8 @@ pub struct Index {
     pub commands: Vec<Command>,
     /// Every kind, sorted by id.
     pub kinds: Vec<Kind>,
+    /// Every migration, sorted by id.
+    pub migrations: Vec<Migration>,
     /// The files of each battery's source, by battery.
     pub modules: BTreeMap<String, Vec<PathBuf>>,
     /// The files of each battery's tests, by battery.
@@ -91,6 +93,27 @@ pub struct Index {
     /// The public bounds the batteries declare: the name, the value and the
     /// file.
     pub bounds: Vec<Bound>,
+}
+
+/// One **migration** the tree declares: a step from one version of a
+/// file format to the next.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Migration {
+    /// The step's id: `<family>.<from>to<to>`.
+    pub id: String,
+    /// The file the step is written in, relative to the root.
+    pub file: PathBuf,
+    /// The line the step's attribute is on.
+    pub line: usize,
+    /// The crate the step belongs to.
+    pub crate_name: String,
+}
+
+impl Migration {
+    /// Where the step is, for a report: `crates/x/src/y.rs:42`.
+    pub fn where_(&self) -> String {
+        format!("{}:{}", self.file.display(), self.line)
+    }
 }
 
 /// One bound a battery declares.
@@ -227,6 +250,36 @@ pub fn commands_in(text: &str, file: &Path, battery: &str) -> Vec<Command> {
                 line,
                 battery: battery.to_string(),
                 example: has_flag(&block, "example"),
+            });
+        }
+        offset = end;
+    }
+    found
+}
+
+/// The **migrations** a file declares, where the attribute is at the
+/// start of its line.
+///
+/// A migration is a step from one version of a file format to the next,
+/// and it is a rule the kit publishes: it says what a file of the older
+/// version becomes. The attribute is at the start of its line when it is
+/// a **declaration**: an attribute in a comment is an example of one, and
+/// the example is not a step.
+pub fn migrations_in(text: &str, file: &Path, crate_name: &str) -> Vec<Migration> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find("#[migration(") {
+        let start = offset + at;
+        let Some((block, end)) = block_of(text, start + "#[migration(".len()) else { break };
+        let line_start = text[..start].rfind('\n').map(|at| at + 1).unwrap_or(0);
+        if text[line_start..start].trim().is_empty()
+            && let Some(id) = field(&block, "id")
+        {
+            found.push(Migration {
+                id,
+                file: file.to_path_buf(),
+                line: text[..start].lines().count().max(1),
+                crate_name: crate_name.to_string(),
             });
         }
         offset = end;

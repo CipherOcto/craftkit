@@ -198,6 +198,12 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **A migration that no test names is caught** (§1135): the same rule, read
+  over the tree's **migrations** — the steps from one version of a file
+  format to the next — and the rule is about the **name**, so a step
+  named in a comment is a step the gate counts. The rule does not say that
+  a document of every version survives being written and read back with
+  everything that version can carry.
 - **The reader that finds the kinds is a reader too** (§1134): it reads the
   kinds a battery writes **through a macro** — the macro's pattern says
   which argument the kind's id is, and the call says what it is — and it

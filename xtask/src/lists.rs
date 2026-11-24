@@ -581,6 +581,7 @@ pub fn broken_document_links(root: &Path) -> Result<Vec<String>, String> {
 pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String> {
     let mut commands: Vec<String> = Vec::new();
     let mut kinds: Vec<String> = Vec::new();
+    let mut migrations: Vec<String> = Vec::new();
     let index = crate::index::build(root)?;
     commands.extend(index.commands.iter().map(|command| command.id.clone()));
     kinds.extend(index.kinds.iter().map(|kind| kind.id.clone()));
@@ -601,6 +602,9 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             };
             commands.extend(commands_at_the_start_of_a_line(&text));
             kinds.extend(crate::index::kinds_in(&text, &file, &name).into_iter().map(|kind| kind.id));
+            migrations.extend(
+                crate::index::migrations_in(&text, &file, &name).into_iter().map(|migration| migration.id),
+            );
         }
     }
     // Every test file in the tree, and what it says.
@@ -614,6 +618,8 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     commands.dedup();
     kinds.sort();
     kinds.dedup();
+    migrations.sort();
+    migrations.dedup();
     let mut problems = Vec::new();
     for command in commands {
         if tests.iter().any(|body| names_it(body, &command)) {
@@ -629,6 +635,14 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
         }
         problems.push(format!(
             "the kind `{kind}` is named by no test: every kind the tree has is named by a test"
+        ));
+    }
+    for migration in migrations {
+        if tests.iter().any(|body| names_it(body, &migration)) {
+            continue;
+        }
+        problems.push(format!(
+            "the migration `{migration}` is named by no test: every migration the tree has is named by a test"
         ));
     }
     Ok(problems)
@@ -1571,6 +1585,46 @@ mod tests {
         assert_eq!(macros.len(), 1, "the macro is read: {macros:?}");
         assert_eq!(macros[0].id, None, "and it declares no command");
         assert_eq!(macros[0].node_kind, Some(0), "but it declares a kind");
+    }
+
+    /// A **migration** that no test names is caught.
+    #[test]
+    fn a_migration_that_no_test_names_is_caught() {
+        let root = crate::temp::dir("lists-migration").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[migration(id = \"thing.1to2\", family = \"thing\", from = 1, to = 2)]\npub struct S;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("thing.1to2"), "{problems:?}");
+    }
+
+    /// And a migration a test names is **not** caught.
+    #[test]
+    fn a_migration_that_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-migration-named").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[migration(id = \"thing.1to2\", family = \"thing\", from = 1, to = 2)]\npub struct S;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let step = \"thing.1to2\"; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
     }
 
     /// A kind written in a **test** is not a kind the tree has.

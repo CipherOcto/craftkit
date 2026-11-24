@@ -4580,6 +4580,7 @@ so.
 | **the matrix's marks are live** | **built.** The harness reads the matrix and compares each cell's mark with what the door did, so a cell that lies is a difference that names its line (§1132) | §1132 |
 | **every command is run by a test** | **built.** The outer gate reads every command the tree declares and says the ones that no test names (§1133) | §1133 |
 | **every kind is named by a test** | **built.** The outer gate reads every kind the tree declares and says the ones that no test names (§1134) | §1134 |
+| **every migration is named by a test** | **built.** The outer gate reads every migration the tree declares and says the ones that no test names (§1135) | §1135 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71998,3 +71999,54 @@ were named by no test at all.
 - **The reader is a reader.** A kind declared in a way it does not see is a
   kind the rule does not hold to account, and the rule's own tests are the
   only thing that says it sees what it says it sees.
+
+## 1135. Every migration is named by a test
+
+A **migration** is a step from one version of the file format to the next.
+It is a rule the kit publishes as much as a command or a kind is: it says
+what a file of the older version becomes when a program that knows the
+later one reads it. Nine steps carry a `craftkit` file from the first
+version to the tenth, and **seven** of them were named by no test at all.
+
+### What was built
+
+- **Every migration is named by a test.** `crates/craftkit-sdk/tests/migrations.rs`
+  has one test per step, and each says what the step does: the step from
+  the first version gives every node the `muted` flag, the step from the
+  third gives the document its payload, the step from the eighth gives
+  every node the `hidden` flag, and the step from the ninth gives every
+  node the `locked` flag. The last test carries a file of the first
+  version through the whole chain and says what it becomes.
+- **The outer gate says so.** The `lists` phase reads every migration the
+  tree declares and says a migration that no test names.
+- **The gate bites.** Two tests in the xtask: a migration that no test
+  names is caught, and a migration a test names is not.
+
+### What the port found
+
+- **A step that no test names is a step that nothing proves.** A step that
+  gave a node the wrong flag, or dropped a relation's payload, or wrote a
+  document's assets away, would have lost a user's work — silently, and
+  at the moment the file was opened. Seven of the nine steps had no test
+  that said what they did.
+- **The chain itself was sound.** A file of the first version does come
+  forward to the tenth, with everything the tenth version can carry. What
+  was missing was the proof that each **step** did what it says, and the
+  gate that would have asked.
+
+### What it cost
+
+- **One rule** in the outer gate, **ten tests** for the nine migrations
+  (the tenth test carries the whole chain), **two tests** for the rule,
+  and the index's `Migration` and the reader that finds them.
+
+### What it does not settle
+
+- **A migration that is named is not a migration that is right.** The rule
+  is about the **name**, as §1133's and §1134's are: a step named in a
+  comment is a step the gate counts.
+- **The rule is about the tree's own tests.** A step that only a program
+  outside the tree holds is a step the rule does not see.
+- **A chain is not a round trip.** The tests say what each step does; they
+  do not say that a document of every version survives being written and
+  read back with everything that version can carry.
