@@ -53,11 +53,37 @@ impl Command {
     }
 }
 
+/// One **kind** of the tree: a node kind, or an evaluator.
+///
+/// A kind is what the document may hold, and an evaluator is what works
+/// out what a document means. Both are **named**: the id is the name the
+/// doors and the plans use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Kind {
+    /// The kind's id: `<area>.<thing>`.
+    pub id: String,
+    /// The file the kind is written in, relative to the root.
+    pub file: PathBuf,
+    /// The line the kind's attribute is on.
+    pub line: usize,
+    /// The battery the kind belongs to: the crate it is in.
+    pub battery: String,
+}
+
+impl Kind {
+    /// Where the kind is, for a report: `crates/x/src/y.rs:42`.
+    pub fn where_(&self) -> String {
+        format!("{}:{}", self.file.display(), self.line)
+    }
+}
+
 /// The tree's index.
 #[derive(Debug, Default, Clone)]
 pub struct Index {
     /// Every command, sorted by id.
     pub commands: Vec<Command>,
+    /// Every kind, sorted by id.
+    pub kinds: Vec<Kind>,
     /// The files of each battery's source, by battery.
     pub modules: BTreeMap<String, Vec<PathBuf>>,
     /// The files of each battery's tests, by battery.
@@ -151,10 +177,13 @@ pub fn build(root: &Path) -> Result<Index, String> {
             index.commands.extend(commands_in(&text, &relative, &battery));
             index.commands.extend(table_commands_in(&text, &relative, &battery));
             index.commands.extend(macro_commands_in(&text, &relative, &battery, &macros));
+            index.kinds.extend(kinds_in(&text, &relative, &battery));
+            index.kinds.extend(macro_kinds_in(&text, &relative, &battery, &macros));
             index.bounds.extend(bounds_in(&text, &relative, &battery));
         }
     }
     index.commands.sort_by(|a, b| a.id.cmp(&b.id));
+    index.kinds.sort_by(|a, b| a.id.cmp(&b.id));
     index.bounds.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(index)
 }
@@ -193,6 +222,68 @@ pub fn commands_in(text: &str, file: &Path, battery: &str) -> Vec<Command> {
     found
 }
 
+/// The kinds a file declares, where the attribute is at the start of its
+/// line.
+///
+/// A **node kind** says `kind =` and an **evaluator** says `id =`, and
+/// both are read as text. The attribute is at the start of its line when
+/// it is a **declaration**: an attribute in a comment is an example of
+/// one, and the example is not a kind.
+pub fn kinds_in(text: &str, file: &Path, battery: &str) -> Vec<Kind> {
+    let mut found = Vec::new();
+    for (attribute, name) in [("#[node_kind(", "kind"), ("#[evaluator(", "id")] {
+        let mut offset = 0usize;
+        while let Some(at) = text[offset..].find(attribute) {
+            let start = offset + at;
+            let Some((block, end)) = block_of(text, start + attribute.len()) else { break };
+            let line_start = text[..start].rfind('\n').map(|at| at + 1).unwrap_or(0);
+            if text[line_start..start].trim().is_empty()
+                && let Some(id) = field(&block, name)
+            {
+                found.push(Kind {
+                    id,
+                    file: file.to_path_buf(),
+                    line: text[..start].lines().count().max(1),
+                    battery: battery.to_string(),
+                });
+            }
+            offset = end;
+        }
+    }
+    found
+}
+
+/// The kinds the macros of a battery declare, in one file.
+///
+/// **The call is read as the pattern says.** The macro's pattern says
+/// which argument is the kind's id, and the call says what it is.
+pub fn macro_kinds_in(text: &str, file: &Path, battery: &str, macros: &[MacroDef]) -> Vec<Kind> {
+    let mut found = Vec::new();
+    for definition in macros {
+        for position in [definition.node_kind, definition.evaluator].into_iter().flatten() {
+            let needle = format!("{}!(", definition.name);
+            let mut offset = 0usize;
+            while let Some(at) = text[offset..].find(&needle) {
+                let start = offset + at;
+                let args_start = start + needle.len();
+                let Some((body, end)) = parens_of(text, args_start) else { break };
+                let arguments = split_arguments(&body);
+                if let Some(id) = literal_at(&arguments, Some(position)) {
+                    let at = arguments.get(position).map(|(_, offset)| args_start + offset).unwrap_or(start);
+                    found.push(Kind {
+                        id,
+                        file: file.to_path_buf(),
+                        line: text[..at].lines().count().max(1),
+                        battery: battery.to_string(),
+                    });
+                }
+                offset = end;
+            }
+        }
+    }
+    found
+}
+
 /// A **macro** that declares a command.
 ///
 /// A battery may declare a family of commands through a `macro_rules!`
@@ -209,6 +300,13 @@ pub struct MacroDef {
     pub id: Option<usize>,
     /// The position of the argument the command's **label** comes from.
     pub label: Option<usize>,
+    /// The position of the argument the **node kind's** id comes from.
+    ///
+    /// A battery may declare a family of kinds through a macro, and the
+    /// macro's body says `kind = $kind`: the call says what the kind is.
+    pub node_kind: Option<usize>,
+    /// The position of the argument the **evaluator's** id comes from.
+    pub evaluator: Option<usize>,
     /// The documentation of the command the macro declares.
     pub doc: Option<String>,
     /// Whether the command the macro declares is the battery's example.
@@ -271,6 +369,10 @@ fn macro_definition_of(
     let label_variable = metavariable_of(&block, "label");
     let id = arguments.get(&id_variable).copied();
     let label = label_variable.and_then(|variable| arguments.get(&variable).copied());
+    // A macro may declare a **kind** as well: a node kind says `kind =`,
+    // and an evaluator says `id =` in an attribute of its own.
+    let node_kind = kind_position(body, "#[node_kind(", "kind", &arguments);
+    let evaluator = kind_position(body, "#[evaluator(", "id", &arguments);
     // The documentation is above the derive, inside the macro's body.
     let derive_at = body.find("#[derive(Command)]").unwrap_or(command_at);
     let doc = doc_above(body, derive_at);
@@ -280,11 +382,30 @@ fn macro_definition_of(
         arguments,
         id,
         label,
+        node_kind,
+        evaluator,
         doc,
         example: has_flag(&block, "example"),
         file: file.to_path_buf(),
         line,
     })
+}
+
+/// The position of the argument a **kind's** id comes from.
+///
+/// The attribute is read as text, and the id is a metavariable of it:
+/// `#[node_kind(kind = $kind, …)]` takes the kind from the argument the
+/// pattern names `$kind`.
+fn kind_position(
+    body: &str,
+    attribute: &str,
+    field: &str,
+    arguments: &BTreeMap<String, usize>,
+) -> Option<usize> {
+    let at = body.find(attribute)?;
+    let (block, _) = block_of(body, at + attribute.len())?;
+    let variable = metavariable_of(&block, field)?;
+    arguments.get(&variable).copied()
 }
 
 /// The commands the macros of a battery declare, in one file.

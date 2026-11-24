@@ -570,14 +570,20 @@ pub fn broken_document_links(root: &Path) -> Result<Vec<String>, String> {
 /// longer one — `task.list` is not named by a test that says
 /// `task.list.all`.
 ///
-/// The commands of the **batteries** are read by the index, which knows
-/// the macros a battery writes its rows with; the kit's own commands are
-/// read from the crates that are not batteries, where the attribute is
-/// at the start of its line.
+/// The **commands** and the **kinds** of the batteries are read by the
+/// index, which knows the macros a battery writes its rows with; the
+/// kit's own are read from the crates that are not batteries, where the
+/// attribute is at the start of its line.
+///
+/// A **kind** is what the document may hold, and it is a rule the kit
+/// publishes as much as a command is: a kind that no test names is a
+/// kind that nothing proves draws, or measures, or means what it says.
 pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String> {
     let mut commands: Vec<String> = Vec::new();
+    let mut kinds: Vec<String> = Vec::new();
     let index = crate::index::build(root)?;
     commands.extend(index.commands.iter().map(|command| command.id.clone()));
+    kinds.extend(index.kinds.iter().map(|kind| kind.id.clone()));
     for directory in crate_directories(root) {
         let name = directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
         // The batteries are the index's own, and the index knows the
@@ -588,6 +594,7 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
         for file in crate::index::rust_files(&directory.join("src")) {
             let Ok(text) = std::fs::read_to_string(&file) else { continue };
             commands.extend(commands_at_the_start_of_a_line(&text));
+            kinds.extend(crate::index::kinds_in(&text, &file, &name).into_iter().map(|kind| kind.id));
         }
     }
     // Every test file in the tree, and what it says.
@@ -599,6 +606,8 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     }
     commands.sort();
     commands.dedup();
+    kinds.sort();
+    kinds.dedup();
     let mut problems = Vec::new();
     for command in commands {
         if tests.iter().any(|body| names_it(body, &command)) {
@@ -606,6 +615,14 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
         }
         problems.push(format!(
             "the command `{command}` is run by no test: every command the tree has is run by a test"
+        ));
+    }
+    for kind in kinds {
+        if tests.iter().any(|body| names_it(body, &kind)) {
+            continue;
+        }
+        problems.push(format!(
+            "the kind `{kind}` is named by no test: every kind the tree has is named by a test"
         ));
     }
     Ok(problems)
@@ -1472,6 +1489,76 @@ mod tests {
     fn a_name_that_is_part_of_a_longer_one_is_not_a_name() {
         assert!(!names_it("the command task.list.all is run", "task.list"));
         assert!(names_it("the command task.list is run", "task.list"));
+    }
+
+    /// A kind that no test names is **caught**.
+    ///
+    /// The tree the test builds is a small one: a crate with a node kind
+    /// and a test that does not name it.
+    #[test]
+    fn a_kind_that_no_test_names_is_caught() {
+        let root = crate::temp::dir("lists-kind").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[derive(NodeKind)]\n#[node_kind(kind = \"thing.shape\")]\npub struct ShapeKind;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("thing.shape"), "{problems:?}");
+    }
+
+    /// And a kind that a test names is **not** caught.
+    #[test]
+    fn a_kind_that_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-kind-named").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "#[derive(NodeKind)]\n#[node_kind(kind = \"thing.shape\")]\npub struct ShapeKind;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { assert_eq!(\"thing.shape\", \"thing.shape\"); }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// The kind of a **macro** is read from the call, and the call says
+    /// what it is.
+    #[test]
+    fn the_kind_of_a_macro_is_read_from_its_call() {
+        let source = "macro_rules! kind_of {\n    ($id:literal) => {\n        #[node_kind(kind = $id)]\n        pub struct K;\n    };\n}\nkind_of!(\"thing.shape\");\n";
+        let kinds = crate::index::kinds_in(source, std::path::Path::new("src/lib.rs"), "thing");
+        assert!(kinds.is_empty(), "the declaration alone is not a kind: {kinds:?}");
+        let mut arguments = std::collections::BTreeMap::new();
+        arguments.insert("id".to_string(), 0usize);
+        let macros = vec![crate::index::MacroDef {
+            name: "kind_of".to_string(),
+            arguments,
+            id: None,
+            label: None,
+            node_kind: Some(0),
+            evaluator: None,
+            doc: None,
+            example: false,
+            file: std::path::PathBuf::from("src/lib.rs"),
+            line: 1,
+        }];
+        let kinds =
+            crate::index::macro_kinds_in(source, std::path::Path::new("src/lib.rs"), "thing", &macros);
+        assert_eq!(kinds.len(), 1, "{kinds:?}");
+        assert_eq!(kinds[0].id, "thing.shape");
     }
 
     /// And the attribute in a **comment** is an example, and not a

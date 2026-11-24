@@ -76,6 +76,21 @@ fn facts_of(session: &mut Session, dimension: u64) -> Json {
     entry.value.clone()
 }
 
+/// A dimension is a **kind** of its own.
+///
+/// The kind is what the document holds: a node of that kind, and the
+/// kind is what the plan and the drawing read.
+#[test]
+fn a_dimension_is_a_kind_of_its_own() {
+    let mut session = session();
+    let block = a_block(&mut session);
+    let line = a_line(&mut session, block);
+    let dimension = a_dimension(&mut session, block, line);
+    let node = session.document().node(dimension).expect("the dimension is there");
+    assert_eq!(node.kind, "cad.entity.dimension", "the node is a dimension");
+    assert!(session.kinds().get("cad.entity.dimension").is_some(), "and the kind is one the session knows");
+}
+
 /// **A dimension measures the length of an entity.**
 #[test]
 fn a_dimension_measures_the_length_of_an_entity() {

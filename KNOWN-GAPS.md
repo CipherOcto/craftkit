@@ -192,6 +192,12 @@ These are the README's own honest notes, and they are still true of the tree:
   crates that are not batteries — and says the ones that no test names.
   The rule is about the **name**: a test behind a feature flag still names
   the command, and a test that runs every command in a loop names none.
+- **A kind that no test names is caught** (§1134): the same rule, read over
+  the tree's **kinds** — a node kind or an evaluator — and a kind is named
+  rather than run, so the rule is even weaker than the command's: a kind
+  written about in a string is a kind the gate counts, and a kind that is
+  created and read in a test is a kind the gate cannot tell from one that
+  is only written about.
 - **A session built by hand is not filtered by layer.** `Session::register`
   refuses a command whose layer is not linked in, and every door builds its
   session with the ecosystem's layers — but a session made from a registry
