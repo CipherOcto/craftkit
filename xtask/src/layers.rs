@@ -196,6 +196,10 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-mcp-server", Class::Layer(5)),
     ("craftkit-repl", Class::Layer(5)),
     ("craftkit-studio", Class::Layer(5)),
+    // The **parity harness**: one program that drives the doors and
+    // compares their answers. It is an application, because it asks
+    // questions of other applications.
+    ("craftkit-parity", Class::Layer(5)),
     ("craftkit-window", Class::Layer(5)),
     ("craftkit-wasm", Class::Layer(5)),
     // The build tool. It is not part of the tree the authority describes, and

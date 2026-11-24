@@ -95,10 +95,19 @@ when the code moves, and a line does.
 
 What is still **not** checked is the *cells* themselves — that is, the gate
 does not read a door and compare what it does with what the table says, and
-it does not check that a named test is *about* the cell it is in. That
-would be a check over behaviour, and it needs a harness that can drive all
-six doors at once: a crate of its own, three edits (the manifest, the
-layer table and the architecture document). It is **not** a defect:
+it does not check that a named test is *about* the cell it is in.
+
+**The doors are compared with each other, though.** The parity harness
+(`apps/craftkit-parity`, §1128) drives five of the six doors with the same
+three questions and says where they differ: the same commands listed, the
+same message for the same command, and every door naming the command it
+refused. It is the harness the survey asked for — a crate of its own and
+**four** edits, not three: the tree's own layer table, the outer gate's
+table, the architecture document and the README. The **a2ui door** is not
+in it, because it speaks a2ui's own vocabulary and there is nothing to
+compare.
+
+What is left is a **cell** read by a person, and that is **not** a defect:
 nothing in the tree is broken by a table that drifts, and the cells that
 matter most are each proved by a test the tree runs.
 

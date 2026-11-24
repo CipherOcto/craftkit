@@ -4573,6 +4573,7 @@ so.
 | **the two spellings of a parameter are two kinds** | **built.** Each spelling is published with its own shape, and the check reads the same answer (§1125) | §1125 |
 | **a required parameter the caller did not give is refused** | **built.** The boundary checks the required flag, and the refusal is the reader's own words (§1126) | §1126 |
 | **a panel is a contribution, and the kit's own list is live** | **built.** A command that joins the session while the window is open is a button with the rest (§1127) | §1127 |
+| **the doors are compared, one against another** | **built.** One program drives five doors with the same questions and says where they differ (§1128) | §1128 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71223,7 +71224,9 @@ matrix and checks that every test it names **exists**.
   doors and compare what they do with what the table says. That would be
   a check over behaviour, and it needs a harness that can reach all six
   doors at once — a crate of its own, three edits (the manifest, the
-  layer table and the architecture document).
+  layer table and the architecture document). **The harness is built now**
+  (§1128): it drives five of the six doors and compares them with each
+  other, and what is left is the *cell* read by a person.
 - **A negative cell has no proof to name.** "The terminal door has no
   schema" is an absence, and an absence has no test to point at.
 
@@ -71481,3 +71484,56 @@ it" — and proposed a **version counter** and a reconciliation step for it.
 - **A subprocess plugin's commands join the session when the plugin is
   loaded**, and that is the sharp case: the doors list what the session
   has either way (§1121).
+
+## 1128. The doors are compared, one against another
+
+The tree has **six doors**, and each one has its own tests: a test that
+says "this door lists what the session has", a test that says "this door
+runs a command", a test that says "this door refuses a command that is
+not there". Six sets of tests prove six doors. They do **not** prove
+that the six doors **agree**.
+
+### What was built
+
+- **A program that drives the doors and compares their answers.** The new
+  application `apps/craftkit-parity` asks each of five doors the same
+  three questions — *which commands do you list*, *what do you say when
+  you run this command*, *what do you say when the command is not there*
+  — and compares the answers, one door against another.
+- **They agree.** The same commands, the same message for the same
+  command, and every door names the command it refused.
+- **The harness bites.** Two doors that answer differently are a
+  difference; a door that could not be built is a difference too. The
+  program **never crashes** and never guesses: it reports, and a
+  difference is a question for a person.
+- **The a2ui door is not in it**, and that is not an oversight: it speaks
+  a2ui's own vocabulary — a catalogue of a2ui's components and not a
+  list of the kit's commands — so there is nothing to compare. Its own
+  tests hold it to that.
+
+### What the port found
+
+- **Six sets of tests prove six doors, and not that they agree.** A
+  review of the tree found the bridge publishing a manifest that was not
+  the session's — and every door's own test was green.
+- **The matrix was a table of claims with a test each.** It said what the
+  doors do, and the tests said it; nothing compared the doors *with each
+  other*, which is the claim the matrix is named for.
+
+### What it cost
+
+- **One application**, **four edits** — the tree's own layer table, the
+  outer gate's table, the architecture document and this file — and **one
+  library** of about three hundred lines with **seven tests**: five about
+  the doors and two about the comparison itself. The workspace's manifest
+  is a glob, so a new application under `apps/` is a member without a
+  line of edit: the survey's three edits are four.
+
+### What it does not settle
+
+- **The matrix's cells are still read by a person.** The harness compares
+  the doors with each other; it does not read the prose and check a cell
+  against a door.
+- **The a2ui door is compared on its own terms**, by its own tests.
+- **Five doors are compared, and the sixth is not** — the a2ui door — so
+  "the doors agree" is a claim about five of the six.

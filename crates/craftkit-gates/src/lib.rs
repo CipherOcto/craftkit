@@ -270,6 +270,10 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("craftkit-mcp-server", 5),
     ("craftkit-repl", 5),
     ("craftkit-studio", 5),
+    // The **parity harness**: one program that drives the doors and
+    // compares their answers. It is an application, because it asks
+    // questions of other applications.
+    ("craftkit-parity", 5),
     // The **window**: a front end over the same registry. It is an
     // application, and the gate holds it thin.
     ("craftkit-window", 5),

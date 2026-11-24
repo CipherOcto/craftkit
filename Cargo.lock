@@ -585,6 +585,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-parity"
+version = "0.2.0"
+dependencies = [
+ "craftkit-bridge",
+ "craftkit-mcp",
+ "craftkit-repl",
+ "craftkit-sdk",
+ "craftkit-studio",
+ "craftkit-wasm",
+ "craftkit-window",
+]
+
+[[package]]
 name = "craftkit-payload"
 version = "0.2.0"
 dependencies = [

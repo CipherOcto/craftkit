@@ -1078,7 +1078,7 @@ not a front end.
 | 3 | **O5** model picks commands, pre-binds params | **small, *if* scoped this way**; large if scoped as a "surface" | **yes** | a door calls `execute_with` with a `Supplier` fed by the model's own output — **done in the a2ui door's terms**: the model's own output pre-binds the arguments, and the layer translates a2ui's names to the kit's (§1113) |
 | 4 | **O8** bounds derived into the catalog | **small** — in practice one `maxLength` | **yes** | the text bound appears in the schema the agent is told — **done** (README §1117): `maxLength`, read from the SDK's own `MAX_TEXT_CHARACTERS` |
 | 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it — **done** (README §1116) |
-| 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table, and keeping it is a rule in the outer gate | no | the table exists, and every cell that says something names the test that proves it — **done** ([`door-parity.md`](door-parity.md)): the six doors side by side, cell by cell, **every cell that says something naming the test that proves it**, and the outer gate checking that a cell names a test and that the test is there |
+| 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table, and keeping it is a rule in the outer gate | no | the table exists, and every cell that says something names the test that proves it — **done** ([`door-parity.md`](door-parity.md)): the six doors side by side, cell by cell, **every cell that says something naming the test that proves it**, and the outer gate checking that a cell names a test and that the test is there. **And the harness is built** (README §1128): `apps/craftkit-parity` drives five of the six doors with the same questions and says where they differ |
 | 7 | **O3** recipe **claim** check | **small**, but it is a judgement, not a link — the link half is already done by `cargo xtask lists` (`xtask/src/lists.rs:55`) | no | a named claim in a recipe is checked against the tree, and a broken claim is reported — **done** (README §1119): the battery list is checked by the tree's own gate, on a stated line |
 | 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it — **the sharp case is closed** (README §1121): a session can gain a command while it runs, and every door lists what the session has; **the panel's side is closed too** (README §1127): a panel is a battery's contribution and a fixed set, and everything else is the kit's own, read from the session every time the window draws — so a version counter would notice what the window already notices |
 | 9 | **O7** paths resolving inside the SDK | **large**, and architecture-defining | no | a path resolves to a plain JSON value inside the SDK, and no front end names a `Plan` — **its constraint holds**: the a2ui layer resolves the paths and the door gets plain values, and the gate refuses a front end that names the plan (§1115); the general API in the SDK is not built |
@@ -1088,11 +1088,13 @@ not a front end.
 
 **Blockers a reader will meet in the first hour**, beyond the costs above:
 
-- **Adding a crate to the tree is three edits, not one**: the `Cargo.toml`,
-  the layer table in `crates/craftkit-gates/src/lib.rs` (`LAYERS`), and
-  `docs/architecture.md` — which `cargo xtask lists` checks against the gate's
-  table. Any new crate (the rejected `craftkit-catalog`, a parity harness)
-  carries all three.
+- **Adding a crate to the tree is three edits, not one**: the layer table
+  in `crates/craftkit-gates/src/lib.rs` (`LAYERS`), the same table in the
+  outer gate (`xtask/src/layers.rs`), and `docs/architecture.md` — which
+  `cargo xtask lists` checks against the gate's table. The workspace's
+  manifest is a **glob**, so a crate under `crates/` or `apps/` is a member
+  without a line of edit. Any new crate carries all three: the parity
+  harness (`apps/craftkit-parity`, README §1128) did.
 - **The SDK's public surface is the plugin API.** A new public method on
   `craftkit-sdk` is a semver-visible addition to the surface plugins compile
   against, even though it is only a *view*.

@@ -10,9 +10,14 @@ when the code moves, and a line does.
 
 **The outer gate reads this table**, and it says two things about it: every
 cell that says something names a test, and every test it names is a test
-that is in the tree. What the gate does **not** do is drive the six doors
-and compare what they do with what the table says; that would need a
-harness that reaches all six at once.
+that is in the tree.
+
+And **one program compares the doors with each other**: the parity
+harness (`apps/craftkit-parity`) drives five of the six doors with the same
+three questions — which commands do you list, what do you say when you run
+this command, what do you say when the command is not there — and says
+where they differ. What the gate does **not** do is read this table and
+check a cell against a door: the cells are still read by a person.
 
 ## What a door is
 
@@ -136,9 +141,13 @@ handshake.
 
 - **The gate does not drive the doors.** It reads this table and checks
   that every cell names a test and that the test is there. It does not
-  run the six doors and compare what they do with what the table says,
-  and it does not check that a named test is *about* the cell it is in —
-  that is still a reader's job.
+  check that a named test is *about* the cell it is in — that is still a
+  reader's job.
+- **The harness compares the doors with each other, and not with this
+  table.** It drives five of the six doors and says where they differ;
+  it does not read a cell and check it against a door. The a2ui door is
+  not in it at all: it speaks a2ui's own vocabulary, and there is
+  nothing to compare.
 - **A negative cell has no proof to name.** "The terminal door has no
   schema" is an absence, and an absence has no test to point at.
 - **The a2ui door cannot undo and cannot read the plan.** a2ui has no

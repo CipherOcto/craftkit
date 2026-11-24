@@ -1,0 +1,20 @@
+[package]
+name = "craftkit-parity"
+description = "The doors, side by side: one program that drives them all and compares their answers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The **doors** it drives. Each one is an application, and an
+# application may depend on an application: the layering rule is about
+# libraries, and this crate is a program that asks questions.
+craftkit-bridge = { path = "../craftkit-bridge", version = "0.2.0" }
+craftkit-mcp = { path = "../../crates/craftkit-mcp", version = "0.2.0" }
+craftkit-repl = { path = "../craftkit-repl", version = "0.2.0" }
+craftkit-studio = { path = "../craftkit-studio", version = "0.2.0" }
+craftkit-wasm = { path = "../craftkit-wasm", version = "0.2.0" }
+craftkit-window = { path = "../craftkit-window", version = "0.2.0" }
+# The kit itself, for the values the doors speak in.
+craftkit-sdk = { path = "../../crates/craftkit-sdk", version = "0.2.0" }
