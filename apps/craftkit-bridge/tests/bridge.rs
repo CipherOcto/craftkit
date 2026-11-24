@@ -81,6 +81,22 @@ fn an_unknown_method_says_which_methods_there_are() {
     assert!(message.contains("tools/list"), "{message}");
 }
 
+/// A tool says **what it changes**.
+///
+/// The descriptor carries the command's own promise, so an agent that
+/// reads the bridge's tool list knows which tools write to the document
+/// and which only read it.
+#[test]
+fn a_tool_says_what_it_changes() {
+    let mut bridge = bridge();
+    let answer = ask(&mut bridge, "tools/list", Json::Null);
+    let tools = answer["result"]["tools"].as_array().expect("there are tools");
+    let read = tools.iter().find(|tool| tool["id"] == "doc.plan").expect("the plan");
+    assert_eq!(read["mutates"], json!(false), "the plan does not change the document");
+    let write = tools.iter().find(|tool| tool["id"] == "link.add").expect("the link");
+    assert_eq!(write["mutates"], json!(true), "a link changes the document");
+}
+
 /// The resources are the kinds, the formats and the **manifest**: the
 /// rest of the registry, read through the projection's own door.
 ///

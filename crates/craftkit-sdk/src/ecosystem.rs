@@ -528,6 +528,10 @@ impl<'a> Projection<'a> {
     }
 
     /// The schema of a command: its parameters, as an agent is told them.
+    ///
+    /// The **descriptor** also says **what the command changes**: a
+    /// command that does not change the document says so, so an agent
+    /// that reads the document does not have to write to read it.
     pub fn schema(&self, id: &str) -> Option<serde_json::Value> {
         let command = self.ecosystem.commands.get(id)?;
         let parameters: Vec<serde_json::Value> = command
@@ -559,6 +563,8 @@ impl<'a> Projection<'a> {
             "area": command.area,
             "capability": command.capability,
             "doc": command.doc,
+            "mutates": command.mutates,
+            "undoable": command.undoable,
             "parameters": parameters,
         }))
     }
@@ -598,6 +604,11 @@ impl<'a> Projection<'a> {
                 "label": command.label,
                 "doc": command.doc,
                 "layer": command.layer,
+                // **What it changes.** A command that says it does not
+                // change the document does not, and a caller that knows
+                // that can read the document without asking to write it.
+                "mutates": command.mutates,
+                "undoable": command.undoable,
                 "schema": crate::schema::to_json_schema(command.params),
             }));
         }

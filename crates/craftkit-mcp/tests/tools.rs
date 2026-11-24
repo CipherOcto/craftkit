@@ -107,3 +107,21 @@ fn the_tool_list_is_the_registry_in_its_own_order() {
         );
     }
 }
+
+/// A tool says whether it **changes the document**.
+///
+/// The hint is the command's own promise, read and not guessed: a
+/// command that says it does not change the document does not, and an
+/// agent that knows that can read without asking to write. A hint that
+/// is `false` for every tool is a hint that says nothing.
+#[test]
+fn a_tool_says_whether_it_changes_the_document() {
+    let server = Server::new(session());
+    let read = server.tools().iter().find(|tool| tool.command == "doc.plan").expect("the plan");
+    assert!(!read.mutates, "the plan does not change the document");
+    assert_eq!(read.to_json()["annotations"]["readOnlyHint"], json!(true), "{}", read.to_json());
+
+    let write = server.tools().iter().find(|tool| tool.command == "link.add").expect("the link");
+    assert!(write.mutates, "adding a node changes the document");
+    assert_eq!(write.to_json()["annotations"]["readOnlyHint"], json!(false), "{}", write.to_json());
+}

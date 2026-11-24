@@ -170,3 +170,33 @@ fn the_vocabulary_view_is_not_the_entries_view() {
     assert!(entries.is_empty(), "the core contributes no catalogue entries");
     assert!(!catalog.is_empty(), "and the vocabulary is not empty");
 }
+
+/// A command in the vocabulary says **what it changes**.
+///
+/// The promise is the command's own: a command that says it does not
+/// change the document does not, and the session keeps that promise —
+/// a command that breaks it is refused and the document is put back.
+#[test]
+fn a_command_says_what_it_changes() {
+    let ecosystem = Ecosystem::from_inventory().expect("the ecosystem is built");
+    let catalog = ecosystem.projection().catalog();
+    let mut read = 0;
+    let mut write = 0;
+    for entry in &catalog {
+        if entry["capability"] != "command" {
+            continue;
+        }
+        let id = entry["id"].as_str().unwrap_or_default();
+        let mutates = entry["mutates"].as_bool().expect("a command says what it changes");
+        let spec = ecosystem.commands.get(id).expect("the command is there");
+        assert_eq!(mutates, spec.mutates, "{id} says something else in the vocabulary");
+        assert_eq!(entry["undoable"], json!(spec.undoable), "{id}");
+        if mutates {
+            write += 1;
+        } else {
+            read += 1;
+        }
+    }
+    assert!(read > 0, "there are commands that only read");
+    assert!(write > 0, "and commands that change the document");
+}

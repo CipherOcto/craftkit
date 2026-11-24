@@ -108,6 +108,12 @@ pub struct Tool {
     pub description: String,
     /// Its parameters, as a JSON schema.
     pub schema: Json,
+    /// Whether the command **changes the document**.
+    ///
+    /// The command's own promise, read and not guessed: a command that
+    /// says it does not change the document does not, and an agent that
+    /// knows that can read without asking to write.
+    pub mutates: bool,
 }
 
 impl Tool {
@@ -118,7 +124,11 @@ impl Tool {
             "title": self.command,
             "description": self.description,
             "inputSchema": self.schema,
-            "annotations": { "title": self.command, "readOnlyHint": false, "openWorldHint": false },
+            "annotations": {
+                "title": self.command,
+                "readOnlyHint": !self.mutates,
+                "openWorldHint": false,
+            },
         })
     }
 }
@@ -147,6 +157,7 @@ impl Server {
                 command: spec.id.to_string(),
                 description: describe(spec.label, spec.doc),
                 schema: schema_of(spec.params),
+                mutates: spec.mutates,
             });
         }
         Server { session, tools }
