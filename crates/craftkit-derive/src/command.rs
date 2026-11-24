@@ -310,13 +310,14 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
                     quote!(#sdk::ParamDoc::either(
                         #field_name_string,
                         <#left as #sdk::ParamKind>::DOC,
+                        <#right as #sdk::ParamKind>::DOC,
                         #help,
                         #alternative_value,
                     )
                     .with_type_name(<#left as #sdk::ParamKind>::NAME)
                     .with_unit(<#left as #sdk::ParamKind>::UNIT)
                     .with_accepts_text(<#left as #sdk::ParamKind>::ACCEPTS_TEXT)
-                    .with_alternative_kind(<#right as #sdk::ParamKind>::DOC)),
+                    .with_alternative_accepts_text(<#right as #sdk::ParamKind>::ACCEPTS_TEXT)),
                 )
             }
             (Some(_), _) => {

@@ -849,26 +849,34 @@ impl Session {
         if !params.is_object() {
             return self.execute(id, raw);
         }
+        // A **null** is not a value: the reader treats it as absent, so
+        // the prompt path treats it as absent too — otherwise the host
+        // is asked for a parameter the caller did give, and the answer
+        // cannot be used.
+        let given = crate::params::Params::new(&params);
+        let mut questions = Vec::new();
         for doc in spec.params {
             if !doc.needed() {
                 continue;
             }
-            if params.get(doc.name).is_some() {
+            if given.get(doc.name).is_some() {
                 continue;
             }
             // The other spelling of the parameter counts as given.
             if let Some(alternative) = doc.alternative
-                && params.get(alternative).is_some()
+                && given.get(alternative).is_some()
             {
                 continue;
             }
-            let question = crate::prompt::Question {
+            questions.push(crate::prompt::Question {
                 name: doc.name.to_string(),
                 kind: doc.kind,
                 help: doc.help.to_string(),
-            };
+            });
+        }
+        for question in questions {
             if let Some(answer) = supplier.supply(&question) {
-                params[doc.name] = answer;
+                params[question.name] = answer;
             }
         }
         self.execute(id, &params)

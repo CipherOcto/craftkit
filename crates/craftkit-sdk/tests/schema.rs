@@ -83,7 +83,8 @@ fn the_help_is_the_description() {
 /// A parameter with a second spelling offers both.
 #[test]
 fn a_parameter_with_a_second_spelling_offers_both() {
-    let schema = to_json_schema(&[ParamDoc::either("node", Doc::NodeRef, "Which node.", "node_name")]);
+    let schema =
+        to_json_schema(&[ParamDoc::either("node", Doc::NodeRef, Doc::Text, "Which node.", "node_name")]);
     let properties = schema["properties"].as_object().expect("the schema has properties");
     assert!(properties.contains_key("node"));
     assert!(properties.contains_key("node_name"));
@@ -99,8 +100,7 @@ fn a_parameter_with_a_second_spelling_offers_both() {
 #[test]
 fn the_two_spellings_are_published_with_their_own_shapes() {
     let schema =
-        to_json_schema(&[ParamDoc::either("node", Doc::NodeRef, "Which node.", "node_name")
-            .with_alternative_kind(Doc::Text)]);
+        to_json_schema(&[ParamDoc::either("node", Doc::NodeRef, Doc::Text, "Which node.", "node_name")]);
     let properties = schema["properties"].as_object().expect("the schema has properties");
     assert_eq!(properties["node"]["type"], json!("integer"), "the id is a number: {schema}");
     assert_eq!(properties["node_name"]["type"], json!("string"), "and the name is a text: {schema}");
@@ -112,12 +112,47 @@ fn the_two_spellings_are_published_with_their_own_shapes() {
     );
 }
 
-/// And a spelling with no kind of its own keeps the first one's shape.
+/// A pair is required **as a pair**, and the schema says so.
+///
+/// JSON Schema cannot say "one of these two" in a word, but it can say it
+/// in a shape: an `anyOf` with a `required` in each half. A schema that
+/// permits a call the door refuses is a schema that lies.
 #[test]
-fn a_spelling_with_no_kind_of_its_own_keeps_the_first_shape() {
-    let schema = to_json_schema(&[ParamDoc::either("node", Doc::NodeRef, "Which node.", "node_name")]);
+fn a_pair_is_required_as_a_pair() {
+    let schema =
+        to_json_schema(&[ParamDoc::either("node", Doc::NodeRef, Doc::Text, "Which node.", "node_name")]);
+    assert_eq!(schema["anyOf"], json!([{ "required": ["node"] }, { "required": ["node_name"] }]), "{schema}");
+}
+
+/// Two pairs are two `anyOf`s, and the caller has to fill in **both**.
+#[test]
+fn two_pairs_are_required_one_after_the_other() {
+    let schema = to_json_schema(&[
+        ParamDoc::either("node", Doc::NodeRef, Doc::Text, "Which node.", "node_name"),
+        ParamDoc::either("kind", Doc::NodeKind, Doc::Text, "Which kind.", "kind_name"),
+    ]);
+    assert_eq!(
+        schema["allOf"],
+        json!([
+            { "anyOf": [{ "required": ["node"] }, { "required": ["node_name"] }] },
+            { "anyOf": [{ "required": ["kind"] }, { "required": ["kind_name"] }] },
+        ]),
+        "{schema}"
+    );
+}
+
+/// The other spelling says what it takes, and the schema says the same.
+///
+/// A kind that takes a string as well — a length, which may be written
+/// `25` or `25mm` — says **both** shapes, for **each** spelling it has.
+#[test]
+fn the_other_spelling_says_what_it_takes() {
+    let schema =
+        to_json_schema(&[ParamDoc::either("length", Doc::Number, Doc::Number, "How long.", "length_text")
+            .with_alternative_accepts_text(true)]);
     let properties = schema["properties"].as_object().expect("the schema has properties");
-    assert_eq!(properties["node_name"]["type"], json!("integer"), "{schema}");
+    assert_eq!(properties["length"]["type"], json!("number"), "{schema}");
+    assert_eq!(properties["length_text"]["type"], json!(["number", "string"]), "{schema}");
 }
 
 /// A plugin's own kind says its name and its unit.

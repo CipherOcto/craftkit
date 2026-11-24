@@ -757,7 +757,8 @@ one.
 ### O8 · Declare the bounds that are already enforced
 
 `ParamDoc` carries `name`, `kind`, `required`, `help`, `alternative`,
-`type_name`, `unit` — but **no default and no range**, even though the SDK
+`type_name`, `unit` — and, since §1129, `alternative_kind` and the two
+leniency flags — but **no default and no range**, even though the SDK
 knows both: `Params`' helpers bound text (`MAX_TEXT_CHARACTERS`), JSON depth
 and node count, and `NodeRef` is a `u64`.
 

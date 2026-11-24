@@ -241,7 +241,7 @@ fn a_pair_of_spellings_is_required_as_a_pair() {
         "Pair",
         "runtime",
         "Take one of two.",
-        vec![ParamDoc::either("node", Doc::Text, "The node's id.", "node_name")],
+        vec![ParamDoc::either("node", Doc::Text, Doc::Text, "The node's id.", "node_name")],
         |_session, params| {
             let either = Either::<Text, Text>::read_either(params, "node", "node_name")
                 .map_err(|error| EngineError::Param { id: "runtime.pair".to_string(), source: error })?;
@@ -264,4 +264,62 @@ fn a_pair_of_spellings_is_required_as_a_pair() {
     // And neither is a refusal.
     let error = session.execute("runtime.pair", &json!({})).expect_err("the pair is required");
     assert!(error.to_string().contains("or `node_name` instead of it"), "{error}");
+}
+
+/// The **other spelling** is checked against **its own** kind.
+///
+/// A pair is two kinds — `node` is a name and `node_id` is a number — and
+/// the second one is checked too: a value of the wrong kind is refused at
+/// the boundary, whichever spelling it came in.
+#[test]
+fn the_other_spelling_is_checked_against_its_own_kind() {
+    let mut commands = craftkit_sdk::Registry::new();
+    let command = CommandSpec::dynamic(
+        "runtime.typed",
+        "Typed",
+        "runtime",
+        "Take a name or an id.",
+        vec![ParamDoc::either("node", Doc::Text, Doc::Number, "Which node.", "node_id")],
+        |_session, _params| Ok(Outcome::new("took it")),
+    );
+    commands.register(command).expect("the command is registered");
+    let mut session = Session::new(commands, craftkit_sdk::Registry::new());
+
+    // The id is a number, and a name is not.
+    let outcome = session.execute("runtime.typed", &json!({ "node_id": 3 })).expect("the command runs");
+    assert_eq!(outcome.message, "took it");
+    let error =
+        session.execute("runtime.typed", &json!({ "node_id": "box" })).expect_err("the id is a number");
+    assert!(error.to_string().contains("is declared as number"), "{error}");
+}
+
+/// The other spelling takes a **string** when its kind says so.
+///
+/// A length is a number and `25mm` is a length too, and the pair's second
+/// spelling is a length as well — so the string is taken, and the refusal
+/// is not.
+#[test]
+fn the_other_spelling_takes_a_string_when_its_kind_says_so() {
+    let mut commands = craftkit_sdk::Registry::new();
+    let command = CommandSpec::dynamic(
+        "runtime.length",
+        "Length",
+        "runtime",
+        "Take a length.",
+        vec![
+            ParamDoc::either("length", Doc::Number, Doc::Number, "How long.", "length_text")
+                .with_alternative_accepts_text(true),
+        ],
+        |_session, _params| Ok(Outcome::new("took it")),
+    );
+    commands.register(command).expect("the command is registered");
+    let mut session = Session::new(commands, craftkit_sdk::Registry::new());
+
+    let outcome =
+        session.execute("runtime.length", &json!({ "length_text": "25mm" })).expect("the string is a length");
+    assert_eq!(outcome.message, "took it");
+    let error = session
+        .execute("runtime.length", &json!({ "length_text": true }))
+        .expect_err("a yes or a no is not a length");
+    assert!(error.to_string().contains("is declared as number"), "{error}");
 }

@@ -137,14 +137,18 @@ These are the README's own honest notes, and they are still true of the tree:
   against its body.** The **kind** is checked: the session refuses a value
   that is not of the kind the command declared, so a command that declares
   a text and reads a number is refused at the door (§1124). A compiled
-  command cannot be refused this way — the compiler writes the reader and
-  the declaration from the same struct. The **required** flag is checked
+  command is not refused this way — the compiler writes the reader and the
+  declaration from the same struct — **unless** a kind says it takes a
+  string and its own reader does not, which is a convention on the kind
+  and not a promise of the compiler (§1129). The **required** flag is checked
   against the **call** (§1126): a parameter the declaration says is
   required and the caller did not give is refused. What is **not** checked
   is the flag against the **body**: a body that ignores a parameter it
   declared is not visible to the engine. The **other spelling** of a parameter with two
   carries its own kind now, and the schema publishes each spelling with
-  its own shape (§1125).
+  its own shape (§1125) — and it carries it on **every** path: the
+  hand-written declaration, the a2ui derive and the subprocess plugin all
+  say what each spelling takes (§1129).
 - **`mutates` and `undoable` are two flags, and the derive refuses only
   one combination.** A command that is undoable and does **not** change
   the document is refused by the macro — there is nothing to undo. A
@@ -166,7 +170,19 @@ These are the README's own honest notes, and they are still true of the tree:
   are leaked when the plugin is loaded (`crates/craftkit-sdk/src/plugin.rs`).
   The leak is bounded by the number of commands the plugin has, and once each.
 - **A subprocess plugin is not checked by the compiler.** Its catalogue is
-  data, and a mistake in it is refused when the plugin is loaded.
+  data, and a mistake in it is refused when the plugin is loaded. What
+  the catalogue now carries is each parameter's kind, its leniency and a
+  pair's second kind (§1129), so the host checks the plugin's **call**
+  against the plugin's own **declaration** — and the plugin's body is
+  still the plugin's business.
+- **A kind's `ACCEPTS_TEXT` is a convention, not a guarantee.** The
+  compiler writes a compiled command's declaration and reader from the same
+  struct, but the constant that says "this kind takes a string as well"
+  is the kind author's own word, and a kind that says it and whose reader
+  does not take one is refused at the door (§1129).
+- **JSON Schema's "integer" admits `3.0`.** The reader takes a whole
+  number, and the schema's word for that is `integer`; a caller that sends
+  `3.0` passes the schema and is refused by the reader (§1129).
 - **A test's scratch comes back when its thread ends, and not before.** A
   test that panics takes its thread down with it, and the harness takes the
   process down with it, so the scratch of a test that panicked may be left
@@ -235,6 +251,13 @@ comes to the tree cold:
   window's own panel, and the plan is still the command's work
   (`doc.plan`) and not the door's. What nothing does is **check** a plan
   against a rule (§5).
+- **"The two spellings of a parameter are two kinds."** That was true
+  for the **compiled** command and not for the rest: the declaration
+  carried the second spelling's kind in one builder, and the hand-written
+  declaration, the a2ui derive and the subprocess plugin did not use it
+  (§1125). It is true on **every** path now: a pair says what each
+  spelling takes, the plugin's catalogue carries it, and the schema
+  publishes the pair as required (§1129).
 
 When the README and the code disagree, the **code** is right, and this file
 records the difference rather than the README's history.

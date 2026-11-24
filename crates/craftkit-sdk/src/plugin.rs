@@ -123,6 +123,20 @@ pub struct PluginParam {
     pub type_name: Option<String>,
     /// The **unit** the value is in, when the kind has one.
     pub unit: Option<String>,
+    /// Whether the kind takes a **string** as well as its own shape.
+    ///
+    /// The same truth the linked plugin's declaration carries: a length
+    /// is a number and `25mm` is a length too, and the host's check
+    /// reads the plugin's answer rather than guessing.
+    pub accepts_text: bool,
+    /// The kind of the **other spelling**, when the parameter has one.
+    ///
+    /// A pair is two kinds, and the host publishes each spelling with
+    /// its own shape — so the shape that is told is the shape that is
+    /// taken.
+    pub alternative_kind: Option<Doc>,
+    /// Whether the **other spelling** takes a string as well.
+    pub alternative_accepts_text: bool,
 }
 
 impl PluginParam {
@@ -136,6 +150,9 @@ impl PluginParam {
             "alternative": self.alternative,
             "type_name": self.type_name,
             "unit": self.unit,
+            "accepts_text": self.accepts_text,
+            "alternative_kind": self.alternative_kind.map(|kind| kind.json_name()),
+            "alternative_accepts_text": self.alternative_accepts_text,
         })
     }
 
@@ -159,7 +176,23 @@ impl PluginParam {
             .map(|alternative| alternative.to_string());
         let type_name = value.get("type_name").and_then(|name| name.as_str()).map(|name| name.to_string());
         let unit = value.get("unit").and_then(|unit| unit.as_str()).map(|unit| unit.to_string());
-        Ok(PluginParam { name, kind, required, help, alternative, type_name, unit })
+        let accepts_text = value.get("accepts_text").and_then(|flag| flag.as_bool()).unwrap_or(false);
+        let alternative_kind =
+            value.get("alternative_kind").and_then(|kind| kind.as_str()).and_then(Doc::from_json_name);
+        let alternative_accepts_text =
+            value.get("alternative_accepts_text").and_then(|flag| flag.as_bool()).unwrap_or(false);
+        Ok(PluginParam {
+            name,
+            kind,
+            required,
+            help,
+            alternative,
+            type_name,
+            unit,
+            accepts_text,
+            alternative_kind,
+            alternative_accepts_text,
+        })
     }
 }
 
@@ -441,12 +474,16 @@ impl LoadedPlugin {
                 alternative: param.alternative.as_ref().map(|name| leak(name.clone())),
                 type_name: param.type_name.as_ref().map(|name| leak(name.clone())),
                 unit: param.unit.as_ref().map(|unit| leak(unit.clone())),
-                // A plugin's kinds are the **core's** kinds, and a core
-                // kind takes its own shape and nothing else.
-                accepts_text: false,
-                // And the other spelling of a plugin's parameter has the
-                // same kind: the protocol does not carry a second one.
-                alternative_kind: None,
+                // A plugin's kinds are the **core's** kinds, and the
+                // plugin says whether each one takes a string as well —
+                // the host reads the plugin's answer rather than
+                // guessing.
+                accepts_text: param.accepts_text,
+                // And the other spelling of a plugin's parameter is
+                // another kind: the protocol carries it, so the host
+                // publishes each spelling with its own shape.
+                alternative_kind: param.alternative_kind,
+                alternative_accepts_text: param.alternative_accepts_text,
             })
             .collect();
         let params: &'static [ParamDoc] = Box::leak(params.into_boxed_slice());
@@ -597,6 +634,9 @@ pub fn serve(ecosystem: &crate::ecosystem::Ecosystem) -> Result<(), PluginError>
                         alternative: param.alternative.map(|name| name.to_string()),
                         type_name: param.type_name.map(|name| name.to_string()),
                         unit: param.unit.map(|unit| unit.to_string()),
+                        accepts_text: param.accepts_text,
+                        alternative_kind: param.alternative_kind,
+                        alternative_accepts_text: param.alternative_accepts_text,
                     })
                     .collect(),
                 mutates: command.mutates,

@@ -161,6 +161,11 @@ pub struct Prop {
     pub inner: Option<syn::Type>,
     /// The **left** type, when the field is an `Either`.
     pub left: Option<syn::Type>,
+    /// The **right** type, when the field is an `Either`.
+    ///
+    /// The other spelling's kind: a pair is two kinds, and the
+    /// declaration says what each one takes.
+    pub right: Option<syn::Type>,
     /// The **other spelling** of the prop, when it has one.
     pub alternative: Option<String>,
     /// The a2ui definition, if the prop names one.
@@ -228,6 +233,23 @@ fn first_argument(ty: &syn::Type) -> Option<&syn::Type> {
     }
 }
 
+/// The **second** type argument of a path type, if it has one.
+fn second_argument(ty: &syn::Type) -> Option<&syn::Type> {
+    let syn::Type::Path(path) = ty else { return None };
+    let segment = path.path.segments.last()?;
+    match &segment.arguments {
+        syn::PathArguments::AngleBracketed(arguments) => arguments
+            .args
+            .iter()
+            .filter_map(|argument| match argument {
+                syn::GenericArgument::Type(ty) => Some(ty),
+                _ => None,
+            })
+            .nth(1),
+        _ => None,
+    }
+}
+
 /// Whether a type is an `Option<T>`, and what the `T` is.
 fn optional_inner(ty: &syn::Type) -> Option<syn::Type> {
     match last_segment(ty).map(Ident::to_string).as_deref() {
@@ -244,6 +266,17 @@ fn optional_inner(ty: &syn::Type) -> Option<syn::Type> {
 fn either_left(ty: &syn::Type) -> Option<syn::Type> {
     match last_segment(ty).map(Ident::to_string).as_deref() {
         Some("Either") => first_argument(ty).cloned(),
+        _ => None,
+    }
+}
+
+/// Whether a type is an `Either<A, B>`, and what the `B` is.
+///
+/// The **second** half is the other spelling's kind: a pair is two
+/// kinds, and the declaration says what each one takes.
+fn either_right(ty: &syn::Type) -> Option<syn::Type> {
+    match last_segment(ty).map(Ident::to_string).as_deref() {
+        Some("Either") => second_argument(ty).cloned(),
         _ => None,
     }
 }
@@ -270,6 +303,7 @@ pub fn props_of(fields: &syn::FieldsNamed) -> Result<Vec<Prop>> {
         let ty = field.ty.clone();
         let inner = optional_inner(&ty);
         let left = either_left(&ty);
+        let right = either_right(&ty);
         // The **other spelling**: `#[param(or = "…")]`.
         let alternative = field
             .attrs
@@ -300,12 +334,21 @@ pub fn props_of(fields: &syn::FieldsNamed) -> Result<Vec<Prop>> {
             }
             _ => {}
         }
+        // An `Either` is **two** kinds: the declaration says what each
+        // spelling takes, so both types have to be there.
+        if left.is_some() && right.is_none() {
+            return Err(Error::new(
+                ident.span(),
+                format!("`{name}` is an `Either`, so it needs two types: `Either<A, B>`"),
+            ));
+        }
         props.push(Prop {
             name,
             ident,
             ty,
             inner,
             left,
+            right,
             alternative,
             definition,
             help: doc_of(&field.attrs),
@@ -477,7 +520,7 @@ pub fn expand_component(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
         let help = prop.help.as_str();
         // An `Either` is one prop written two ways: it is read with the
         // other spelling, and it is declared with it.
-        if let (Some(left), Some(alternative)) = (&prop.left, &prop.alternative) {
+        if let (Some(left), Some(right), Some(alternative)) = (&prop.left, &prop.right, &prop.alternative) {
             let alternative = alternative.as_str();
             reads.push(quote! {
                 let #ident = <#ty>::read_either(params, #prop_name, #alternative)
@@ -490,11 +533,14 @@ pub fn expand_component(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
                 #sdk::ParamDoc::either(
                     #prop_name,
                     <#left as #sdk::ParamKind>::DOC,
+                    <#right as #sdk::ParamKind>::DOC,
                     #help,
                     #alternative,
                 )
                 .with_type_name(<#left as #sdk::ParamKind>::NAME)
                 .with_unit(<#left as #sdk::ParamKind>::UNIT)
+                .with_accepts_text(<#left as #sdk::ParamKind>::ACCEPTS_TEXT)
+                .with_alternative_accepts_text(<#right as #sdk::ParamKind>::ACCEPTS_TEXT)
             });
             idents.push(ident.clone());
             continue;

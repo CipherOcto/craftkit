@@ -106,6 +106,24 @@ fn the_optional_parameters_are_not_asked_for() {
     assert!(supplier.asked.is_empty(), "the host was asked: {:?}", supplier.asked);
 }
 
+/// A **null** is not a value, and the seam treats it as one that was not
+/// given.
+///
+/// The reader treats a null as absent, so the seam asks for the parameter
+/// rather than taking the null for an answer it cannot use.
+#[test]
+fn a_null_is_not_an_answer_and_the_host_is_asked() {
+    let mut session = ecosystem().session();
+    let mut supplier = Counting::new(json!({ "name": "a box" }));
+    session
+        .execute_with("node.add", &json!({ "name": null, "kind": "geometry.rect" }), &mut supplier)
+        .expect("the command runs");
+    assert_eq!(supplier.asked.len(), 1, "the host was asked once: {:?}", supplier.asked);
+    assert_eq!(supplier.asked[0].name, "name");
+    assert_eq!(session.document().nodes.len(), 1, "and the node is there");
+    assert_eq!(session.document().nodes[0].name, "a box");
+}
+
 /// A **map** of answers is a supplier, and it is the one a script or a
 /// test uses.
 #[test]

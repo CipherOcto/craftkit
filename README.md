@@ -4574,6 +4574,7 @@ so.
 | **a required parameter the caller did not give is refused** | **built.** The boundary checks the required flag, and the refusal is the reader's own words (§1126) | §1126 |
 | **a panel is a contribution, and the kit's own list is live** | **built.** A command that joins the session while the window is open is a button with the rest (§1127) | §1127 |
 | **the doors are compared, one against another** | **built.** One program drives five doors with the same questions and says where they differ (§1128) | §1128 |
+| **a pair says what each spelling takes** | **built.** The declaration requires the second spelling's kind, the plugin protocol carries it, and the schema publishes the pair as required (§1129) | §1129 |
 
 ### The list of things that are honestly not there: empty
 
@@ -71320,8 +71321,11 @@ a number, and nothing refuses it".
 - **A command that declares a text and reads a number is refused.** The
   reader is happy — the caller sent the number the body wanted — and the
   declaration says otherwise, so the door refuses the call. A command
-  that was **compiled** cannot be refused this way: the compiler wrote
-  the declaration and the reader from the same struct.
+  that was **compiled** is not refused this way: the compiler wrote
+  the declaration and the reader from the same struct, so the two cannot
+  disagree — **unless** a kind says it takes a string and its own reader
+  does not, which is a convention on the kind and not a promise of the
+  compiler (§1129).
 - **A kind that takes a string says so, and the schema says it too.** A
   length is a number, and `25mm` is a length as well. The kind says it
   takes a string, the declaration carries the answer, the schema
@@ -71339,9 +71343,9 @@ a number, and nothing refuses it".
 ### What it cost
 
 - **One constant** in the SDK's kind trait, **one field** in the
-  declaration, **one method** on the kind table, **one call** in the
-  session, **one branch** in the schema, and the derive writes the new
-  field from the type it already had.
+  declaration, **one shape** on the kind table (`Doc::shape`), **one
+  call** in the session, **one branch** in the schema, and the derive
+  writes the new field from the type it already had.
 
 ### What it does not settle
 
@@ -71383,17 +71387,18 @@ because the declaration did not say what it was.
 
 ### What it cost
 
-- **One field** in the declaration, **one builder**, **one branch** in the
-  schema, **one step** in the check, and the derive reading the second
-  half of an `Either`.
+- **One field** in the declaration, **one branch** in the schema, **one
+  step** in the check, and the derive reading the second half of an
+  `Either`.
 
 ### What it does not settle
 
 - **The `required` flag is still not checked against the body** (§1124).
-- **A subprocess plugin's parameters have no second kind.** The plugin
-  protocol carries one kind per parameter, so a plugin's other spelling
-  keeps the first spelling's shape — and the protocol would have to grow
-  a field to say otherwise.
+- **A subprocess plugin's parameters had no second kind.** That was true
+  when this section was written: the plugin protocol carried one kind per
+  parameter, so a plugin's other spelling kept the first spelling's shape.
+  It is not true now — the catalogue carries each spelling's kind and each
+  spelling's leniency (§1129).
 - **The declaration is still checked against the call, and not against the
   body** (§1124).
 
@@ -71561,3 +71566,85 @@ that the six doors **agree**.
   equal only because every command in the tree has the `command`
   capability. A command with another capability is the day the two
   lists part company, and the harness will say so.
+
+## 1129. A pair says what each spelling takes
+
+§1125 published the other spelling's kind for a **compiled** command: the
+derive had both halves of an `Either` and threw one away. A verifier that
+read the arc found the promise was **narrower** than the section said. The
+other spelling's kind was carried by one builder on the declaration, and
+three paths did not use it — the hand-written declaration, the **a2ui
+derive**, and the **subprocess plugin**. The check and the schema were
+right for one path and wrong for the others, and a section that says "the
+two spellings are two kinds" is a promise about the tree and not about
+one macro.
+
+### What was built
+
+- **A pair says what each spelling takes.** `ParamDoc::either` takes the
+  second spelling's **kind** as an argument, and it is a required one: a
+  declaration of a pair cannot leave it out. There is no second way to
+  say it — the builder that set it on its own is gone.
+- **A kind that takes a string says so for each spelling.** The second
+  spelling's leniency is the same truth as the first's, and it is carried
+  the same way: the check and the schema read it, and a length written
+  `25mm` under either spelling is a length.
+- **The a2ui derive writes both halves.** An `Either<A, B>` prop has two
+  kinds, and the derive reads the second type argument and publishes it —
+  it was reading one half and throwing the other away. An `Either` with
+  one type is refused by the macro, because a pair of kinds that names one
+  of them is not a pair.
+- **The plugin protocol carries both.** A subprocess plugin's catalogue
+  carries each parameter's leniency and each pair's second kind, and the
+  host reads the plugin's answer rather than guessing. The old truth was
+  "a plugin's kinds are the core's kinds, and a core kind takes its own
+  shape and nothing else": it was true, and it was the wrong truth — a
+  plugin's length was a number and nothing else, whatever its reader
+  took.
+- **A pair is required as a pair, in the schema.** JSON Schema cannot say
+  "one of these two" in a word, but it can say it in a shape: an `anyOf`
+  with a `required` in each half, and an `allOf` of those when there is
+  more than one pair. A schema that permits a call the door refuses is a
+  schema that lies.
+- **A null is not a value.** The prompt seam asked the host for a
+  parameter the caller had given as `null`, because the reader treats a
+  null as absent; now the seam treats it as absent too, and the answer
+  the host gives can be used.
+
+### What the port found
+
+- **The promise held for one path.** The check and the schema read the
+  other spelling's kind when the declaration had it, and three ways of
+  making a declaration did not have it. A verifier that read the section
+  against the code found it, and the fix is in the declaration and not in
+  the check.
+- **The a2ui derive could not say what a prop took.** The prop's second
+  half was in the type and not in the declaration, so an a2ui component
+  with a pair published the first spelling's shape for both.
+- **The plugin's catalogue could not say what its parameters took.** One
+  kind per parameter and no leniency: a plugin's length was a number, and
+  the plugin's reader would have taken `25mm` as well.
+
+### What it cost
+
+- **One required argument** and **one field** in the declaration, **one
+  builder** removed, **one field** on the plugin's wire and **one** on its
+  reader, **one step** in the derive and **one** in the a2ui derive, **one
+  branch** in the schema, **one line** in the session, and **six tests**.
+
+### What it does not settle
+
+- **A compiled command is refused only when the kind says so.** The
+  compiler writes the declaration and the reader from the same struct, so
+  the two cannot disagree — but a kind's `ACCEPTS_TEXT` is a **convention**
+  between the kind and its own reader: a kind that says it takes a string
+  and whose reader does not is refused, and the compiler cannot see it.
+- **JSON Schema's "integer" admits `3.0`.** The reader takes a whole
+  number, and the schema's word for that is `integer`; a caller that
+  sends `3.0` passes the schema and is refused by the reader. The schema
+  is the door's promise about the **shape**, and the reader is the truth
+  about the **value**.
+- **A body that ignores a parameter it declared is still not visible**
+  (§1124).
+- **The declaration is still checked against the call, and not against the
+  body** (§1124).

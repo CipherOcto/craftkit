@@ -75,6 +75,9 @@ fn shape_of(kind: Doc, accepts_text: bool) -> Json {
 pub fn to_json_schema(params: &[ParamDoc]) -> Json {
     let mut properties = serde_json::Map::new();
     let mut required: Vec<Json> = Vec::new();
+    // The pairs: a parameter with two spellings is required as a pair,
+    // and each pair is a **group** of two halves.
+    let mut pairs: Vec<Vec<Json>> = Vec::new();
     for param in params {
         // The **type** comes from the SDK's own table of kinds, and the
         // schema and the engine's refusal read the same table — so the
@@ -102,18 +105,22 @@ pub fn to_json_schema(params: &[ParamDoc]) -> Json {
             // published with **its own** shape — the one its reader
             // takes — and not with the first spelling's. A schema that
             // says a name is a number is a schema that lies.
-            let mut other = shape_of(param.alternative_kind.unwrap_or(param.kind), false);
+            let mut other =
+                shape_of(param.alternative_kind.unwrap_or(param.kind), param.alternative_accepts_text);
             other["description"] =
                 Json::String(format!("{description} (the other spelling of `{}`)", param.name));
             properties.insert(alternative.to_string(), other);
         }
         properties.insert(param.name.to_string(), schema);
         if let Some(alternative) = param.alternative {
-            // The pair is required, and neither half is: the schema says
-            // so in the words of the description, because JSON Schema
-            // cannot say "one of these two".
+            // The pair is required, and neither half is. The **schema**
+            // says so: JSON Schema cannot say "one of these two" in a
+            // word, but it can say it in a shape — `anyOf` with a
+            // `required` in each half. A schema that permits a call the
+            // door refuses is a schema that lies.
             properties[param.name]["description"] =
                 Json::String(format!("{description} (or `{alternative}`)"));
+            pairs.push(vec![json!({ "required": [param.name] }), json!({ "required": [alternative] })]);
         }
         if param.required {
             required.push(Json::String(param.name.to_string()));
@@ -126,6 +133,25 @@ pub fn to_json_schema(params: &[ParamDoc]) -> Json {
     });
     if !required.is_empty() {
         schema["required"] = Json::Array(required);
+    }
+    if !pairs.is_empty() {
+        // One `anyOf` for **one** pair: each half says which of the two
+        // spellings the caller gave. And more than one pair is an
+        // `allOf` of them: the caller has to fill in **every** pair, and
+        // each pair is satisfied by one of its two spellings.
+        let mut groups = pairs.into_iter();
+        let first = groups.next();
+        match (first, groups.len()) {
+            (Some(pair), 0) => schema["anyOf"] = Json::Array(pair),
+            (Some(pair), _) => {
+                let mut all = vec![json!({ "anyOf": Json::Array(pair) })];
+                for pair in groups {
+                    all.push(json!({ "anyOf": Json::Array(pair) }));
+                }
+                schema["allOf"] = Json::Array(all);
+            }
+            (None, _) => {}
+        }
     }
     schema
 }

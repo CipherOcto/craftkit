@@ -229,6 +229,12 @@ pub struct ParamDoc {
     /// schema publishes each spelling with its own shape — so the shape
     /// that is told is the shape that is taken.
     pub alternative_kind: Option<Doc>,
+    /// Whether the **other spelling** takes a string as well.
+    ///
+    /// The same truth as [`Self::accepts_text`], said about the second
+    /// spelling: a kind that takes a string says so for each way it is
+    /// written.
+    pub alternative_accepts_text: bool,
     /// Whether the kind takes a **string** as well as its own shape.
     ///
     /// A length is a number, and `25mm` is a length too: the string is
@@ -260,6 +266,7 @@ impl ParamDoc {
             type_name: None,
             unit: None,
             accepts_text: false,
+            alternative_accepts_text: false,
         }
     }
 
@@ -275,6 +282,7 @@ impl ParamDoc {
             type_name: None,
             unit: None,
             accepts_text: false,
+            alternative_accepts_text: false,
         }
     }
 
@@ -290,6 +298,7 @@ impl ParamDoc {
             type_name: None,
             unit: None,
             accepts_text: false,
+            alternative_accepts_text: false,
         }
     }
 
@@ -308,12 +317,9 @@ impl ParamDoc {
         self
     }
 
-    /// The parameter with the **other spelling's** kind on it.
-    ///
-    /// The two spellings of a parameter are two kinds, and each one is
-    /// published with its own shape.
-    pub const fn with_alternative_kind(mut self, kind: Doc) -> Self {
-        self.alternative_kind = Some(kind);
+    /// The parameter whose **other spelling** takes a string as well.
+    pub const fn with_alternative_accepts_text(mut self, accepts_text: bool) -> Self {
+        self.alternative_accepts_text = accepts_text;
         self
     }
 
@@ -330,9 +336,17 @@ impl ParamDoc {
     ///
     /// The pair is required; neither half is. §116 of the tree this
     /// replaces said it, and it is still true.
+    ///
+    /// **The second spelling says what it is.** A pair is two kinds —
+    /// `node` is a node's id and `node_name` is a name — so the second
+    /// one's kind is part of the declaration and not something the
+    /// caller may leave out: a declaration that does not say what the
+    /// second spelling takes is a declaration the schema has to guess
+    /// about.
     pub const fn either(
         name: &'static str,
         kind: Doc,
+        alternative_kind: Doc,
         help: &'static str,
         alternative: &'static str,
     ) -> Self {
@@ -342,10 +356,11 @@ impl ParamDoc {
             required: false,
             help,
             alternative: Some(alternative),
-            alternative_kind: None,
+            alternative_kind: Some(alternative_kind),
             type_name: None,
             unit: None,
             accepts_text: false,
+            alternative_accepts_text: false,
         }
     }
 

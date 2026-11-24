@@ -281,10 +281,10 @@ impl<'a> Params<'a> {
     /// at the boundary, and the refusal says **which** parameter and what
     /// was expected.
     ///
-    /// **The other spelling is not checked.** A parameter with two
-    /// spellings has one declared kind and two readings — the second
-    /// reading's kind is not in the declaration, so there is nothing to
-    /// check it against.
+    /// **The other spelling is checked against its own kind.** A parameter
+    /// with two spellings has two kinds — `node` is a node's id and
+    /// `node_name` is a name — and the declaration carries the second
+    /// one, so the boundary is the same on both sides of the pair.
     pub fn deny_wrong_kind(&self, docs: &[ParamDoc]) -> Result<(), ParamError> {
         for doc in docs {
             let Some(value) = self.get(doc.name) else { continue };
@@ -294,13 +294,13 @@ impl<'a> Params<'a> {
             return Err(wrong_kind(doc.name, doc.kind, value));
         }
         // The **other spelling** is another kind, and the declaration says
-        // which one.
+        // which one — and whether that kind takes a string as well.
         for doc in docs {
             let (Some(alternative), Some(kind)) = (doc.alternative, doc.alternative_kind) else {
                 continue;
             };
             let Some(value) = self.get(alternative) else { continue };
-            if kind.accepts(value) {
+            if kind.accepts(value) || (doc.alternative_accepts_text && value.is_string()) {
                 continue;
             }
             return Err(wrong_kind(alternative, kind, value));
