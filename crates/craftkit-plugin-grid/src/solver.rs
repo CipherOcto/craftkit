@@ -47,11 +47,11 @@ pub const MAX_VARS: usize = 200;
 pub const MAX_CONSTRAINTS: usize = 1000;
 
 /// The most **nodes** the branch and bound may visit.
-pub const MAX_NODES: usize = 10_000;
+pub const MAX_SOLVER_NODES: usize = 10_000;
 
 /// The most **nodes** the branch and bound may visit, as the tree's
 /// own number for a linear program.
-pub const MAX_NODES_LP: usize = MAX_NODES;
+pub const MAX_NODES_LP: usize = MAX_SOLVER_NODES;
 
 /// The **budget** of the solver: the most pivots it may make.
 ///

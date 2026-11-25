@@ -766,7 +766,7 @@ pub const IMPORTED: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"
 pub const MAX_CAPTION_CUES: usize = 10_000;
 
 /// The most a **cue's text** may have.
-pub const MAX_CAPTION_TEXT: usize = 4096;
+pub const MAX_FILM_CAPTION_TEXT: usize = 4096;
 
 /// The most a cue's **time** may be, in milliseconds: a year.
 pub const MAX_MILLISECONDS: i64 = 31_536_000_000;
@@ -828,11 +828,11 @@ fn cues_from(value: &Json, id: &str) -> Result<Vec<Cue>, EngineError> {
                         message: format!("the text of the cue {at} is not text"),
                     });
                 };
-                if text.chars().count() > MAX_CAPTION_TEXT {
+                if text.chars().count() > MAX_FILM_CAPTION_TEXT {
                     return Err(EngineError::Failed {
                         id: id.to_string(),
                         message: format!(
-                            "the text of the cue {at} is longer than {MAX_CAPTION_TEXT} characters"
+                            "the text of the cue {at} is longer than {MAX_FILM_CAPTION_TEXT} characters"
                         ),
                     });
                 }
@@ -895,10 +895,10 @@ fn blocks_from(value: &Json, id: &str) -> Result<Vec<String>, EngineError> {
                 message: format!("the block {at} is not text"),
             });
         };
-        if block.chars().count() > MAX_CAPTION_TEXT {
+        if block.chars().count() > MAX_FILM_CAPTION_TEXT {
             return Err(EngineError::Failed {
                 id: id.to_string(),
-                message: format!("the block {at} is longer than {MAX_CAPTION_TEXT} characters"),
+                message: format!("the block {at} is longer than {MAX_FILM_CAPTION_TEXT} characters"),
             });
         }
         blocks.push(block.to_string());

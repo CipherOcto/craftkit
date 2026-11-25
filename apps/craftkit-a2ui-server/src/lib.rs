@@ -876,7 +876,7 @@ fn serde_json_to_string(value: &Json) -> Result<String, String> {
 /// A line that is over the limit is **refused**: the door reads a line
 /// byte by byte, so the limit is checked as it goes and not after the
 /// whole line has been in memory.
-pub const MAX_LINE: usize = 1024 * 1024;
+pub const MAX_A2UI_LINE: usize = 1024 * 1024;
 
 /// Serve the door: one JSON-RPC message per line, in and out.
 ///
@@ -916,7 +916,7 @@ pub fn serve_with(
             let _ = output.flush();
         }
     });
-    for line in craftkit_sdk::lines::lines_bounded(input, MAX_LINE) {
+    for line in craftkit_sdk::lines::lines_bounded(input, MAX_A2UI_LINE) {
         let Ok(line) = line else { break };
         if line.trim().is_empty() {
             continue;

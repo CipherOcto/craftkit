@@ -66,7 +66,7 @@ use craftkit_sdk::serde_json::{Map, Value as Json, json};
 /// The protocol had this number from the start, and the reader did not
 /// use it: a line was read until its newline, however long it was. The
 /// number is now the **reader's** bound.
-pub const MAX_LINE: usize = 1 << 20;
+pub const MAX_CONTROL_LINE: usize = 1 << 20;
 
 /// What the channel can ask the **window** for.
 ///
@@ -213,7 +213,7 @@ impl Request {
 
     /// A request read from a line.
     pub fn from_line(line: &str) -> Result<Request, ProtocolError> {
-        if line.len() > MAX_LINE {
+        if line.len() > MAX_CONTROL_LINE {
             return Err(ProtocolError::TooLong(line.len()));
         }
         let value: Json = craftkit_sdk::serde_json::from_str(line)
@@ -316,7 +316,9 @@ pub enum ProtocolError {
 impl std::fmt::Display for ProtocolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProtocolError::TooLong(len) => write!(f, "the line is {len} bytes; the limit is {MAX_LINE}"),
+            ProtocolError::TooLong(len) => {
+                write!(f, "the line is {len} bytes; the limit is {MAX_CONTROL_LINE}")
+            }
             ProtocolError::NotJson(error) => write!(f, "this is not valid JSON: {error}"),
             ProtocolError::NotAnObject(text) => write!(f, "this line is not a request object: {text}"),
             ProtocolError::NoMethod => write!(f, "the request has no method"),
@@ -513,7 +515,7 @@ fn serve_connection(
     let mut writer = stream.try_clone()?;
     let reader = BufReader::new(stream);
     let mut authenticated = false;
-    for line in craftkit_sdk::lines::lines_bounded(reader, MAX_LINE) {
+    for line in craftkit_sdk::lines::lines_bounded(reader, MAX_CONTROL_LINE) {
         let line = line.map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
         let request = match Request::from_line(&line) {
             Ok(request) => request,
@@ -821,7 +823,7 @@ impl Client {
         let mut writer = self.stream.try_clone()?;
         writeln!(writer, "{line}")?;
         writer.flush()?;
-        let Some(answer) = craftkit_sdk::lines::read_line_bounded(&mut self.reader, MAX_LINE)
+        let Some(answer) = craftkit_sdk::lines::read_line_bounded(&mut self.reader, MAX_CONTROL_LINE)
             .map_err(|message| ControlError::Protocol(ProtocolError::NotJson(message)))?
         else {
             return Err(ControlError::Protocol(ProtocolError::NotJson("the answer was empty".to_string())));
@@ -844,7 +846,7 @@ impl Client {
         let mut writer = self.stream.try_clone()?;
         writeln!(writer, "{}", request.to_line()?)?;
         writer.flush()?;
-        let Some(line) = craftkit_sdk::lines::read_line_bounded(&mut self.reader, MAX_LINE)
+        let Some(line) = craftkit_sdk::lines::read_line_bounded(&mut self.reader, MAX_CONTROL_LINE)
             .map_err(|message| ControlError::Protocol(ProtocolError::NotJson(message)))?
         else {
             return Err(ControlError::Protocol(ProtocolError::NotJson("the answer was empty".to_string())));
@@ -901,7 +903,7 @@ mod tests {
 
     #[test]
     fn a_line_that_is_too_long_is_refused() {
-        let line = "x".repeat(MAX_LINE + 1);
+        let line = "x".repeat(MAX_CONTROL_LINE + 1);
         assert!(matches!(Request::from_line(&line), Err(ProtocolError::TooLong(_))));
     }
 

@@ -333,7 +333,7 @@ pub use trim::FilmClipTrim;
 /// Every cap is **one name and one number**, and every one of them may
 /// be named from outside the battery: a reader who wants to know the
 /// bound of a thing may say the name of it and use the number.
-pub use captions::{MAX_CAPTION_CUES, MAX_CAPTION_TEXT, MAX_MILLISECONDS};
+pub use captions::{MAX_CAPTION_CUES, MAX_FILM_CAPTION_TEXT, MAX_MILLISECONDS};
 pub use captiontracks::{MAX_TRACK_CUES, MAX_TRACK_TEXT};
 
 /// The film layer.

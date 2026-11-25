@@ -26,7 +26,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
-use crate::formula::{CellRef, MAX_COLS, MAX_FORMULA_ROWS, Value};
+use crate::formula::{CellRef, MAX_FORMULA_COLUMNS, MAX_FORMULA_ROWS, Value};
 
 /// The **parts** a text holds when it is cut at the given widths.
 ///
@@ -132,10 +132,10 @@ commands! {
             };
             // The **parts** are a row of values, and a sheet has so many
             // columns.
-            if destination as u64 + widths.len() as u64 > MAX_COLS {
+            if destination as u64 + widths.len() as u64 > MAX_FORMULA_COLUMNS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the parts of the text do not fit in the {MAX_COLS} columns of a sheet"),
+                    message: format!("the parts of the text do not fit in the {MAX_FORMULA_COLUMNS} columns of a sheet"),
                 });
             }
             let Some(node) = session.document_mut()?.node_mut(sheet) else {

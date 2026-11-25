@@ -4,7 +4,7 @@
 //! file is read, and a reader that stops must **say** that it stopped.
 //! A limit that no test names is a limit nothing proves holds.
 
-use craftkit_xlsx::{MAX_BAGS, MAX_COLS, MAX_ITERATIONS, MAX_OUTLINE, MAX_ROWS, MAX_SHEETS, read};
+use craftkit_xlsx::{MAX_BAGS, MAX_ITERATIONS, MAX_OUTLINE, MAX_ROWS, MAX_SHEET_COLUMNS, MAX_SHEETS, read};
 
 /// The **address** of the cell in that column, counted from zero.
 ///
@@ -126,11 +126,11 @@ fn a_cell_beyond_the_rows_is_dropped_and_the_file_is_told() {
     );
 }
 
-/// A cell in a column **beyond** `MAX_COLS` is dropped, and the file is
+/// A cell in a column **beyond** `MAX_SHEET_COLUMNS` is dropped, and the file is
 /// told.
 #[test]
 fn a_cell_beyond_the_columns_is_dropped_and_the_file_is_told() {
-    let column = a_column(MAX_COLS);
+    let column = a_column(MAX_SHEET_COLUMNS);
     let bytes = a_workbook(
         ONE_SHEET_BOOK,
         ONE_SHEET,

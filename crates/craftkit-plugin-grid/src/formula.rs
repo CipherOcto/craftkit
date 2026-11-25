@@ -101,7 +101,7 @@ pub const MAX_FORMULA_ROWS: u64 = 1_048_576;
 /// The most columns a sheet has.
 ///
 /// The tree's bound: a sheet is sixteen thousand columns wide.
-pub const MAX_COLS: u64 = 16_384;
+pub const MAX_FORMULA_COLUMNS: u64 = 16_384;
 
 /// The **names** of the functions the engine itself carries.
 ///
@@ -223,7 +223,7 @@ impl Anchor {
     pub fn shifted(&self, row_delta: i64, col_delta: i64) -> Option<Anchor> {
         let row = if self.row_abs { i64::from(self.cell.row) } else { i64::from(self.cell.row) + row_delta };
         let col = if self.col_abs { i64::from(self.cell.col) } else { i64::from(self.cell.col) + col_delta };
-        if row < 0 || col < 0 || row as u64 >= MAX_FORMULA_ROWS || col as u64 >= MAX_COLS {
+        if row < 0 || col < 0 || row as u64 >= MAX_FORMULA_ROWS || col as u64 >= MAX_FORMULA_COLUMNS {
             return None;
         }
         Some(Anchor {
@@ -404,9 +404,9 @@ impl Anchor {
         let col = col.checked_sub(1)?;
         let row = digits.parse::<u32>().ok()?.checked_sub(1)?;
         // An address that is **not in the sheet** is not an address: a
-        // sheet is `MAX_FORMULA_ROWS` rows tall and `MAX_COLS` columns
+        // sheet is `MAX_FORMULA_ROWS` rows tall and `MAX_FORMULA_COLUMNS` columns
         // wide, and the cell past the last one is not a cell.
-        if col as u64 >= MAX_COLS || row as u64 >= MAX_FORMULA_ROWS {
+        if col as u64 >= MAX_FORMULA_COLUMNS || row as u64 >= MAX_FORMULA_ROWS {
             return None;
         }
         Some(Anchor { cell: CellRef { col, row }, row_abs, col_abs })
@@ -420,7 +420,7 @@ impl Anchor {
     pub fn moved(self, dr: i64, dc: i64) -> Option<Anchor> {
         let row = if self.row_abs { self.cell.row as i64 } else { self.cell.row as i64 + dr };
         let col = if self.col_abs { self.cell.col as i64 } else { self.cell.col as i64 + dc };
-        if row < 0 || col < 0 || row as u64 >= MAX_FORMULA_ROWS || col as u64 >= MAX_COLS {
+        if row < 0 || col < 0 || row as u64 >= MAX_FORMULA_ROWS || col as u64 >= MAX_FORMULA_COLUMNS {
             return None;
         }
         Some(Anchor {
@@ -533,7 +533,7 @@ impl Lines {
         let delta = if self.rows { row_delta } else { col_delta };
         let first = self.first as i64 + delta;
         let last = self.last as i64 + delta;
-        let limit = if self.rows { MAX_FORMULA_ROWS } else { MAX_COLS } as i64;
+        let limit = if self.rows { MAX_FORMULA_ROWS } else { MAX_FORMULA_COLUMNS } as i64;
         if first < 0 || last < 0 || last >= limit {
             return None;
         }
@@ -1426,7 +1426,7 @@ fn collect_precedents(expression: &Expr, names: &BTreeMap<String, Name>, found: 
             let area = match lines.rows {
                 true => Area::new(
                     CellRef { col: 0, row: lines.first },
-                    CellRef { col: MAX_COLS as u32 - 1, row: lines.last },
+                    CellRef { col: MAX_FORMULA_COLUMNS as u32 - 1, row: lines.last },
                 ),
                 false => Area::new(
                     CellRef { col: lines.first, row: 0 },
@@ -2250,7 +2250,7 @@ fn column_of(text: &str) -> Option<u32> {
         return None;
     }
     let column = CellRef::column_index(letters)?;
-    if column as u64 >= MAX_COLS {
+    if column as u64 >= MAX_FORMULA_COLUMNS {
         return None;
     }
     Some(column)

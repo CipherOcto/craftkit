@@ -115,7 +115,7 @@ pub const GAIN_DEFAULT: f32 = 1.0;
 /// The pool is **wide**, because the host's tests open the library
 /// once — the loader gives the same library to every test in a
 /// process — and each of them makes an instance of its own.
-pub const MAX_INSTANCES: usize = 64;
+pub const MAX_VST3_INSTANCES: usize = 64;
 
 /// The class's identifier, as the host reads it: a C string.
 const CID_BYTES: &[u8] = b"Craftkit::Fixture\0";
@@ -158,7 +158,7 @@ const fn slot() -> Slot {
 }
 
 /// The instances this plugin can have at once.
-static SLOTS: [Slot; MAX_INSTANCES] = [const { slot() }; MAX_INSTANCES];
+static SLOTS: [Slot; MAX_VST3_INSTANCES] = [const { slot() }; MAX_VST3_INSTANCES];
 
 /// Make an **instance** of the fixture, the way the host's own door
 /// does.
@@ -199,7 +199,8 @@ mod exports {
 
     use super::{
         BUS_NAME_BYTES, CATEGORY, CID, CID_BYTES, GAIN_DEFAULT, GAIN_ID_BYTES, GAIN_MAX, GAIN_MIN,
-        GAIN_TITLE_BYTES, GAIN_UNITS_BYTES, INITIALISED, MADE, MAX_INSTANCES, NAME, NEXT_SLOT, SLOTS, VENDOR,
+        GAIN_TITLE_BYTES, GAIN_UNITS_BYTES, INITIALISED, MADE, MAX_VST3_INSTANCES, NAME, NEXT_SLOT, SLOTS,
+        VENDOR,
     };
 
     /// The **object** the factory hands back.
@@ -345,7 +346,7 @@ mod exports {
     /// wearing two hats.
     fn make(table: *const c_void) -> *mut c_void {
         let index = NEXT_SLOT.fetch_add(1, Ordering::SeqCst) as usize;
-        if index >= MAX_INSTANCES {
+        if index >= MAX_VST3_INSTANCES {
             return std::ptr::null_mut();
         }
         let object = Box::into_raw(Box::new(Object { table, slot: index, refs: AtomicU32::new(1) }));
@@ -666,8 +667,8 @@ mod tests {
     /// The pool of instances is **fixed**.
     #[test]
     fn the_pool_of_instances_is_fixed() {
-        assert_eq!(MAX_INSTANCES, 64, "sixty-four at a time");
-        assert_eq!(SLOTS.len(), MAX_INSTANCES, "and a slot for each of them");
+        assert_eq!(MAX_VST3_INSTANCES, 64, "sixty-four at a time");
+        assert_eq!(SLOTS.len(), MAX_VST3_INSTANCES, "and a slot for each of them");
     }
 
     /// The entry is there, and it is a **factory**.

@@ -809,6 +809,38 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             }
         }
     }
+    // **One name, one number — the whole tree.** The rule above is
+    // inside a crate; this one is across the tree. A published cap is a
+    // promise anybody may rely on, and a name that two crates publish
+    // leaves a reader with no way to say which promise is meant: the
+    // kit's own bound registry refuses two crates publishing one name,
+    // and a cap is the same kind of promise.
+    let mut published: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        std::collections::BTreeMap::new();
+    for directory in crate_directories(root) {
+        let crate_name =
+            directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+        for file in crate::index::rust_files(&directory.join("src")) {
+            let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Production) else {
+                continue;
+            };
+            // Only the **published** caps: a private cap is the crate's
+            // own business and nobody may rely on it.
+            for cap in crate::index::limits_in(&text, &file, &crate_name) {
+                published.entry(cap.name).or_default().insert(crate_name.clone());
+            }
+        }
+    }
+    for (cap, owners) in published {
+        if owners.len() > 1 {
+            let crates: Vec<&str> = owners.iter().map(|owner| owner.as_str()).collect();
+            problems.push(format!(
+                "the cap `{cap}` is published by {} crates ({}): one name, one number",
+                owners.len(),
+                crates.join(", ")
+            ));
+        }
+    }
     for (crate_name, limit) in &limits {
         // A **promise bound** is a cap with a promise attached, and the
         // rule of the bounds holds it: a name is not checked twice.
@@ -2029,6 +2061,54 @@ mod tests {
             .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert!(problems.iter().any(|problem| problem.contains("MAX_THING")), "{problems:?}");
+    }
+
+    /// Two **crates** that publish one name are caught.
+    ///
+    /// The rule of one name and one number is about the code's own
+    /// clarity, and a published cap is a promise anybody may rely on: a
+    /// name that two crates publish leaves a reader with no way to say
+    /// which promise is meant. §1169.
+    #[test]
+    fn a_name_published_by_two_crates_is_caught() {
+        let root = crate::temp::dir("lists-one-name-two-crates").expect("a temporary folder");
+        for name in ["craftkit-one", "craftkit-two"] {
+            let crate_directory = root.join("crates").join(name);
+            std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+            std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+            std::fs::write(crate_directory.join("src").join("lib.rs"), "pub const MAX_THING: usize = 10;\n")
+                .expect("the source is written");
+            std::fs::write(
+                crate_directory.join("tests").join("thing.rs"),
+                "#[test]\nfn a_test() { let thing = MAX_THING; }\n",
+            )
+            .expect("the test is written");
+        }
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.iter().any(|problem| problem.contains("MAX_THING")), "{problems:?}");
+    }
+
+    /// Two crates that publish **different** names are not caught.
+    #[test]
+    fn two_crates_with_two_names_are_not_caught() {
+        let root = crate::temp::dir("lists-two-names-two-crates").expect("a temporary folder");
+        for (name, cap) in [("craftkit-one", "MAX_THING"), ("craftkit-two", "MAX_OTHER")] {
+            let crate_directory = root.join("crates").join(name);
+            std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+            std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+            std::fs::write(
+                crate_directory.join("src").join("lib.rs"),
+                format!("pub const {cap}: usize = 10;\n"),
+            )
+            .expect("the source is written");
+            std::fs::write(
+                crate_directory.join("tests").join("thing.rs"),
+                format!("#[test]\nfn a_test() {{ let thing = {cap}; }}\n"),
+            )
+            .expect("the test is written");
+        }
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
     }
 
     /// An **evaluator** that no test names is caught.

@@ -1928,7 +1928,7 @@ fn print_titles_of(text: &str) -> (Vec<u32>, Vec<u32>) {
         else {
             continue;
         };
-        if second < first || second as u64 >= crate::formula::MAX_COLS {
+        if second < first || second as u64 >= crate::formula::MAX_FORMULA_COLUMNS {
             continue;
         }
         for column in first..=second {

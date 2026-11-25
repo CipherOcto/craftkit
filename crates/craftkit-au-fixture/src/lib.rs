@@ -72,7 +72,7 @@ use craftkit_au_abi::StreamFormat;
 ///
 /// The instances are handed out from a fixed pool: a fixture that grew
 /// without limit would be a fixture that could not be reasoned about.
-pub const MAX_INSTANCES: usize = 16;
+pub const MAX_AU_INSTANCES: usize = 16;
 
 /// The rate the unit works at until it is told otherwise.
 pub const DEFAULT_SAMPLE_RATE: f64 = 48_000.0;
@@ -127,7 +127,7 @@ const fn slot() -> Slot {
 }
 
 /// The instances this unit can have at once.
-static SLOTS: [Slot; MAX_INSTANCES] = [const { slot() }; MAX_INSTANCES];
+static SLOTS: [Slot; MAX_AU_INSTANCES] = [const { slot() }; MAX_AU_INSTANCES];
 
 /// Make an **instance** of the fixture, the way the host's own door
 /// does.
@@ -405,8 +405,8 @@ mod tests {
     /// The pool of instances is **fixed**.
     #[test]
     fn the_pool_of_instances_is_fixed() {
-        assert_eq!(MAX_INSTANCES, 16, "sixteen at a time");
-        assert_eq!(SLOTS.len(), MAX_INSTANCES, "and a slot for each of them");
+        assert_eq!(MAX_AU_INSTANCES, 16, "sixteen at a time");
+        assert_eq!(SLOTS.len(), MAX_AU_INSTANCES, "and a slot for each of them");
     }
 
     /// The unit starts at the rate it is told to work at.

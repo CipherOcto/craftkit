@@ -45,7 +45,7 @@
 #![forbid(unsafe_code)]
 
 /// The deepest an element may be.
-pub const MAX_DEPTH: usize = 256;
+pub const MAX_XML_DEPTH: usize = 256;
 
 /// The most elements one part may hold.
 pub const MAX_XML_NODES: usize = 1_000_000;
@@ -342,8 +342,8 @@ impl Parser<'_> {
         if empty {
             self.finish(element)?;
         } else {
-            if self.stack.len() >= MAX_DEPTH {
-                return Err(Error::TooLarge(format!("the part is deeper than {MAX_DEPTH}")));
+            if self.stack.len() >= MAX_XML_DEPTH {
+                return Err(Error::TooLarge(format!("the part is deeper than {MAX_XML_DEPTH}")));
             }
             self.stack.push(element);
         }

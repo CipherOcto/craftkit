@@ -118,7 +118,7 @@ fn moved_cells(
                     if column < at {
                         // The cell is **before** the band: it stays.
                         cell
-                    } else if column + count > crate::formula::MAX_COLS {
+                    } else if column + count > crate::formula::MAX_FORMULA_COLUMNS {
                         // The cell would be pushed **off** the sheet,
                         // and the tree refuses rather than leave a cell
                         // behind (§962).

@@ -40,7 +40,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
-use crate::formula::{Anchor, CellRef, MAX_COLS};
+use crate::formula::{Anchor, CellRef, MAX_FORMULA_COLUMNS};
 
 /// The keys of a sheet that this tree **moves** when columns are
 /// inserted.
@@ -398,10 +398,10 @@ commands! {
             // The columns may not run **past the last column of the
             // sheet**.
             let last = last_column(&node);
-            if last + count > MAX_COLS {
+            if last + count > MAX_FORMULA_COLUMNS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a sheet has at most {MAX_COLS} columns"),
+                    message: format!("a sheet has at most {MAX_FORMULA_COLUMNS} columns"),
                 });
             }
             // A **protected** sheet has locked cells, and a locked cell may

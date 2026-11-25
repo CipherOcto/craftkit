@@ -47,7 +47,7 @@
 use std::collections::BTreeMap;
 
 /// The largest part a package may hold.
-pub const MAX_PART: u64 = 512 * 1024 * 1024;
+pub const MAX_ZIP_PART: u64 = 512 * 1024 * 1024;
 
 /// The largest total a package may inflate to.
 pub const MAX_TOTAL: u64 = 1024 * 1024 * 1024;
@@ -161,13 +161,13 @@ impl<'a> Package<'a> {
     /// A part that is not there is `None`, and not an error: a
     /// package may hold parts that are optional.
     pub fn read(&mut self, part: &str) -> Result<Option<Vec<u8>>, Error> {
-        self.read_limited(part, MAX_PART)
+        self.read_limited(part, MAX_ZIP_PART)
     }
 
     /// Read a part of the package, and let it be no bigger than
     /// `maximum`.
     pub fn read_limited(&mut self, part: &str, maximum: u64) -> Result<Option<Vec<u8>>, Error> {
-        let maximum = maximum.min(MAX_PART);
+        let maximum = maximum.min(MAX_ZIP_PART);
         let Some(index) = self.names.get(&normalize(part)).copied() else {
             return Ok(None);
         };

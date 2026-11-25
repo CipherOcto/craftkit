@@ -108,7 +108,7 @@ pub use theme::{SLOTS, Theme, apply_tint, read_theme};
 pub const MAX_ROWS: u64 = 1_048_576;
 
 /// The most **columns** a sheet may have: the tree's own bound.
-pub const MAX_COLS: u64 = 16_384;
+pub const MAX_SHEET_COLUMNS: u64 = 16_384;
 
 /// The most **sheets** a workbook may have.
 ///
@@ -2953,7 +2953,7 @@ fn read_sheet(
                 },
                 None => (next_column, row_index),
             };
-            if u64::from(column) >= MAX_COLS || row_index >= MAX_ROWS {
+            if u64::from(column) >= MAX_SHEET_COLUMNS || row_index >= MAX_ROWS {
                 dropped += 1;
                 continue;
             }
@@ -3070,7 +3070,7 @@ fn read_sheet(
 
     if dropped > 0 {
         warnings.push(format!(
-            "the sheet holds {dropped} cells or rows outside the {MAX_ROWS} × {MAX_COLS} grid; they were dropped"
+            "the sheet holds {dropped} cells or rows outside the {MAX_ROWS} × {MAX_SHEET_COLUMNS} grid; they were dropped"
         ));
     }
     sheet.rows = rows;
@@ -3094,7 +3094,7 @@ fn read_view(root: &craftkit_xml::El) -> Option<SheetView> {
     if let Some(pane) = view.child("pane")
         && pane.attr("state") == Some("frozen")
     {
-        let cols = pane.attr_f64("xSplit").unwrap_or(0.0).clamp(0.0, (MAX_COLS - 1) as f64) as u32;
+        let cols = pane.attr_f64("xSplit").unwrap_or(0.0).clamp(0.0, (MAX_SHEET_COLUMNS - 1) as f64) as u32;
         let rows = pane.attr_f64("ySplit").unwrap_or(0.0).clamp(0.0, (MAX_ROWS - 1) as f64) as u32;
         if rows > 0 || cols > 0 {
             freeze = Some((rows, cols));
@@ -3642,18 +3642,18 @@ fn read_columns(
         }
         // The **columns** the file names are cut at the width of the
         // sheet, and the file is **told** that it was.
-        if u64::from(min) > MAX_COLS {
+        if u64::from(min) > MAX_SHEET_COLUMNS {
             warnings.push(format!(
-                "the file names the columns from {min} on; a sheet is {MAX_COLS} columns wide; they were not read"
+                "the file names the columns from {min} on; a sheet is {MAX_SHEET_COLUMNS} columns wide; they were not read"
             ));
             continue;
         }
-        if u64::from(max) > MAX_COLS {
+        if u64::from(max) > MAX_SHEET_COLUMNS {
             warnings.push(format!(
-                "the file names the columns up to {max}; a sheet is {MAX_COLS} columns wide; the rest were not read"
+                "the file names the columns up to {max}; a sheet is {MAX_SHEET_COLUMNS} columns wide; the rest were not read"
             ));
         }
-        let max = max.min(MAX_COLS as u32);
+        let max = max.min(MAX_SHEET_COLUMNS as u32);
         // The **width** of the column: the file's own, and only when it
         // says something of itself. A width that is the sheet's own
         // default width is the sheet's own, and a width the user set is
@@ -3856,7 +3856,7 @@ fn read_breaks(root: &craftkit_xml::El) -> Breaks {
     if let Some(columns) = root.child("colBreaks") {
         for element in columns.kids("brk") {
             let Some(line) = element.attr_u32("id") else { continue };
-            if line < MAX_COLS as u32 {
+            if line < MAX_SHEET_COLUMNS as u32 {
                 breaks.columns.push(line);
             }
         }
@@ -4197,7 +4197,7 @@ fn read_note_shapes(package: &mut craftkit_zip::Package<'_>, sheet_rels: &[Rel])
 /// The **shapes of the notes** in a drawing: the shapes are looked for,
 /// and a shape may sit in a group of shapes.
 fn note_shapes_of(root: &craftkit_xml::El, out: &mut Vec<NoteShape>, depth: usize) {
-    if depth > craftkit_xml::MAX_DEPTH {
+    if depth > craftkit_xml::MAX_XML_DEPTH {
         return;
     }
     for element in root.children.iter() {
@@ -4257,7 +4257,7 @@ fn note_box_of(shape: &NoteShape) -> Option<NoteBox> {
     let numbers: Vec<u32> =
         anchor.split(',').map(|part| part.trim().parse::<u32>().ok()).collect::<Option<_>>()?;
     let [c1, dx1, r1, dy1, c2, dx2, r2, dy2] = <[u32; 8]>::try_from(numbers).ok()?;
-    if u64::from(c1.max(c2)) >= MAX_COLS || u64::from(r1.max(r2)) >= MAX_ROWS {
+    if u64::from(c1.max(c2)) >= MAX_SHEET_COLUMNS || u64::from(r1.max(r2)) >= MAX_ROWS {
         return None;
     }
     let corner = |column: u32, column_px: u32, row: u32, row_px: u32| NoteCorner {

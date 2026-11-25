@@ -628,16 +628,16 @@ pub use workbookreading::GridWorkbookGet;
 pub use dates::MAX_SERIAL;
 pub use errors::MAX_ERRORS;
 pub use format::MAX_FORMAT_CHARS;
-pub use formula::{MAX_COLS, MAX_FORMULA_ROWS};
+pub use formula::{MAX_FORMULA_COLUMNS, MAX_FORMULA_ROWS};
 pub use formulavalues::MAX_VALUE_STEPS;
 pub use fractions::{MAX_DENOMINATOR_DIGITS, MAX_FIXED_DENOMINATOR};
 pub use headers::MAX_TEXT;
-pub use importing::{MAX_COLUMNS, MAX_IMPORT_ROWS};
+pub use importing::{MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS};
 pub use pdfexport::{MAX_EXPORT_CHARS, MAX_EXPORT_LINES, MAX_HEADER_LINES, MAX_SPARK_POINTS};
 pub use pivotfields::MAX_SAMPLES;
 pub use printing::MAX_MARGIN;
 pub use scaling::{MAX_FIT_PAGES, MAX_SCALE};
-pub use solver::{MAX_CONSTRAINTS, MAX_NODES, MAX_NODES_LP, MAX_PIVOTS, MAX_VARS};
+pub use solver::{MAX_CONSTRAINTS, MAX_NODES_LP, MAX_PIVOTS, MAX_SOLVER_NODES, MAX_VARS};
 pub use spelling::{
     MAX_ISSUES, MAX_RELATED, MAX_SPELLING_LINES, MAX_SPELLING_SUGGESTIONS, MAX_SPELLING_WORD,
 };

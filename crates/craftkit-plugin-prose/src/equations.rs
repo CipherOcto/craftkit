@@ -33,7 +33,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome};
 
 /// The most an equation may be **deep**.
-pub const MAX_DEPTH: usize = 32;
+pub const MAX_EQUATION_DEPTH: usize = 32;
 
 /// The most an equation may have **parts**.
 pub const MAX_PARTS: usize = 1024;
@@ -55,8 +55,8 @@ pub fn is_equation(node: &Node) -> bool {
 /// the parts are read: an equation that is too big is refused before
 /// it is written down.
 fn linear_of(part: &Json, depth: usize, parts: &mut usize) -> Result<(String, bool), String> {
-    if depth > MAX_DEPTH {
-        return Err(format!("an equation is not more than {MAX_DEPTH} deep"));
+    if depth > MAX_EQUATION_DEPTH {
+        return Err(format!("an equation is not more than {MAX_EQUATION_DEPTH} deep"));
     }
     *parts += 1;
     if *parts > MAX_PARTS {

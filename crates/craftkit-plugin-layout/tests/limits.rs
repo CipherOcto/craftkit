@@ -5,7 +5,7 @@
 //! checked before they are used, and a limit that no test names is a
 //! limit nothing proves holds.
 
-use craftkit_plugin_layout::{MAX_CHAIN, MAX_ITEMS, MAX_NAME, MAX_TARGET, MAX_WEIGHT};
+use craftkit_plugin_layout::{MAX_ITEMS, MAX_LAYOUT_CHAIN, MAX_LAYOUT_TARGET, MAX_NAME, MAX_WEIGHT};
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -98,18 +98,18 @@ fn a_bookmark_name_over_the_limit_is_refused() {
     assert!(message.contains(&MAX_NAME.to_string()), "the refusal names the bound: {message}");
 }
 
-/// A link **target** over `MAX_TARGET` is refused.
+/// A link **target** over `MAX_LAYOUT_TARGET` is refused.
 #[test]
 fn a_link_target_over_the_limit_is_refused() {
     let mut session = session();
     let (_, item) = a_document_with_an_item(&mut session);
-    let target = format!("https://example.com/{}", "a".repeat(MAX_TARGET));
+    let target = format!("https://example.com/{}", "a".repeat(MAX_LAYOUT_TARGET));
     let error = session
         .execute("layout.item.link", &json!({ "item": item, "target": target }))
         .expect_err("that target is too long");
     let message = error.to_string();
     assert!(message.contains("at most"), "{message}");
-    assert!(message.contains(&MAX_TARGET.to_string()), "the refusal names the bound: {message}");
+    assert!(message.contains(&MAX_LAYOUT_TARGET.to_string()), "the refusal names the bound: {message}");
 }
 
 /// A **document**, and its id.
@@ -137,7 +137,7 @@ fn said_of(session: &mut Session, node: u64) -> craftkit_sdk::serde_json::Value 
     entry.value.clone()
 }
 
-/// A **chain of styles** stops at `MAX_CHAIN`.
+/// A **chain of styles** stops at `MAX_LAYOUT_CHAIN`.
 ///
 /// The chain of a style is walked from the style upwards, and the walk
 /// is bounded: a chain of forty styles is cut at the limit, and the
@@ -166,7 +166,7 @@ fn a_chain_of_styles_stops_at_the_limit() {
     assert!(said["fill"].is_null(), "the fill beyond the limit is not inherited: {said:?}");
     // The base the tree reports is the last one the walk reached: the
     // walk went up as many bases as the cap allows, and no more.
-    let reached = styles[styles.len() - 1 - MAX_CHAIN];
+    let reached = styles[styles.len() - 1 - MAX_LAYOUT_CHAIN];
     assert_eq!(said["base"], json!(reached), "the chain stops at the limit: {said:?}");
     assert_ne!(said["base"], json!(deepest), "and the deepest base is not in it: {said:?}");
 }

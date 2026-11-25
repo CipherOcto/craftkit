@@ -184,7 +184,7 @@ fn a_line_that_is_too_long_is_refused() {
     let (_server, address) = a_server("secret");
     let mut stream = std::net::TcpStream::connect(address).expect("the connection is made");
     // The line is longer than the protocol's limit, and it never ends.
-    let mut line = vec![b'x'; craftkit_control::MAX_LINE + 1024];
+    let mut line = vec![b'x'; craftkit_control::MAX_CONTROL_LINE + 1024];
     line.push(b'\n');
     stream.write_all(&line).expect("the bytes are written");
     stream.flush().expect("the bytes are flushed");

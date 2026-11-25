@@ -39,7 +39,7 @@ use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
 use crate::items::{item_of, may_edit};
 
 /// The most characters a target may have.
-pub const MAX_TARGET: usize = 2048;
+pub const MAX_LAYOUT_TARGET: usize = 2048;
 
 /// The **schemes** a link that may be opened has.
 pub const OPENABLE: [&str; 3] = ["http", "https", "mailto"];
@@ -66,8 +66,8 @@ pub fn why_not(target: &str) -> Option<String> {
     // that is kept, and a target that is kept is a target that is in the
     // document: a link of any length at all would be a hole, and the
     // hole is in the door that says "this may be opened".
-    if target.chars().count() > MAX_TARGET {
-        return Some(format!("a target is at most {MAX_TARGET} characters long"));
+    if target.chars().count() > MAX_LAYOUT_TARGET {
+        return Some(format!("a target is at most {MAX_LAYOUT_TARGET} characters long"));
     }
     if may_be_opened(target) {
         return None;

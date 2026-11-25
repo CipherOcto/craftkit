@@ -82,7 +82,7 @@ fn column_of(name: &str) -> Option<u32> {
         col = col.checked_mul(26)?;
         col = col.checked_add(u32::from(letter.to_ascii_uppercase() as u8 - b'A'))?;
     }
-    if u64::from(col) >= crate::formula::MAX_COLS {
+    if u64::from(col) >= crate::formula::MAX_FORMULA_COLUMNS {
         return None;
     }
     Some(col)

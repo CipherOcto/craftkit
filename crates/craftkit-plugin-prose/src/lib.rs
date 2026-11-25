@@ -223,15 +223,15 @@ pub use accessibility::{MAX_ACCESSIBILITY_COLUMNS, MAX_ACCESSIBILITY_ISSUES};
 pub use authorities::MAX_AUTHORITY_ENTRY;
 pub use bookmarks::MAX_BOOKMARK_NAME;
 pub use captions::{MAX_CAPTION_LABEL, MAX_CAPTION_TEXT};
-pub use columns::{MAX_COLUMN_SPACE, MAX_COLUMNS};
+pub use columns::{MAX_COLUMN_SPACE, MAX_PAGE_COLUMNS};
 pub use contents::MAX_CONTENT_LEVEL;
 pub use endnotes::MAX_ENDNOTE_TEXT;
-pub use equations::{MAX_DEPTH, MAX_EQUATION_TEXT, MAX_PARTS};
+pub use equations::{MAX_EQUATION_DEPTH, MAX_EQUATION_TEXT, MAX_PARTS};
 pub use fields::MAX_CODE;
 pub use figures::MAX_FIGURE_LABEL;
 pub use footnotes::MAX_FOOTNOTE_TEXT;
 pub use index::MAX_INDEX_ENTRY;
-pub use links::MAX_TARGET;
+pub use links::MAX_LINK_TARGET;
 pub use numbering::MAX_LEVELS;
 pub use outline::MAX_OUTLINE_LEVEL;
 pub use page::MAX_POINTS;
@@ -239,8 +239,8 @@ pub use pagenumbers::MAX_START;
 pub use paragraph::{MAX_INDENT, MAX_LINE_SPACING, MAX_PARAGRAPH_SPACE};
 pub use properties::{MAX_PROPERTY_NAME, MAX_VALUE};
 pub use revisions::{MAX_DATE, MAX_REVISION_AUTHOR};
-pub use sources::{MAX_PART, MAX_SOURCE_AUTHOR, MAX_TAG, MAX_YEAR};
-pub use styles::MAX_CHAIN;
+pub use sources::{MAX_SOURCE_AUTHOR, MAX_SOURCE_PART, MAX_TAG, MAX_YEAR};
+pub use styles::MAX_STYLE_CHAIN;
 
 /// The prose layer.
 ///
@@ -1061,10 +1061,10 @@ commands! {
                             message: "a link is a target".to_string(),
                         });
                     };
-                    if target.chars().count() > crate::links::MAX_TARGET {
+                    if target.chars().count() > crate::links::MAX_LINK_TARGET {
                         return Err(EngineError::Failed {
                             id: "prose.block.runs".to_string(),
-                            message: format!("a target is at most {} characters long", crate::links::MAX_TARGET),
+                            message: format!("a target is at most {} characters long", crate::links::MAX_LINK_TARGET),
                         });
                     }
                 }

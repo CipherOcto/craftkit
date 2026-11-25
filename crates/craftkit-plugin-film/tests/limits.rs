@@ -10,7 +10,7 @@
 //! cap that changes the test and not only the prose.
 
 use craftkit_plugin_film::{
-    MAX_CAPTION_CUES, MAX_CAPTION_TEXT, MAX_MILLISECONDS, MAX_TRACK_CUES, MAX_TRACK_TEXT,
+    MAX_CAPTION_CUES, MAX_FILM_CAPTION_TEXT, MAX_MILLISECONDS, MAX_TRACK_CUES, MAX_TRACK_TEXT,
 };
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
@@ -106,19 +106,19 @@ fn a_caption_file_with_too_many_cues_is_refused() {
     assert!(message.contains(&MAX_CAPTION_CUES.to_string()), "the refusal names the bound: {message}");
 }
 
-/// A cue whose **text** is over `MAX_CAPTION_TEXT` long is refused.
+/// A cue whose **text** is over `MAX_FILM_CAPTION_TEXT` long is refused.
 #[test]
 fn a_cue_with_too_much_text_is_refused() {
     let mut session = session();
     let path = craftkit_scratch::file("captions.srt").expect("the scratch file is there");
-    let text = "t".repeat(MAX_CAPTION_TEXT + 1);
+    let text = "t".repeat(MAX_FILM_CAPTION_TEXT + 1);
     let cues = vec![json!({ "start": 0, "end": 1, "text": text })];
     let error = session
         .execute("film.captions.write", &json!({ "path": path, "cues": cues }))
         .expect_err("that text is too long");
     let message = error.to_string();
     assert!(message.contains("longer than"), "{message}");
-    assert!(message.contains(&MAX_CAPTION_TEXT.to_string()), "the refusal names the bound: {message}");
+    assert!(message.contains(&MAX_FILM_CAPTION_TEXT.to_string()), "the refusal names the bound: {message}");
 }
 
 /// A cue that is **later than a year** is refused.

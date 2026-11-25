@@ -5,9 +5,10 @@
 //! used, and a limit that no test names is a limit nothing proves holds.
 
 use craftkit_plugin_grid::{
-    MAX_COLS, MAX_COLUMNS, MAX_CONSTRAINTS, MAX_DENOMINATOR_DIGITS, MAX_ERRORS, MAX_FIT_PAGES,
-    MAX_FIXED_DENOMINATOR, MAX_FORMAT_CHARS, MAX_FORMULA_ROWS, MAX_IMPORT_ROWS, MAX_MARGIN, MAX_NODES,
-    MAX_NODES_LP, MAX_ORDER, MAX_PERIOD, MAX_PIVOTS, MAX_SCALE, MAX_SERIAL, MAX_TEXT, MAX_VARS,
+    MAX_CONSTRAINTS, MAX_DENOMINATOR_DIGITS, MAX_ERRORS, MAX_FIT_PAGES, MAX_FIXED_DENOMINATOR,
+    MAX_FORMAT_CHARS, MAX_FORMULA_COLUMNS, MAX_FORMULA_ROWS, MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS, MAX_MARGIN,
+    MAX_NODES_LP, MAX_ORDER, MAX_PERIOD, MAX_PIVOTS, MAX_SCALE, MAX_SERIAL, MAX_SOLVER_NODES, MAX_TEXT,
+    MAX_VARS,
 };
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
@@ -71,12 +72,12 @@ fn a_text_with_too_many_rows_is_refused() {
     assert!(error.to_string().contains("at most"), "{error}");
 }
 
-/// A text with **more columns** than `MAX_COLUMNS` allows is refused.
+/// A text with **more columns** than `MAX_IMPORT_COLUMNS` allows is refused.
 #[test]
 fn a_text_with_too_many_columns_is_refused() {
     let mut session = session();
     let workbook = a_workbook(&mut session);
-    let text = format!("a{}", ",a".repeat(MAX_COLUMNS));
+    let text = format!("a{}", ",a".repeat(MAX_IMPORT_COLUMNS));
     let error = session
         .execute("grid.import.csv", &json!({ "workbook": workbook, "text": text }))
         .expect_err("that text has too many columns");
@@ -100,7 +101,7 @@ fn a_chart(session: &mut Session, sheet: u64) -> u64 {
     outcome.data["chart"].as_u64().expect("the chart has an id")
 }
 
-/// A cell in a column **beyond** `MAX_COLS` is not an address.
+/// A cell in a column **beyond** `MAX_FORMULA_COLUMNS` is not an address.
 ///
 /// A sheet is sixteen thousand columns wide, and the address past the
 /// last one is not a cell the battery has.
@@ -111,7 +112,7 @@ fn a_cell_beyond_the_columns_is_refused() {
     let error = session
         .execute(
             "grid.cell.set",
-            &json!({ "sheet": sheet, "cell": format!("{}1", a_column(MAX_COLS as usize)), "value": 1 }),
+            &json!({ "sheet": sheet, "cell": format!("{}1", a_column(MAX_FORMULA_COLUMNS as usize)), "value": 1 }),
         )
         .expect_err("that column is past the sheet");
     assert!(error.to_string().contains("is not a cell"), "{error}");
@@ -304,16 +305,19 @@ fn a_solver_budget_over_the_limit_is_refused() {
     assert!(error.to_string().contains("pivots"), "{error}");
 }
 
-/// A solver that may visit **more nodes** than `MAX_NODES` is refused.
+/// A solver that may visit **more nodes** than `MAX_SOLVER_NODES` is refused.
 ///
 /// The branch and bound is bounded by `MAX_NODES_LP`, which is
-/// `MAX_NODES`: the two are one number under two names.
+/// `MAX_SOLVER_NODES`: the two are one number under two names.
 #[test]
 fn a_solver_node_budget_over_the_limit_is_refused() {
     let mut session = session();
-    assert_eq!(MAX_NODES, MAX_NODES_LP, "the two names are one number");
+    assert_eq!(MAX_SOLVER_NODES, MAX_NODES_LP, "the two names are one number");
     let error = session
-        .execute("grid.solver.solve", &json!({ "objective": [1.0], "max_nodes": MAX_NODES as f64 + 1.0 }))
+        .execute(
+            "grid.solver.solve",
+            &json!({ "objective": [1.0], "max_nodes": MAX_SOLVER_NODES as f64 + 1.0 }),
+        )
         .expect_err("that budget is too many nodes");
     assert!(error.to_string().contains("nodes"), "{error}");
 }

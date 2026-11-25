@@ -30,7 +30,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
 
-use crate::formula::{CellRef, MAX_COLS, Value};
+use crate::formula::{CellRef, MAX_FORMULA_COLUMNS, Value};
 
 /// The **parts** a text holds, cut at the delimiters.
 ///
@@ -215,10 +215,10 @@ commands! {
                 let parts = split(&text, &delimiters, qualifier, treat_consecutive);
                 // The parts are written into the columns from the
                 // destination on, and a sheet has so many columns.
-                if destination as u64 + parts.len() as u64 > MAX_COLS {
+                if destination as u64 + parts.len() as u64 > MAX_FORMULA_COLUMNS {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: format!("the parts of the text do not fit in the {MAX_COLS} columns of a sheet"),
+                        message: format!("the parts of the text do not fit in the {MAX_FORMULA_COLUMNS} columns of a sheet"),
                     });
                 }
                 for (offset, part) in parts.iter().enumerate() {

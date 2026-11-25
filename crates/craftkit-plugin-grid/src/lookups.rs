@@ -900,7 +900,7 @@ impl Book {
         let row = row.trunc();
         let column = column.trunc();
         if !(1.0..=crate::formula::MAX_FORMULA_ROWS as f64).contains(&row)
-            || !(1.0..=crate::formula::MAX_COLS as f64).contains(&column)
+            || !(1.0..=crate::formula::MAX_FORMULA_COLUMNS as f64).contains(&column)
             || !(1..=4).contains(&absolute)
         {
             return Value::Error("#VALUE!".to_string());

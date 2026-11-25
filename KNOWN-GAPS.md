@@ -224,6 +224,16 @@ These are the README's own honest notes, and they are still true of the tree:
   apart now, and the tree keeps **one hundred and eleven** caps under
   one hundred and eleven names — the count of §1156 was the count of
   *names*, and five of them were two caps each.
+- **One name, one number — the whole tree** (§1169): the rule of §1144
+  and §1160 was **inside** a crate, and the tree published ten names
+  that two crates published each: `MAX_DEPTH` in three, and nine more in
+  two each. The §62 promise that two crates may not publish one bound's
+  name was broken by §1159 — the batteries published their caps, and the
+  cap registry never saw them, because a cap is not a registered bound.
+  The rule now holds the **whole tree**: a published cap's name belongs
+  to one crate, the gate says the ones that do not, and ten names are
+  named apart. What stays: a **private** cap may still share a name with
+  another crate's — it is not a promise, and nobody may rely on it.
 - **The rule holds every crate to its own caps** (§1158): the rule of
   §1141 held the **kit's** limits to a test anywhere in the tree, and
   §1145–§1156 brought every other crate's caps under a test by hand.

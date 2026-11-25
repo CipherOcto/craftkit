@@ -32,7 +32,7 @@ fn the_questions_are_read_out_of_the_arguments() {
     assert_eq!(ask(&["area", "grid"]), Question::Area("grid".to_string()));
     assert_eq!(ask(&["battery", "grid"]), Question::Battery("grid".to_string()));
     assert_eq!(ask(&["command", "pivot"]), Question::Command("pivot".to_string()));
-    assert_eq!(ask(&["bound", "MAX_NODES"]), Question::Bound("MAX_NODES".to_string()));
+    assert_eq!(ask(&["bound", "MAX_SOLVER_NODES"]), Question::Bound("MAX_SOLVER_NODES".to_string()));
     assert_eq!(ask(&["text", "pivot"]), Question::Text("pivot".to_string()));
 }
 
@@ -216,9 +216,9 @@ fn a_battery_answers_with_its_commands_modules_and_tests() {
 #[test]
 fn a_bound_is_a_number_and_says_where_it_is() {
     let index = index::build(&root()).expect("the index is built");
-    let lines = answer(&index, &Question::Bound("MAX_NODES".to_string()));
+    let lines = answer(&index, &Question::Bound("MAX_SOLVER_NODES".to_string()));
     assert!(!lines.is_empty(), "the bound is found");
-    assert!(lines[0].contains("MAX_NODES = 10_000"), "the answer says what it is: {}", lines[0]);
+    assert!(lines[0].contains("MAX_SOLVER_NODES = 10_000"), "the answer says what it is: {}", lines[0]);
     assert!(lines[0].contains(".rs:"), "the answer says where it is: {}", lines[0]);
     // And a bound that is not there is said so, not guessed at.
     let missing = answer(&index, &Question::Bound("MAX_NOTHING".to_string()));

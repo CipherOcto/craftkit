@@ -37,7 +37,7 @@ pub const BASED_ON: &str = "layout.based_on";
 pub const STYLED_BY: &str = "layout.styled_by";
 
 /// The most a chain of styles may be **long**.
-pub const MAX_CHAIN: usize = 32;
+pub const MAX_LAYOUT_CHAIN: usize = 32;
 
 /// The **style** an item is on, if it is on one.
 pub fn style_of(document: &craftkit_sdk::Document, item: u64) -> Option<u64> {
@@ -57,7 +57,7 @@ pub fn chain_of(document: &craftkit_sdk::Document, style: u64) -> Vec<u64> {
     let mut chain: Vec<u64> = Vec::new();
     let mut seen: Vec<u64> = vec![style];
     let mut current = style;
-    for _ in 0..MAX_CHAIN {
+    for _ in 0..MAX_LAYOUT_CHAIN {
         let Some(relation) =
             document.relations.iter().find(|relation| relation.kind == BASED_ON && relation.from == current)
         else {

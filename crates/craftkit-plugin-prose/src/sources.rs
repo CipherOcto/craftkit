@@ -72,7 +72,7 @@ pub const MAX_YEAR: usize = 32;
 
 /// The longest **part** of a source may have: the place, the
 /// publisher, the journal, the volume, the pages and the address.
-pub const MAX_PART: usize = 1024;
+pub const MAX_SOURCE_PART: usize = 1024;
 
 /// The **sources** of a document, as they are kept.
 pub fn sources_of(node: &Node) -> Vec<Json> {
@@ -283,10 +283,10 @@ commands! {
                             message: "a source has a title".to_string(),
                         });
                     }
-                    if title.chars().count() > MAX_PART {
+                    if title.chars().count() > MAX_SOURCE_PART {
                         return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: format!("the title of a source is at most {MAX_PART} characters long"),
+                            message: format!("the title of a source is at most {MAX_SOURCE_PART} characters long"),
                         });
                     }
                     Some(title.to_string())
@@ -353,10 +353,10 @@ commands! {
             ] {
                 let Some(part) = part else { continue };
                 let part = part.0.trim();
-                if part.chars().count() > MAX_PART {
+                if part.chars().count() > MAX_SOURCE_PART {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: format!("the {key} of a source is at most {MAX_PART} characters long"),
+                        message: format!("the {key} of a source is at most {MAX_SOURCE_PART} characters long"),
                     });
                 }
                 if part.is_empty() {

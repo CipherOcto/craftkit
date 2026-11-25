@@ -128,7 +128,7 @@ fn a_request_is_answered() {
 /// A line that is over the limit is **refused**, and the door says so.
 #[test]
 fn an_over_long_line_is_refused() {
-    let long = "x".repeat(craftkit_a2ui_server::MAX_LINE + 16);
+    let long = "x".repeat(craftkit_a2ui_server::MAX_A2UI_LINE + 16);
     let answers =
         ask_the_stream(&format!("{{\"id\": 1, \"method\": \"ping\", \"params\": {{\"x\": \"{long}\"}}}}\n"));
     assert!(answers.is_empty(), "the line was refused and the door stopped: {answers:?}");
@@ -230,5 +230,5 @@ fn the_channel_serves_the_doors_own_session() {
 /// The reader of the stream is bounded: the limit is written down.
 #[test]
 fn the_reads_are_bounded() {
-    assert_eq!(craftkit_a2ui_server::MAX_LINE, 1024 * 1024, "the limit is written down");
+    assert_eq!(craftkit_a2ui_server::MAX_A2UI_LINE, 1024 * 1024, "the limit is written down");
 }

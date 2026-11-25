@@ -4,7 +4,7 @@
 //! about how much of a package is read and how much it may inflate to.
 //! A limit that no test names is a limit nothing proves holds.
 
-use craftkit_zip::{Error, MAX_ENTRIES, MAX_PART, MAX_TOTAL, Package, crc32};
+use craftkit_zip::{Error, MAX_ENTRIES, MAX_TOTAL, MAX_ZIP_PART, Package, crc32};
 
 /// A **package** of one part, written by hand.
 ///
@@ -63,13 +63,13 @@ fn a_package_claiming(name: &str, claimed: u32) -> Vec<u8> {
     out
 }
 
-/// A **part** that says it is bigger than `MAX_PART` is refused.
+/// A **part** that says it is bigger than `MAX_ZIP_PART` is refused.
 ///
 /// A package may claim a part of any size at all, and the tree reads
 /// none of it: the bound is checked against what the package says.
 #[test]
 fn a_part_over_the_limit_is_refused() {
-    let claimed = (MAX_PART + 1) as u32;
+    let claimed = (MAX_ZIP_PART + 1) as u32;
     let bytes = a_package_claiming("the part", claimed);
     let mut package = Package::open(&bytes).expect("the package opens");
     let error = package.read("the part").expect_err("that part is too big");

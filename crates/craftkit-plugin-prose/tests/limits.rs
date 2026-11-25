@@ -10,11 +10,11 @@
 //! cap that changes the test and not only the prose.
 
 use craftkit_plugin_prose::{
-    MAX_AUTHORITY_ENTRY, MAX_BOOKMARK_NAME, MAX_CAPTION_LABEL, MAX_CAPTION_TEXT, MAX_CHAIN, MAX_CODE,
-    MAX_COLUMN_SPACE, MAX_COLUMNS, MAX_CONTENT_LEVEL, MAX_DATE, MAX_DEPTH, MAX_ENDNOTE_TEXT,
-    MAX_EQUATION_TEXT, MAX_FIGURE_LABEL, MAX_FOOTNOTE_TEXT, MAX_INDENT, MAX_INDEX_ENTRY, MAX_LEVELS,
-    MAX_LINE_SPACING, MAX_OUTLINE_LEVEL, MAX_PARAGRAPH_SPACE, MAX_PART, MAX_PARTS, MAX_POINTS,
-    MAX_PROPERTY_NAME, MAX_REVISION_AUTHOR, MAX_SOURCE_AUTHOR, MAX_START, MAX_TAG, MAX_TARGET, MAX_VALUE,
+    MAX_AUTHORITY_ENTRY, MAX_BOOKMARK_NAME, MAX_CAPTION_LABEL, MAX_CAPTION_TEXT, MAX_CODE, MAX_COLUMN_SPACE,
+    MAX_CONTENT_LEVEL, MAX_DATE, MAX_ENDNOTE_TEXT, MAX_EQUATION_DEPTH, MAX_EQUATION_TEXT, MAX_FIGURE_LABEL,
+    MAX_FOOTNOTE_TEXT, MAX_INDENT, MAX_INDEX_ENTRY, MAX_LEVELS, MAX_LINE_SPACING, MAX_LINK_TARGET,
+    MAX_OUTLINE_LEVEL, MAX_PAGE_COLUMNS, MAX_PARAGRAPH_SPACE, MAX_PARTS, MAX_POINTS, MAX_PROPERTY_NAME,
+    MAX_REVISION_AUTHOR, MAX_SOURCE_AUTHOR, MAX_SOURCE_PART, MAX_START, MAX_STYLE_CHAIN, MAX_TAG, MAX_VALUE,
     MAX_YEAR,
 };
 use craftkit_sdk::serde_json::json;
@@ -182,17 +182,20 @@ fn a_figure_label_is_cut_at_the_limit() {
     assert_eq!(ident.len(), MAX_FIGURE_LABEL, "the label is cut at the limit: {ident}");
 }
 
-/// A page of **more columns** than `MAX_COLUMNS` allows is refused.
+/// A page of **more columns** than `MAX_PAGE_COLUMNS` allows is refused.
 #[test]
 fn a_page_with_too_many_columns_is_refused() {
     let mut session = session();
     let document = a_document(&mut session);
     let error = session
-        .execute("prose.page.columns", &json!({ "document": document, "count": (MAX_COLUMNS + 1) as f64 }))
+        .execute(
+            "prose.page.columns",
+            &json!({ "document": document, "count": (MAX_PAGE_COLUMNS + 1) as f64 }),
+        )
         .expect_err("that page has too many columns");
     let message = error.to_string();
     assert!(message.contains("columns"), "{message}");
-    assert!(message.contains(&MAX_COLUMNS.to_string()), "the refusal names the bound: {message}");
+    assert!(message.contains(&MAX_PAGE_COLUMNS.to_string()), "the refusal names the bound: {message}");
 }
 
 /// A **space** between the columns over `MAX_COLUMN_SPACE` is refused.
@@ -241,19 +244,19 @@ fn a_revision_date_over_the_limit_is_refused() {
     assert!(message.contains(&MAX_DATE.to_string()), "the refusal names the bound: {message}");
 }
 
-/// A link **target** over `MAX_TARGET` long is refused.
+/// A link **target** over `MAX_LINK_TARGET` long is refused.
 #[test]
 fn a_link_target_over_the_limit_is_refused() {
     let mut session = session();
     let block = a_paragraph(&mut session);
-    let target = "https://example.com/".to_string() + &"a".repeat(MAX_TARGET);
+    let target = "https://example.com/".to_string() + &"a".repeat(MAX_LINK_TARGET);
     let runs = json!([{ "len": 1, "link": target }]);
     let error = session
         .execute("prose.block.runs", &json!({ "block": block, "runs": runs }))
         .expect_err("that target is too long");
     let message = error.to_string();
     assert!(message.contains("at most"), "{message}");
-    assert!(message.contains(&MAX_TARGET.to_string()), "the refusal names the bound: {message}");
+    assert!(message.contains(&MAX_LINK_TARGET.to_string()), "the refusal names the bound: {message}");
 }
 
 /// An equation with **more parts** than `MAX_PARTS` allows is refused.
@@ -279,13 +282,13 @@ fn an_equation_with_too_many_parts_is_refused() {
     assert!(message.contains(&MAX_PARTS.to_string()), "the refusal names the bound: {message}");
 }
 
-/// An equation **deeper** than `MAX_DEPTH` is refused.
+/// An equation **deeper** than `MAX_EQUATION_DEPTH` is refused.
 #[test]
 fn an_equation_too_deep_is_refused() {
     let mut session = session();
     let document = a_document(&mut session);
     let mut parts = json!({ "kind": "text", "text": "x" });
-    for _ in 0..(MAX_DEPTH + 2) {
+    for _ in 0..(MAX_EQUATION_DEPTH + 2) {
         parts = json!({ "kind": "fraction", "top": parts, "bottom": { "kind": "text", "text": "y" } });
     }
     let error = session
@@ -293,7 +296,7 @@ fn an_equation_too_deep_is_refused() {
         .expect_err("that equation is too deep");
     let message = error.to_string();
     assert!(message.contains("deep"), "{message}");
-    assert!(message.contains(&MAX_DEPTH.to_string()), "the refusal names the bound: {message}");
+    assert!(message.contains(&MAX_EQUATION_DEPTH.to_string()), "the refusal names the bound: {message}");
 }
 
 /// The **text** of an equation over `MAX_EQUATION_TEXT` long is refused.
@@ -408,7 +411,7 @@ fn a_source_year_over_the_limit_is_refused() {
     assert!(message.contains(&MAX_YEAR.to_string()), "the refusal names the bound: {message}");
 }
 
-/// A source's **title** over `MAX_PART` long is refused.
+/// A source's **title** over `MAX_SOURCE_PART` long is refused.
 ///
 /// The title is a part of a source, and it is bounded like every other
 /// part: a source had a title of any length at all, and that was a hole
@@ -417,13 +420,13 @@ fn a_source_year_over_the_limit_is_refused() {
 fn a_source_title_over_the_limit_is_refused() {
     let mut session = session();
     let document = a_document(&mut session);
-    let title = "t".repeat(MAX_PART + 1);
+    let title = "t".repeat(MAX_SOURCE_PART + 1);
     let error = session
         .execute("prose.document.source.set", &json!({ "document": document, "title": title }))
         .expect_err("that title is too long");
     let message = error.to_string();
     assert!(message.contains("at most"), "{message}");
-    assert!(message.contains(&MAX_PART.to_string()), "the refusal names the bound: {message}");
+    assert!(message.contains(&MAX_SOURCE_PART.to_string()), "the refusal names the bound: {message}");
 }
 
 /// A page's **margin** over `MAX_POINTS` is refused.
@@ -554,7 +557,7 @@ fn a_list_level_over_the_limit_is_refused() {
     assert!(message.contains(&MAX_LEVELS.to_string()), "the refusal names the bound: {message}");
 }
 
-/// A **chain** of styles stops at `MAX_CHAIN`.
+/// A **chain** of styles stops at `MAX_STYLE_CHAIN`.
 ///
 /// The chain of a style is walked from the style to its base, and the
 /// walk is bounded: a chain of forty styles is cut at the limit, and the
@@ -582,6 +585,6 @@ fn a_chain_of_styles_stops_at_the_limit() {
         .execute("prose.style.character.read", &json!({ "style": style }))
         .expect("the character is read");
     let chain = outcome.data["chain"].as_array().expect("the chain is a list");
-    assert_eq!(chain.len(), MAX_CHAIN + 1, "the chain stops at the limit: {chain:?}");
+    assert_eq!(chain.len(), MAX_STYLE_CHAIN + 1, "the chain stops at the limit: {chain:?}");
     assert!(!chain.iter().any(|id| id.as_u64() == Some(base)), "the walk was cut before the base: {chain:?}");
 }

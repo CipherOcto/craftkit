@@ -59,7 +59,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
-use crate::formula::{Anchor, CellRef, MAX_COLS};
+use crate::formula::{Anchor, CellRef, MAX_FORMULA_COLUMNS};
 
 /// The **column** a text names, and the number it is.
 ///
@@ -524,10 +524,10 @@ commands! {
             // The place the block goes: it takes the place of the
             // column it is put before.
             let to = if before > from { before - count } else { before };
-            if to + count > MAX_COLS {
+            if to + count > MAX_FORMULA_COLUMNS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a sheet has at most {MAX_COLS} columns"),
+                    message: format!("a sheet has at most {MAX_FORMULA_COLUMNS} columns"),
                 });
             }
             // A **protected** sheet has locked cells, and a locked cell

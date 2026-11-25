@@ -47,7 +47,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session};
 
 /// The most columns a page may have.
-pub const MAX_COLUMNS: u64 = 12;
+pub const MAX_PAGE_COLUMNS: u64 = 12;
 
 /// The **space** between the columns, in points, when it is not given.
 pub const DEFAULT_SPACE: f64 = 36.0;
@@ -164,11 +164,11 @@ commands! {
             let document = self.document.0;
             the_document(session, &id, document)?;
             let count = self.count.0;
-            if !count.is_finite() || count.fract() != 0.0 || count < 1.0 || count > MAX_COLUMNS as f64 {
+            if !count.is_finite() || count.fract() != 0.0 || count < 1.0 || count > MAX_PAGE_COLUMNS as f64 {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "a page has from one to {MAX_COLUMNS} columns, and {count} is not one of them"
+                        "a page has from one to {MAX_PAGE_COLUMNS} columns, and {count} is not one of them"
                     ),
                 });
             }

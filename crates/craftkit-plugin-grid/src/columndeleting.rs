@@ -42,7 +42,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
-use crate::formula::{Anchor, CellRef, MAX_COLS};
+use crate::formula::{Anchor, CellRef, MAX_FORMULA_COLUMNS};
 
 /// The **address** of a cell, moved left by the columns deleted.
 ///
@@ -393,10 +393,10 @@ commands! {
                 });
             }
             let count = count as u64;
-            if at + count > MAX_COLS {
+            if at + count > MAX_FORMULA_COLUMNS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a sheet has at most {MAX_COLS} columns"),
+                    message: format!("a sheet has at most {MAX_FORMULA_COLUMNS} columns"),
                 });
             }
             // A **protected** sheet has locked cells, and a locked cell may

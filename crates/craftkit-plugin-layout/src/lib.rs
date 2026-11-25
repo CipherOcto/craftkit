@@ -128,9 +128,9 @@ pub use styles::{LayoutItemStyle, LayoutStyleAdd, LayoutStyleFill, LayoutStyleSt
 /// bound of a thing may say the name of it and use the number.
 pub use bookmarks::MAX_NAME;
 pub use grouping::MAX_ITEMS;
-pub use links::MAX_TARGET;
+pub use links::MAX_LAYOUT_TARGET;
 pub use paint::MAX_WEIGHT;
-pub use styles::MAX_CHAIN;
+pub use styles::MAX_LAYOUT_CHAIN;
 
 /// The layout layer.
 ///

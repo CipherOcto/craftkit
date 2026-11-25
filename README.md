@@ -4617,6 +4617,7 @@ so.
 | **the pdf battery says what it did not read of an outline** | **built.** The outline of a file is read to a depth and to a number of items, and the reader says that it stopped at one of them (§1166) | §1166 |
 | **the prose battery says when it cut a label** | **built.** The label of a table of figures is cut at a published bound, and the answer says that it was (§1167) | §1167 |
 | **the pdf battery says when it counted a cut tree** | **built.** The hidden report counts the bookmarks with the same walk that reads the outline, and it says that it stopped (§1168) | §1168 |
+| **one name, one number — the whole tree** | **built.** A published cap's name belongs to one crate, the gate says the ones that do not, and ten names are named apart (§1169) | §1169 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73838,3 +73839,81 @@ it.
   count of the bookmarks is the count of a walk that stopped; the
   bookmarks themselves are in the file and in the document, and the
   report does not say which ones it did not count.
+
+## 1169. One name, one number — the whole tree
+
+§1144 brought the rule of **one name and one number**, §1160 held every
+crate to it for the private caps as well, and the rule was **inside** a
+crate. This arc holds the whole tree to it.
+
+### What was built
+
+- **The rule holds the tree.** A published cap's name is a promise
+  anybody may rely on, and a name that two crates publish leaves a
+  reader with no way to say which promise is meant. The outer gate now
+  says the names that two crates publish: *"the cap `MAX_DEPTH` is
+  published by 3 crates (craftkit-plugin-prose, craftkit-sdk,
+  craftkit-xml): one name, one number"*. The kit's own bound registry
+  refuses two crates publishing one name; the caps are the same kind of
+  promise and the registry never saw them.
+- **Ten names are named apart.** The film battery's caption text is
+  `MAX_FILM_CAPTION_TEXT`; the prose battery's style chain, page
+  columns, equation depth, source part and link target are
+  `MAX_STYLE_CHAIN`, `MAX_PAGE_COLUMNS`, `MAX_EQUATION_DEPTH`,
+  `MAX_SOURCE_PART` and `MAX_LINK_TARGET`; the layout battery's style
+  chain and link target are `MAX_LAYOUT_CHAIN` and `MAX_LAYOUT_TARGET`;
+  the grid battery's formula columns, import columns and solver nodes
+  are `MAX_FORMULA_COLUMNS`, `MAX_IMPORT_COLUMNS` and
+  `MAX_SOLVER_NODES`; the xlsx crate's sheet columns are
+  `MAX_SHEET_COLUMNS`; the xml crate's depth is `MAX_XML_DEPTH`; the zip
+  crate's part is `MAX_ZIP_PART`; the control crate's line is
+  `MAX_CONTROL_LINE`; the a2ui server's line is `MAX_A2UI_LINE`; and the
+  two fixtures' instances are `MAX_AU_INSTANCES` and
+  `MAX_VST3_INSTANCES`. The **kit's** own `MAX_DEPTH` and `MAX_NODES`
+  keep their names: they are the registered bounds, and they are the
+  tree's.
+- **Two tests prove the rule.** One catches a name that two crates
+  publish, and one holds that two crates with **two** names are not
+  caught: a rule that catches everything is not a rule.
+
+### What the port found
+
+- **The tree had broken its own promise.** §62 promised that two crates
+  may not publish one bound's name and said that the prose plugin's own
+  `MAX_DEPTH` *"is not published"*: a bound that another crate also
+  declares has to be given a name of its own. §1159 published the
+  batteries' caps, and the prose plugin's `MAX_DEPTH` was published with
+  it — so the promise was broken by the very arc that made the caps
+  visible, and nothing refused it: the **registry** refuses a duplicate
+  id, and a cap is not a registered bound.
+- **Ten names, twenty-four caps.** The clash was not one name but ten,
+  and it was spread over thirteen crates: the prose battery alone
+  published five names that another crate published too.
+- **Four of the clashes had the same number.** The grid's `MAX_COLS` and
+  the xlsx crate's were 16 384 in both; the prose battery's and the
+  layout battery's `MAX_CHAIN` were 32 in both; their `MAX_TARGET` were
+  2 048 in both; the grid's and the kit's `MAX_NODES` were 10 000 in
+  both. A rule that caught only the names with **different** numbers
+  would have left those four in place, and a reader looking a name up
+  would still have two places to look: the number being the same does
+  not make the name one.
+
+### What it cost
+
+- **The rule** and its **two tests**, **ten names named apart** —
+  twenty-four caps renamed — and the claim row above.
+
+### What it does not settle
+
+- **A private cap may still share a name with another crate's.** The
+  rule is about **published** caps: a private cap is the crate's own
+  business and nobody may rely on it. A crate that publishes
+  `MAX_THING` and keeps a private `MAX_THING` of another number is
+  caught by the rule inside the crate (§1160); a *different* crate's
+  private `MAX_THING` is not caught at all, and cannot be: it is not a
+  promise.
+- **The names the tree published before the batteries published their
+  caps** are the kit's own, and the rule holds them to the same promise
+  as the rest: the kit's `MAX_DEPTH` is the depth of a document's tree
+  and nothing else, and the prose battery's equation depth is a
+  different thing with a name of its own now.

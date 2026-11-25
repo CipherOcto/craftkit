@@ -55,7 +55,7 @@ use crate::formula::{CellRef, Value};
 pub const MAX_IMPORT_ROWS: usize = 10_000;
 
 /// The most **columns** a text may have.
-pub const MAX_COLUMNS: usize = 256;
+pub const MAX_IMPORT_COLUMNS: usize = 256;
 
 /// The **delimiter** the tree uses.
 pub const DELIMITER: char = ',';
@@ -200,10 +200,10 @@ commands! {
                 });
             }
             let width = rows[0].len();
-            if width > MAX_COLUMNS {
+            if width > MAX_IMPORT_COLUMNS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the text holds {width} columns, and a text holds at most {MAX_COLUMNS}"),
+                    message: format!("the text holds {width} columns, and a text holds at most {MAX_IMPORT_COLUMNS}"),
                 });
             }
             // The **rows** are the same length, or the text is refused.
@@ -343,11 +343,11 @@ commands! {
                     message: "the data holds nothing to import".to_string(),
                 });
             }
-            if keys.len() > MAX_COLUMNS {
+            if keys.len() > MAX_IMPORT_COLUMNS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "the data holds {} columns, and a text holds at most {MAX_COLUMNS}",
+                        "the data holds {} columns, and a text holds at most {MAX_IMPORT_COLUMNS}",
                         keys.len()
                     ),
                 });

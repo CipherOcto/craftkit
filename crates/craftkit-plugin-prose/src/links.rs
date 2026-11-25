@@ -22,7 +22,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 /// The most characters a target may have.
-pub const MAX_TARGET: usize = 2048;
+pub const MAX_LINK_TARGET: usize = 2048;
 
 /// The **schemes** a link that may be opened has.
 pub const OPENABLE: [&str; 3] = ["http", "https", "mailto"];
