@@ -633,7 +633,7 @@ pub use formulavalues::MAX_VALUE_STEPS;
 pub use fractions::{MAX_DENOMINATOR_DIGITS, MAX_FIXED_DENOMINATOR};
 pub use headers::MAX_TEXT;
 pub use importing::{MAX_COLUMNS, MAX_IMPORT_ROWS};
-pub use pdfexport::{MAX_EXPORT_CHARS, MAX_HEADER_LINES, MAX_SPARK_POINTS};
+pub use pdfexport::{MAX_EXPORT_CHARS, MAX_EXPORT_LINES, MAX_HEADER_LINES, MAX_SPARK_POINTS};
 pub use pivotfields::MAX_SAMPLES;
 pub use printing::MAX_MARGIN;
 pub use scaling::{MAX_FIT_PAGES, MAX_SCALE};

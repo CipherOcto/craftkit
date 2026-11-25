@@ -49,7 +49,10 @@ const LINE: f64 = 1.2;
 const GRIDLINE: [u8; 3] = [176, 176, 176];
 
 /// The **most** lines one cell's text may be broken into.
-const MAX_EXPORT_LINES: usize = 200;
+///
+/// The lines past this one are not drawn, and the export says how many
+/// of them there were.
+pub const MAX_EXPORT_LINES: usize = 200;
 
 /// The **most** characters of a cell's text that are drawn.
 pub const MAX_EXPORT_CHARS: usize = 10_000;
@@ -181,14 +184,20 @@ fn width_of(face: PdfFont, size: f64, text: &str) -> f64 {
 }
 
 /// The text of a cell, **broken into lines** that fit in `width`, and
-/// whether any **line** was cut.
+/// how many **lines** were cut.
 ///
-/// The lines of a cell's text are cut at the tree's bound, and the
-/// export says how many cells were cut short: a cell whose text is
-/// not all there is not the cell the user wrote.
-fn wrap_lines(text: &str, face: PdfFont, size: f64, width: f64) -> (Vec<String>, bool) {
+/// The lines of a cell's text are cut at `MAX_EXPORT_LINES`, and the
+/// export says how many lines were cut: a cell whose text is not all
+/// there is not the cell the user wrote.
+fn wrap_lines(text: &str, face: PdfFont, size: f64, width: f64) -> (Vec<String>, usize) {
     let mut out: Vec<String> = Vec::new();
-    let mut truncated = false;
+    // The lines that were **not** drawn: the lines are counted even
+    // after the bound is reached, so the answer says how many were cut
+    // and not merely that something was.
+    let mut cut = 0usize;
+    // Whether the bound has been reached: past it the lines are not
+    // drawn, but they are still counted.
+    let mut full = false;
     for paragraph in text.split('\n') {
         let mut line = String::new();
         for word in paragraph.split(' ') {
@@ -196,31 +205,42 @@ fn wrap_lines(text: &str, face: PdfFont, size: f64, width: f64) -> (Vec<String>,
             if line.is_empty() || width_of(face, size, &candidate) <= width {
                 line = candidate;
             } else {
-                out.push(std::mem::take(&mut line));
+                if full {
+                    cut += 1;
+                } else {
+                    out.push(std::mem::take(&mut line));
+                }
                 line = word.to_string();
             }
             // A word that is longer than the cell is broken by characters.
             while width_of(face, size, &line) > width && line.chars().count() > 1 {
                 let characters: Vec<char> = line.chars().collect();
-                let mut cut = characters.len() - 1;
-                while cut > 1 && width_of(face, size, &characters[..cut].iter().collect::<String>()) > width {
-                    cut -= 1;
+                let mut at = characters.len() - 1;
+                while at > 1 && width_of(face, size, &characters[..at].iter().collect::<String>()) > width {
+                    at -= 1;
                 }
-                out.push(characters[..cut].iter().collect());
-                line = characters[cut..].iter().collect();
+                let piece = characters[..at].iter().collect::<String>();
+                if full {
+                    cut += 1;
+                } else {
+                    out.push(piece);
+                }
+                line = characters[at..].iter().collect();
             }
-            if out.len() >= MAX_EXPORT_LINES {
-                truncated = true;
-                return (out, truncated);
+            if !full && out.len() >= MAX_EXPORT_LINES {
+                full = true;
             }
         }
-        out.push(line);
-        if out.len() >= MAX_EXPORT_LINES {
-            truncated = true;
-            break;
+        if full {
+            cut += 1;
+        } else {
+            out.push(line);
+        }
+        if !full && out.len() >= MAX_EXPORT_LINES {
+            full = true;
         }
     }
-    (out, truncated)
+    (out, cut)
 }
 
 /// The **look** of a cell: its font, its alignment and its fill.
@@ -505,6 +525,8 @@ struct Counts {
     spark_points_cut: usize,
     /// The **texts of cells** that were cut.
     cell_texts_cut: usize,
+    /// The **lines of cells** that were cut.
+    cell_lines_cut: usize,
 }
 
 /// The **width** of a line of a border, in points, and the **dashes** it
@@ -971,14 +993,12 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
                 text = "#".repeat(count);
                 measured = width_of(face, size, &text);
             }
-            let (lines, lines_cut) = if align.wrap {
-                wrap_lines(&text, face, size, available.max(size))
-            } else {
-                (vec![text], false)
-            };
-            if lines_cut {
-                counts.cell_texts_cut += 1;
-            }
+            let (lines, lines_cut) =
+                if align.wrap { wrap_lines(&text, face, size, available.max(size)) } else { (vec![text], 0) };
+            // The lines of the cell's text that were **not** drawn: the
+            // cut of the lines is its own cut, and it is counted apart
+            // from the cut of the text itself.
+            counts.cell_lines_cut += lines_cut;
             let line_height = size * LINE;
             let count = lines.len().max(1) as f64;
             let first_baseline = match align.vertical {
@@ -1260,6 +1280,7 @@ commands! {
                     counts.header_lines_cut += drawn.header_lines_cut;
                     counts.spark_points_cut += drawn.spark_points_cut;
                     counts.cell_texts_cut += drawn.cell_texts_cut;
+                    counts.cell_lines_cut += drawn.cell_lines_cut;
                 }
                 // The **links**, the **pictures**, the **sparklines** and
                 // the **borders** of the sheet: the ones that were drawn
@@ -1305,7 +1326,11 @@ commands! {
                 "header_lines_cut": counts.header_lines_cut,
                 "spark_points_cut": counts.spark_points_cut,
                 "cell_texts_cut": counts.cell_texts_cut,
-                "truncated": counts.header_lines_cut + counts.spark_points_cut + counts.cell_texts_cut
+                "cell_lines_cut": counts.cell_lines_cut,
+                "truncated": counts.header_lines_cut
+                    + counts.spark_points_cut
+                    + counts.cell_texts_cut
+                    + counts.cell_lines_cut
                     > 0,
                 "sparklines": sparklines,
                 "sparklines_drawn": counts.sparklines,

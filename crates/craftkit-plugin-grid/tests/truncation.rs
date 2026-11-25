@@ -8,8 +8,8 @@
 //! bound cannot drift apart.
 
 use craftkit_plugin_grid::{
-    MAX_EXPORT_CHARS, MAX_HEADER_LINES, MAX_ISSUES, MAX_RELATED, MAX_SAMPLES, MAX_SPARK_POINTS,
-    MAX_VALUE_STEPS,
+    MAX_EXPORT_CHARS, MAX_EXPORT_LINES, MAX_HEADER_LINES, MAX_ISSUES, MAX_RELATED, MAX_SAMPLES,
+    MAX_SPARK_POINTS, MAX_VALUE_STEPS,
 };
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
@@ -285,4 +285,52 @@ fn the_points_of_a_sparkline_are_cut_and_the_export_says_so() {
     let cut = outcome.data["spark_points_cut"].as_u64().expect("the answer says how many were cut");
     assert_eq!(cut, 1, "the point beyond the bound is cut: {outcome:?}");
     assert_eq!(outcome.data["truncated"], json!(true), "the answer says it stopped: {outcome:?}");
+}
+
+/// The **lines of a cell** are cut at `MAX_EXPORT_LINES`, and the export
+/// says how many were cut.
+///
+/// The text of a cell is broken into lines, and the lines are cut at the
+/// bound: a cell whose text is not all there is not the cell the user
+/// wrote, and the export says how many lines are missing.
+#[test]
+fn the_lines_of_a_cell_are_cut_and_the_export_says_so() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let lines =
+        (0..MAX_EXPORT_LINES + 3).map(|number| format!("line{number}")).collect::<Vec<String>>().join("\n");
+    a_text(&mut session, sheet, "A1", &lines);
+    session
+        .execute("grid.cell.align", &json!({ "sheet": sheet, "cell": "A1", "wrap": true }))
+        .expect("the text of the cell wraps");
+    let path = craftkit_scratch::file("craftkit-v2-grid-lines.pdf").expect("the scratch gives a path");
+    let outcome = session
+        .execute("grid.export.pdf", &json!({ "sheet": sheet, "path": path.to_string_lossy() }))
+        .expect("the sheet is exported");
+    let cut = outcome.data["cell_lines_cut"].as_u64().expect("the answer says how many were cut");
+    assert_eq!(cut, 3, "the lines beyond the bound are cut: {outcome:?}");
+    assert_eq!(outcome.data["truncated"], json!(true), "the answer says it stopped: {outcome:?}");
+}
+
+/// A cell of **as many lines** as the bound allows is drawn whole, and
+/// nothing is cut.
+///
+/// The other half of the test above: a bound that is always reached
+/// proves nothing.
+#[test]
+fn the_lines_of_a_cell_at_the_bound_are_drawn_whole() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let lines =
+        (0..MAX_EXPORT_LINES).map(|number| format!("line{number}")).collect::<Vec<String>>().join("\n");
+    a_text(&mut session, sheet, "A1", &lines);
+    session
+        .execute("grid.cell.align", &json!({ "sheet": sheet, "cell": "A1", "wrap": true }))
+        .expect("the text of the cell wraps");
+    let path = craftkit_scratch::file("craftkit-v2-grid-lines-whole.pdf").expect("the scratch gives a path");
+    let outcome = session
+        .execute("grid.export.pdf", &json!({ "sheet": sheet, "path": path.to_string_lossy() }))
+        .expect("the sheet is exported");
+    let cut = outcome.data["cell_lines_cut"].as_u64().expect("the answer says how many were cut");
+    assert_eq!(cut, 0, "nothing was cut: {outcome:?}");
 }
