@@ -293,6 +293,9 @@ commands! {
                     (false, _) => here.saturating_sub(magnitude),
                 },
             };
+            // The playhead may not go past the last frame the tree
+            // holds, and the answer says that it was held.
+            let held = target > MAX_FRAME;
             let target = target.min(MAX_FRAME);
             let Some(node) = session.document_mut()?.node_mut(sequence) else {
                 return Err(EngineError::Failed {
@@ -302,7 +305,13 @@ commands! {
             };
             node.data["playhead"] = json!(target);
             Ok(Outcome::changed(format!("the playhead is at frame {target}"))
-                .with_data(json!({ "sequence": sequence, "frame": target })))
+                .with_data(json!({
+                    "sequence": sequence,
+                    "frame": target,
+                    // The step was **held** at the last frame of the
+                    // tree, and the answer says so.
+                    "clamped": held,
+                })))
 
         }
     }

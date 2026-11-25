@@ -559,22 +559,56 @@ These are the README's own honest notes, and they are still true of the tree:
 - **The document model is still small.** The *seam* is the thing being
   demonstrated: a version is a contribution, a step is a contribution, and the
   chain is checked. A document worth versioning is a different piece of work.
-- **Only four batteries have been surveyed for silent cuts.** A reader
-  that stops at a bound must say that it stopped, and the pdf and xlsx
-  readers and the audio crate's detectors say it now (§1146, §1147, §1150,
-  §1151); the grid battery says it too (§1161, §1163, §1164), the prose
-  battery's accessibility check says it (§1162), the sound battery says
-  it when it cuts a name (§1165), the pdf battery's outline says it
-  (§1166), and the prose battery's table of figures says it when it cuts
-  a label (§1167), and the pdf battery's hidden report says it when it
-  counted a cut tree (§1168). The **other** batteries — the film, the layout, the
-  text, the art, the cad, the vector, the fx and the image — have **not**
-  been looked at with the same care: a survey of the caps of the tree and
-  of every `.truncate` and `.take` in it found that the film battery's cuts
-  are the *format's own* (a caption is thirty-two columns by fifteen
-  rows, and a window is the size the file says), and no other battery's
-  cut is known to be silent. Nothing checks a battery for a cut that is
-  silent: the next one to be found is found by a reader, not by the tree.
+- **The survey of the tree's bounds (§1170) names the silent stops that
+  are left.** Fifteen batteries keep two hundred and twenty-three bounds
+  and the kit and the libraries seventy-seven more; every one of them
+  was read with a written contract, and these are the ones that do not
+  say that they stopped:
+  - **pdf** — `pdf.page.attributes` stops the walk up `/Parent` at
+    `MAX_ANCESTORS` (sixty-four) and the inherited attributes below it
+    are missing with no word; `pdf.form.flatten` and
+    `pdf.comment.flatten` stop the walk over the pages at `MAX_DEPTH`
+    (sixty-four) and the pages below are neither flattened nor counted.
+  - **prose** — `prose.style.character.read` and `prose.block.character`
+    stop the chain of base styles at `MAX_STYLE_CHAIN` (thirty-two),
+    and the chain in the answer looks whole.
+  - **grid** — `grid.row.groups` and `grid.column.groups` hold a level
+    at `MAX_LEVEL` with no word; `grid.export.pdf` clips a spill past
+    `MAX_SPILL` (sixty-four columns) without counting it; the
+    `SUMIF` family cuts a criterion at `MAX_CRITERION_UNITS` (two
+    hundred and fifty-five) before it matches; `grid.goal` stops its
+    search at `MAX_GOAL_STEPS` (sixty-four) and says only how many
+    steps it took; and `grid.solver.solve` answers **"optimal"** when
+    its pivot budget runs out, which is a lie about the answer.
+  - **fx** — `fx.time.step` holds the frame at `MAX_FRAME` with no
+    word, the same shape as the film battery's playhead, which §1170
+    fixed.
+  - **vector** — `vector.path.erase` samples a contour at
+    `MAX_SAMPLES` (four thousand and ninety-six) however fine the
+    eraser is asked to be: the geometry is coarser than the caller
+    asked for, and nothing says so.
+  - **text** — a metric run longer than `MAX_RUN` (eight characters) is
+    kept and never used, and the measurement that comes back does not
+    say that a run of it was ignored.
+  - **image** — the head of a picture is read up to `MAX_HEAD_BYTES`
+    (a mebibyte) and the size of the picture is then refused; the
+    refusal does not name the bound.
+  - **The deliberate departures stay deliberate**: the art battery's
+    rate, the sound battery's repeat count and the camera's zoom are
+    held rather than refused, and they are recorded above.
+- **A reader that stops at a bound must say that it stopped, and five
+  batteries say it.** The pdf and xlsx readers and the audio crate's
+  detectors say it now (§1146, §1147, §1150, §1151); the grid battery
+  says it too (§1161, §1163, §1164), the prose battery's accessibility
+  check says it (§1162), the sound battery says it when it cuts a name
+  (§1165), the pdf battery's outline and its hidden report say it
+  (§1166, §1168), the prose battery's table of figures says it (§1167),
+  and the film battery says it when it holds a playhead or cuts a
+  caption file's pairs (§1170). The **rest** of the batteries were
+  surveyed in §1170 with a written contract, and the stops they do not
+  say are named in the list above. Nothing *checks* a battery for a cut
+  that is silent: the next one to be found is found by a reader, not by
+  the tree.
 
 ---
 

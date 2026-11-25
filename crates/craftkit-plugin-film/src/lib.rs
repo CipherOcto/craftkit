@@ -297,6 +297,11 @@ pub use lifting::FilmClipLift;
 pub use linking::{FilmClipLink, FilmClipUnlink};
 pub use locking::FilmTrackLock;
 pub use markers::{FilmMarkerAdd, FilmMarkerClear, FilmMarkerRemove, FilmMarkerSet, MarkerKind};
+/// The **caps** of the battery: the bounds it keeps.
+///
+/// The **caption pairs** of a file are cut at a bound, and the reader
+/// says so when it cuts them.
+pub use mcc::MAX_CAPTION_PAIRS;
 pub use mediamarks::FilmItemMark;
 pub use moving::FilmClipMove;
 pub use naming::FilmClipRename;

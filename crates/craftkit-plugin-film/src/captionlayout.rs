@@ -89,6 +89,8 @@ const ANCHORS: [&str; 3] = ["top", "middle", "bottom"];
 
 /// Where a caption goes on a frame: the tree's own layout.
 pub struct Placement {
+    /// Whether a number of the style was **held** to a bound.
+    pub clamped: bool,
     /// The lines of the caption.
     pub lines: Vec<String>,
     /// How wide each line is.
@@ -138,14 +140,19 @@ pub fn style_of(session: &Session, track: Option<NodeRef>) -> Result<Json, Engin
     Ok(node.data.get("style").cloned().unwrap_or_else(crate::captionstyle::default_style))
 }
 
-/// A **number** of the style, held between the two numbers.
-fn number_in(style: &Json, name: &str, lowest: f64, highest: f64, fallback: f64) -> f64 {
-    style
-        .get(name)
-        .and_then(Json::as_f64)
-        .filter(|value| value.is_finite())
-        .map(|value| value.clamp(lowest, highest))
-        .unwrap_or(fallback)
+/// A **number** of the style, held between the two numbers — and
+/// whether it had to be held.
+///
+/// The style of a caption comes from outside, and a number that is out
+/// of range is held to the bound: the layout says so, because a caption
+/// that was laid out with a size the style did not name is not the
+/// caption the style asked for.
+fn number_in(style: &Json, name: &str, lowest: f64, highest: f64, fallback: f64) -> (f64, bool) {
+    let Some(value) = style.get(name).and_then(Json::as_f64).filter(|value| value.is_finite()) else {
+        return (fallback, false);
+    };
+    let held = value.clamp(lowest, highest);
+    (held, held != value)
 }
 
 /// A **word** of the style: one of the tree's own.
@@ -219,7 +226,7 @@ pub fn placement(
     }
     // The **scale** and the **size** of the letters.
     let scale = height / BASE_HEIGHT;
-    let size = number_in(style, "size", MIN_SIZE, MAX_LAYOUT_SIZE, 54.0);
+    let (size, size_held) = number_in(style, "size", MIN_SIZE, MAX_LAYOUT_SIZE, 54.0);
     let px = (size * scale).clamp(MIN_SIZE, height);
     let Some(metrics) = Metrics::new(px) else {
         return Err("the size of the letters of a caption is a number that is positive".to_string());
@@ -237,7 +244,7 @@ pub fn placement(
         return Err("a caption with no words has no place".to_string());
     }
     // The **height of a line**, the **padding** and the **block**.
-    let spacing = number_in(style, "line_spacing", MIN_LINE_SPACING, MAX_LINE_SPACING, 1.25);
+    let (spacing, spacing_held) = number_in(style, "line_spacing", MIN_LINE_SPACING, MAX_LINE_SPACING, 1.25);
     let line_height = px * spacing;
     let padding = (px * PADDING).round();
     let block_height = line_height * lines.len() as f64;
@@ -245,7 +252,8 @@ pub fn placement(
     let (line_override, align_override) = settings_of(settings);
     let align = align_override.unwrap_or_else(|| word_in(style, "align", &ALIGNS, "center"));
     let anchor = word_in(style, "anchor", &ANCHORS, "bottom");
-    let margin = number_in(style, "margin", 0.0, MAX_MARGIN, 0.08) * height;
+    let (margin_number, margin_held) = number_in(style, "margin", 0.0, MAX_MARGIN, 0.08);
+    let margin = margin_number * height;
     // The **top** of the block.
     let top = match (line_override, anchor.as_str()) {
         (Some(fraction), _) => (fraction * height).min(height - block_height),
@@ -267,8 +275,8 @@ pub fn placement(
         })
         .collect();
     // The **outline** grows the box.
-    let outline =
-        (number_in(style, "outline", 0.0, MAX_LAYOUT_OUTLINE, 0.0) * scale).clamp(0.0, MAX_LAYOUT_OUTLINE);
+    let (outline_number, outline_held) = number_in(style, "outline", 0.0, MAX_LAYOUT_OUTLINE, 0.0);
+    let outline = (outline_number * scale).clamp(0.0, MAX_LAYOUT_OUTLINE);
     let grow = outline.ceil() + 1.0;
     let left = xs.iter().zip(&widths).map(|(x, _)| x - padding - grow).fold(f64::MAX, f64::min).floor();
     let right = xs
@@ -288,6 +296,10 @@ pub fn placement(
         return Err("the caption has no room on the frame".to_string());
     }
     Ok(Placement {
+        // Whether a **number of the style** was held to a bound: the
+        // layout is not the layout the style asked for, and the answer
+        // says so.
+        clamped: size_held || spacing_held || margin_held || outline_held,
         lines,
         widths,
         x: xs,
@@ -347,6 +359,9 @@ commands! {
                 "outline": laid.outline,
                 "box": laid.extent,
                 "frame": [self.width.0, self.height.0],
+                // The style of the caption is held to the bounds of the
+                // tree, and the answer says that it was held.
+                "clamped": laid.clamped,
             })))
 
         }

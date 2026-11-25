@@ -54,7 +54,11 @@ const ABBREV: [(char, &[u8]); 7] = [
 const MAX_LINES: usize = 100_000;
 
 /// The most **pairs** a file may carry.
-const MAX_PAIRS: usize = 4_000_000;
+/// The most **caption pairs** a file may hold.
+///
+/// The pairs of a file are cut at this bound, and the reader says so:
+/// the captions of the rest of the file are not in the answer.
+pub const MAX_CAPTION_PAIRS: usize = 4_000_000;
 
 /// The **rate** of a timecode: the nominal base of the frames, the
 /// drop-frame mark and the number of frames a second.
@@ -214,6 +218,9 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
     let mut pairs: Vec<(i64, u8, u8)> = Vec::new();
     let mut service: Vec<(i64, bool, u8, u8)> = Vec::new();
     let mut any_608 = false;
+    // Whether the **pairs** of the file were cut at the bound: the file
+    // holds more of them, and the answer says so.
+    let mut pairs_cut = false;
     for (number, line) in lines {
         let line = line.trim_end();
         if line.trim().is_empty() || line.starts_with("//") {
@@ -257,8 +264,10 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
                 // The **field one**: the CEA-608 pairs.
                 0 => {
                     any_608 |= first & 0x7f != 0 || second & 0x7f != 0;
-                    if pairs.len() < MAX_PAIRS {
+                    if pairs.len() < MAX_CAPTION_PAIRS {
                         pairs.push((frame, first, second));
+                    } else {
+                        pairs_cut = true;
                     }
                 }
                 // The **field two** is not read.
@@ -267,12 +276,21 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
                 // packets, and the first of a packet says that it
                 // starts here.
                 other => {
-                    if service.len() < MAX_PAIRS {
+                    if service.len() < MAX_CAPTION_PAIRS {
                         service.push((frame, other == 3, first, second));
+                    } else {
+                        pairs_cut = true;
                     }
                 }
             }
         }
+    }
+    if pairs_cut {
+        // The pairs of the file are **cut** at the bound, and the file
+        // says so: the captions of the rest of it are not in the answer.
+        warnings.push(format!(
+            "the file holds more than {MAX_CAPTION_PAIRS} caption pairs; the rest of them were not read"
+        ));
     }
     let cues = if any_608 {
         // The **field one** comes first: the tree's own rule is that

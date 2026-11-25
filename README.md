@@ -4604,7 +4604,7 @@ so.
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
 | **the batteries and the libraries name their caps** | **built.** Eleven crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-eight caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-nine caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
@@ -4618,6 +4618,7 @@ so.
 | **the prose battery says when it cut a label** | **built.** The label of a table of figures is cut at a published bound, and the answer says that it was (§1167) | §1167 |
 | **the pdf battery says when it counted a cut tree** | **built.** The hidden report counts the bookmarks with the same walk that reads the outline, and it says that it stopped (§1168) | §1168 |
 | **one name, one number — the whole tree** | **built.** A published cap's name belongs to one crate, the gate says the ones that do not, and ten names are named apart (§1169) | §1169 |
+| **the tree's bounds are surveyed** | **built.** Every battery's bounds were read with a written contract, the film battery's three silent stops now say so, and the rest are named one by one (§1170) | §1170 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73917,3 +73918,68 @@ crate. This arc holds the whole tree to it.
   as the rest: the kit's `MAX_DEPTH` is the depth of a document's tree
   and nothing else, and the prose battery's equation depth is a
   different thing with a name of its own now.
+
+## 1170. The tree's bounds are surveyed, and the film battery says when it stops
+
+§1161–§1168 brought the rule of the **saying so** to the grid, the
+prose, the sound and the pdf batteries, one battery at a time. The
+rule was applied where a reader was found by hand, and the batteries
+that had not been looked at were the batteries that had not been
+looked at. This arc **looks**.
+
+### What was built
+
+- **The survey.** Every battery's bounds were read, one battery at a
+  time, with a written contract: the bounds of the crate, where each
+  one is used, and whether the use **refuses**, **cuts**, **clamps** or
+  **says**. Fifteen batteries keep **two hundred and twenty-three**
+  bounds between them — eighty-three of them published — and the kit
+  and the libraries keep seventy-seven more.
+- **The film battery's three say so.** The **playhead** that is held at
+  the last frame the tree holds answers `clamped`; the **style** of a
+  caption that is held to a bound answers `clamped`; and the **caption
+  pairs** of a file that are cut at the bound are a **warning** in the
+  reader's own channel, the way the rest of the film's warnings are.
+- **The film's bound is published.** `MAX_CAPTION_PAIRS` is the film's
+  first published cap: a file may hold that many caption pairs, and a
+  reader may rely on it.
+- **Four tests name every bound.** The new file names
+  `MAX_CAPTION_PAIRS` in **code**, and the playhead's two halves are
+  both there: a step that lands past the last frame is held and says
+  so, and a step that lands inside it is not.
+
+### What the port found
+
+- **A clamp is a second kind of cut.** A bound that **refuses** says so
+  in the error; a bound that **cuts** drops content; and a bound that
+  **clamps** changes a value in place and keeps going. The clamps were
+  the quietest of the three: the film battery's style command refuses
+  an out-of-range number, so its layout's clamp is a safety net — and
+  the answer now says when the net was used.
+- **The survey found the bounds that are the *format's own*.** The film
+  battery's caption is thirty-two columns by fifteen rows and its
+  window is the size the file says: those are not cuts, they are the
+  format. A survey that cannot tell the two apart is a survey that
+  produces work.
+- **The bounds that cannot bite are named as such.** The kit's arcs
+  sweep at most three hundred and sixty degrees, so the count of an
+  arc's segments can never pass four: the clamp there is a proof, not
+  a loss.
+
+### What it cost
+
+- **The survey** — three contracts, fourteen crates — **three fixes** in
+  the film battery, **one cap published**, **four tests** in a new
+  file, and the claim row above.
+
+### What it does not settle
+
+- **The other batteries' silent cuts are recorded, not fixed.** The
+  `KNOWN-GAPS` list names them one by one, with the place and the
+  bound: the pdf's inherited attributes and its flattened pages, the
+  prose style chain, the grid's group level, its spill, its solver's
+  budget, its goal search and its criteria, the fx step, the vector
+  erase, and the text battery's metric run. They are the next arcs.
+- **The survey is a reading, not a rule.** Nothing checks a battery for
+  a cut that is silent: the next one to be found is found by a reader,
+  not by the tree.
