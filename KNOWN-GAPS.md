@@ -198,6 +198,16 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The rule holds every crate to its own caps** (§1158): the rule of
+  §1141 held the **kit's** limits to a test anywhere in the tree, and
+  §1145–§1156 brought every other crate's caps under a test by hand.
+  The rule now asks **each crate** for the proof of **its own** caps —
+  its test files and the test parts of its own source — and the promise
+  bounds follow the same rule. The tree was already ready: every
+  crate's caps were named by that crate's own tests, so the rule was
+  made strict without changing a behaviour. The other rules still ask
+  the whole tree: a battery's command may be run by the studio's test,
+  and that is the proof the tree wants.
 - **The blind spot is closed** (§1157): the rule that reads the tree's
   caps — and its commands, kinds, migrations, panels, tools, evaluators,
   layers, formats and promise bounds — read the test **files** of the

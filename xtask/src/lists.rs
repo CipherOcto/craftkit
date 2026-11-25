@@ -587,8 +587,8 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     let mut evaluators: Vec<String> = Vec::new();
     let mut layers: Vec<String> = Vec::new();
     let mut formats: Vec<String> = Vec::new();
-    let mut bounds: Vec<String> = Vec::new();
-    let mut limits: Vec<String> = Vec::new();
+    let mut bounds: Vec<(String, String)> = Vec::new();
+    let mut limits: Vec<(String, String)> = Vec::new();
     let index = crate::index::build(root)?;
     commands.extend(index.commands.iter().map(|command| command.id.clone()));
     kinds.extend(index.kinds.iter().map(|kind| kind.id.clone()));
@@ -619,25 +619,35 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             formats.extend(crate::index::formats_in(&text, &file, &name).into_iter().map(|f| f.id));
         }
     }
-    // **The kit's own limits.** The kit is the core: a limit it keeps is
-    // a limit every program that links it inherits. Each of them is
-    // named by a test, and the rule says the ones that are not.
-    {
-        let kit = root.join("crates").join("craftkit-sdk");
-        for file in crate::index::rust_files(&kit.join("src")) {
+    // **The limits of every crate.** A limit a crate keeps is a limit
+    // every program that links it inherits, and each of them is named
+    // by a **test of that crate**: the proof belongs beside the thing
+    // it proves. The kit's own limits are the kit's like any other.
+    for directory in crate_directories(root) {
+        let name = directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+        for file in crate::index::rust_files(&directory.join("src")) {
             let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Production) else {
                 continue;
             };
             limits.extend(
-                crate::index::limits_in(&text, &file, "craftkit-sdk").into_iter().map(|limit| limit.name),
+                crate::index::limits_in(&text, &file, &name)
+                    .into_iter()
+                    .map(|limit| (name.clone(), limit.name)),
             );
         }
     }
     // Every test file in the tree, and what it says.
     let mut tests: Vec<String> = Vec::new();
+    // And the tests of **each crate**: a crate's own test files and the
+    // test parts of its own source. A cap is proved beside the crate
+    // that keeps it, and the rule asks each crate about its own.
+    let mut own_tests: Vec<(String, String)> = Vec::new();
     for directory in crate_directories(root) {
+        let name = directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
         for file in crate::index::rust_files(&directory.join("tests")) {
-            tests.push(std::fs::read_to_string(&file).unwrap_or_default());
+            let body = std::fs::read_to_string(&file).unwrap_or_default();
+            tests.push(body.clone());
+            own_tests.push((name.clone(), body));
         }
     }
     // And the **unit tests**: the tests that live inside a crate's own
@@ -646,9 +656,12 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     // that only a unit test named was invisible to this rule before.
     // §1157.
     for directory in crate_directories(root) {
+        let name = directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
         for file in crate::index::rust_files(&directory.join("src")) {
             let Ok(text) = std::fs::read_to_string(&file) else { continue };
-            tests.push(crate::tree::tests_of(&file, &text));
+            let body = crate::tree::tests_of(&file, &text);
+            tests.push(body.clone());
+            own_tests.push((name.clone(), body));
         }
     }
     // **The promise bounds of every crate.** A bound whose name says what
@@ -662,7 +675,9 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
                 continue;
             };
             bounds.extend(
-                crate::index::promise_bounds_in(&text, &file, &name).into_iter().map(|bound| bound.name),
+                crate::index::promise_bounds_in(&text, &file, &name)
+                    .into_iter()
+                    .map(|bound| (name.clone(), bound.name)),
             );
         }
     }
@@ -751,12 +766,12 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             "the format `{format}` is named by no test: every format the tree has is named by a test"
         ));
     }
-    for bound in bounds {
-        if tests.iter().any(|body| names_it(body, &bound)) {
+    for (crate_name, bound) in &bounds {
+        if own_tests.iter().any(|(owner, body)| owner == crate_name && names_it(body, bound)) {
             continue;
         }
         problems.push(format!(
-            "the bound `{bound}` is named by no test: every bound the tree promises is named by a test"
+            "the bound `{bound}` of `{crate_name}` is named by no test of its own: every bound a crate promises is named by a test beside it"
         ));
     }
     // **One name, one number.** A cap's name is its id: two caps of the
@@ -784,12 +799,17 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             }
         }
     }
-    for limit in limits {
-        if tests.iter().any(|body| names_it(body, &limit)) {
+    for (crate_name, limit) in &limits {
+        // A **promise bound** is a cap with a promise attached, and the
+        // rule of the bounds holds it: a name is not checked twice.
+        if crate::index::is_a_promise_bound(limit) {
+            continue;
+        }
+        if own_tests.iter().any(|(owner, body)| owner == crate_name && names_it(body, limit)) {
             continue;
         }
         problems.push(format!(
-            "the limit `{limit}` is named by no test: every limit the kit keeps is named by a test"
+            "the limit `{limit}` of `{crate_name}` is named by no test of its own: every cap a crate keeps is named by a test beside it"
         ));
     }
     Ok(problems)
@@ -1836,6 +1856,32 @@ mod tests {
         assert!(problems.is_empty(), "{problems:?}");
     }
 
+    /// A cap that **another crate's** test names is caught.
+    ///
+    /// The proof belongs beside the thing it proves: a cap of one crate
+    /// that only the test of another names is the other crate's proof
+    /// and not this one.
+    #[test]
+    fn a_cap_that_only_another_crates_test_names_is_caught() {
+        let root = crate::temp::dir("lists-limit-elsewhere").expect("a temporary folder");
+        let thing = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(thing.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(thing.join("tests")).expect("the directory is made");
+        std::fs::write(thing.join("src").join("lib.rs"), "pub const MAX_THING: usize = 10;\n")
+            .expect("the source is written");
+        let other = root.join("crates").join("craftkit-other");
+        std::fs::create_dir_all(other.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(other.join("tests")).expect("the directory is made");
+        std::fs::write(other.join("src").join("lib.rs"), "\n").expect("the source is written");
+        std::fs::write(
+            other.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let limit = MAX_THING; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.iter().any(|problem| problem.contains("MAX_THING")), "{problems:?}");
+    }
+
     /// A **limit of the kit** that no test names is caught.
     #[test]
     fn a_limit_of_the_kit_that_no_test_names_is_caught() {
@@ -1882,8 +1928,11 @@ mod tests {
             "pub const MAX_THING: usize = 10;\npub const MAX_OTHER: usize = 20;\n",
         )
         .expect("the source is written");
-        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
-            .expect("the test is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let thing = MAX_THING; let other = MAX_OTHER; }\n",
+        )
+        .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert!(problems.is_empty(), "{problems:?}");
     }

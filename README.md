@@ -4606,6 +4606,7 @@ so.
 | **the batteries and the libraries name their caps** | **built.** Nine crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
 | **every published cap in the tree is named by a test** | **built.** The hundred and six caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
+| **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73193,3 +73194,50 @@ This arc closes the blind spot.
   cap.** The kit's limits are the rule's own; a battery's caps are
   proved by the battery's own tests, and nothing yet holds a battery to
   it.
+
+## 1158. The rule holds every crate to its own caps
+
+§1141 brought the rule to the **kit**: every limit the kit keeps is
+named by a test. §1145–§1156 then brought every other crate's caps
+under a test by hand, one crate at a time. This arc makes the rule do
+that work itself.
+
+### What was built
+
+- **Every crate, not only the kit.** The rule now reads the caps of
+  **every** crate and asks **that crate** for the proof: the cap must
+  be named by a test of its own crate — its test files and the test
+  parts of its own source. A cap of the numeric crate that only the
+  studio's test names is the studio's proof and not the numeric
+  crate's, and the rule says so.
+- **The promise bounds follow.** A promise a crate makes — a bound on
+  the bytes, the memory or the steps — is held to the same rule: it is
+  named by a test beside the crate that promises it.
+- **A name is checked once.** A promise bound is a cap with a promise
+  attached, and the rule of the bounds holds it: a gap is reported
+  once and not twice.
+- **A test proves the strength.** The rule's own test builds two
+  crates, one with a cap and one with a test that names it, and the
+  rule catches the cap: the proof is in the wrong house.
+
+### What the port found
+
+- **The tree was already ready.** Every crate's caps were named by
+  that crate's own tests — the measurement says so — so the rule
+  could be made strict without changing a single behaviour: it holds
+  the tree to what the tree already does, and holds it from now on.
+
+### What it cost
+
+- **Two rules** made per-crate, **one** skip for the names that are
+  both, **one** test, and the claim row above.
+
+### What it does not settle
+
+- **The rule is about the name.** A cap named in a comment, in a string
+  or in a doc comment is a cap the rule holds to be named, and the
+  proof it asks for may be a word and not a test of behaviour.
+- **The other rules still ask the whole tree.** A command, a kind, a
+  panel, a tool or an evaluator is proved by a test **anywhere**: a
+  battery's command may be run by the studio's test, and that is the
+  proof the tree wants.
