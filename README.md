@@ -4601,6 +4601,7 @@ so.
 | **the xlsx reader says what it did not read** | **built.** The bags, the outline and the columns of a file are read against a bound, and the file is told when the bound bites (§1150) | §1150 |
 | **the audio crate's caps are named and its detectors say so** | **built.** The onsets, the transients and the notes of a sound are a reading that says when the detector stopped, and a pitch above the bound is refused (§1151) | §1151 |
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
+| **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72962,3 +72963,48 @@ This arc names all three by a test beside the crate.
   **eighteen** caps in **fourteen** crates are published and named by
   no test: two each in the kit and the xml crate, and one in each of
   twelve more.
+
+## 1153. The zip crate's caps are named
+
+The zip crate reads a package of parts, and its three caps are about
+how big a part may be and how much a package may hold. This arc names
+all three by a test beside the crate — and says which of them a test
+can reach.
+
+### What was built
+
+- **Three caps, three tests.** The zip crate's limit suite is new: the
+  size of a part (`MAX_PART`), the number of the entries of a package
+  (`MAX_ENTRIES`) and the total a package may inflate to
+  (`MAX_TOTAL`).
+
+### What the port found
+
+- **A bound that cannot bite.** The most entries a package may hold
+  is two hundred thousand, and the count of the entries is a number of
+  **sixteen bits** in the record at the end of the directory: a
+  package with more entries than that keeps its real numbers in the
+  **ZIP64** record, and this reader refuses that one. The bound of two
+  hundred thousand is above the count the format itself can hold, and
+  it can never be reached.
+- **A bound a test cannot reach.** The total a package may inflate to
+  is a **gigabyte** of real bytes, and the tree counts the bytes it
+  has read: the bound is reached only by reading a gigabyte, and that
+  is not a test the tree runs. The test names the bound and says what
+  the tree reads.
+
+### What it cost
+
+- **Three tests** in a new limit suite for the zip crate, and the
+  claim row above.
+
+### What it does not settle
+
+- **A bound that cannot bite is a bound that cannot be relied on.** The
+  tree says so here rather than changing the crate's behaviour to make
+  it reachable: the same choice the kit's own unreachable bound got in
+  §1141.
+- **The outer gate still reaches only the kit.** After this arc
+  **fifteen** caps in **thirteen** crates are published and named by
+  no test: two each in the kit and the xml crate, and one in each of
+  eleven more.

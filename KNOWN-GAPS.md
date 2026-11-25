@@ -206,6 +206,20 @@ These are the README's own honest notes, and they are still true of the tree:
   hard a note is struck said in one breath that a velocity outside the
   range is refused and that the tree clamps it; the tree refuses, and
   the doc says so now.
+- **The zip crate's caps are named; two of them cannot be reached**
+  (§1153): the size of a part is proved by a package that claims a
+  part of more than the bound, and the tree reads none of it. The
+  **number of the entries** is a number of sixteen bits in the record
+  at the end of the directory, so the tree's bound of two hundred
+  thousand is above the count the format itself can hold and can never
+  be reached — a package with more entries keeps its numbers in the
+  **ZIP64** record, and this reader refuses that one. The **total** a
+  package may inflate to is a gigabyte of real bytes, and the tree
+  counts the bytes it has read: the bound is reached only by reading a
+  gigabyte, and that is not a test the tree runs. A bound that cannot
+  bite is a bound that cannot be relied on, and the tree says so rather
+  than changing the crate's behaviour to make it reachable — the same
+  choice the kit's own unreachable bound got in §1141.
 - **The audio crate's detectors say when they stop** (§1151): the
   onsets, the transients and the notes of a sound are a reading — the
   items that were found and whether the detector stopped at its bound —
