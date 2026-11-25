@@ -198,6 +198,14 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The midi crate's caps are named** (§1152): the tracks of a file, the
+  events of a file and the velocity of a note are each named by a test
+  beside the crate. The **budget of the events** is one budget for the
+  whole file and not one per track, so a file of many tracks is refused
+  for its events and not for its tracks. The operation that changes how
+  hard a note is struck said in one breath that a velocity outside the
+  range is refused and that the tree clamps it; the tree refuses, and
+  the doc says so now.
 - **The audio crate's detectors say when they stop** (§1151): the
   onsets, the transients and the notes of a sound are a reading — the
   items that were found and whether the detector stopped at its bound —

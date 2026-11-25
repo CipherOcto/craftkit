@@ -4600,6 +4600,7 @@ so.
 | **every cap the grid battery publishes is named by a test** | **built.** All twenty of the grid battery's published cap names are named by a test beside the battery, and an address past the sheet is refused (§1149) | §1149 |
 | **the xlsx reader says what it did not read** | **built.** The bags, the outline and the columns of a file are read against a bound, and the file is told when the bound bites (§1150) | §1150 |
 | **the audio crate's caps are named and its detectors say so** | **built.** The onsets, the transients and the notes of a sound are a reading that says when the detector stopped, and a pitch above the bound is refused (§1151) | §1151 |
+| **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72920,3 +72921,44 @@ holds it to the rule and names its five caps.
   **twenty-one** caps in **fifteen** crates are published and named by
   no test: three each in the midi and zip crates, two each in the kit
   and the xml crate, and one in each of eleven more.
+
+## 1152. The midi crate's caps are named
+
+The midi crate reads a file of notes and writes one, and its three caps
+are about how much of a file is read and how hard a note may be struck.
+This arc names all three by a test beside the crate.
+
+### What was built
+
+- **Three caps, five tests.** The midi crate's limit suite is new: the
+  tracks of a file (`MAX_TRACKS`), the events of a file
+  (`MAX_EVENTS`) and the velocity of a note (`MAX_VELOCITY`). A file
+  with four thousand and ninety-seven tracks is refused, a file with
+  five million and one events is refused, and a note asked for as a
+  hundred and fifty is refused — and the notes are not changed.
+- **A doc that said two things.** The operation that changes how hard
+  a note is struck said that a velocity outside the range is
+  **refused** and, in the next breath, that the tree clamps it: the
+  tree refuses, and the doc says so now.
+
+### What the port found
+
+- **The events are counted across the file, not the track.** The budget
+  of a file is one budget: a file of many tracks is refused for its
+  events and not for its tracks, and the test of the events is a file
+  of one track with five million of them.
+
+### What it cost
+
+- **Five tests** in a new limit suite for the midi crate, **one** doc
+  corrected, and the claim row above.
+
+### What it does not settle
+
+- **The crate's own caps are not the tree's rules.** The midi crate
+  keeps bounds of its own that no test names, and the three here are
+  the published ones.
+- **The outer gate still reaches only the kit.** After this arc
+  **eighteen** caps in **fourteen** crates are published and named by
+  no test: two each in the kit and the xml crate, and one in each of
+  twelve more.

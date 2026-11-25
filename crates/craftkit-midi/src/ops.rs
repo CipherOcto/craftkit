@@ -213,9 +213,8 @@ pub const MAX_VELOCITY: i32 = 127;
 /// Changes how hard the notes are struck.
 ///
 /// A velocity outside the range is **refused** and the notes are not
-/// changed: the tree clamps such a velocity into the range, and a note
-/// asked for as a hundred and fifty is not a note the caller knows
-/// about.
+/// changed: a note asked for as a hundred and fifty is not a note the
+/// caller knows about.
 ///
 /// The **limit** is the one operation that moves a velocity into the
 /// range on purpose: a limit says *no softer than this and no harder
