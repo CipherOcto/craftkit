@@ -46,19 +46,25 @@ pub const MAX_FIGURE_LABEL: usize = 40;
 /// tree's.
 pub const DEFAULT_LABEL: &str = "Figure";
 
-/// The **identifier** of a label: the tree's own.
+/// The **identifier** of a label: the tree's own — and whether the
+/// label was **cut**.
 ///
 /// A label holds no quote, no backslash and no control character, it
 /// is at most forty characters long, and its words are joined with an
 /// underscore. A label that says nothing after that is `Figure`.
-pub fn ident_of(label: &str) -> String {
-    let cleaned: String = label
+///
+/// A label that is too long is **cut**, and the reader says so: a table
+/// of figures asked for by a label that was cut is a table of figures of
+/// a label that is not the one that was asked for.
+pub fn ident_of(label: &str) -> (String, bool) {
+    let kept: String = label
         .chars()
         .filter(|character| !matches!(character, '"' | '\\') && !character.is_control())
-        .take(MAX_FIGURE_LABEL)
         .collect();
+    let cut = kept.chars().count() > MAX_FIGURE_LABEL;
+    let cleaned: String = kept.chars().take(MAX_FIGURE_LABEL).collect();
     let ident = cleaned.split_whitespace().collect::<Vec<_>>().join("_");
-    if ident.is_empty() { DEFAULT_LABEL.to_string() } else { ident }
+    if ident.is_empty() { (DEFAULT_LABEL.to_string(), cut) } else { (ident, cut) }
 }
 
 /// The **entries** of a table of figures: the captions that carry the
@@ -78,7 +84,7 @@ pub fn entries_of(
     let mut entries = Vec::new();
     for caption in captions {
         let label = caption.get("label").and_then(|label| label.as_str()).unwrap_or(DEFAULT_LABEL);
-        if ident_of(label) != ident {
+        if ident_of(label).0 != ident {
             continue;
         }
         // The **number** of the caption: the whole number when the
@@ -149,7 +155,7 @@ commands! {
             // The **label** of the table, and its **identifier**: the
             // tree's own.
             let label = self.label.as_ref().map(|label| label.0.as_str()).unwrap_or(DEFAULT_LABEL);
-            let ident = ident_of(label);
+            let (ident, label_truncated) = ident_of(label);
             let include_label = self.include_label.map(|flag| flag.0).unwrap_or(true);
             let entries = entries_of(session.document(), document, &ident, include_label);
             Ok(Outcome::new(format!(
@@ -159,6 +165,10 @@ commands! {
             .with_data(json!({
                 "document": document,
                 "label": ident,
+                // The label was **cut** at the bound, and the answer
+                // says so: the table is of a label that is not the
+                // whole of the one that was asked for.
+                "label_truncated": label_truncated,
                 "includeLabel": include_label,
                 "entries": entries,
             })))

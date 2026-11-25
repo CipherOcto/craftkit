@@ -554,11 +554,12 @@ These are the README's own honest notes, and they are still true of the tree:
   readers and the audio crate's detectors say it now (§1146, §1147, §1150,
   §1151); the grid battery says it too (§1161, §1163, §1164), the prose
   battery's accessibility check says it (§1162), the sound battery says
-  it when it cuts a name (§1165), and the pdf battery's outline says it
-  (§1166). The **other** batteries — the film, the layout, the text, the
-  art, the cad, the vector, the fx and the image — have **not** been
-  looked at with the same care: a survey of the caps of the tree and of
-  every `.truncate` and `.take` in it found that the film battery's cuts
+  it when it cuts a name (§1165), the pdf battery's outline says it
+  (§1166), and the prose battery's table of figures says it when it cuts
+  a label (§1167). The **other** batteries — the film, the layout, the
+  text, the art, the cad, the vector, the fx and the image — have **not**
+  been looked at with the same care: a survey of the caps of the tree and
+  of every `.truncate` and `.take` in it found that the film battery's cuts
   are the *format's own* (a caption is thirty-two columns by fifteen
   rows, and a window is the size the file says), and no other battery's
   cut is known to be silent. Nothing checks a battery for a cut that is

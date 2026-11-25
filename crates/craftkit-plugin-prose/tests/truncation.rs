@@ -6,7 +6,7 @@
 //! a reader, and it now says what it cut — how many issues there were,
 //! how many are listed, and whether any were left out.
 
-use craftkit_plugin_prose::{MAX_ACCESSIBILITY_COLUMNS, MAX_ACCESSIBILITY_ISSUES};
+use craftkit_plugin_prose::{MAX_ACCESSIBILITY_COLUMNS, MAX_ACCESSIBILITY_ISSUES, MAX_FIGURE_LABEL};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -210,4 +210,38 @@ fn the_columns_at_the_bound_are_looked_at_whole() {
         MAX_ACCESSIBILITY_COLUMNS - 1,
         "every column that was looked at is reported: {columns:?}"
     );
+}
+
+/// The **label** of a table of figures is cut at `MAX_FIGURE_LABEL`, and
+/// the answer says so.
+///
+/// A label longer than the bound is cut, and the table that is read is
+/// the table of a label that is not the whole of the one that was asked
+/// for.
+#[test]
+fn the_label_of_a_table_of_figures_is_cut_and_the_answer_says_so() {
+    let mut session = session();
+    let document = a_document(&mut session);
+    let label = "f".repeat(MAX_FIGURE_LABEL + 5);
+    let outcome = session
+        .execute("prose.document.figures", &json!({ "document": document, "label": label }))
+        .expect("the table of figures is read");
+    let ident = outcome.data["label"].as_str().expect("the label is text");
+    assert_eq!(ident.len(), MAX_FIGURE_LABEL, "the label is cut at the bound: {ident}");
+    assert_eq!(outcome.data["label_truncated"], json!(true), "the answer says it stopped: {outcome:?}");
+}
+
+/// A label of **exactly** `MAX_FIGURE_LABEL` is not cut, and the answer
+/// says so.
+#[test]
+fn the_label_of_a_table_of_figures_at_the_bound_is_not_cut() {
+    let mut session = session();
+    let document = a_document(&mut session);
+    let label = "f".repeat(MAX_FIGURE_LABEL);
+    let outcome = session
+        .execute("prose.document.figures", &json!({ "document": document, "label": label }))
+        .expect("the table of figures is read");
+    let ident = outcome.data["label"].as_str().expect("the label is text");
+    assert_eq!(ident.len(), MAX_FIGURE_LABEL, "the label is whole: {ident}");
+    assert_eq!(outcome.data["label_truncated"], json!(false), "nothing was cut: {outcome:?}");
 }

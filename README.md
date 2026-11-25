@@ -4615,6 +4615,7 @@ so.
 | **the grid battery says what it did not offer** | **built.** The suggestions of a spelling issue are cut at a published bound, a word too long for the suggestions says so, and three tests prove both (§1164) | §1164 |
 | **the sound battery says when it cut a name** | **built.** The name of a track of a file is cut at a published bound and the import says so, and the two names of the battery are told apart (§1165) | §1165 |
 | **the pdf battery says what it did not read of an outline** | **built.** The outline of a file is read to a depth and to a number of items, and the reader says that it stopped at one of them (§1166) | §1166 |
+| **the prose battery says when it cut a label** | **built.** The label of a table of figures is cut at a published bound, and the answer says that it was (§1167) | §1167 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73743,3 +73744,47 @@ still caps that skipped silently. This arc closes it.
   tree.** The hidden-text report counts the outline's items with the
   same walk, and the walk stops at the same bounds: the report says how
   many bookmarks there are and not that there were more.
+
+## 1167. The prose battery says when it cut a label
+
+§1162 brought the rule of the **saying so** to the prose battery's
+accessibility check. This arc brings it to the battery's **table of
+figures**, whose label is cut at a bound and was not saying so.
+
+### What was built
+
+- **The table of figures says that it cut the label.** The label of a
+  table of figures is cut at `MAX_FIGURE_LABEL` — forty characters — and
+  the answer of `prose.document.figures` now carries `label_truncated`: a
+  table asked for by a label that was cut is a table of a label that is
+  not the whole of the one that was asked for, and the answer says that.
+- **Two tests name the bound.** The new tests name `MAX_FIGURE_LABEL` in
+  **code**, and one of the two is the other half: a label of exactly the
+  bound's length is not cut, and the answer says so.
+
+### What the port found
+
+- **The bound was already published, and the cut was still a secret.**
+  `MAX_FIGURE_LABEL` was named and proved by a test — the test that says
+  the label comes back short — and the answer that came back short said
+  nothing about it. A cap that is published is a promise, and a promise
+  the answer does not keep is a promise the reader has to guess at.
+- **The reader had no way to tell.** A label of forty characters and a
+  label of four thousand gave the same answer, and both were right.
+
+### What it cost
+
+- **One answer changed** — `prose.document.figures` — **two tests** in
+  the truncation file, and the claim row above.
+
+### What it does not settle
+
+- **The tree's other batteries have not been surveyed this way.** The
+  grid, the prose, the sound and the pdf batteries answer it now
+  (§1161–§1167), and the others have not been looked at with the same
+  care.
+- **The label of a caption is cut the same way.** A caption's own label
+  is bounded, and a caption whose label was cut is matched by its cut
+  label: the answer of the table says that the label it was asked for
+  was cut, and the captions it holds are the ones whose cut label is the
+  same.
