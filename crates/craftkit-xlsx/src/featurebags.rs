@@ -23,7 +23,8 @@
 //! is not a checkbox, and a broken file is not a file to guess at.
 //!
 //! The bags are read against a bound: a file may name **100 000**
-//! complements, and the rest are not read.
+//! complements, and the rest are not read — and the file is **told**
+//! that they were not.
 
 use craftkit_xml::El;
 
@@ -39,8 +40,24 @@ pub const MAX_BAGS: usize = 100_000;
 ///
 /// A file with no feature property bags has no complements, and a file
 /// whose list of them is not there has none either.
-pub fn checkbox_complements(root: &El) -> Vec<bool> {
-    let bags: Vec<&El> = root.kids("bag").take(MAX_BAGS).collect();
+///
+/// The bags are read against a bound, and a file that names more than
+/// the bound is **told** that the rest were not read.
+pub fn checkbox_complements(root: &El, warnings: &mut Vec<String>) -> Vec<bool> {
+    let mut bags: Vec<&El> = Vec::new();
+    let mut more = false;
+    for bag in root.kids("bag") {
+        if bags.len() >= MAX_BAGS {
+            more = true;
+            break;
+        }
+        bags.push(bag);
+    }
+    if more {
+        warnings.push(format!(
+            "the file names more than {MAX_BAGS} feature property bags; the rest were not read"
+        ));
+    }
     // The bag of that number, when it is a bag of that kind.
     let bag = |number: Option<u32>, kind: &str| {
         number
@@ -59,8 +76,21 @@ pub fn checkbox_complements(root: &El) -> Vec<bool> {
     let Some(list) = map.kids("a").find(|a| a.attr("k") == Some("MappedFeaturePropertyBags")) else {
         return Vec::new();
     };
-    list.kids("bagId")
-        .take(MAX_BAGS)
+    let mut ids: Vec<&El> = Vec::new();
+    let mut more_ids = false;
+    for id in list.kids("bagId") {
+        if ids.len() >= MAX_BAGS {
+            more_ids = true;
+            break;
+        }
+        ids.push(id);
+    }
+    if more_ids {
+        warnings.push(format!(
+            "the file names more than {MAX_BAGS} feature property bag places; the rest were not read"
+        ));
+    }
+    ids.into_iter()
         .map(|id| {
             // The complement this place names, then the controls it
             // names, then the control itself.

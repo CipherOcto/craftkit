@@ -4598,6 +4598,7 @@ so.
 | **every reader of the pdf battery says what it did not read** | **built.** The structure tree, the marked content, the figures, the comments and the attachments each say when they stopped at their depth (§1147) | §1147 |
 | **every cap the prose battery keeps is named by a test** | **built.** All twenty-nine of the prose battery's cap names are named by a test beside the battery, and a source's title is bounded at last (§1148) | §1148 |
 | **every cap the grid battery publishes is named by a test** | **built.** All twenty of the grid battery's published cap names are named by a test beside the battery, and an address past the sheet is refused (§1149) | §1149 |
+| **the xlsx reader says what it did not read** | **built.** The bags, the outline and the columns of a file are read against a bound, and the file is told when the bound bites (§1150) | §1150 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72787,3 +72788,65 @@ beside it.
 - **A cap of a battery is not a rule of the tree.** The proof lives
   beside the battery that owns it, and nothing makes the next battery
   do the same.
+
+## 1150. The xlsx reader says what it did not read
+
+§1146 and §1147 held the pdf battery's readers to one rule: a reader
+that stops at a bound must **say** that it stopped. The xlsx crate is
+a reader, and it had **two** places where it stopped and said nothing.
+This arc holds it to the rule and names its six caps.
+
+### What was built
+
+- **Six caps, six tests.** The xlsx crate's limit suite is new: the
+  rows and the columns of a sheet (`MAX_ROWS` and `MAX_COLS`), the
+  sheets of a workbook (`MAX_SHEETS`), the outline of a row
+  (`MAX_OUTLINE`), the iterations of a file (`MAX_ITERATIONS`) and the
+  feature property bags of a file (`MAX_BAGS`).
+- **The bags say so.** A file may name a hundred thousand feature
+  property bags; the rest were not read and the file was not told. It
+  is told now.
+- **The outline says so.** A row or a column whose outline is deeper
+  than the tree has was **cut** — silently — and the file was not told.
+  It is told now, and the cut itself stays: a file with a deeper
+  outline is read, and what it says about the depth is in the answer.
+- **The columns say so.** A file that names columns past the width of
+  the sheet had them skipped, and the end of a range of columns had it
+  cut, and neither was said.
+
+### What the port found
+
+- **The bags were never read at all.** The reader looks for the
+  relation of the feature property bags by its kind, and the kind is
+  the last word of the type — which is written `featurePropertyBag`,
+  in camel case, and the reader asked for `FeaturePropertyBag`. The
+  name is compared without regard to the case of its letters now, and
+  the checkboxes of a file are read for the first time.
+- **A bound is not a promise and a promise is not a bound.** Three of
+  the six caps already said what they did: the cells outside the grid
+  are dropped and said, the sheets past the limit are not read and
+  said, the iterations of a file are the default and said. The other
+  three were silent.
+
+### What it cost
+
+- **Six tests** in a new limit suite for the xlsx crate, **three**
+  bounds made to say what they do, **one** name compared without regard
+  to case, and the claim row above.
+
+### What it does not settle
+
+- **The reader's own caps are not the tree's rules.** The xlsx crate
+  keeps caps of its own that no test names, and the six here are the
+  published ones.
+- **A cut is still a cut.** The outline of a row deeper than the tree
+  has is cut to the limit and said; the file is read and the answer
+  holds the truth of it. It is not refused, and the file is not thrown
+  away.
+- **The outer gate still reaches only the kit.** After this arc
+  **twenty-six** caps in **sixteen** crates are published and named by
+  no test: five in the audio crate, three each in the midi and zip
+  crates, two each in the kit and the xml crate, and one in each of
+  ten more — the au fixture, the mcp server, the numeric crate, the
+  art, film, layout and text batteries, the rasteriser, the sound
+  time, the text layout and the vst3 fixture.

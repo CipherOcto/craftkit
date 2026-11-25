@@ -198,6 +198,21 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The xlsx reader's bounds now say what they do** (§1150): the bags
+  of a file, the outline of a row and the columns of a sheet are read
+  against a bound, and the file is told when the bound bites — the
+  rule of §1146 and §1147, held to the xlsx reader. Three of the six
+  bounds already said so; the other three were silent. The **bags were
+  never read at all**: the reader asked for a relation of the kind
+  `FeaturePropertyBag` and the kind of a relation is the last word of
+  its type, which is written `featurePropertyBag`; the name is
+  compared without regard to the case of its letters now, and the
+  checkboxes of a file are read for the first time.
+- **A cut is still a cut** (§1150): the outline of a row deeper than
+  `MAX_OUTLINE` is cut to the limit and the file is told, and the
+  columns of a sheet past its width are not read and the file is told.
+  The file is read, not refused: the answer holds the truth of what
+  was read, and the truth of what was not is in the warnings beside it.
 - **The grid battery's caps are named; the other batteries' are not**
   (§1149): the grid battery publishes twenty cap names and every one of
   them is named by a test beside the battery. The caps a battery keeps

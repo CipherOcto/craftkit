@@ -2857,7 +2857,7 @@ fn read_sheet(
     // The **columns** of the sheet: their width and whether they are
     // hidden. A file says a span of columns at once, so one span of
     // ten columns is ten columns here.
-    sheet.columns = read_columns(&root, styles, sheet.default_width);
+    sheet.columns = read_columns(&root, styles, sheet.default_width, warnings);
     // The **merges** of the sheet: the ranges that are one cell. A
     // range of one cell is not a merge.
     sheet.merges = read_merges(&root);
@@ -2922,7 +2922,16 @@ fn read_sheet(
         let custom = custom && height.is_some();
         let hidden = row.flag("hidden", false);
         // The **outline level** of the row: how deep in a group it is.
-        let outline = row.attr_u32("outlineLevel").unwrap_or(0).min(MAX_OUTLINE) as u8;
+        // A file that names a level deeper than the tree has is
+        // **told** that the level was cut, and the file is not read
+        // past what the tree knows.
+        let named = row.attr_u32("outlineLevel").unwrap_or(0);
+        if named > MAX_OUTLINE {
+            warnings.push(format!(
+                "the outline level of a row is {named}, and the most a row may have is {MAX_OUTLINE}; it was cut"
+            ));
+        }
+        let outline = named.min(MAX_OUTLINE) as u8;
         // Whether the **group** of the row is folded away.
         let collapsed = row.flag("collapsed", false);
         // The **format** of the row: the file names one for a row only
@@ -3618,7 +3627,12 @@ fn read_merges(root: &craftkit_xml::El) -> Vec<String> {
 /// A file says a **span** of columns at once, and a span of ten
 /// columns is ten columns here. A span that is out of the grid is
 /// clipped to it, as the tree's reader clips it.
-fn read_columns(root: &craftkit_xml::El, styles: &Styles, default_width: Option<f64>) -> Vec<Column> {
+fn read_columns(
+    root: &craftkit_xml::El,
+    styles: &Styles,
+    default_width: Option<f64>,
+    warnings: &mut Vec<String>,
+) -> Vec<Column> {
     let mut columns = Vec::new();
     let Some(cols) = root.child("cols") else { return columns };
     for col in cols.kids("col") {
@@ -3626,10 +3640,20 @@ fn read_columns(root: &craftkit_xml::El, styles: &Styles, default_width: Option<
         if min == 0 || max < min {
             continue;
         }
-        let max = max.min(MAX_COLS as u32);
+        // The **columns** the file names are cut at the width of the
+        // sheet, and the file is **told** that it was.
         if u64::from(min) > MAX_COLS {
+            warnings.push(format!(
+                "the file names the columns from {min} on; a sheet is {MAX_COLS} columns wide; they were not read"
+            ));
             continue;
         }
+        if u64::from(max) > MAX_COLS {
+            warnings.push(format!(
+                "the file names the columns up to {max}; a sheet is {MAX_COLS} columns wide; the rest were not read"
+            ));
+        }
+        let max = max.min(MAX_COLS as u32);
         // The **width** of the column: the file's own, and only when it
         // says something of itself. A width that is the sheet's own
         // default width is the sheet's own, and a width the user set is
@@ -3642,7 +3666,13 @@ fn read_columns(root: &craftkit_xml::El, styles: &Styles, default_width: Option<
         let hidden = col.flag("hidden", false);
         // The **outline level** of the columns: how deep in a group they
         // are.
-        let outline = col.attr_u32("outlineLevel").unwrap_or(0).min(MAX_OUTLINE) as u8;
+        let named = col.attr_u32("outlineLevel").unwrap_or(0);
+        if named > MAX_OUTLINE {
+            warnings.push(format!(
+                "the outline level of a column is {named}, and the most a column may have is {MAX_OUTLINE}; it was cut"
+            ));
+        }
+        let outline = named.min(MAX_OUTLINE) as u8;
         // Whether the **group** of the columns is folded away.
         let collapsed = col.flag("collapsed", false);
         // The **format** of the columns: what the file names of them.
@@ -4624,14 +4654,18 @@ fn read_complements_of(
     workbook_rels: &[Rel],
     warnings: &mut Vec<String>,
 ) -> Vec<bool> {
-    let Some(relation) = workbook_rels.iter().find(|rel| rel.kind == "FeaturePropertyBag") else {
+    // The kind of the relation is the last word of its type, and the
+    // type of a feature property bag is written in camel case: the
+    // name is compared without regard to the case of its letters.
+    let Some(relation) = workbook_rels.iter().find(|rel| rel.kind.eq_ignore_ascii_case("FeaturePropertyBag"))
+    else {
         return Vec::new();
     };
     let Some(root) = read_xml(package, &relation.target).ok().flatten() else {
         warnings.push(format!("the part {} could not be read", relation.target));
         return Vec::new();
     };
-    featurebags::checkbox_complements(&root)
+    featurebags::checkbox_complements(&root, warnings)
 }
 
 /// Read a part of the package as XML.
