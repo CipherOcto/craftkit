@@ -374,36 +374,40 @@ fn gone_with(document: &Document, annots: &[(u64, String)], gone: &mut Vec<u64>)
 }
 
 /// The **pages** of the file, in the order of the tree of pages.
-pub(crate) fn pages_of(document: &Document) -> Vec<u64> {
-    let Some(catalog) = crate::preflight::the_catalog(document) else { return Vec::new() };
+pub(crate) fn pages_of(document: &Document) -> (Vec<u64>, bool) {
+    let Some(catalog) = crate::preflight::the_catalog(document) else { return (Vec::new(), false) };
     let catalog_entries = crate::entries_of(&catalog.data);
-    let Some(pages) = entry(&catalog_entries, "Pages") else { return Vec::new() };
-    let Some(node) = crate::preflight::node_of(document, pages) else { return Vec::new() };
+    let Some(pages) = entry(&catalog_entries, "Pages") else { return (Vec::new(), false) };
+    let Some(node) = crate::preflight::node_of(document, pages) else { return (Vec::new(), false) };
     let mut out: Vec<u64> = Vec::new();
-    walk_pages(document, node.id, 0, &mut out);
-    out
+    let truncated = walk_pages(document, node.id, 0, &mut out);
+    (out, truncated)
 }
 
 /// Walk the **tree of pages**, and take the pages of it in order.
-fn walk_pages(document: &Document, node: u64, depth: usize, out: &mut Vec<u64>) {
+fn walk_pages(document: &Document, node: u64, depth: usize, out: &mut Vec<u64>) -> bool {
     if depth >= crate::comments::MAX_DEPTH {
-        return;
+        // The walk is **cut** at the bound: the pages below it are not
+        // in the answer, and the answer says so.
+        return true;
     }
-    let Some(current) = document.node(node) else { return };
+    let Some(current) = document.node(node) else { return false };
     let entries = crate::entries_of(&current.data);
     let is_page = entries.iter().any(|(key, value)| key == "Type" && value.as_str() == Some("Page"));
     if is_page {
         out.push(node);
-        return;
+        return false;
     }
     let Some(kids) = entry(&entries, "Kids").and_then(|kids| kids.as_array()).cloned() else {
-        return;
+        return false;
     };
+    let mut truncated = false;
     for kid in kids {
         let Some(kid_node) = crate::preflight::node_of(document, &kid) else { continue };
         let id = kid_node.id;
-        walk_pages(document, id, depth + 1, out);
+        truncated = walk_pages(document, id, depth + 1, out) || truncated;
     }
+    truncated
 }
 
 /// **Flatten** the fields or the comments of the pages.
@@ -580,9 +584,9 @@ fn a_path_beside(session: &Session, page: u64, stream: u64) -> Option<String> {
 
 /// The **pages** that are asked for: the page that is said, or every
 /// page of the file.
-fn the_pages(session: &Session, page: Option<NodeRef>) -> Result<Vec<u64>, EngineError> {
+fn the_pages(session: &Session, page: Option<NodeRef>) -> Result<(Vec<u64>, bool), EngineError> {
     let document = session.document();
-    let pages = pages_of(document);
+    let (pages, truncated) = pages_of(document);
     match page {
         Some(page) => {
             let Some(node) = document.node(page.0) else {
@@ -598,9 +602,9 @@ fn the_pages(session: &Session, page: Option<NodeRef>) -> Result<Vec<u64>, Engin
                     message: format!("the node `{}` is not a page", page.0),
                 });
             }
-            Ok(vec![page.0])
+            Ok((vec![page.0], truncated))
         }
-        None => Ok(pages),
+        None => Ok((pages, truncated)),
     }
 }
 
@@ -622,7 +626,7 @@ commands! {
             page: Option<NodeRef>,
         },
         run: {
-            let pages = the_pages(session, self.page)?;
+            let (pages, truncated) = the_pages(session, self.page)?;
             let report = flatten_pages(session, &pages, What::Fields)?;
             Ok(Outcome::changed(format!("{} appearance(s) drawn", report.drawn)).with_data(json!({
                 "drawn": report.drawn,
@@ -630,6 +634,9 @@ commands! {
                 "left": report.left,
                 "pruned": report.pruned,
                 "flattened": report.flattened,
+                // The walk over the tree of pages was **cut** at the
+                // bound, and the answer says so.
+                "truncated": truncated,
             })))
 
         }
@@ -653,7 +660,7 @@ commands! {
             page: Option<NodeRef>,
         },
         run: {
-            let pages = the_pages(session, self.page)?;
+            let (pages, truncated) = the_pages(session, self.page)?;
             let report = flatten_pages(session, &pages, What::Comments)?;
             Ok(Outcome::changed(format!("{} appearance(s) drawn", report.drawn)).with_data(json!({
                 "drawn": report.drawn,
@@ -661,6 +668,9 @@ commands! {
                 "left": report.left,
                 "pruned": report.pruned,
                 "flattened": report.flattened,
+                // The walk over the tree of pages was **cut** at the
+                // bound, and the answer says so.
+                "truncated": truncated,
             })))
 
         }

@@ -13,7 +13,7 @@
 //! tree deeper than the bound comes from a file and not from the
 //! commands.
 
-use craftkit_plugin_pdf::{MAX_OUTLINE_DEPTH, MAX_OUTLINE_ITEMS};
+use craftkit_plugin_pdf::{MAX_ANCESTORS, MAX_OUTLINE_DEPTH, MAX_OUTLINE_ITEMS};
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -116,10 +116,34 @@ fn a_file(name: &str, bodies: Vec<(u32, String)>) -> String {
     path
 }
 
-/// The **outline** of a file, as the reader gives it.
-fn the_outline(session: &mut Session, path: &str) -> craftkit_sdk::serde_json::Value {
+/// The **page** of a file, and its id.
+fn the_page(session: &mut Session) -> u64 {
+    session
+        .document()
+        .walk()
+        .find(|node| {
+            node.data.get("entries").and_then(|entries| entries.as_array()).is_some_and(|entries| {
+                entries.iter().any(|entry| {
+                    entry.as_array().is_some_and(|pair| {
+                        pair.first().and_then(|key| key.as_str()) == Some("Type")
+                            && pair.get(1).and_then(|value| value.as_str()) == Some("Page")
+                    })
+                })
+            })
+        })
+        .expect("the file has a page")
+        .id
+}
+
+/// **Load** a file into the document.
+fn load(session: &mut Session, path: &str) {
     let into = format!("{path}.streams");
     session.execute("pdf.file.load", &json!({ "path": path, "into": into })).expect("the file is loaded");
+}
+
+/// The **outline** of a file, as the reader gives it.
+fn the_outline(session: &mut Session, path: &str) -> craftkit_sdk::serde_json::Value {
+    load(session, path);
     let outcome = session.execute("pdf.outline.read", &json!({})).expect("the outline is read");
     outcome.data.clone()
 }
@@ -218,4 +242,81 @@ fn the_hidden_report_of_a_whole_outline_is_not_cut() {
         .expect("there is a category for the bookmarks");
     let count = bookmarks["count"].as_u64().expect("the category has a count");
     assert_eq!(count, 3, "the count is the count of the bookmarks: {outcome:?}");
+}
+
+/// A file of PDF whose **tree of pages** is `depth` deep.
+///
+/// Every page-tree node holds one child, and every one of them names
+/// its parent: the tree is as deep as the file says it is.
+fn a_file_with_a_deep_page_tree(name: &str, depth: usize) -> String {
+    let mut bodies: Vec<(u32, String)> = vec![(1, "<< /Type /Catalog /Pages 2 0 R >>".to_string())];
+    for index in 0..depth {
+        let number = 2 + index as u32;
+        let mut body = format!("<< /Type /Pages /Count 1 /Kids [{} 0 R]", number + 1);
+        if index > 0 {
+            body.push_str(&format!(" /Parent {} 0 R", number - 1));
+        }
+        body.push_str(" >>");
+        bodies.push((number, body));
+    }
+    // The **page** at the bottom of the tree, and the last node of the
+    // tree that holds it.
+    let page = 2 + depth as u32;
+    bodies.push((page, format!("<< /Type /Page /Parent {} 0 R >>", page - 1)));
+    a_file(name, bodies)
+}
+
+/// The **ancestors** of a page are walked to a bound, and the answer
+/// says when the walk was cut.
+///
+/// A file whose tree of pages is deeper than the bound has ancestors
+/// that are not read, and the attributes they hold are missing: the
+/// answer says that the walk stopped.
+#[test]
+fn the_ancestors_of_a_page_are_cut_at_the_bound_and_the_answer_says_so() {
+    let mut session = session();
+    let path = a_file_with_a_deep_page_tree("thedeeppages", MAX_ANCESTORS + 2);
+    load(&mut session, &path);
+    let page = the_page(&mut session);
+    let outcome =
+        session.execute("pdf.page.attributes", &json!({ "page": page })).expect("the attributes are read");
+    assert_eq!(outcome.data["truncated"], json!(true), "the answer says it stopped: {outcome:?}");
+}
+
+/// The **ancestors** of a page within the bound are not cut, and the
+/// answer says so.
+#[test]
+fn the_ancestors_of_a_page_within_the_bound_are_not_cut() {
+    let mut session = session();
+    let path = a_file_with_a_deep_page_tree("theshallowpages", 3);
+    load(&mut session, &path);
+    let page = the_page(&mut session);
+    let outcome =
+        session.execute("pdf.page.attributes", &json!({ "page": page })).expect("the attributes are read");
+    assert_eq!(outcome.data["truncated"], json!(false), "nothing was cut: {outcome:?}");
+}
+
+/// The **tree of pages** is walked to a bound, and the answer says when
+/// the walk was cut.
+///
+/// The pages below the bound are not flattened, and the answer says
+/// that the walk stopped.
+#[test]
+fn the_tree_of_pages_is_cut_at_the_bound_and_the_answer_says_so() {
+    let mut session = session();
+    let path = a_file_with_a_deep_page_tree("thedeepflatten", MAX_OUTLINE_DEPTH + 2);
+    load(&mut session, &path);
+    let outcome = session.execute("pdf.form.flatten", &json!({})).expect("the form is flattened");
+    assert_eq!(outcome.data["truncated"], json!(true), "the answer says it stopped: {outcome:?}");
+}
+
+/// The **tree of pages** within the bound is not cut, and the answer
+/// says so.
+#[test]
+fn the_tree_of_pages_within_the_bound_is_not_cut() {
+    let mut session = session();
+    let path = a_file_with_a_deep_page_tree("theshallowflatten", 3);
+    load(&mut session, &path);
+    let outcome = session.execute("pdf.form.flatten", &json!({})).expect("the form is flattened");
+    assert_eq!(outcome.data["truncated"], json!(false), "nothing was cut: {outcome:?}");
 }

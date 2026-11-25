@@ -278,6 +278,7 @@ pub use outline::{PdfOutlineAdd, PdfOutlineRead};
 /// and the reader says that it stopped: the file holds bookmarks that
 /// are not in the answer.
 pub use outline::{MAX_OUTLINE_DEPTH, MAX_OUTLINE_ITEMS};
+
 pub use pages::PdfPageRemove;
 pub use pagetext::PdfPageText;
 pub use patterns::{PdfRedactPatternFind, PdfRedactPatterns};
@@ -998,6 +999,10 @@ commands! {
             let own = entries_of(&node.data);
             let mut attributes = serde_json::Map::new();
             let mut inherited = serde_json::Map::new();
+            // Whether the walk up the **ancestors** stopped at the
+            // bound: the attributes below it are missing, and the
+            // answer says so.
+            let mut truncated = false;
             for key in INHERITED {
                 if let Some((_, value)) = own.iter().find(|(name, _)| name == key) {
                     attributes.insert(key.to_string(), value.clone());
@@ -1010,6 +1015,10 @@ commands! {
                 while let Some(current) = ancestor {
                     steps += 1;
                     if steps > MAX_ANCESTORS {
+                        // The walk is **cut** at the bound: there is an
+                        // ancestor below it that was not read, and the
+                        // answer says so.
+                        truncated = true;
                         break;
                     }
                     let Some(current_node) = session.document().node(current) else { break };
@@ -1029,6 +1038,9 @@ commands! {
                 "id": id,
                 "attributes": attributes,
                 "inherited": inherited,
+                // The walk up the ancestors was **cut** at the bound,
+                // and the answer says so.
+                "truncated": truncated,
             })))
 
         }
@@ -1948,7 +1960,11 @@ fn parent_of(session: &Session, id: u64) -> Option<u64> {
 ///
 /// A page tree is a tree, and a tree has no loop in it; the bound is
 /// there so that a document that says otherwise is not walked for ever.
-const MAX_ANCESTORS: usize = 64;
+/// The most **ancestors** of a page that are walked for the attributes
+/// they hold.
+///
+/// The walk is cut at this bound, and the answer says that it was.
+pub const MAX_ANCESTORS: usize = 64;
 
 /// The smallest an **annotation** may be.
 ///

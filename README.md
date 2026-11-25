@@ -4604,7 +4604,7 @@ so.
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
 | **the batteries and the libraries name their caps** | **built.** Eleven crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-nine caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and thirty caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
@@ -4620,6 +4620,7 @@ so.
 | **one name, one number — the whole tree** | **built.** A published cap's name belongs to one crate, the gate says the ones that do not, and ten names are named apart (§1169) | §1169 |
 | **the tree's bounds are surveyed** | **built.** Every battery's bounds were read with a written contract, the film battery's three silent stops now say so, and the rest are named one by one (§1170) | §1170 |
 | **the grid battery stops lying about its solver** | **built.** The solver answers feasible when it did not prove its answer, the goal says when its search stopped, and two of the survey's claims were wrong (§1171) | §1171 |
+| **the last of the surveyed stops say so** | **built.** The fx time, the prose style chain and the pdf's ancestors and page tree answer when they stop, and six tests prove them (§1172) | §1172 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74046,3 +74047,64 @@ not say. This arc takes the one of them that is not a silence but a
   pdf's inherited attributes and its flattened pages, the prose style
   chain, the fx step, the vector erase and the text battery's metric
   run.
+
+## 1172. The last of the surveyed stops say so
+
+§1170 surveyed the tree's bounds and named the stops the batteries do
+not say. §1171 took the one that was a lie. This arc takes the rest of
+the **reads of content**: the ones where a caller reads something that
+is not there and is not told.
+
+### What was built
+
+- **The fx battery says when it holds the time.** A step that lands
+  past the last frame the tree holds is held there, and
+  `fx.time.step` answers `clamped`. It is the same shape as the film
+  battery's playhead, and §1170 fixed that one.
+- **The prose battery says when it cuts the chain of a style.** The
+  chain of the bases of a style is walked to a bound, and
+  `prose.style.character.read` and `prose.block.character` answer
+  `chain_truncated`: a style whose bases are deeper than the bound has a
+  chain that is shorter than the styles it is made of, and the answer
+  says so.
+- **The pdf battery says when it stops walking.** The **ancestors** of
+  a page are walked for the attributes they hold, and the **tree of
+  pages** is walked for the pages that are flattened; both walks stop
+  at a bound, and `pdf.page.attributes`, `pdf.form.flatten` and
+  `pdf.comment.flatten` answer `truncated`.
+- **The pdf's bound is published.** `MAX_ANCESTORS` is the pdf
+  battery's third published cap, and the tests name it in **code**.
+
+### What the port found
+
+- **Four answers, four batteries, one shape.** The fx time, the prose
+  style chain, the pdf's ancestors and the pdf's page tree are the same
+  defect in four places, and the survey found all four in one reading
+  — which is the argument for surveying a battery at a time rather than
+  a tree at a time: the shapes are the same, and the shapes are what
+  the rule is about.
+- **A walk that stops at a bound loses content, not accuracy.** The
+  attributes of a page that are held by an ancestor below the bound are
+  missing, and a page that is not flattened is not flattened. Neither is
+  a *quality* of a computed value: they are things a caller reads.
+
+### What it cost
+
+- **Four answers changed** — `fx.time.step`, `prose.style.character.read`,
+  `prose.block.character`, `pdf.page.attributes`, `pdf.form.flatten` and
+  `pdf.comment.flatten` — **one cap published** at the pdf battery's
+  root, **six tests** in three files, and the claim row above.
+
+### What it does not settle
+
+- **Two of the surveyed stops are documented rather than silent.** The
+  text battery's **metric** keeps a run longer than its bound and never
+  uses it, and says so in the code; the `SUMIF` family cuts a
+  criterion at the tree's bound and matches the cut text, and says so
+  in the code. Both are rules rather than accidents, and both are
+  recorded in the `KNOWN-GAPS`.
+- **The vector battery's erase is still a silent quality.** The erase
+  samples a contour at no more than four thousand and ninety-six
+  points however fine it is asked to be, and the geometry is coarser
+  than the caller asked for. It is the last of the surveyed stops, and
+  it is a *quality* and not a read: the next arc, if there is one.

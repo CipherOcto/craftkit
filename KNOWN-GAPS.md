@@ -559,19 +559,20 @@ These are the README's own honest notes, and they are still true of the tree:
 - **The document model is still small.** The *seam* is the thing being
   demonstrated: a version is a contribution, a step is a contribution, and the
   chain is checked. A document worth versioning is a different piece of work.
-- **The survey of the tree's bounds (§1170) names the silent stops that
-  are left.** Fifteen batteries keep two hundred and twenty-three bounds
-  and the kit and the libraries seventy-seven more; every one of them
-  was read with a written contract, and these are the ones that do not
-  say that they stopped:
-  - **pdf** — `pdf.page.attributes` stops the walk up `/Parent` at
-    `MAX_ANCESTORS` (sixty-four) and the inherited attributes below it
-    are missing with no word; `pdf.form.flatten` and
-    `pdf.comment.flatten` stop the walk over the pages at `MAX_DEPTH`
-    (sixty-four) and the pages below are neither flattened nor counted.
-  - **prose** — `prose.style.character.read` and `prose.block.character`
-    stop the chain of base styles at `MAX_STYLE_CHAIN` (thirty-two),
-    and the chain in the answer looks whole.
+- **The survey of the tree's bounds (§1170) named the stops that did not
+  say so, and the arcs after it have taken them.** Fifteen batteries
+  keep two hundred and twenty-three bounds and the kit and the
+  libraries seventy-seven more; every one of them was read with a
+  written contract, and these are the ones that did not say that they
+  stopped — with the arc that took each of them:
+  - **pdf** — §1172 fixed the two walks: `pdf.page.attributes` stops
+    the walk up `/Parent` at `MAX_ANCESTORS` (sixty-four) and
+    `pdf.form.flatten` and `pdf.comment.flatten` stop the walk over the
+    pages at `MAX_DEPTH` (sixty-four), and all three answer
+    `truncated`.
+  - **prose** — §1172 fixed the chain: `prose.style.character.read` and
+    `prose.block.character` stop the chain of base styles at
+    `MAX_STYLE_CHAIN` (thirty-two), and both answer `chain_truncated`.
   - **grid** — the `SUMIF` family cuts a criterion at
     `MAX_CRITERION_UNITS` (two hundred and fifty-five) before it
     matches, where the single-criterion case refuses it: the code says
@@ -588,16 +589,23 @@ These are the README's own honest notes, and they are still true of the tree:
     with a word), and a cell's spill cannot reach `MAX_SPILL` (the text
     runs over the columns of the page it is drawn on, and a page holds
     about eight columns).
-  - **fx** — `fx.time.step` holds the frame at `MAX_FRAME` with no
-    word, the same shape as the film battery's playhead, which §1170
-    fixed.
+  - **fx** — §1172 fixed it: `fx.time.step` holds the frame at
+    `MAX_FRAME` and answers `clamped`, the same shape as the film
+    battery's playhead, which §1170 fixed.
   - **vector** — `vector.path.erase` samples a contour at
     `MAX_SAMPLES` (four thousand and ninety-six) however fine the
     eraser is asked to be: the geometry is coarser than the caller
     asked for, and nothing says so.
   - **text** — a metric run longer than `MAX_RUN` (eight characters) is
-    kept and never used, and the measurement that comes back does not
-    say that a run of it was ignored.
+    kept and never used. The code says so in its own words ("it is
+    kept, and it is never used, because the walk does not look that
+    far"), so it is a rule and not an accident; what is missing is that
+    the **measurement** does not say that a run of it was ignored.
+  - **vector** — `vector.path.erase` samples a contour at no more than
+    `MAX_SAMPLES` (four thousand and ninety-six) however fine the
+    eraser is asked to be: the geometry is coarser than the caller
+    asked for, and nothing says so. It is the last of the surveyed
+    stops, and it is a *quality* of a computed value and not a read.
   - **image** — the head of a picture is read up to `MAX_HEAD_BYTES`
     (a mebibyte) and the size of the picture is then refused; the
     refusal does not name the bound.

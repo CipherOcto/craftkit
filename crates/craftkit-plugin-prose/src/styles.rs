@@ -47,9 +47,21 @@ pub fn style_of_block(document: &craftkit_sdk::Document, block: u64) -> Option<N
 /// The walk is **bounded** and it stops at a style it has already
 /// seen, so a cycle ends the chain instead of hanging the program.
 pub(crate) fn chain_of(document: &craftkit_sdk::Document, style: u64) -> Vec<u64> {
+    chain_of_with(document, style).0
+}
+
+/// The **chain** of a style, and whether the walk **stopped** at the
+/// bound.
+///
+/// The walk stops at a style it has already seen as well, and that is
+/// the end of the chain and not a cut: only the bound is a cut.
+pub(crate) fn chain_of_with(document: &craftkit_sdk::Document, style: u64) -> (Vec<u64>, bool) {
     let mut chain: Vec<u64> = Vec::new();
     let mut seen: Vec<u64> = vec![style];
     let mut current = style;
+    // Whether the walk stopped at the bound: the chain is shorter than
+    // the styles it is made of, and the answer says so.
+    let mut truncated = false;
     for _ in 0..MAX_STYLE_CHAIN {
         let Some(relation) = document
             .relations
@@ -66,11 +78,20 @@ pub(crate) fn chain_of(document: &craftkit_sdk::Document, style: u64) -> Vec<u64
         seen.push(base);
         current = base;
     }
+    if chain.len() >= MAX_STYLE_CHAIN
+        && document
+            .relations
+            .iter()
+            .any(|relation| relation.kind == "prose.based_on" && relation.from == current)
+    {
+        // The chain is **cut** at the bound: there is a base below it
+        // that was not read, and the answer says so.
+        truncated = true;
+    }
     chain.reverse();
     chain.push(style);
-    chain
+    (chain, truncated)
 }
-
 /// The **character** of a style, with the character of its base under
 /// it.
 ///
@@ -221,10 +242,14 @@ commands! {
                 });
             }
             let character = effective_character(session.document(), style);
+            let (chain, truncated) = chain_of_with(session.document(), style);
             Ok(Outcome::new(format!("the style `{style}` has a character")).with_data(json!({
                 "style": style,
                 "character": character,
-                "chain": chain_of(session.document(), style),
+                "chain": chain,
+                // The chain of the style is **cut** at the bound, and
+                // the answer says so.
+                "chain_truncated": truncated,
             })))
 
         }
@@ -263,10 +288,14 @@ commands! {
                 })));
             };
             let character = effective_character(session.document(), style.id);
+            let (_, truncated) = chain_of_with(session.document(), style.id);
             Ok(Outcome::new(format!("the block `{block}` is on the style `{}`", style.name)).with_data(json!({
                 "block": block,
                 "style": style.id,
                 "character": character,
+                // The chain of the style is **cut** at the bound, and
+                // the answer says so.
+                "chain_truncated": truncated,
             })))
 
         }

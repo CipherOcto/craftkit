@@ -6,7 +6,9 @@
 //! a reader, and it now says what it cut — how many issues there were,
 //! how many are listed, and whether any were left out.
 
-use craftkit_plugin_prose::{MAX_ACCESSIBILITY_COLUMNS, MAX_ACCESSIBILITY_ISSUES, MAX_FIGURE_LABEL};
+use craftkit_plugin_prose::{
+    MAX_ACCESSIBILITY_COLUMNS, MAX_ACCESSIBILITY_ISSUES, MAX_FIGURE_LABEL, MAX_STYLE_CHAIN,
+};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -244,4 +246,58 @@ fn the_label_of_a_table_of_figures_at_the_bound_is_not_cut() {
     let ident = outcome.data["label"].as_str().expect("the label is text");
     assert_eq!(ident.len(), MAX_FIGURE_LABEL, "the label is whole: {ident}");
     assert_eq!(outcome.data["label_truncated"], json!(false), "nothing was cut: {outcome:?}");
+}
+
+/// A **style** in a document, and the style it is based on.
+fn a_style(session: &mut Session, document: u64, name: &str, based_on: Option<u64>) -> u64 {
+    let mut params = json!({ "document": document, "name": name });
+    if let Some(base) = based_on {
+        params["based_on"] = json!(base);
+    }
+    let outcome = session.execute("prose.style.add", &params).expect("the style is added");
+    outcome.data["id"].as_u64().expect("the style has an id")
+}
+
+/// The **chain** of a style that is deeper than the tree's own is cut,
+/// and the answer says so.
+///
+/// The chain of the bases of a style is walked to a bound, and a style
+/// whose bases are deeper than the bound has a chain that is shorter
+/// than the styles it is made of: the answer says so.
+#[test]
+fn the_chain_of_a_style_is_cut_at_the_bound_and_the_answer_says_so() {
+    let mut session = session();
+    let document = a_document(&mut session);
+    // A chain of styles, each one based on the one before it, deeper
+    // than the tree's own bound of thirty-two.
+    let mut base = None;
+    for index in 0..MAX_STYLE_CHAIN + 2 {
+        base = Some(a_style(&mut session, document, &format!("the style {index}"), base));
+    }
+    let style = base.expect("there is a style");
+    let outcome = session
+        .execute("prose.style.character.read", &json!({ "style": style }))
+        .expect("the character is read");
+    assert_eq!(outcome.data["chain_truncated"], json!(true), "the answer says it stopped: {outcome:?}");
+    let chain = outcome.data["chain"].as_array().expect("the chain is a list");
+    assert_eq!(chain.len(), MAX_STYLE_CHAIN + 1, "the chain is cut at the bound: {outcome:?}");
+}
+
+/// The **chain** of a style within the tree's own bound is not cut, and
+/// the answer says so.
+#[test]
+fn the_chain_of_a_style_within_the_bound_is_not_cut() {
+    let mut session = session();
+    let document = a_document(&mut session);
+    let mut base = None;
+    for index in 0..3 {
+        base = Some(a_style(&mut session, document, &format!("the style {index}"), base));
+    }
+    let style = base.expect("there is a style");
+    let outcome = session
+        .execute("prose.style.character.read", &json!({ "style": style }))
+        .expect("the character is read");
+    assert_eq!(outcome.data["chain_truncated"], json!(false), "nothing was cut: {outcome:?}");
+    let chain = outcome.data["chain"].as_array().expect("the chain is a list");
+    assert_eq!(chain.len(), 3, "the whole chain is there: {outcome:?}");
 }

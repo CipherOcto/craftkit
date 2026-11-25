@@ -136,7 +136,7 @@ commands! {
             comp: NodeRef,
         },
         run: {
-            go_to(session, "fx.time.start", self.comp.0, 0)
+            go_to(session, "fx.time.start", self.comp.0, 0, false)
 
         }
     }
@@ -157,7 +157,7 @@ commands! {
             let comp = self.comp.0;
             let node = the_comp(session, &id, comp)?;
             let frame = length_of(node);
-            go_to(session, &id, comp, frame)
+            go_to(session, &id, comp, frame, false)
 
         }
     }
@@ -187,10 +187,17 @@ commands! {
                 });
             }
             let steps = self.frames.0 as i64;
+            // Whether the time was **held** at the last frame the tree
+            // holds: a step that lands past it is held there, and the
+            // answer says so.
+            let mut held = false;
             let target = match steps.unsigned_abs() {
                 0 => here,
                 magnitude => match (steps > 0, here.checked_add(magnitude)) {
-                    (true, Some(frame)) => frame.min(MAX_FRAME),
+                    (true, Some(frame)) => {
+                        held = frame > MAX_FRAME;
+                        frame.min(MAX_FRAME)
+                    }
                     (true, None) => {
                         return Err(EngineError::Failed {
                             id,
@@ -200,14 +207,14 @@ commands! {
                     (false, _) => here.saturating_sub(magnitude),
                 },
             };
-            go_to(session, &id, comp, target)
+            go_to(session, &id, comp, target, held)
 
         }
     }
 }
 
 /// The time goes to a **frame**.
-fn go_to(session: &mut Session, id: &str, comp: u64, frame: u64) -> Result<Outcome, EngineError> {
+fn go_to(session: &mut Session, id: &str, comp: u64, frame: u64, held: bool) -> Result<Outcome, EngineError> {
     let Some(node) = session.document_mut()?.node_mut(comp) else {
         return Err(EngineError::Failed {
             id: id.to_string(),
@@ -215,6 +222,11 @@ fn go_to(session: &mut Session, id: &str, comp: u64, frame: u64) -> Result<Outco
         });
     };
     node.data["time"] = json!(frame);
-    Ok(Outcome::changed(format!("the time is at frame {frame}"))
-        .with_data(json!({ "comp": comp, "frame": frame })))
+    Ok(Outcome::changed(format!("the time is at frame {frame}")).with_data(json!({
+        "comp": comp,
+        "frame": frame,
+        // The time was **held** at the last frame of the tree, and
+        // the answer says so.
+        "clamped": held,
+    })))
 }
