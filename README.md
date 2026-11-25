@@ -4592,7 +4592,7 @@ so.
 | **every bound the tree promises is named by a test** | **built.** The outer gate reads every promise bound the tree declares and says the ones that no test names (§1139) | §1139 |
 | **the reader reads a specification and not a mention of one** | **built.** The reader that finds the evaluators, layers and formats reads the specification and not the type that names it (§1140) | §1140 |
 | **every limit the kit keeps is named by a test** | **built.** The outer gate reads every limit the kit declares and says the ones that no test names (§1141) | §1141 |
-| **every limit a battery keeps is proved by the battery's own test** | **built.** The layout, film, fx, grid and prose batteries each prove their caps by exceeding them (§1142, §1143) | §1142 |
+| **every limit a battery keeps is proved by the battery's own test** | **built.** The layout, film, fx, grid, prose and sound batteries each prove their caps by exceeding them (§1142, §1143, §1145) | §1142 |
 | **one name, one number** | **built.** The outer gate says a cap that is declared with two different numbers in one crate (§1144) | §1144 |
 
 ### The list of things that are honestly not there: empty
@@ -72519,3 +72519,47 @@ numbers has no way to say which is which. The rule was about *crates*.
 - **The batteries' caps are still private.** The kit publishes its
   bounds; the batteries do not publish theirs, and this arc does not
   change that.
+
+## 1145. The sound battery proves its caps too
+
+The sound battery keeps caps of its own, and none of them had a test
+that exceeded one. Two of them are **knobs**: a number the tree clamps
+into its bounds and says so in its own documentation. The rest are
+refusals.
+
+### What was built
+
+- **The sound battery proves its caps.** Four tests: a name over the
+  limit is refused, a pitch range over the limit is refused, and a
+  repeat count outside its bounds is **clamped** to the bound — once is
+  none, and nine hundred and ninety-nine is as many as a repeat may be.
+
+### What the port found
+
+- **A knob is not a fact.** The repeat count is the one number the tree
+  clamps: the command's own documentation says the number is clamped
+  into its bounds, because it is a knob and not a fact about the
+  material. A caller that asks for a thousand repeats gets nine hundred
+  and ninety-nine and is told so in the outcome. That is the tree's
+  second deliberate departure from **refuse, do not clamp** — the first
+  is the art battery's rate, which is the application's rule.
+- **The rule is not uniform, and that is fine.** A name over the limit
+  is refused and a count over the limit is clamped: the difference is
+  what the number *is*. A name is a fact about the document; a count of
+  repeats is a knob on a command.
+
+### What it cost
+
+- **One test file** of four tests, and the claim row above.
+
+### What it does not settle
+
+- **Two clamps are two departures from the house rule.** The art
+  battery's rate and the sound battery's repeat count are both
+  deliberate and both documented in the code itself, and both are
+  recorded in `KNOWN-GAPS.md` rather than changed here: a clamp that
+  the tree's own documentation promises is a decision, and changing it
+  is the owner's.
+- **The batteries are still not all done.** The pdf and numeric
+  batteries keep caps of their own, and the prose and grid batteries
+  keep many that no test has exceeded yet.

@@ -215,13 +215,16 @@ These are the README's own honest notes, and they are still true of the tree:
   confusion is still there. A test that names `MAX_SPACE` does not say
   which limit it means, and nothing in the tree holds a battery to one
   name, one number.
-- **The art battery clamps where the house says refuse** (§1142): a rate
-  outside the domain's bounds is **clamped** to the bound, and the tree
-  has a test that says so. The house rule says an out-of-range
-  parameter is an error and not a silently clamped value, and this is
-  the one place the tree does not do it. The behaviour is the
-  application's own and is deliberate; changing it is a decision and not
-  a fix, and it is recorded here rather than made quietly.
+- **The tree clamps in two places, and both are deliberate** (§1142,
+  §1145): the art battery **clamps** a rate outside the domain's bounds,
+  and the sound battery **clamps** a repeat count into its bounds. The
+  house rule says an out-of-range parameter is an error and not a
+  silently clamped value, and these are the two places the tree does
+  not do it. Both are documented in the code itself — the rate is "the
+  application's rule" and the count is "a knob and not a fact about the
+  material" — and both are recorded here rather than changed: a clamp
+  the tree's own documentation promises is a decision, and changing it
+  is the owner's. A test now says what each knob does.
 - **A cap in a private module is textually public and practically
   private** (§1142): the batteries' caps are `pub const` inside private
   modules, so the outer gate reads the text and sees a promise while no
