@@ -4594,6 +4594,7 @@ so.
 | **every limit the kit keeps is named by a test** | **built.** The outer gate reads every limit the kit declares and says the ones that no test names (§1141) | §1141 |
 | **every limit a battery keeps is proved by the battery's own test** | **built.** The layout, film, fx, grid, prose and sound batteries each prove their caps by exceeding them (§1142, §1143, §1145) | §1142 |
 | **one name, one number** | **built.** The outer gate says a cap that is declared with two different numbers in one crate (§1144) | §1144 |
+| **the reader says what it did not read** | **built.** The pdf battery's name tree says when it stopped at its depth (§1146) | §1146 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72563,3 +72564,52 @@ refusals.
 - **The batteries are still not all done.** The pdf and numeric
   batteries keep caps of their own, and the prose and grid batteries
   keep many that no test has exceeded yet.
+
+## 1146. The pdf battery says what it did not read
+
+A PDF file comes from outside — a download, a scan, an agent — so it is
+read carefully, and the reader keeps **depths**: a name tree is read
+eight deep, a structure tree sixty-four. §1142–§1145 held the batteries
+to their caps; this arc found that one of the caps **hid** what it did
+not read.
+
+### What was built
+
+- **The name tree says when it stopped.** The scripts under a name tree
+  that is deeper than the reader reads are in the file and not in the
+  answer, and the answer now **says** so: the part that was not read is
+  in the same list as the parts that were not scripts.
+- **The pdf battery proves two of its caps.** Two tests: a name tree
+  deeper than the reader reads says so, and form data of more than eight
+  megabytes is refused.
+
+### What the port found
+
+- **A cap that hides is a cap that lies.** The JavaScript name tree is
+  read eight deep, and the walk simply **stopped** at the eighth: the
+  scripts below it were in the file and not in the answer, and nothing
+  said so. The house rule is that a false note is corrected in place
+  rather than quietly left, and a reader that drops part of a file
+  without saying so is the same thing in a different place.
+- **Five more of the battery's readers do the same.** The structure
+  tree, the marked content, the figures, the comments and the
+  attachments each stop at their depth and say nothing. Their answers
+  have no place to say it yet, and this arc did not change their shape;
+  it is written down instead.
+
+### What it cost
+
+- **One change** in the pdf battery's reader, **one test file** of two
+  tests, and the claim row above.
+
+### What it does not settle
+
+- **Five readers still stop silently.** They are recorded in
+  `KNOWN-GAPS.md` with the reason each one needs a different answer to
+  say what it did not read.
+- **The other caps of the battery are not proved.** The image pixels and
+  the outline's items are caps that skip rather than refuse, and no test
+  says so yet.
+- **The rule is still about the name.** The gate cannot see whether a
+  test exceeded the cap, and it cannot see whether a reader said what
+  it did not read.
