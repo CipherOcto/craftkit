@@ -53,7 +53,7 @@ pub const MAX_COLUMNS: u64 = 12;
 pub const DEFAULT_SPACE: f64 = 36.0;
 
 /// The most **space** there may be between the columns, in points.
-pub const MAX_SPACE: f64 = 300.0;
+pub const MAX_COLUMN_SPACE: f64 = 300.0;
 
 /// The **columns** of a page, as they are kept.
 pub fn stored_of(node: &Node) -> Option<Json> {
@@ -127,10 +127,10 @@ fn space_of(value: f64, id: &str) -> Result<f64, EngineError> {
             message: format!("a space of points is a number that is there: {value}"),
         });
     }
-    if !(0.0..=MAX_SPACE).contains(&value) {
+    if !(0.0..=MAX_COLUMN_SPACE).contains(&value) {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("a space is from zero to {MAX_SPACE} points, and {value} is not"),
+            message: format!("a space is from zero to {MAX_COLUMN_SPACE} points, and {value} is not"),
         });
     }
     Ok(value)

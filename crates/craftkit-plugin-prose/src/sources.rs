@@ -65,7 +65,7 @@ pub const KINDS: [&str; 18] = [
 pub const MAX_TAG: usize = 64;
 
 /// The longest **author** a source may have.
-pub const MAX_AUTHOR: usize = 256;
+pub const MAX_SOURCE_AUTHOR: usize = 256;
 
 /// The longest **year** a source may have.
 pub const MAX_YEAR: usize = 32;
@@ -248,10 +248,10 @@ commands! {
             let author = match &self.author {
                 Some(author) => {
                     let author = author.0.trim();
-                    if author.chars().count() > MAX_AUTHOR {
+                    if author.chars().count() > MAX_SOURCE_AUTHOR {
                         return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: format!("an author is at most {MAX_AUTHOR} characters long"),
+                            message: format!("an author is at most {MAX_SOURCE_AUTHOR} characters long"),
                         });
                     }
                     Some(author.to_string())

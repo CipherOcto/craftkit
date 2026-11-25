@@ -33,7 +33,7 @@ pub const ALIGNMENTS: [&str; 5] = ["left", "centre", "right", "justify", "distri
 
 /// The **most** room a paragraph may have above it or below it, in
 /// points.
-pub const MAX_SPACE: f64 = 10_000.0;
+pub const MAX_PARAGRAPH_SPACE: f64 = 10_000.0;
 
 /// The **most** a line spacing may be, as a multiple.
 pub const MAX_LINE_SPACING: f64 = 100.0;
@@ -148,11 +148,11 @@ commands! {
                 Ok(value)
             };
             if let Some(space) = &self.space_before {
-                let space = room(*space, "a space above a paragraph", MAX_SPACE)?;
+                let space = room(*space, "a space above a paragraph", MAX_PARAGRAPH_SPACE)?;
                 paragraph.insert("space_before".to_string(), Json::from(space));
             }
             if let Some(space) = &self.space_after {
-                let space = room(*space, "a space below a paragraph", MAX_SPACE)?;
+                let space = room(*space, "a space below a paragraph", MAX_PARAGRAPH_SPACE)?;
                 paragraph.insert("space_after".to_string(), Json::from(space));
             }
             if let Some(spacing) = &self.line_spacing {

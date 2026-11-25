@@ -16,7 +16,7 @@ use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 /// The most characters a bookmark's name may have.
 ///
 /// Word's own bound, and the tree writes names in the file.
-pub const MAX_NAME: usize = 40;
+pub const MAX_BOOKMARK_NAME: usize = 40;
 
 /// Whether a name is a name a bookmark may have.
 ///
@@ -24,7 +24,7 @@ pub const MAX_NAME: usize = 40;
 /// the rest of it is letters, digits and underscores, and it is not
 /// longer than forty characters.
 pub fn name_is_well_formed(name: &str) -> bool {
-    if name.is_empty() || name.chars().count() > MAX_NAME {
+    if name.is_empty() || name.chars().count() > MAX_BOOKMARK_NAME {
         return false;
     }
     let mut characters = name.chars();
@@ -92,7 +92,7 @@ commands! {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "`{name}` is not a name a bookmark may have: a name begins with a letter or an underscore, the rest of it is letters, digits and underscores, and it is at most {MAX_NAME} characters long"
+                        "`{name}` is not a name a bookmark may have: a name begins with a letter or an underscore, the rest of it is letters, digits and underscores, and it is at most {MAX_BOOKMARK_NAME} characters long"
                     ),
                 });
             }

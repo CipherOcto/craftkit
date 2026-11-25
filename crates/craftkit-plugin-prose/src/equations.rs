@@ -39,7 +39,7 @@ pub const MAX_DEPTH: usize = 32;
 pub const MAX_PARTS: usize = 1024;
 
 /// The most the **text** of an equation may be long.
-pub const MAX_TEXT: usize = 4096;
+pub const MAX_EQUATION_TEXT: usize = 4096;
 
 /// The **kind** of a block, for the equations.
 pub const EQUATION: &str = "prose.block.equation";
@@ -131,8 +131,8 @@ fn linear_of(part: &Json, depth: usize, parts: &mut usize) -> Result<(String, bo
 pub fn linear(parts: &Json) -> Result<String, String> {
     let mut count = 0usize;
     let (text, _) = linear_of(parts, 0, &mut count)?;
-    if text.chars().count() > MAX_TEXT {
-        return Err(format!("the text of an equation is at most {MAX_TEXT} characters long"));
+    if text.chars().count() > MAX_EQUATION_TEXT {
+        return Err(format!("the text of an equation is at most {MAX_EQUATION_TEXT} characters long"));
     }
     Ok(text)
 }

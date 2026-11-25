@@ -79,7 +79,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Text};
 
-use crate::formula::{CellRef, Cells, MAX_COLS, MAX_ROWS};
+use crate::formula::{CellRef, Cells, MAX_COLS, MAX_FORMULA_ROWS};
 
 /// The **workbook** a sheet is in, and its **name**.
 fn workbook_of(session: &craftkit_sdk::Session, sheet: u64) -> Option<(u64, String)> {
@@ -610,7 +610,7 @@ commands! {
                         at.col as i64 + (cell.col as i64 - from.col as i64),
                     )
                 };
-                if row < 0 || col < 0 || row as u64 >= MAX_ROWS || col as u64 >= MAX_COLS {
+                if row < 0 || col < 0 || row as u64 >= MAX_FORMULA_ROWS || col as u64 >= MAX_COLS {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(
@@ -898,8 +898,8 @@ commands! {
                         col: (rule_area.end.col as i64 + block_col) as u32,
                         row: (rule_area.end.row as i64 + block_row) as u32,
                     };
-                    if start.row as u64 >= MAX_ROWS
-                        || end.row as u64 >= MAX_ROWS
+                    if start.row as u64 >= MAX_FORMULA_ROWS
+                        || end.row as u64 >= MAX_FORMULA_ROWS
                         || start.col as u64 >= MAX_COLS
                         || end.col as u64 >= MAX_COLS
                     {

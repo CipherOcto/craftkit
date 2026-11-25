@@ -31,7 +31,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
 /// The longest **name** a custom property may have.
-pub const MAX_NAME: usize = 255;
+pub const MAX_PROPERTY_NAME: usize = 255;
 
 /// The longest **value** a property may have, in bytes.
 pub const MAX_VALUE: usize = 1024 * 1024;
@@ -84,10 +84,10 @@ fn name_of(name: &str, id: &str) -> Result<String, EngineError> {
             message: "a custom property has a name".to_string(),
         });
     }
-    if name.chars().count() > MAX_NAME {
+    if name.chars().count() > MAX_PROPERTY_NAME {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("a name is at most {MAX_NAME} characters long"),
+            message: format!("a name is at most {MAX_PROPERTY_NAME} characters long"),
         });
     }
     Ok(name.to_string())

@@ -26,7 +26,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
-use crate::formula::{CellRef, MAX_COLS, MAX_ROWS, Value};
+use crate::formula::{CellRef, MAX_COLS, MAX_FORMULA_ROWS, Value};
 
 /// The **parts** a text holds when it is cut at the given widths.
 ///
@@ -107,10 +107,10 @@ commands! {
                         message: "a width of no characters is not a cut".to_string(),
                     });
                 }
-                if width > MAX_ROWS {
+                if width > MAX_FORMULA_ROWS {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: format!("a width is at most {MAX_ROWS} characters"),
+                        message: format!("a width is at most {MAX_FORMULA_ROWS} characters"),
                     });
                 }
                 widths.push(width);

@@ -16,7 +16,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Text};
 
 /// The most characters a footnote may have.
-pub const MAX_TEXT: usize = 32_767;
+pub const MAX_FOOTNOTE_TEXT: usize = 32_767;
 
 /// The **numbers** of the notes of a document, by the note.
 ///
@@ -80,10 +80,10 @@ commands! {
                 });
             }
             let text = self.text.0.clone();
-            if text.chars().count() > MAX_TEXT {
+            if text.chars().count() > MAX_FOOTNOTE_TEXT {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a footnote is at most {MAX_TEXT} characters long"),
+                    message: format!("a footnote is at most {MAX_FOOTNOTE_TEXT} characters long"),
                 });
             }
             let footnote = session.document_mut()?.add_node_with_under(

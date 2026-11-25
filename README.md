@@ -4593,6 +4593,7 @@ so.
 | **the reader reads a specification and not a mention of one** | **built.** The reader that finds the evaluators, layers and formats reads the specification and not the type that names it (§1140) | §1140 |
 | **every limit the kit keeps is named by a test** | **built.** The outer gate reads every limit the kit declares and says the ones that no test names (§1141) | §1141 |
 | **every limit a battery keeps is proved by the battery's own test** | **built.** The layout, film, fx, grid and prose batteries each prove their caps by exceeding them (§1142, §1143) | §1142 |
+| **one name, one number** | **built.** The outer gate says a cap that is declared with two different numbers in one crate (§1144) | §1144 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72468,3 +72469,53 @@ finds a naming problem the kit's own bound registry forbids elsewhere.
 - **The rule is still about the name.** The gate cannot see whether a
   test **exceeded** the limit, and it cannot tell two caps of the same
   name apart.
+
+## 1144. One name, one number
+
+The kit's own bound registry has a rule: **two crates may not publish one
+name**, because a reader who finds two `MAX_DEPTH`s with different
+numbers has no way to say which is which. The rule was about *crates*.
+**Inside** a crate the same confusion was there, and nothing saw it —
+§1143 found it in the prose battery, and the grid had it too.
+
+### What was built
+
+- **Twelve caps are renamed**, so that every cap in the tree says one
+  thing. The prose battery: `MAX_SPACE` is `MAX_COLUMN_SPACE` in the
+  columns and `MAX_PARAGRAPH_SPACE` in the paragraph; `MAX_NAME` is
+  `MAX_PROPERTY_NAME` and `MAX_BOOKMARK_NAME`; `MAX_AUTHOR` is
+  `MAX_SOURCE_AUTHOR` and `MAX_REVISION_AUTHOR`; `MAX_TEXT` is
+  `MAX_EQUATION_TEXT`, `MAX_CAPTION_TEXT`, `MAX_FOOTNOTE_TEXT` and
+  `MAX_ENDNOTE_TEXT`. The grid battery: `MAX_ROWS` is `MAX_IMPORT_ROWS`
+  and `MAX_FORMULA_ROWS`.
+- **The outer gate says so.** The `lists` phase reads the caps of every
+  crate and says a name that is declared with two different numbers.
+
+### What the port found
+
+- **A rule about crates was never a rule about a crate.** The registry
+  refuses a duplicate name between two crates and says nothing about a
+  duplicate *within* one, so the batteries — whose caps are private and
+  never reach the registry — could hold two names for two numbers with
+  nothing to say so.
+- **The confusion reached the tests.** A test that says "the space over
+  `MAX_SPACE` is refused" does not say which of the two spaces it means,
+  and a reader of the test cannot tell either.
+
+### What it cost
+
+- **Twelve renames** across twelve files, ten more files that imported
+  one of them, **one gate rule** and **two tests** for it.
+
+### What it does not settle
+
+- **The rule is about the public caps.** A private cap of the same name
+  is not read, and the batteries' caps are private: a reader still
+  cannot name them from outside the battery.
+- **The rule compares the numbers as they are written.** Two caps that
+  hold the same number and spell it differently are the same number —
+  the underscores are stripped — but nothing checks that the two are the
+  same *kind*.
+- **The batteries' caps are still private.** The kit publishes its
+  bounds; the batteries do not publish theirs, and this arc does not
+  change that.

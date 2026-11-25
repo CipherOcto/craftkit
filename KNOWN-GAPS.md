@@ -198,6 +198,13 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **One name, one number** (§1144): the `lists` phase reads the caps
+  of every crate and says a name that is declared with two different
+  numbers — the same rule the kit's own bound registry holds between
+  crates, held inside one. The rule is about the **public** caps, and it
+  compares the numbers as they are written: two caps that hold the same
+  number and spell it differently are the same number, but nothing
+  checks that the two are the same kind.
 - **The same name means two different numbers** (§1143): the prose
   battery keeps `MAX_SPACE` — ten thousand points in the paragraph and
   three hundred in the columns — and `MAX_LINE_SPACING`, a hundred in

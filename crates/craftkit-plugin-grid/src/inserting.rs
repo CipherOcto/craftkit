@@ -35,7 +35,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome};
 
-use crate::formula::{Anchor, CellRef, MAX_ROWS};
+use crate::formula::{Anchor, CellRef, MAX_FORMULA_ROWS};
 
 /// The keys of a sheet that this tree **moves** when rows are
 /// inserted.
@@ -322,10 +322,10 @@ commands! {
             let count = count as u64;
             // The rows may not run **past the last row of the sheet**.
             let last = last_row(&node);
-            if last + count > MAX_ROWS {
+            if last + count > MAX_FORMULA_ROWS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a sheet has at most {MAX_ROWS} rows"),
+                    message: format!("a sheet has at most {MAX_FORMULA_ROWS} rows"),
                 });
             }
             // A **protected** sheet has locked cells, and a locked cell may

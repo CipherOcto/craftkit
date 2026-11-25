@@ -23,7 +23,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Text};
 
 /// The most characters an endnote may have.
-pub const MAX_TEXT: usize = 32_767;
+pub const MAX_ENDNOTE_TEXT: usize = 32_767;
 
 /// An **endnote**: a note that belongs to the end of the document.
 #[derive(NodeKind)]
@@ -78,10 +78,10 @@ commands! {
                 });
             }
             let text = self.text.0.clone();
-            if text.chars().count() > MAX_TEXT {
+            if text.chars().count() > MAX_ENDNOTE_TEXT {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("an endnote is at most {MAX_TEXT} characters long"),
+                    message: format!("an endnote is at most {MAX_ENDNOTE_TEXT} characters long"),
                 });
             }
             let endnote = session.document_mut()?.add_node_with_under(

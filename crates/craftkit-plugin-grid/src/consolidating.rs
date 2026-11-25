@@ -390,7 +390,7 @@ commands! {
             // given.
             let out_row = destination.cell.row + u32::from(top);
             let out_col = destination.cell.col + u32::from(left);
-            if u64::from(out_row) + row_keys.len() as u64 > crate::formula::MAX_ROWS
+            if u64::from(out_row) + row_keys.len() as u64 > crate::formula::MAX_FORMULA_ROWS
                 || u64::from(out_col) + column_keys.len() as u64 > crate::formula::MAX_COLS
             {
                 return Err(EngineError::Failed {

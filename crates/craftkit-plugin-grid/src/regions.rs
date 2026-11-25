@@ -28,7 +28,7 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
-use crate::formula::{Area, CellRef, MAX_COLS, MAX_ROWS};
+use crate::formula::{Area, CellRef, MAX_COLS, MAX_FORMULA_ROWS};
 
 /// The **filled cells** of a sheet: by row and by column, so that the
 /// lines around a region are read without walking the sheet.
@@ -94,12 +94,13 @@ fn region(filled: &Filled, cell: CellRef) -> Area {
         while top > 0 && filled.row_holds(top - 1, from_column, to_column) {
             top -= 1;
         }
-        while (bottom as u64 + 1) < MAX_ROWS && filled.row_holds(bottom + 1, from_column, to_column) {
+        while (bottom as u64 + 1) < MAX_FORMULA_ROWS && filled.row_holds(bottom + 1, from_column, to_column) {
             bottom += 1;
         }
         // The **columns** to the left and to the right, read with the
         // diagonals.
-        let (from_row, to_row) = (top.saturating_sub(1) as u64, (bottom as u64 + 1).min(MAX_ROWS - 1));
+        let (from_row, to_row) =
+            (top.saturating_sub(1) as u64, (bottom as u64 + 1).min(MAX_FORMULA_ROWS - 1));
         while left > 0 && filled.column_holds(left - 1, from_row, to_row) {
             left -= 1;
         }

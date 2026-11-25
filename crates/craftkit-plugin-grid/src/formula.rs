@@ -96,7 +96,7 @@ const SPILL_REFUSED: &str = "a spill is not a formula this tree has: the tree ha
 ///
 /// The tree's bound: a sheet is a million rows tall, and an address
 /// that is not in the sheet is not an address.
-pub const MAX_ROWS: u64 = 1_048_576;
+pub const MAX_FORMULA_ROWS: u64 = 1_048_576;
 
 /// The most columns a sheet has.
 ///
@@ -223,7 +223,7 @@ impl Anchor {
     pub fn shifted(&self, row_delta: i64, col_delta: i64) -> Option<Anchor> {
         let row = if self.row_abs { i64::from(self.cell.row) } else { i64::from(self.cell.row) + row_delta };
         let col = if self.col_abs { i64::from(self.cell.col) } else { i64::from(self.cell.col) + col_delta };
-        if row < 0 || col < 0 || row as u64 >= MAX_ROWS || col as u64 >= MAX_COLS {
+        if row < 0 || col < 0 || row as u64 >= MAX_FORMULA_ROWS || col as u64 >= MAX_COLS {
             return None;
         }
         Some(Anchor {
@@ -414,7 +414,7 @@ impl Anchor {
     pub fn moved(self, dr: i64, dc: i64) -> Option<Anchor> {
         let row = if self.row_abs { self.cell.row as i64 } else { self.cell.row as i64 + dr };
         let col = if self.col_abs { self.cell.col as i64 } else { self.cell.col as i64 + dc };
-        if row < 0 || col < 0 || row as u64 >= MAX_ROWS || col as u64 >= MAX_COLS {
+        if row < 0 || col < 0 || row as u64 >= MAX_FORMULA_ROWS || col as u64 >= MAX_COLS {
             return None;
         }
         Some(Anchor {
@@ -527,7 +527,7 @@ impl Lines {
         let delta = if self.rows { row_delta } else { col_delta };
         let first = self.first as i64 + delta;
         let last = self.last as i64 + delta;
-        let limit = if self.rows { MAX_ROWS } else { MAX_COLS } as i64;
+        let limit = if self.rows { MAX_FORMULA_ROWS } else { MAX_COLS } as i64;
         if first < 0 || last < 0 || last >= limit {
             return None;
         }
@@ -1424,7 +1424,7 @@ fn collect_precedents(expression: &Expr, names: &BTreeMap<String, Name>, found: 
                 ),
                 false => Area::new(
                     CellRef { col: lines.first, row: 0 },
-                    CellRef { col: lines.last, row: MAX_ROWS as u32 - 1 },
+                    CellRef { col: lines.last, row: MAX_FORMULA_ROWS as u32 - 1 },
                 ),
             };
             found.push(Reference { sheet: sheet.clone(), area });
@@ -2258,7 +2258,7 @@ fn row_of(text: &str) -> Option<u32> {
         return None;
     }
     let row: u32 = digits.parse().ok()?;
-    if row == 0 || row as u64 > MAX_ROWS {
+    if row == 0 || row as u64 > MAX_FORMULA_ROWS {
         return None;
     }
     Some(row - 1)

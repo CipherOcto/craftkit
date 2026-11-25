@@ -51,8 +51,8 @@ use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{CellRef, Value};
 
-/// The most **rows** a text may have.
-pub const MAX_ROWS: usize = 10_000;
+/// The most **rows** an imported text may have.
+pub const MAX_IMPORT_ROWS: usize = 10_000;
 
 /// The most **columns** a text may have.
 pub const MAX_COLUMNS: usize = 256;
@@ -193,10 +193,10 @@ commands! {
                     message: "the text holds nothing to import".to_string(),
                 });
             }
-            if rows.len() > MAX_ROWS {
+            if rows.len() > MAX_IMPORT_ROWS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the text holds {} rows, and a text holds at most {MAX_ROWS}", rows.len()),
+                    message: format!("the text holds {} rows, and a text holds at most {MAX_IMPORT_ROWS}", rows.len()),
                 });
             }
             let width = rows[0].len();
@@ -316,10 +316,10 @@ commands! {
                     message: "the data holds nothing to import".to_string(),
                 });
             }
-            if list.len() > MAX_ROWS {
+            if list.len() > MAX_IMPORT_ROWS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the data holds {} rows, and a text holds at most {MAX_ROWS}", list.len()),
+                    message: format!("the data holds {} rows, and a text holds at most {MAX_IMPORT_ROWS}", list.len()),
                 });
             }
             // The **keys**: the columns, in the order they first appear.

@@ -1913,7 +1913,7 @@ fn print_titles_of(text: &str) -> (Vec<u32>, Vec<u32>) {
         if let (Ok(first), Ok(second)) = (first.parse::<u32>(), second.parse::<u32>()) {
             // A range of **rows**: the rows of the file count from one,
             // and a sheet is not taller than the tree's own bound.
-            if first >= 1 && second >= first && second as u64 <= crate::formula::MAX_ROWS {
+            if first >= 1 && second >= first && second as u64 <= crate::formula::MAX_FORMULA_ROWS {
                 for row in (first - 1)..=(second - 1) {
                     if !rows.contains(&row) {
                         rows.push(row);

@@ -144,7 +144,7 @@ fn moved_cells(
                     if row < at {
                         // The cell is **before** the band: it stays.
                         cell
-                    } else if row + count > crate::formula::MAX_ROWS {
+                    } else if row + count > crate::formula::MAX_FORMULA_ROWS {
                         return Err(format!(
                             "the cell {} would be pushed off the sheet, and a cell may not be lost",
                             CellRef { col: cell.col, row: (row - 1) as u32 }.to_text()

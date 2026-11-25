@@ -19,8 +19,8 @@ use craftkit_sdk::{EngineError, NodeRef, Outcome};
 /// The kinds of revision the tree has.
 pub const KINDS: [&str; 3] = ["insert", "delete", "format"];
 
-/// The most characters an author's name may have.
-pub const MAX_AUTHOR: usize = 255;
+/// The most characters the **author of a revision** may have.
+pub const MAX_REVISION_AUTHOR: usize = 255;
 
 /// The most characters a date may have.
 pub const MAX_DATE: usize = 64;
@@ -61,10 +61,10 @@ pub fn check(revision: &Json, id: &str) -> Result<(), EngineError> {
             message: "a revision has an author".to_string(),
         });
     }
-    if author.chars().count() > MAX_AUTHOR {
+    if author.chars().count() > MAX_REVISION_AUTHOR {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("an author is at most {MAX_AUTHOR} characters long"),
+            message: format!("an author is at most {MAX_REVISION_AUTHOR} characters long"),
         });
     }
     if let Some(date) = revision.get("date") {

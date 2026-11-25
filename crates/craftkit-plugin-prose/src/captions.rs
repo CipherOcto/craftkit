@@ -35,7 +35,7 @@ use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 pub const MAX_LABEL: usize = 40;
 
 /// The longest **text** a caption may have.
-pub const MAX_TEXT: usize = 1024;
+pub const MAX_CAPTION_TEXT: usize = 1024;
 
 /// The **formats** a number may be written in: the tree's own.
 pub const FORMATS: [&str; 4] = ["arabic", "roman", "alphabetic", "ALPHABETIC"];
@@ -94,10 +94,10 @@ pub fn label_of(name: &str, id: &str) -> Result<String, EngineError> {
 
 /// The **text** of a caption.
 fn text_of(name: &str, id: &str) -> Result<String, EngineError> {
-    if name.chars().count() > MAX_TEXT {
+    if name.chars().count() > MAX_CAPTION_TEXT {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("the text of a caption is at most {MAX_TEXT} characters long"),
+            message: format!("the text of a caption is at most {MAX_CAPTION_TEXT} characters long"),
         });
     }
     Ok(name.to_string())

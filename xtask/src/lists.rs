@@ -748,6 +748,31 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             "the bound `{bound}` is named by no test: every bound the tree promises is named by a test"
         ));
     }
+    // **One name, one number.** A cap's name is its id: two caps of the
+    // same name and different numbers leave a reader with no way to say
+    // which is which. The kit's own bound registry refuses two crates
+    // publishing one name, and this is the same rule inside a crate.
+    for directory in crate_directories(root) {
+        let crate_name =
+            directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+        let mut numbers: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+            std::collections::BTreeMap::new();
+        for file in crate::index::rust_files(&directory.join("src")) {
+            let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Production) else {
+                continue;
+            };
+            for cap in crate::index::limits_in(&text, &file, &crate_name) {
+                numbers.entry(cap.name).or_default().insert(cap.value.replace(['_', ' '], ""));
+            }
+        }
+        for (cap, values) in numbers {
+            if values.len() > 1 {
+                problems.push(format!(
+                    "the cap `{cap}` is declared in `{crate_name}` with different numbers: one name, one number"
+                ));
+            }
+        }
+    }
     for limit in limits {
         if tests.iter().any(|body| names_it(body, &limit)) {
             continue;
@@ -1810,6 +1835,41 @@ mod tests {
         .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// Two caps of **one name** and different numbers are caught.
+    #[test]
+    fn one_name_may_only_have_one_number() {
+        let root = crate::temp::dir("lists-one-name").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "pub const MAX_THING: usize = 10;\npub const MAX_OTHER: usize = 20;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// And the same name with **two numbers** is caught.
+    #[test]
+    fn one_name_with_two_numbers_is_caught() {
+        let root = crate::temp::dir("lists-one-name-twice").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(crate_directory.join("src").join("lib.rs"), "pub const MAX_THING: usize = 10;\n")
+            .expect("the source is written");
+        std::fs::write(crate_directory.join("src").join("other.rs"), "pub const MAX_THING: usize = 20;\n")
+            .expect("the source is written");
+        std::fs::write(crate_directory.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.iter().any(|problem| problem.contains("MAX_THING")), "{problems:?}");
     }
 
     /// An **evaluator** that no test names is caught.
