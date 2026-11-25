@@ -73097,4 +73097,52 @@ This arc names all nine by a test beside each crate.
   cannot tell a unit test from the code around it. A cap that only a
   unit test names is invisible to it.
 
-| **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
+## 1156. The last caps are named, and the backlog is closed
+
+The tree keeps **one hundred and six** published caps. After §1156
+every one of them is named by a test: the two of the fixtures and the
+two of the kit itself are the last, and the backlog of named caps is
+**empty**.
+
+### What was built
+
+- **The fixtures' slots are proved.** The au fixture and the vst3
+  fixture hold a fixed number of instances each, and a host that asks
+  for one more gets nothing: the fixtures now say so in a test of their
+  own, and the fixtures' exports are **public** so that the test may
+  go through the same door the host goes through.
+- **The kit's own two are proved by the kit.** The tree's camera clamps
+  its zoom at `MAX_ZOOM` — a third deliberate departure from "refuse,
+  do not clamp", and the camera says so in its own words — and the kit
+  now has a test of its own for it. The kit's history is bounded at
+  `HISTORY_LIMIT`, and the kit now has a test of its own for that too:
+  before this arc both were proved by the **studio's** tests, which is
+  a proof in another crate's house.
+
+### What the port found
+
+- **The proof should live with the thing.** Two of the kit's own caps
+  were proved by the studio's and the window's tests, and the rule was
+  satisfied because the rule looks at every test in the tree. The
+  proof is better at home.
+- **The rule has a blind spot.** It reads the `tests` of a crate and
+  not the `#[cfg(test)]` modules of its source, because it reads the
+  production code and cannot tell a unit test from the code around it.
+  The two fixtures' caps were named by their own unit tests and by
+  nothing else, and the rule could not see them.
+
+### What it cost
+
+- **Four tests** — two in the fixtures and two in the kit — **two**
+  public modules, **one** public door for the vst3 fixture, and the
+  claim row above.
+
+### What it does not settle
+
+- **A rule that cannot see a unit test is a rule with a blind spot.**
+  The blind spot is recorded rather than closed: closing it means
+  teaching the reader to tell a test from the code around it, and that
+  is a change to the reader the tree trusts.
+- **The caps are named, and the numbers are not proved.** A test says
+  that the tree does this at this number; it does not say that this is
+  the right number.

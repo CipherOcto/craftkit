@@ -129,6 +129,17 @@ const fn slot() -> Slot {
 /// The instances this unit can have at once.
 static SLOTS: [Slot; MAX_INSTANCES] = [const { slot() }; MAX_INSTANCES];
 
+/// Make an **instance** of the fixture, the way the host's own door
+/// does.
+///
+/// The fixture holds a fixed number of slots, and a host that asks for
+/// one more than the fixture holds gets **nothing**: this answers
+/// **false** when the fixture is full, and the tree's own test goes
+/// through the same door the host goes through.
+pub fn make_an_instance() -> bool {
+    !exports::craftkit_au_instance().is_null()
+}
+
 /// Whether any instance has been initialised.
 pub fn initialised() -> bool {
     INITIALISED.load(Ordering::SeqCst)

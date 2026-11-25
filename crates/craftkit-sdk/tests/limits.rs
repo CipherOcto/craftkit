@@ -24,6 +24,9 @@ const JOURNAL_LIMIT: usize = craftkit_sdk::journal::JOURNAL_LIMIT;
 /// The bundle's own limit.
 const MAX_FILES: usize = craftkit_sdk::bundle::MAX_FILES;
 
+/// The history's own limit.
+const HISTORY_LIMIT: usize = craftkit_sdk::history::HISTORY_LIMIT;
+
 /// The one parameter the test command takes.
 const TEXT_PARAM: craftkit_sdk::error::ParamDoc =
     craftkit_sdk::error::ParamDoc::optional("text", craftkit_sdk::Doc::Text, "The text.");
@@ -210,4 +213,33 @@ fn a_bundle_with_too_many_files_is_refused() {
         .expect("the bundle is written");
     let error = craftkit_sdk::bundle::read(&bytes, &formats, &migrations).expect_err("it is refused");
     assert!(error.contains("files"), "{error}");
+}
+
+/// The **history** is bounded.
+///
+/// The tree holds a whole document per state, so the history is
+/// bounded in the number of states it holds: the oldest state that is
+/// not the current one is dropped when the tree is full, and a history
+/// that grows for ever is a leak.
+#[test]
+fn the_history_is_bounded() {
+    let mut history = craftkit_sdk::history::History::new(Document::new("the document"));
+    for index in 0..(HISTORY_LIMIT + 10) {
+        history.push("test.note", Document::new("the document"), Vec::new(), None);
+        let _ = index;
+    }
+    assert!(history.len() <= HISTORY_LIMIT, "the history held {} states", history.len());
+}
+
+/// The **zoom** of a camera over `MAX_ZOOM` is **clamped**, not refused.
+///
+/// The camera is a value: a wheel event can send anything, and a camera
+/// that refuses to move is a camera that feels broken. This is a
+/// deliberate departure from the tree's rule that a number outside its
+/// range is refused, and the tree's camera says so in its own words.
+#[test]
+fn a_zoom_over_the_limit_is_clamped() {
+    let mut camera = craftkit_sdk::camera::Camera::new();
+    camera.set_zoom(craftkit_sdk::camera::Camera::MAX_ZOOM * 10.0);
+    assert_eq!(camera.zoom(), craftkit_sdk::camera::Camera::MAX_ZOOM, "the zoom is as big as it goes");
 }

@@ -198,9 +198,6 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
-- **The xml crate's caps are named** (§1154): the depth of a part and
-  the number of the elements of a part are each named by a test beside
-  the crate, and both are refusals that name their own bound.
 - **Every published cap in the tree is named by a test** (§1154–§1156):
   the tree keeps one hundred and six published caps and every one of
   them is named by a test. The last four were the two of the fixtures

@@ -160,6 +160,17 @@ const fn slot() -> Slot {
 /// The instances this plugin can have at once.
 static SLOTS: [Slot; MAX_INSTANCES] = [const { slot() }; MAX_INSTANCES];
 
+/// Make an **instance** of the fixture, the way the host's own door
+/// does.
+///
+/// The fixture holds a fixed number of slots, and a host that asks for
+/// one more than the fixture holds gets **nothing**: this answers
+/// **false** when the fixture is full, and the tree's own test goes
+/// through the same door the host goes through.
+pub fn make_an_instance() -> bool {
+    !exports::make_an_instance().is_null()
+}
+
 /// Whether any instance has been initialised.
 pub fn initialised() -> bool {
     INITIALISED.load(Ordering::SeqCst)
@@ -340,6 +351,16 @@ mod exports {
         let object = Box::into_raw(Box::new(Object { table, slot: index, refs: AtomicU32::new(1) }));
         MADE.fetch_add(1, Ordering::SeqCst);
         object as *mut c_void
+    }
+
+    /// Make an **instance** of the fixture, the way the host's own door
+    /// does.
+    ///
+    /// The fixture holds a fixed number of slots, and a host that asks
+    /// for one more gets nothing: this is the door the tree's own test
+    /// goes through.
+    pub fn make_an_instance() -> *mut c_void {
+        make(&PROCESSOR as *const IAudioProcessor as *const c_void)
     }
 
     /// The slot behind an object.
