@@ -4605,6 +4605,7 @@ so.
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
 | **the batteries and the libraries name their caps** | **built.** Nine crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
 | **every published cap in the tree is named by a test** | **built.** The hundred and six caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73140,9 +73141,55 @@ two of the kit itself are the last, and the backlog of named caps is
 ### What it does not settle
 
 - **A rule that cannot see a unit test is a rule with a blind spot.**
-  The blind spot is recorded rather than closed: closing it means
-  teaching the reader to tell a test from the code around it, and that
-  is a change to the reader the tree trusts.
+  The blind spot was recorded rather than closed at the time, because
+  closing it meant teaching the reader to tell a test from the code
+  around it — and that is what §1157 did.
 - **The caps are named, and the numbers are not proved.** A test says
   that the tree does this at this number; it does not say that this is
   the right number.
+
+## 1157. The rule can see a unit test
+
+§1156 closed the backlog of named caps and left a blind spot behind it:
+the rule that reads the tree's caps looks in the `tests` of a crate and
+not in the `#[cfg(test)]` modules of its source, because it reads the
+production code and cannot tell a unit test from the code around it.
+This arc closes the blind spot.
+
+### What was built
+
+- **The reader hands back the tests as well as the code.** The cut that
+  takes the tests out of the production code takes them out **line by
+  line**, so the tests are exactly the lines that go: `tree::tests_of`
+  gives them back, and the production view and the test view are two
+  halves of one cut.
+- **The rule reads both.** A rule that asks *is this named by a test?*
+  now reads the test files of the tree and the test parts of every
+  crate's source: a **unit test** is a test, and a cap that only a
+  unit test named is no longer invisible to the tree's own gate.
+- **A test proves it.** The rule's own test builds a kit with a limit
+  that only a `#[cfg(test)]` module names, and the rule does not catch
+  it; the same limit with no test at all is caught, as before.
+
+### What the port found
+
+- **The blind spot was one line of the rule.** The reader already knew
+  a test from the code around it — it had to, to cut the tests out of
+  the production code — and the rule simply never asked it for the
+  other half.
+
+### What it cost
+
+- **One function** in the reader, **one loop** in the rule, **one**
+  test, and the claim row above.
+
+### What it does not settle
+
+- **A name in a comment is a name, and a name in a string is a name.**
+  The rule counts a name wherever it appears in a test — a comment, a
+  string, a doc comment — and the unit tests widen the surface it
+  looks at. The weakness is the one the tree already knows.
+- **The rule still holds the tree to the kit's caps and not to every
+  cap.** The kit's limits are the rule's own; a battery's caps are
+  proved by the battery's own tests, and nothing yet holds a battery to
+  it.

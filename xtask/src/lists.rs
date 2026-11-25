@@ -640,6 +640,17 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             tests.push(std::fs::read_to_string(&file).unwrap_or_default());
         }
     }
+    // And the **unit tests**: the tests that live inside a crate's own
+    // source. A rule that asks *is this named by a test?* must see them
+    // too — the reader knows a test from the code around it, and a cap
+    // that only a unit test named was invisible to this rule before.
+    // §1157.
+    for directory in crate_directories(root) {
+        for file in crate::index::rust_files(&directory.join("src")) {
+            let Ok(text) = std::fs::read_to_string(&file) else { continue };
+            tests.push(crate::tree::tests_of(&file, &text));
+        }
+    }
     // **The promise bounds of every crate.** A bound whose name says what
     // it bounds is a promise to a reader, and the tree's own gate holds
     // it to the prose. This rule holds it to a **test**: a promise that
@@ -1799,6 +1810,28 @@ mod tests {
             "#[test]\nfn a_test() { let bound = MAX_THING_BYTES; }\n",
         )
         .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// A limit that **only a unit test** names is not caught.
+    ///
+    /// The rule reads the test files of the tree and the test parts of
+    /// its source: a unit test is a test, and a cap that only a unit
+    /// test named was invisible to this rule before. §1157.
+    #[test]
+    fn a_limit_that_only_a_unit_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-limit-unit").expect("a temporary folder");
+        let kit = root.join("crates").join("craftkit-sdk");
+        std::fs::create_dir_all(kit.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(kit.join("tests")).expect("the directory is made");
+        std::fs::write(
+            kit.join("src").join("lib.rs"),
+            "pub const MAX_THING: usize = 10;\n\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn the_thing_is_bounded() {\n        assert_eq!(MAX_THING, 10);\n    }\n}\n",
+        )
+        .expect("the source is written");
+        std::fs::write(kit.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
+            .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert!(problems.is_empty(), "{problems:?}");
     }

@@ -498,6 +498,49 @@ pub fn read_rust(path: impl AsRef<Path>, subject: Subject) -> Result<String, std
 /// The line count is the file's, whatever is removed: a gate that names a
 /// line has to name the file's line.
 pub fn production_of(path: &Path, text: &str) -> String {
+    let kept = kept_lines(path, text);
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = String::with_capacity(text.len());
+    for (index, line) in lines.iter().enumerate() {
+        if kept[index] {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// The **tests** of a file: its test items and its test-only methods, and
+/// nothing else.
+///
+/// The cut that takes the tests out of the production code takes them out
+/// **line by line**, so the tests are exactly the lines that go: a file
+/// under a `tests` directory is a test from its first line to its last, a
+/// `mod tests { … }` block is a test whole, and an indented
+/// `#[cfg(test)]` marks a method that is a test whole.
+///
+/// A rule that asks *is this named by a test?* has to be able to see a
+/// **unit** test — the test that lives inside a crate's own source — and
+/// not only the test files of a `tests` directory. Before this, a cap that
+/// only a unit test named was invisible to the tree's own rule. §1157.
+pub fn tests_of(path: &Path, text: &str) -> String {
+    let kept = kept_lines(path, text);
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = String::with_capacity(text.len());
+    for (index, line) in lines.iter().enumerate() {
+        if !kept[index] {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// The lines of a file that are **production code**, one flag for each.
+///
+/// The flags are the cut the reader makes: a line that is a test is
+/// `false`, and every other line is `true`.
+fn kept_lines(path: &Path, text: &str) -> Vec<bool> {
     let code = code_lines_kept(text);
     let lines: Vec<&str> = text.lines().collect();
     // The byte offset of each line's first byte.
@@ -508,13 +551,13 @@ pub fn production_of(path: &Path, text: &str) -> String {
         at += line.len() + 1;
     }
 
-    let mut out = String::with_capacity(text.len());
+    let mut kept = vec![true; lines.len()];
     let mut index = 0usize;
     while index < lines.len() {
         let line = lines[index];
         if is_a_test_file(path) {
             // The whole file is a test: every line goes, and the lines stay.
-            out.push('\n');
+            kept[index] = false;
             index += 1;
             continue;
         }
@@ -523,8 +566,8 @@ pub fn production_of(path: &Path, text: &str) -> String {
             // found in the code view: a `}` inside a string is not a brace.
             // §160.
             let last = top_level_item_last_line(&code, &starts, &lines, index);
-            for _ in index..=last {
-                out.push('\n');
+            for slot in kept.iter_mut().take(last + 1).skip(index) {
+                *slot = false;
             }
             index = last + 1;
             continue;
@@ -532,17 +575,15 @@ pub fn production_of(path: &Path, text: &str) -> String {
         if is_indented_test_attribute(line)
             && let Some(last) = test_method_last_line(&code, &starts, &lines, index)
         {
-            for _ in index..=last {
-                out.push('\n');
+            for slot in kept.iter_mut().take(last + 1).skip(index) {
+                *slot = false;
             }
             index = last + 1;
             continue;
         }
-        out.push_str(line);
-        out.push('\n');
         index += 1;
     }
-    out
+    kept
 }
 
 /// Whether a file is a test file: a file under a `tests` directory.

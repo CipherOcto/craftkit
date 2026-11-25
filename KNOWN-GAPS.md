@@ -198,6 +198,17 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The blind spot is closed** (§1157): the rule that reads the tree's
+  caps — and its commands, kinds, migrations, panels, tools, evaluators,
+  layers, formats and promise bounds — read the test **files** of the
+  tree and not the `#[cfg(test)]` modules of its source, because it read
+  the production code and could not tell a unit test from the code
+  around it. The reader already knew the difference — it has to, to cut
+  the tests out — and the rule now asks it for the other half: a cap
+  named only by a unit test is no longer invisible to the tree's own
+  gate. What stays is the weakness the tree already knows: a name in a
+  comment is a name, and a name in a string is a name, and the unit
+  tests widen the surface the rule looks at.
 - **Every published cap in the tree is named by a test** (§1154–§1156):
   the tree keeps one hundred and six published caps and every one of
   them is named by a test. The last four were the two of the fixtures
@@ -212,7 +223,8 @@ These are the README's own honest notes, and they are still true of the tree:
   is invisible to it — the two fixtures' caps were. The blind spot is
   recorded rather than closed: closing it means teaching the reader to
   tell a test from the code around it, and that is a change to the
-  reader the tree trusts.
+  reader the tree trusts. It is closed now (§1157): the reader hands
+  back the tests as well as the production code.
 - **The camera's zoom is a third deliberate clamp** (§1156): a zoom
   above `MAX_ZOOM` is clamped, and the camera says so in its own
   words. The tree now has a test of its own for it. The art battery's
