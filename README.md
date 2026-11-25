@@ -4597,14 +4597,14 @@ so.
 | **the reader says what it did not read** | **built.** The pdf battery's name tree says when it stopped at its depth (§1146) | §1146 |
 | **every reader of the pdf battery says what it did not read** | **built.** The structure tree, the marked content, the figures, the comments and the attachments each say when they stopped at their depth (§1147) | §1147 |
 | **every cap the prose battery keeps is named by a test** | **built.** All thirty-four of the prose battery's cap names are named by a test beside the battery, and a source's title is bounded at last (§1148) | §1148 |
-| **every cap the grid battery publishes is named by a test** | **built.** All twenty-nine of the grid battery's published cap names are named by a test beside the battery, and an address past the sheet is refused (§1149) | §1149 |
+| **every cap the grid battery publishes is named by a test** | **built.** All thirty-one of the grid battery's published cap names are named by a test beside the battery, and an address past the sheet is refused (§1149) | §1149 |
 | **the xlsx reader says what it did not read** | **built.** The bags, the outline and the columns of a file are read against a bound, and the file is told when the bound bites (§1150) | §1150 |
 | **the audio crate's caps are named and its detectors say so** | **built.** The onsets, the transients and the notes of a sound are a reading that says when the detector stopped, and a pitch above the bound is refused (§1151) | §1151 |
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
 | **the batteries and the libraries name their caps** | **built.** Nine crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-two caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-four caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
@@ -4612,6 +4612,7 @@ so.
 | **the grid battery says what it cut** | **built.** The issues, the related words, the samples, the steps and the export's own cuts now say that they stopped, and nine tests prove each of them (§1161) | §1161 |
 | **the prose battery says what it cut** | **built.** The accessibility check now says how many issues there were, how many it lists and how many columns of a table it did not look at, and five tests prove each of them (§1162) | §1162 |
 | **the grid export says which lines it did not draw** | **built.** The lines of a cell are cut at a published bound, the export says how many of them were cut, and the cut of the text and the cut of the lines are told apart (§1163) | §1163 |
+| **the grid battery says what it did not offer** | **built.** The suggestions of a spelling issue are cut at a published bound, a word too long for the suggestions says so, and three tests prove both (§1164) | §1164 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73557,3 +73558,64 @@ closes that.
 - **A cell that is too tall is drawn anyway.** The lines are cut at the
   bound, but the cell is still drawn with the lines that fit in it: the
   export does not say how much of the cell overflowed its row.
+
+## 1164. The grid battery says what it did not offer
+
+§1161 and §1163 brought the rule of the **saying so** to the grid
+battery's cuts. One cut was left in the same file: the **suggestions** a
+spelling check offers for a word. This arc closes it.
+
+### What was built
+
+- **The suggestions of an issue say when they were cut.** The checker
+  offers the words that are one edit away from the word, and it offers
+  at most `MAX_SPELLING_SUGGESTIONS` of them — six. An issue now carries
+  `suggestions_truncated`, and the answer carries it too: a reader
+  offered six alternatives is told that there were more.
+- **A word too long for the suggestions says so.** The candidates of a
+  word grow with the square of its length, so a word longer than
+  `MAX_SPELLING_WORD` — sixty-four characters — has **no** suggestions
+  looked for at all. The issue says `suggestions_omitted`: a word with no
+  suggestions because none were looked for is not a word with no
+  alternatives.
+- **Both bounds are published.** `MAX_SPELLING_SUGGESTIONS` and
+  `MAX_SPELLING_WORD` are at the grid battery's root, and the grid
+  battery now publishes **thirty-one** caps.
+- **Three tests name every bound.** The new tests name the two caps **in
+  code**, and one of the three is the other half: a word with exactly the
+  bound's number of suggestions is not cut.
+
+### What the port found
+
+- **The cut of the suggestions was invisible.** The check offered six
+  alternatives for a word and said nothing about the seventh, and the
+  answer's `truncated` flag was about the **issues**, not about the
+  suggestions: the two cuts were one number apart in the reader's mind
+  and one flag apart in the answer.
+- **The long word was the worse of the two.** The suggestions were not
+  looked for, and the issue looked exactly like an issue about a word
+  with no alternatives — the reader was left to guess that the checker
+  had given up rather than that nothing was near.
+- **The bounds were numbers in the middle of a file.** `MAX_WORD` and
+  `MAX_SUGGESTIONS` were private, and the second of them was a name the
+  MCP crate already publishes — two crates, one name.
+
+### What it cost
+
+- **One answer changed** — `grid.spelling.check` — **two caps published**
+  at the grid battery's root, **three tests** in the truncation file, and
+  the claim row above.
+- **The claim table's counts are up to date again**: the grid battery
+  keeps **thirty-one** caps and the tree keeps **a hundred and
+  twenty-four**.
+
+### What it does not settle
+
+- **The tree's other batteries still cut in silence.** The film battery's
+  captions, the layout battery's boxes, the text battery's word list and
+  the sound battery's names are the same shape and are not yet answered.
+- **A cut word list makes a cut set of suggestions.** The suggestions are
+  drawn from the word list, and the list may itself be cut at
+  `MAX_SPELLING_LINES`: the answer says that too
+  (`dictionary_truncated`), and a word beyond the cut is still called
+  misspelled.

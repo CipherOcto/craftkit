@@ -54,10 +54,17 @@ pub const MAX_ISSUES: usize = 500;
 ///
 /// The candidates of a word grow with the square of its length, so a
 /// long word gets no suggestion rather than an unbounded work.
-const MAX_WORD: usize = 64;
+///
+/// The suggestions of a word that is too long are **not made**, and the
+/// issue says so: a word with no suggestions and a word with no
+/// alternatives are not the same thing.
+pub const MAX_SPELLING_WORD: usize = 64;
 
 /// The **most** suggestions one word gets.
-const MAX_SUGGESTIONS: usize = 6;
+///
+/// The suggestions beyond this one are not offered, and the issue says
+/// so.
+pub const MAX_SPELLING_SUGGESTIONS: usize = 6;
 
 /// The most **related words** the thesaurus answers with.
 pub const MAX_RELATED: usize = 20;
@@ -134,12 +141,19 @@ fn is_known(words: &std::collections::HashSet<String>, taught: &[String], word: 
 
 /// The **suggestions** for a word: the words of the list that are one
 /// edit away from it — a letter added, a letter taken away, a letter
-/// changed, two letters swapped.
-fn suggestions(words: &std::collections::HashSet<String>, word: &str) -> Vec<String> {
+/// changed, two letters swapped — and what was left out.
+///
+/// The list is cut at `MAX_SPELLING_SUGGESTIONS`, and a word that is
+/// longer than `MAX_SPELLING_WORD` gets none at all: both are said, and
+/// an answer that says nothing about them is an answer that leaves the
+/// reader to guess.
+fn suggestions(words: &std::collections::HashSet<String>, word: &str) -> Suggestions {
     const LETTERS: &str = "abcdefghijklmnopqrstuvwxyz";
     let characters: Vec<char> = word.to_lowercase().chars().collect();
-    if characters.len() > MAX_WORD {
-        return Vec::new();
+    if characters.len() > MAX_SPELLING_WORD {
+        // The word is too long for the candidates to be made: the
+        // suggestions are **omitted**, and the issue says so.
+        return Suggestions { words: Vec::new(), truncated: false, omitted: true };
     }
     let mut candidates: Vec<String> = Vec::new();
     for index in 0..=characters.len() {
@@ -168,10 +182,14 @@ fn suggestions(words: &std::collections::HashSet<String>, word: &str) -> Vec<Str
         candidates.into_iter().filter(|candidate| words.contains(candidate)).collect();
     found.sort();
     found.dedup();
-    found.truncate(MAX_SUGGESTIONS);
+    // The list is **cut** at the bound, and the cut is said.
+    let truncated = found.len() > MAX_SPELLING_SUGGESTIONS;
+    if truncated {
+        found.truncate(MAX_SPELLING_SUGGESTIONS);
+    }
     // The capitalisation of the word that was written.
     let capital = word.chars().next().is_some_and(char::is_uppercase);
-    found
+    let words = found
         .into_iter()
         .map(|suggestion| {
             if capital {
@@ -184,7 +202,20 @@ fn suggestions(words: &std::collections::HashSet<String>, word: &str) -> Vec<Str
                 suggestion
             }
         })
-        .collect()
+        .collect();
+    Suggestions { words, truncated, omitted: false }
+}
+
+/// The **suggestions** of a word, and what was left out of them.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Suggestions {
+    /// The words that are one edit away from the word.
+    words: Vec<String>,
+    /// Whether the list was cut at `MAX_SPELLING_SUGGESTIONS`.
+    truncated: bool,
+    /// Whether the suggestions were not made at all, because the word is
+    /// longer than `MAX_SPELLING_WORD`.
+    omitted: bool,
 }
 
 /// The **words** of a text: the runs of letters and apostrophes.
@@ -287,6 +318,11 @@ commands! {
             // listed, so a sheet with exactly the bound's number of
             // issues is not called cut.
             let mut truncated = false;
+            // The suggestions of the issues are cut at their own bound,
+            // and the answer says so: a reader must not take six
+            // suggestions for the whole of the alternatives.
+            let mut suggestions_truncated = false;
+            let mut suggestions_omitted = false;
             'scan: for row in area.start.row..=area.end.row {
                 for column in area.start.col..=area.end.col {
                     let cell = CellRef { col: column, row };
@@ -303,10 +339,15 @@ commands! {
                             truncated = true;
                             break 'scan;
                         }
+                        let found = suggestions(&words, word);
+                        suggestions_truncated = suggestions_truncated || found.truncated;
+                        suggestions_omitted = suggestions_omitted || found.omitted;
                         issues.push(json!({
                             "cell": cell.to_text(),
                             "word": word,
-                            "suggestions": suggestions(&words, word),
+                            "suggestions": found.words,
+                            "suggestions_truncated": found.truncated,
+                            "suggestions_omitted": found.omitted,
                         }));
                     }
                 }
@@ -318,6 +359,8 @@ commands! {
                 "done": done,
                 "truncated": truncated,
                 "dictionary_truncated": dictionary_truncated,
+                "suggestions_truncated": suggestions_truncated,
+                "suggestions_omitted": suggestions_omitted,
             })))
 
         }

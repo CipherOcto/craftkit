@@ -552,7 +552,7 @@ These are the README's own honest notes, and they are still true of the tree:
 - **Only the grid and the prose batteries say when they stop.** A reader
   that stops at a bound must say that it stopped, and the pdf and xlsx
   readers and the audio crate's detectors say it now (§1146, §1147, §1150,
-  §1151); the grid battery says it too (§1161, §1163), and so does the prose
+  §1151); the grid battery says it too (§1161, §1163, §1164), and so does the prose
   battery's accessibility check (§1162). The film battery's captions, the
   layout battery's boxes and the rest are the same shape and are **not**
   answered yet, and nothing checks a battery for a cut

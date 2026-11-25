@@ -9,7 +9,7 @@
 
 use craftkit_plugin_grid::{
     MAX_EXPORT_CHARS, MAX_EXPORT_LINES, MAX_HEADER_LINES, MAX_ISSUES, MAX_RELATED, MAX_SAMPLES,
-    MAX_SPARK_POINTS, MAX_VALUE_STEPS,
+    MAX_SPARK_POINTS, MAX_SPELLING_SUGGESTIONS, MAX_SPELLING_WORD, MAX_VALUE_STEPS,
 };
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
@@ -333,4 +333,72 @@ fn the_lines_of_a_cell_at_the_bound_are_drawn_whole() {
         .expect("the sheet is exported");
     let cut = outcome.data["cell_lines_cut"].as_u64().expect("the answer says how many were cut");
     assert_eq!(cut, 0, "nothing was cut: {outcome:?}");
+}
+
+/// The **suggestions** of an issue are cut at
+/// `MAX_SPELLING_SUGGESTIONS`, and the issue says so.
+///
+/// The suggestions are the alternatives the checker offers for a word,
+/// and a reader that is offered six of them is not told that there were
+/// more.
+#[test]
+fn the_suggestions_of_an_issue_are_cut_and_the_issue_says_so() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_text(&mut session, sheet, "A1", "cat");
+    // The **alternatives** of `cat`: every one of them is one edit away
+    // from it, so the checker finds them all.
+    let alternatives = ["at", "ct", "bat", "cot", "hat", "fat", "mat"];
+    let list = a_word_list(&alternatives.iter().map(|word| word.to_string()).collect::<Vec<String>>());
+    let data = a_check(&mut session, sheet, &list);
+    let issues = data["issues"].as_array().expect("the issues are a list");
+    let issue = issues.first().expect("there is an issue for the word");
+    let suggestions = issue["suggestions"].as_array().expect("the suggestions are a list");
+    assert_eq!(
+        suggestions.len(),
+        MAX_SPELLING_SUGGESTIONS,
+        "the suggestions are cut at the bound: {issue:?}"
+    );
+    assert_eq!(issue["suggestions_truncated"], json!(true), "the issue says it stopped: {issue:?}");
+    assert_eq!(data["suggestions_truncated"], json!(true), "the answer says it stopped: {data:?}");
+}
+
+/// A word with **as many suggestions** as the bound allows is not cut,
+/// and the issue says so.
+#[test]
+fn the_suggestions_at_the_bound_are_not_cut() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    a_text(&mut session, sheet, "A1", "cat");
+    let alternatives = ["at", "ct", "bat", "cot", "hat", "fat"];
+    let list = a_word_list(&alternatives.iter().map(|word| word.to_string()).collect::<Vec<String>>());
+    let data = a_check(&mut session, sheet, &list);
+    let issues = data["issues"].as_array().expect("the issues are a list");
+    let issue = issues.first().expect("there is an issue for the word");
+    let suggestions = issue["suggestions"].as_array().expect("the suggestions are a list");
+    assert_eq!(suggestions.len(), MAX_SPELLING_SUGGESTIONS, "every suggestion is offered: {issue:?}");
+    assert_eq!(issue["suggestions_truncated"], json!(false), "nothing was cut: {issue:?}");
+    assert_eq!(data["suggestions_truncated"], json!(false), "nothing was cut: {data:?}");
+}
+
+/// A word **longer** than `MAX_SPELLING_WORD` gets no suggestions at
+/// all, and the issue says so.
+///
+/// The candidates of a word grow with the square of its length, so a
+/// long word is not looked for: a word with no suggestions because none
+/// were looked for is not a word with no alternatives.
+#[test]
+fn a_long_word_gets_no_suggestions_and_the_issue_says_so() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    let word = "a".repeat(MAX_SPELLING_WORD + 1);
+    a_text(&mut session, sheet, "A1", &word);
+    let list = a_word_list(&["the".to_string(), "cat".to_string()]);
+    let data = a_check(&mut session, sheet, &list);
+    let issues = data["issues"].as_array().expect("the issues are a list");
+    let issue = issues.first().expect("there is an issue for the word");
+    let suggestions = issue["suggestions"].as_array().expect("the suggestions are a list");
+    assert!(suggestions.is_empty(), "no suggestions are offered: {issue:?}");
+    assert_eq!(issue["suggestions_omitted"], json!(true), "the issue says they were not made: {issue:?}");
+    assert_eq!(data["suggestions_omitted"], json!(true), "the answer says so: {data:?}");
 }
