@@ -37,7 +37,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 /// The most characters an entry may have.
-pub const MAX_ENTRY: usize = 200;
+pub const MAX_AUTHORITY_ENTRY: usize = 200;
 
 /// The **marks** of a block: the authorities it is marked with.
 pub fn authorities_of(node: &craftkit_sdk::Node) -> Vec<String> {
@@ -123,10 +123,10 @@ commands! {
                     message: "an authority says what it is".to_string(),
                 });
             }
-            if entry.chars().count() > MAX_ENTRY {
+            if entry.chars().count() > MAX_AUTHORITY_ENTRY {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("an entry is at most {MAX_ENTRY} characters long"),
+                    message: format!("an entry is at most {MAX_AUTHORITY_ENTRY} characters long"),
                 });
             }
             // The **mark**: the same entry twice on one block is one mark.

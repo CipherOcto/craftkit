@@ -59,7 +59,7 @@ use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome};
 
 /// The most characters the text may have.
-const MAX_TEXT: usize = 4_000_000;
+const MAX_OTIO_TEXT: usize = 4_000_000;
 
 /// The rate a sequence with **no rate** runs at: the tree's own.
 const DEFAULT_RATE: (i64, i64) = (25, 1);
@@ -392,10 +392,10 @@ commands! {
             });
             let text = serde_json::to_string_pretty(&timeline)
                 .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-            if text.chars().count() > MAX_TEXT {
+            if text.chars().count() > MAX_OTIO_TEXT {
                 return Err(EngineError::Failed {
                     id,
-                    message: format!("the text is more than {MAX_TEXT} characters long, and it is not written"),
+                    message: format!("the text is more than {MAX_OTIO_TEXT} characters long, and it is not written"),
                 });
             }
             Ok(Outcome::new(format!("the sequence is {} characters of OTIO", text.chars().count())).with_data(

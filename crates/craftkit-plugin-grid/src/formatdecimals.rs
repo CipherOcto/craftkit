@@ -36,7 +36,7 @@ use crate::formula::Value;
 const MAX_DECIMALS: usize = 15;
 
 /// The most **characters** a format may hold: the tree's own bound.
-const MAX_FORMAT_CHARS: usize = 255;
+const MAX_DECIMAL_FORMAT_CHARS: usize = 255;
 
 /// The **code** of a format with its decimals moved by `delta`, or
 /// nothing when the format cannot hold them.
@@ -190,10 +190,10 @@ commands! {
                     message: format!("the format `{code}` has no decimals to take away"),
                 })?
             };
-            if moved.chars().count() > MAX_FORMAT_CHARS {
+            if moved.chars().count() > MAX_DECIMAL_FORMAT_CHARS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a format holds {MAX_FORMAT_CHARS} characters or fewer"),
+                    message: format!("a format holds {MAX_DECIMAL_FORMAT_CHARS} characters or fewer"),
                 });
             }
             if crate::format::Format::parse(&moved).is_none() {

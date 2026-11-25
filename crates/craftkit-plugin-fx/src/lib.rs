@@ -165,6 +165,13 @@ pub use stack::{FxLayerArrange, FxLayerList, FxLayerRename};
 pub use switches::{FxCompSwitch, FxLayerSwitch, SwitchesEvaluator};
 pub use time::{FxTimeEnd, FxTimeGet, FxTimeSet, FxTimeStart, FxTimeStep};
 
+/// The **caps** of the battery: the bounds it keeps.
+///
+/// Every cap is **one name and one number**, and every one of them may
+/// be named from outside the battery: a reader who wants to know the
+/// bound of a thing may say the name of it and use the number.
+pub use expressions::MAX_CHARS;
+
 /// The compositing layer.
 ///
 /// It needs the core, and it says so.

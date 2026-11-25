@@ -40,7 +40,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
 
 /// The longest **label** of a table of figures: the tree's.
-pub const MAX_LABEL: usize = 40;
+pub const MAX_FIGURE_LABEL: usize = 40;
 
 /// The label a table of figures has when it is not given one: the
 /// tree's.
@@ -55,7 +55,7 @@ pub fn ident_of(label: &str) -> String {
     let cleaned: String = label
         .chars()
         .filter(|character| !matches!(character, '"' | '\\') && !character.is_control())
-        .take(MAX_LABEL)
+        .take(MAX_FIGURE_LABEL)
         .collect();
     let ident = cleaned.split_whitespace().collect::<Vec<_>>().join("_");
     if ident.is_empty() { DEFAULT_LABEL.to_string() } else { ident }

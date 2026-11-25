@@ -38,10 +38,10 @@ pub const FORMATS: [&str; 4] = ["subtitle", "cea608", "cea708", "teletext"];
 pub const DEFAULT_FORMAT: &str = "subtitle";
 
 /// The most a cue's **text** may have.
-pub const MAX_TEXT: usize = 4096;
+pub const MAX_TRACK_TEXT: usize = 4096;
 
 /// The most **cues** a track may hold.
-pub const MAX_CUES: usize = 10_000;
+pub const MAX_TRACK_CUES: usize = 10_000;
 
 /// The **caption track** a command is about.
 fn the_track<'a>(session: &'a Session, command: &str, track: u64) -> Result<&'a Node, EngineError> {
@@ -187,20 +187,20 @@ commands! {
                 });
             }
             let text = self.text.0.clone();
-            if text.chars().count() > MAX_TEXT {
+            if text.chars().count() > MAX_TRACK_TEXT {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
-                    message: format!("the text of a cue is not longer than {MAX_TEXT} characters"),
+                    message: format!("the text of a cue is not longer than {MAX_TRACK_TEXT} characters"),
                 });
             }
             // The **cues** of the track, and the overlap: the tree's own
             // rule.
             let node = the_track(session, command, track)?;
             let cues = cues_of(node);
-            if cues.len() >= MAX_CUES {
+            if cues.len() >= MAX_TRACK_CUES {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
-                    message: format!("a track holds at most {MAX_CUES} cues"),
+                    message: format!("a track holds at most {MAX_TRACK_CUES} cues"),
                 });
             }
             for (_, held_start, held_end, _, _) in &cues {

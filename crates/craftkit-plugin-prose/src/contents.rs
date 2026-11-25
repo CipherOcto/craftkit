@@ -43,7 +43,7 @@ pub const DEFAULT_LEVELS: u32 = 3;
 pub const MIN_LEVEL: u32 = 1;
 
 /// The **most** a level may be.
-pub const MAX_LEVEL: u32 = 9;
+pub const MAX_CONTENT_LEVEL: u32 = 9;
 
 /// The **entries** of a table of contents: the headings of a document,
 /// in the order they stand.
@@ -56,7 +56,7 @@ pub fn entries_of(document: &craftkit_sdk::Document, document_node: u64, levels:
     for block in node.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {
         let Some(style) = crate::styles::style_of_block(document, block.id) else { continue };
         let Some(level) = crate::outline::effective_level(document, style.id) else { continue };
-        if !(MIN_LEVEL..=MAX_LEVEL).contains(&level) || level > levels {
+        if !(MIN_LEVEL..=MAX_CONTENT_LEVEL).contains(&level) || level > levels {
             continue;
         }
         let text = crate::references::text_of(document, block);
@@ -117,11 +117,11 @@ commands! {
                             message: format!("a level is a whole number: {value} is not one"),
                         });
                     }
-                    if value < f64::from(MIN_LEVEL) || value > f64::from(MAX_LEVEL) {
+                    if value < f64::from(MIN_LEVEL) || value > f64::from(MAX_CONTENT_LEVEL) {
                         return Err(EngineError::Failed {
                             id: id.clone(),
                             message: format!(
-                                "a level is a whole number from {MIN_LEVEL} to {MAX_LEVEL}: {value} is not one"
+                                "a level is a whole number from {MIN_LEVEL} to {MAX_CONTENT_LEVEL}: {value} is not one"
                             ),
                         });
                     }

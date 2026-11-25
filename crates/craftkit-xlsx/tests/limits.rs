@@ -4,7 +4,22 @@
 //! file is read, and a reader that stops must **say** that it stopped.
 //! A limit that no test names is a limit nothing proves holds.
 
-use craftkit_xlsx::read;
+use craftkit_xlsx::{MAX_BAGS, MAX_COLS, MAX_ITERATIONS, MAX_OUTLINE, MAX_ROWS, MAX_SHEETS, read};
+
+/// The **address** of the cell in that column, counted from zero.
+///
+/// A column is named in letters, the way the format names them: `A` is
+/// the first and `XFD` is the last of a sheet.
+fn a_column(column: u64) -> String {
+    let mut name = String::new();
+    let mut left = column + 1;
+    while left > 0 {
+        let rest = left - 1;
+        name.insert(0, (b'A' + (rest % 26) as u8) as char);
+        left = rest / 26;
+    }
+    name
+}
 
 /// A **package** of parts, written by hand.
 ///
@@ -94,10 +109,13 @@ const ONE_SHEET_BOOK: &str =
 /// not a cell of the sheet.
 #[test]
 fn a_cell_beyond_the_rows_is_dropped_and_the_file_is_told() {
+    let row = MAX_ROWS + 1;
     let bytes = a_workbook(
         ONE_SHEET_BOOK,
         ONE_SHEET,
-        r#"<worksheet><sheetData><row r="1048577"><c r="A1048577"><v>1</v></c></row></sheetData></worksheet>"#,
+        &format!(
+            r#"<worksheet><sheetData><row r="{row}"><c r="A{row}"><v>1</v></c></row></sheetData></worksheet>"#
+        ),
     );
     let workbook = read(&bytes).expect("the workbook is read");
     assert!(workbook.sheets[0].cells.is_empty(), "the cell is not there");
@@ -112,10 +130,13 @@ fn a_cell_beyond_the_rows_is_dropped_and_the_file_is_told() {
 /// told.
 #[test]
 fn a_cell_beyond_the_columns_is_dropped_and_the_file_is_told() {
+    let column = a_column(MAX_COLS);
     let bytes = a_workbook(
         ONE_SHEET_BOOK,
         ONE_SHEET,
-        r#"<worksheet><sheetData><row r="1"><c r="XFE1"><v>1</v></c></row></sheetData></worksheet>"#,
+        &format!(
+            r#"<worksheet><sheetData><row r="1"><c r="{column}1"><v>1</v></c></row></sheetData></worksheet>"#
+        ),
     );
     let workbook = read(&bytes).expect("the workbook is read");
     assert!(workbook.sheets[0].cells.is_empty(), "the cell is not there");
@@ -140,7 +161,7 @@ fn a_workbook_with_too_many_sheets_says_so() {
             r#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#.to_string(),
         ),
     ];
-    for index in 0..1025 {
+    for index in 0..(MAX_SHEETS + 1) {
         let id = format!("rId{index}");
         rels.push_str(&format!(
             "<Relationship Id=\"{id}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{index}.xml\"/>"
@@ -157,9 +178,9 @@ fn a_workbook_with_too_many_sheets_says_so() {
     let parts: Vec<(&str, &str)> = parts.iter().map(|(name, text)| (name.as_str(), text.as_str())).collect();
     let bytes = a_package(&parts);
     let workbook = read(&bytes).expect("the workbook is read");
-    assert_eq!(workbook.sheets.len(), 1024, "the sheets that were read: {:?}", workbook.warnings);
+    assert_eq!(workbook.sheets.len(), MAX_SHEETS, "the sheets that were read: {:?}", workbook.warnings);
     assert!(
-        workbook.warnings.iter().any(|warning| warning.contains("more than 1024 sheets")),
+        workbook.warnings.iter().any(|warning| warning.contains(&format!("more than {MAX_SHEETS} sheets"))),
         "the file is told: {:?}",
         workbook.warnings
     );
@@ -172,10 +193,13 @@ fn an_outline_deeper_than_the_tree_is_cut_and_the_file_is_told() {
     let bytes = a_workbook(
         ONE_SHEET_BOOK,
         ONE_SHEET,
-        r#"<worksheet><sheetData><row r="1" outlineLevel="9"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+        &format!(
+            r#"<worksheet><sheetData><row r="1" outlineLevel="{}"><c r="A1"><v>1</v></c></row></sheetData></worksheet>"#,
+            MAX_OUTLINE + 1
+        ),
     );
     let workbook = read(&bytes).expect("the workbook is read");
-    assert_eq!(workbook.sheets[0].rows[0].outline, 7, "the outline is cut at the limit");
+    assert_eq!(workbook.sheets[0].rows[0].outline as u32, MAX_OUTLINE, "the outline is cut at the limit");
     assert!(
         workbook.warnings.iter().any(|warning| warning.contains("outline level")),
         "the file is told: {:?}",
@@ -190,12 +214,15 @@ fn an_outline_deeper_than_the_tree_is_cut_and_the_file_is_told() {
 #[test]
 fn a_file_that_names_too_many_iterations_says_so() {
     let bytes = a_workbook(
-        r#"<workbook><calcPr iterate="1" iterateCount="40000"/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+        &format!(
+            r#"<workbook><calcPr iterate="1" iterateCount="{}"/><sheets><sheet name="One" sheetId="1" r:id="rId1"/></sheets></workbook>"#,
+            MAX_ITERATIONS + 1
+        ),
         ONE_SHEET,
         r#"<worksheet><sheetData/></worksheet>"#,
     );
     let workbook = read(&bytes).expect("the workbook is read");
-    assert_eq!(workbook.calculation.max_iterations, 100, "the default is used");
+    assert_eq!(workbook.calculation.max_iterations, craftkit_xlsx::DEFAULT_ITERATIONS, "the default is used");
     assert!(
         workbook.warnings.iter().any(|warning| warning.contains("iterations")),
         "the file is told: {:?}",
@@ -210,7 +237,7 @@ fn a_file_that_names_too_many_iterations_says_so() {
 #[test]
 fn a_file_with_too_many_bags_says_so() {
     let mut bags = String::from("<FeaturePropertyBags>");
-    for index in 0..100_001 {
+    for index in 0..(MAX_BAGS + 1) {
         bags.push_str(&format!("<bag type=\"B{index}\"/>"));
     }
     bags.push_str("</FeaturePropertyBags>");

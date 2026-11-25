@@ -32,7 +32,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
 /// The longest **label** a caption may have.
-pub const MAX_LABEL: usize = 40;
+pub const MAX_CAPTION_LABEL: usize = 40;
 
 /// The longest **text** a caption may have.
 pub const MAX_CAPTION_TEXT: usize = 1024;
@@ -74,10 +74,10 @@ fn format_of(name: &str, id: &str) -> Result<&'static str, EngineError> {
 /// character, as the tree's.
 pub fn label_of(name: &str, id: &str) -> Result<String, EngineError> {
     let label = name.trim();
-    if label.chars().count() > MAX_LABEL {
+    if label.chars().count() > MAX_CAPTION_LABEL {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("a label is at most {MAX_LABEL} characters long"),
+            message: format!("a label is at most {MAX_CAPTION_LABEL} characters long"),
         });
     }
     if label.chars().any(|character| character == '"' || character == '\\' || character.is_control()) {

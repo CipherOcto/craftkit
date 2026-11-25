@@ -641,13 +641,20 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
     // And the tests of **each crate**: a crate's own test files and the
     // test parts of its own source. A cap is proved beside the crate
     // that keeps it, and the rule asks each crate about its own.
+    //
+    // The rule asks for the name in the **code** of the test and not in
+    // its prose: a cap named in a comment is a name, and a cap named in
+    // the code of a test is a cap the test uses. The code view is the
+    // file with its comments and its strings taken out, and it is the
+    // same length as the file, so a name in it is a name in the test.
+    // §1159.
     let mut own_tests: Vec<(String, String)> = Vec::new();
     for directory in crate_directories(root) {
         let name = directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
         for file in crate::index::rust_files(&directory.join("tests")) {
             let body = std::fs::read_to_string(&file).unwrap_or_default();
             tests.push(body.clone());
-            own_tests.push((name.clone(), body));
+            own_tests.push((name.clone(), crate::tree::code_lines_kept(&body)));
         }
     }
     // And the **unit tests**: the tests that live inside a crate's own
@@ -661,7 +668,7 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             let Ok(text) = std::fs::read_to_string(&file) else { continue };
             let body = crate::tree::tests_of(&file, &text);
             tests.push(body.clone());
-            own_tests.push((name.clone(), body));
+            own_tests.push((name.clone(), crate::tree::code_lines_kept(&body)));
         }
     }
     // **The promise bounds of every crate.** A bound whose name says what
@@ -1852,6 +1859,46 @@ mod tests {
         .expect("the source is written");
         std::fs::write(kit.join("tests").join("thing.rs"), "#[test]\nfn a_test() {}\n")
             .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// A cap that **only a comment** names is caught.
+    ///
+    /// The rule asks for the name in the **code** of a test: a cap named
+    /// in a comment is a name, and a cap named in the code of a test is
+    /// a cap the test uses. §1159.
+    #[test]
+    fn a_cap_that_only_a_comment_names_is_caught() {
+        let root = crate::temp::dir("lists-limit-comment").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(crate_directory.join("src").join("lib.rs"), "pub const MAX_THING: usize = 10;\n")
+            .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "/// The cap `MAX_THING` is the tree's.\n#[test]\nfn a_test() {}\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.iter().any(|problem| problem.contains("MAX_THING")), "{problems:?}");
+    }
+
+    /// And a cap that the **code** of a test names is not caught.
+    #[test]
+    fn a_cap_that_the_code_of_a_test_names_is_not_caught() {
+        let root = crate::temp::dir("lists-limit-code").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(crate_directory.join("src").join("lib.rs"), "pub const MAX_THING: usize = 10;\n")
+            .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let limit = MAX_THING; }\n",
+        )
+        .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert!(problems.is_empty(), "{problems:?}");
     }

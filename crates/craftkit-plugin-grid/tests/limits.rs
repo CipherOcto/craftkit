@@ -4,6 +4,11 @@
 //! outside — a file, a paste, an agent — so it is checked before it is
 //! used, and a limit that no test names is a limit nothing proves holds.
 
+use craftkit_plugin_grid::{
+    MAX_COLS, MAX_COLUMNS, MAX_CONSTRAINTS, MAX_DENOMINATOR_DIGITS, MAX_ERRORS, MAX_FIT_PAGES,
+    MAX_FIXED_DENOMINATOR, MAX_FORMAT_CHARS, MAX_FORMULA_ROWS, MAX_IMPORT_ROWS, MAX_MARGIN, MAX_NODES,
+    MAX_NODES_LP, MAX_ORDER, MAX_PERIOD, MAX_PIVOTS, MAX_SCALE, MAX_SERIAL, MAX_TEXT, MAX_VARS,
+};
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -36,6 +41,21 @@ fn a_workbook(session: &mut Session) -> u64 {
     outcome.data["id"].as_u64().expect("the workbook has an id")
 }
 
+/// The **address** of the cell in that column, counted from zero.
+///
+/// A column is named in letters, the way the format names them: `A` is
+/// the first and `XFD` is the last of a sheet.
+fn a_column(column: usize) -> String {
+    let mut name = String::new();
+    let mut left = column + 1;
+    while left > 0 {
+        let rest = left - 1;
+        name.insert(0, (b'A' + (rest % 26) as u8) as char);
+        left = rest / 26;
+    }
+    name
+}
+
 /// A text with **more rows** than `MAX_IMPORT_ROWS` allows is refused.
 ///
 /// The text of an import comes from outside, and a text of ten thousand
@@ -44,7 +64,7 @@ fn a_workbook(session: &mut Session) -> u64 {
 fn a_text_with_too_many_rows_is_refused() {
     let mut session = session();
     let workbook = a_workbook(&mut session);
-    let text = "a\n".repeat(10_001);
+    let text = "a\n".repeat(MAX_IMPORT_ROWS + 1);
     let error = session
         .execute("grid.import.csv", &json!({ "workbook": workbook, "text": text }))
         .expect_err("that text has too many rows");
@@ -56,7 +76,7 @@ fn a_text_with_too_many_rows_is_refused() {
 fn a_text_with_too_many_columns_is_refused() {
     let mut session = session();
     let workbook = a_workbook(&mut session);
-    let text = format!("a{}", ",a".repeat(257));
+    let text = format!("a{}", ",a".repeat(MAX_COLUMNS));
     let error = session
         .execute("grid.import.csv", &json!({ "workbook": workbook, "text": text }))
         .expect_err("that text has too many columns");
@@ -89,7 +109,10 @@ fn a_cell_beyond_the_columns_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let error = session
-        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "XFE1", "value": 1 }))
+        .execute(
+            "grid.cell.set",
+            &json!({ "sheet": sheet, "cell": format!("{}1", a_column(MAX_COLS as usize)), "value": 1 }),
+        )
         .expect_err("that column is past the sheet");
     assert!(error.to_string().contains("is not a cell"), "{error}");
 }
@@ -100,7 +123,10 @@ fn a_cell_beyond_the_rows_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let error = session
-        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1048577", "value": 1 }))
+        .execute(
+            "grid.cell.set",
+            &json!({ "sheet": sheet, "cell": format!("A{}", MAX_FORMULA_ROWS + 1), "value": 1 }),
+        )
         .expect_err("that row is past the sheet");
     assert!(error.to_string().contains("is not a cell"), "{error}");
 }
@@ -110,7 +136,7 @@ fn a_cell_beyond_the_rows_is_refused() {
 fn a_format_over_the_limit_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    let format = "0".repeat(256);
+    let format = "0".repeat(MAX_FORMAT_CHARS + 1);
     let error = session
         .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": format }))
         .expect_err("that format is too long");
@@ -127,7 +153,7 @@ fn a_fraction_with_too_many_denominator_digits_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let error = session
-        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "# ??/????????" }))
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": format!("# ??/{}", "?".repeat(MAX_DENOMINATOR_DIGITS + 1)) }))
         .expect_err("that denominator has too many digits");
     assert!(error.to_string().contains("is not a format"), "{error}");
 }
@@ -139,7 +165,10 @@ fn a_fraction_with_too_large_a_denominator_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let error = session
-        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "# ?/1000000001" }))
+        .execute(
+            "grid.cell.format",
+            &json!({ "sheet": sheet, "cell": "A1", "format": format!("# ?/{}", MAX_FIXED_DENOMINATOR + 1) }),
+        )
         .expect_err("that denominator is too large");
     assert!(error.to_string().contains("is not a format"), "{error}");
 }
@@ -156,7 +185,7 @@ fn a_fraction_within_the_limits_is_a_fraction() {
         .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": 0.5 }))
         .expect("the value is set");
     session
-        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "# ??/???????" }))
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": format!("# ??/{}", "?".repeat(MAX_DENOMINATOR_DIGITS)) }))
         .expect("the format is kept");
     let outcome =
         session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
@@ -169,7 +198,7 @@ fn a_fraction_within_the_limits_is_a_fraction() {
 fn a_header_over_the_limit_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    let text = "h".repeat(10_001);
+    let text = "h".repeat(MAX_TEXT + 1);
     let error = session
         .execute("grid.print.header", &json!({ "sheet": sheet, "text": text }))
         .expect_err("that header is too long");
@@ -182,7 +211,7 @@ fn a_scale_over_the_limit_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let error = session
-        .execute("grid.print.scale", &json!({ "sheet": sheet, "percent": 401.0 }))
+        .execute("grid.print.scale", &json!({ "sheet": sheet, "percent": MAX_SCALE + 1.0 }))
         .expect_err("that scale is too big");
     assert!(error.to_string().contains("percent"), "{error}");
 }
@@ -193,7 +222,10 @@ fn a_fit_over_the_limit_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let error = session
-        .execute("grid.print.fit", &json!({ "sheet": sheet, "wide": 1001.0, "tall": 1.0 }))
+        .execute(
+            "grid.print.fit",
+            &json!({ "sheet": sheet, "wide": MAX_FIT_PAGES as f64 + 1.0, "tall": 1.0 }),
+        )
         .expect_err("that fit is too many pages");
     assert!(error.to_string().contains("pages"), "{error}");
 }
@@ -204,7 +236,7 @@ fn a_margin_over_the_limit_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let error = session
-        .execute("grid.print.margins", &json!({ "sheet": sheet, "left": 21.0 }))
+        .execute("grid.print.margins", &json!({ "sheet": sheet, "left": MAX_MARGIN + 1.0 }))
         .expect_err("that margin is too big");
     assert!(error.to_string().contains("margin"), "{error}");
 }
@@ -216,7 +248,10 @@ fn a_trendline_order_over_the_limit_is_refused() {
     let sheet = a_sheet(&mut session);
     let chart = a_chart(&mut session, sheet);
     let error = session
-        .execute("grid.chart.trendline", &json!({ "chart": chart, "kind": "polynomial", "order": 7.0 }))
+        .execute(
+            "grid.chart.trendline",
+            &json!({ "chart": chart, "kind": "polynomial", "order": MAX_ORDER as f64 + 1.0 }),
+        )
         .expect_err("that order is too deep");
     assert!(error.to_string().contains("order"), "{error}");
 }
@@ -230,7 +265,7 @@ fn a_trendline_period_over_the_limit_is_refused() {
     let error = session
         .execute(
             "grid.chart.trendline",
-            &json!({ "chart": chart, "kind": "moving_average", "period": 256.0 }),
+            &json!({ "chart": chart, "kind": "moving_average", "period": MAX_PERIOD as f64 + 1.0 }),
         )
         .expect_err("that period is too long");
     assert!(error.to_string().contains("period"), "{error}");
@@ -240,7 +275,7 @@ fn a_trendline_period_over_the_limit_is_refused() {
 #[test]
 fn a_program_with_too_many_variables_is_refused() {
     let mut session = session();
-    let objective = json!(vec![1.0; 201]);
+    let objective = json!(vec![1.0; MAX_VARS + 1]);
     let error = session
         .execute("grid.solver.solve", &json!({ "objective": objective }))
         .expect_err("that program has too many variables");
@@ -252,7 +287,7 @@ fn a_program_with_too_many_variables_is_refused() {
 fn a_program_with_too_many_constraints_is_refused() {
     let mut session = session();
     let row = json!({ "coefficients": [1.0], "sense": "<=", "rhs": 1.0 });
-    let constraints = json!(vec![row; 1001]);
+    let constraints = json!(vec![row; MAX_CONSTRAINTS + 1]);
     let error = session
         .execute("grid.solver.solve", &json!({ "objective": [1.0], "constraints": constraints }))
         .expect_err("that program has too many constraints");
@@ -264,7 +299,7 @@ fn a_program_with_too_many_constraints_is_refused() {
 fn a_solver_budget_over_the_limit_is_refused() {
     let mut session = session();
     let error = session
-        .execute("grid.solver.solve", &json!({ "objective": [1.0], "budget": 2_000_001.0 }))
+        .execute("grid.solver.solve", &json!({ "objective": [1.0], "budget": MAX_PIVOTS as f64 + 1.0 }))
         .expect_err("that budget is too many pivots");
     assert!(error.to_string().contains("pivots"), "{error}");
 }
@@ -276,8 +311,9 @@ fn a_solver_budget_over_the_limit_is_refused() {
 #[test]
 fn a_solver_node_budget_over_the_limit_is_refused() {
     let mut session = session();
+    assert_eq!(MAX_NODES, MAX_NODES_LP, "the two names are one number");
     let error = session
-        .execute("grid.solver.solve", &json!({ "objective": [1.0], "max_nodes": 10_001.0 }))
+        .execute("grid.solver.solve", &json!({ "objective": [1.0], "max_nodes": MAX_NODES as f64 + 1.0 }))
         .expect_err("that budget is too many nodes");
     assert!(error.to_string().contains("nodes"), "{error}");
 }
@@ -291,7 +327,10 @@ fn a_serial_beyond_the_calendar_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let outcome = session
-        .execute("grid.formula.evaluate", &json!({ "sheet": sheet, "formula": "=YEAR(2958466)" }))
+        .execute(
+            "grid.formula.evaluate",
+            &json!({ "sheet": sheet, "formula": format!("=YEAR({})", MAX_SERIAL + 1.0) }),
+        )
         .expect("the formula is worked out");
     assert_eq!(outcome.data["type"], "error", "{outcome:?}");
     assert_eq!(outcome.data["value"]["error"], json!("#NUM!"), "{outcome:?}");
@@ -311,7 +350,7 @@ fn a_sheet_with_too_many_errors_is_refused() {
     session
         .execute(
             "grid.range.fill",
-            &json!({ "sheet": sheet, "from": "A1", "to": "A1:A10001", "mode": "copy" }),
+            &json!({ "sheet": sheet, "from": "A1", "to": format!("A1:A{}", MAX_ERRORS + 1), "mode": "copy" }),
         )
         .expect("the formula is filled down");
     let error = session

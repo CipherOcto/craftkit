@@ -198,6 +198,23 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The rule asks for the name in the code** (§1159): a cap named in a
+  comment is a name, and a cap named in the **code** of a test is a cap
+  the test uses. Sixty-nine of the tree's caps were named in prose and
+  in no code, because the batteries' caps lived in private modules and
+  a test could not use one: the test said "a title over `MAX_PART` is
+  refused" and typed 1 025 where the bound was 1 024, so a change of
+  the bound would have left the test proving nothing. The batteries
+  publish their caps now, the tests use them, and the rule reads the
+  code view of the tests.
+- **Five names that were two caps each are one cap each** (§1159): the
+  prose battery had a `MAX_LABEL` for its captions and one for its
+  figures, an `MAX_ENTRY` for its authorities and one for its index, and
+  a `MAX_LEVEL` for its contents and one for its outline; the film
+  battery had a `MAX_TEXT` and a `MAX_CUES` twice each. They are named
+  apart now, and the tree keeps **one hundred and eleven** caps under
+  one hundred and eleven names — the count of §1156 was the count of
+  *names*, and five of them were two caps each.
 - **The rule holds every crate to its own caps** (§1158): the rule of
   §1141 held the **kit's** limits to a test anywhere in the tree, and
   §1145–§1156 brought every other crate's caps under a test by hand.

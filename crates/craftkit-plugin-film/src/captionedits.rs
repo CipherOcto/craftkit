@@ -32,7 +32,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
 /// The most characters the **text** of a cue may have.
-const MAX_TEXT: usize = 4096;
+const MAX_EDIT_TEXT: usize = 4096;
 
 /// The **cue** a command is about, and the **track** it is on.
 fn the_caption(session: &Session, command: &str, caption: u64) -> Result<(Node, u64), EngineError> {
@@ -118,11 +118,11 @@ commands! {
             // The **text**: the line breaks of the tree are line breaks.
             let text = self.text.as_ref().map(|text| text.0.replace("\r\n", "\n"));
             if let Some(text) = text.as_ref()
-                && text.chars().count() > MAX_TEXT
+                && text.chars().count() > MAX_EDIT_TEXT
             {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
-                    message: format!("the text of a cue is not longer than {MAX_TEXT} characters"),
+                    message: format!("the text of a cue is not longer than {MAX_EDIT_TEXT} characters"),
                 });
             }
             // The **speaker**: a name, and an empty name takes it away.

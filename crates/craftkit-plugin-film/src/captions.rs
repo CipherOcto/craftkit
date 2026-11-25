@@ -763,10 +763,10 @@ pub const WRITABLE: [&str; 7] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"
 pub const IMPORTED: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"];
 
 /// The most **cues** a caption file may hold.
-pub const MAX_CUES: usize = 10_000;
+pub const MAX_CAPTION_CUES: usize = 10_000;
 
 /// The most a **cue's text** may have.
-pub const MAX_TEXT: usize = 4096;
+pub const MAX_CAPTION_TEXT: usize = 4096;
 
 /// The most a cue's **time** may be, in milliseconds: a year.
 pub const MAX_MILLISECONDS: i64 = 31_536_000_000;
@@ -780,10 +780,13 @@ fn cues_from(value: &Json, id: &str) -> Result<Vec<Cue>, EngineError> {
     let Some(list) = value.as_array() else {
         return Err(EngineError::Failed { id: id.to_string(), message: "the cues are a list".to_string() });
     };
-    if list.len() > MAX_CUES {
+    if list.len() > MAX_CAPTION_CUES {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("there are {} cues, and the most there may be is {MAX_CUES}", list.len()),
+            message: format!(
+                "there are {} cues, and the most there may be is {MAX_CAPTION_CUES}",
+                list.len()
+            ),
         });
     }
     let mut cues = Vec::with_capacity(list.len());
@@ -825,10 +828,12 @@ fn cues_from(value: &Json, id: &str) -> Result<Vec<Cue>, EngineError> {
                         message: format!("the text of the cue {at} is not text"),
                     });
                 };
-                if text.chars().count() > MAX_TEXT {
+                if text.chars().count() > MAX_CAPTION_TEXT {
                     return Err(EngineError::Failed {
                         id: id.to_string(),
-                        message: format!("the text of the cue {at} is longer than {MAX_TEXT} characters"),
+                        message: format!(
+                            "the text of the cue {at} is longer than {MAX_CAPTION_TEXT} characters"
+                        ),
                     });
                 }
                 text.to_string()
@@ -873,10 +878,13 @@ fn blocks_from(value: &Json, id: &str) -> Result<Vec<String>, EngineError> {
     let Some(list) = value.as_array() else {
         return Err(EngineError::Failed { id: id.to_string(), message: "the blocks are a list".to_string() });
     };
-    if list.len() > MAX_CUES {
+    if list.len() > MAX_CAPTION_CUES {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("there are {} blocks, and the most there may be is {MAX_CUES}", list.len()),
+            message: format!(
+                "there are {} blocks, and the most there may be is {MAX_CAPTION_CUES}",
+                list.len()
+            ),
         });
     }
     let mut blocks = Vec::with_capacity(list.len());
@@ -887,10 +895,10 @@ fn blocks_from(value: &Json, id: &str) -> Result<Vec<String>, EngineError> {
                 message: format!("the block {at} is not text"),
             });
         };
-        if block.chars().count() > MAX_TEXT {
+        if block.chars().count() > MAX_CAPTION_TEXT {
             return Err(EngineError::Failed {
                 id: id.to_string(),
-                message: format!("the block {at} is longer than {MAX_TEXT} characters"),
+                message: format!("the block {at} is longer than {MAX_CAPTION_TEXT} characters"),
             });
         }
         blocks.push(block.to_string());

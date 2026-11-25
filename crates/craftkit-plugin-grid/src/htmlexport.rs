@@ -40,7 +40,7 @@ use crate::formula::{AlignH, Area, CellRef, Cells, Value};
 ///
 /// A page of endless rows is not a page, and the tree **refuses** it
 /// rather than cutting it short.
-const MAX_FORMULA_ROWS: u64 = 100_001;
+const MAX_EXPORT_ROWS: u64 = 100_001;
 
 /// The **most** cells a page may hold: the tree's own bound.
 ///
@@ -107,11 +107,11 @@ commands! {
             // The **bounds**: a page of endless rows is not a page.
             let rows = u64::from(area.end.row - area.start.row + 1);
             let columns = u64::from(area.end.col - area.start.col + 1);
-            if rows > MAX_FORMULA_ROWS {
+            if rows > MAX_EXPORT_ROWS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "the sheet is too tall for a page: {rows} rows, at most {MAX_FORMULA_ROWS}"
+                        "the sheet is too tall for a page: {rows} rows, at most {MAX_EXPORT_ROWS}"
                     ),
                 });
             }

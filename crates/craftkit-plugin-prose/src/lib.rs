@@ -214,6 +214,33 @@ pub use tables::{
 pub use theme::ProseDocumentTheme;
 pub use titles::ProseDocumentTitle;
 
+/// The **caps** of the battery: the bounds it keeps.
+///
+/// Every cap is **one name and one number**, and every one of them may
+/// be named from outside the battery: a reader who wants to know the
+/// bound of a thing may say the name of it and use the number.
+pub use authorities::MAX_AUTHORITY_ENTRY;
+pub use bookmarks::MAX_BOOKMARK_NAME;
+pub use captions::{MAX_CAPTION_LABEL, MAX_CAPTION_TEXT};
+pub use columns::{MAX_COLUMN_SPACE, MAX_COLUMNS};
+pub use contents::MAX_CONTENT_LEVEL;
+pub use endnotes::MAX_ENDNOTE_TEXT;
+pub use equations::{MAX_DEPTH, MAX_EQUATION_TEXT, MAX_PARTS};
+pub use fields::MAX_CODE;
+pub use figures::MAX_FIGURE_LABEL;
+pub use footnotes::MAX_FOOTNOTE_TEXT;
+pub use index::MAX_INDEX_ENTRY;
+pub use links::MAX_TARGET;
+pub use numbering::MAX_LEVELS;
+pub use outline::MAX_OUTLINE_LEVEL;
+pub use page::MAX_POINTS;
+pub use pagenumbers::MAX_START;
+pub use paragraph::{MAX_INDENT, MAX_LINE_SPACING, MAX_PARAGRAPH_SPACE};
+pub use properties::{MAX_PROPERTY_NAME, MAX_VALUE};
+pub use revisions::{MAX_DATE, MAX_REVISION_AUTHOR};
+pub use sources::{MAX_PART, MAX_SOURCE_AUTHOR, MAX_TAG, MAX_YEAR};
+pub use styles::MAX_CHAIN;
+
 /// The prose layer.
 ///
 /// It needs the core, and it says so.

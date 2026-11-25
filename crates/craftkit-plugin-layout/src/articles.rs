@@ -33,7 +33,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
 
 /// The most an article's **name** may have.
-const MAX_NAME: usize = 256;
+const MAX_ARTICLE_NAME: usize = 256;
 
 /// The most **items** an article may name, and the most a command may
 /// be given.
@@ -201,10 +201,10 @@ commands! {
                     });
                 }
                 Some(name) => {
-                    if name.chars().count() > MAX_NAME {
+                    if name.chars().count() > MAX_ARTICLE_NAME {
                         return Err(EngineError::Failed {
                             id: command.to_string(),
-                            message: format!("the name of an article is not longer than {MAX_NAME} characters"),
+                            message: format!("the name of an article is not longer than {MAX_ARTICLE_NAME} characters"),
                         });
                     }
                     if articles.iter().any(|article| {
@@ -367,10 +367,10 @@ commands! {
                         message: "an article has a name".to_string(),
                     });
                 }
-                if name.chars().count() > MAX_NAME {
+                if name.chars().count() > MAX_ARTICLE_NAME {
                     return Err(EngineError::Failed {
                         id: command.to_string(),
-                        message: format!("the name of an article is not longer than {MAX_NAME} characters"),
+                        message: format!("the name of an article is not longer than {MAX_ARTICLE_NAME} characters"),
                     });
                 }
             }

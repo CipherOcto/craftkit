@@ -555,7 +555,7 @@ pub use filters::{GridFilterClear, GridFilterGroupsSet, GridFilterRows, GridFilt
 pub use finding::GridFind;
 use flash::GridFlashFill;
 pub use font::{GridCellFont, GridCellFontBold, GridCellFontItalic, GridCellFontStrike};
-use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
+use format::{DateStyle, Format, TimeStyle};
 pub use formatdecimals::GridCellFormatDecimals;
 use formula::{Book, Cell, CellRef, Cells, Value};
 pub use formulavalues::GridFormulaValues;
@@ -619,6 +619,23 @@ pub use validation::{GridValidationCheck, GridValidationClear, GridValidationSet
 pub use view::{GridSheetFreeze, GridSheetFreezeDelete, GridSheetView, GridSheetZoom};
 pub use whatifs::GridWhatif;
 pub use workbookreading::GridWorkbookGet;
+
+/// The **caps** of the battery: the bounds it keeps.
+///
+/// The names are the tree's own, and they are published so that a test
+/// beside the battery may name them **in code**: the proof of a bound
+/// belongs beside the bound.
+pub use dates::MAX_SERIAL;
+pub use errors::MAX_ERRORS;
+pub use format::MAX_FORMAT_CHARS;
+pub use formula::{MAX_COLS, MAX_FORMULA_ROWS};
+pub use fractions::{MAX_DENOMINATOR_DIGITS, MAX_FIXED_DENOMINATOR};
+pub use headers::MAX_TEXT;
+pub use importing::{MAX_COLUMNS, MAX_IMPORT_ROWS};
+pub use printing::MAX_MARGIN;
+pub use scaling::{MAX_FIT_PAGES, MAX_SCALE};
+pub use solver::{MAX_CONSTRAINTS, MAX_NODES, MAX_NODES_LP, MAX_PIVOTS, MAX_VARS};
+pub use trendlines::{MAX_ORDER, MAX_PERIOD};
 
 /// The grid layer.
 ///

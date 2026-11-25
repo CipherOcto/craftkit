@@ -22,7 +22,7 @@
 //!   text that is deep cannot make the reader deep in the stack.
 
 /// The most elements may be **deep**.
-const MAX_DEPTH: usize = 64;
+const MAX_XML_DEPTH: usize = 64;
 
 /// The most characters a text may have.
 const MAX_CHARS: usize = 4_000_000;
@@ -228,8 +228,8 @@ fn attributes_of(chars: &[char], at: &mut usize) -> Result<(Vec<(String, String)
 
 /// The **element** at that place.
 fn element_of(chars: &[char], at: &mut usize, depth: usize) -> Result<Element, String> {
-    if depth > MAX_DEPTH {
-        return Err(format!("the text is more than {MAX_DEPTH} elements deep"));
+    if depth > MAX_XML_DEPTH {
+        return Err(format!("the text is more than {MAX_XML_DEPTH} elements deep"));
     }
     if chars.get(*at) != Some(&'<') {
         return Err("an element starts with `<`".to_string());

@@ -5,6 +5,7 @@
 //! checked before they are used, and a limit that no test names is a
 //! limit nothing proves holds.
 
+use craftkit_plugin_fx::MAX_CHARS;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -51,12 +52,14 @@ fn a_layer(session: &mut Session) -> u64 {
 fn an_expression_over_the_limit_is_refused() {
     let mut session = session();
     let layer = a_layer(&mut session);
-    let expression = "1".repeat(1025);
+    let expression = "1".repeat(MAX_CHARS + 1);
     let error = session
         .execute(
             "fx.prop.expression",
             &json!({ "layer": layer, "path": "position", "expression": expression }),
         )
         .expect_err("that expression is too long");
-    assert!(error.to_string().contains("at most"), "{error}");
+    let message = error.to_string();
+    assert!(message.contains("at most"), "{message}");
+    assert!(message.contains(&MAX_CHARS.to_string()), "the refusal names the bound: {message}");
 }

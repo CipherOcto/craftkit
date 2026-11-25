@@ -5,6 +5,7 @@
 //! checked before they are used, and a limit that no test names is a
 //! limit nothing proves holds.
 
+use craftkit_plugin_layout::{MAX_CHAIN, MAX_ITEMS, MAX_NAME, MAX_TARGET, MAX_WEIGHT};
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -58,11 +59,13 @@ fn a_document_with_an_item(session: &mut Session) -> (u64, u64) {
 #[test]
 fn a_group_with_too_many_items_is_refused() {
     let mut session = session();
-    let items: Vec<u64> = (0..=1000).collect();
+    let items: Vec<u64> = (0..=MAX_ITEMS as u64).collect();
     let error = session
         .execute("layout.item.group", &json!({ "items": items }))
         .expect_err("there are too many items");
-    assert!(error.to_string().contains("the most there may be"), "{error}");
+    let message = error.to_string();
+    assert!(message.contains("the most there may be"), "{message}");
+    assert!(message.contains(&MAX_ITEMS.to_string()), "the refusal names the bound: {message}");
 }
 
 /// A stroke **weight** over `MAX_WEIGHT` is refused.
@@ -74,9 +77,11 @@ fn a_stroke_weight_over_the_limit_is_refused() {
     let mut session = session();
     let (_, item) = a_document_with_an_item(&mut session);
     let error = session
-        .execute("layout.item.stroke", &json!({ "item": item, "weight": 1001.0 }))
+        .execute("layout.item.stroke", &json!({ "item": item, "weight": MAX_WEIGHT + 1.0 }))
         .expect_err("that weight is too heavy");
-    assert!(error.to_string().contains("is not a weight"), "{error}");
+    let message = error.to_string();
+    assert!(message.contains("is not a weight"), "{message}");
+    assert!(message.contains(&MAX_WEIGHT.to_string()), "the refusal names the bound: {message}");
 }
 
 /// A bookmark **name** over `MAX_NAME` is refused.
@@ -84,11 +89,13 @@ fn a_stroke_weight_over_the_limit_is_refused() {
 fn a_bookmark_name_over_the_limit_is_refused() {
     let mut session = session();
     let (document, _) = a_document_with_an_item(&mut session);
-    let name = "n".repeat(257);
+    let name = "n".repeat(MAX_NAME + 1);
     let error = session
         .execute("layout.bookmark.add", &json!({ "document": document, "name": name }))
         .expect_err("that name is too long");
-    assert!(error.to_string().contains("longer than"), "{error}");
+    let message = error.to_string();
+    assert!(message.contains("longer than"), "{message}");
+    assert!(message.contains(&MAX_NAME.to_string()), "the refusal names the bound: {message}");
 }
 
 /// A link **target** over `MAX_TARGET` is refused.
@@ -96,11 +103,13 @@ fn a_bookmark_name_over_the_limit_is_refused() {
 fn a_link_target_over_the_limit_is_refused() {
     let mut session = session();
     let (_, item) = a_document_with_an_item(&mut session);
-    let target = format!("https://example.com/{}", "a".repeat(2049));
+    let target = format!("https://example.com/{}", "a".repeat(MAX_TARGET));
     let error = session
         .execute("layout.item.link", &json!({ "item": item, "target": target }))
         .expect_err("that target is too long");
-    assert!(error.to_string().contains("at most"), "{error}");
+    let message = error.to_string();
+    assert!(message.contains("at most"), "{message}");
+    assert!(message.contains(&MAX_TARGET.to_string()), "the refusal names the bound: {message}");
 }
 
 /// A **document**, and its id.
@@ -155,9 +164,10 @@ fn a_chain_of_styles_stops_at_the_limit() {
         .expect("the deepest style is filled");
     let said = said_of(&mut session, last);
     assert!(said["fill"].is_null(), "the fill beyond the limit is not inherited: {said:?}");
-    // The base the tree reports is the thirty-second one up: the walk
-    // reached thirty-two bases and no more.
-    assert_eq!(said["base"], json!(styles[7]), "the chain stops at the limit: {said:?}");
+    // The base the tree reports is the last one the walk reached: the
+    // walk went up as many bases as the cap allows, and no more.
+    let reached = styles[styles.len() - 1 - MAX_CHAIN];
+    assert_eq!(said["base"], json!(reached), "the chain stops at the limit: {said:?}");
     assert_ne!(said["base"], json!(deepest), "and the deepest base is not in it: {said:?}");
 }
 

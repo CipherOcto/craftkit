@@ -328,6 +328,14 @@ pub use tracks::{
 pub use transitions::{FilmTransitionAdd, FilmTransitionRemove, FilmTransitionSet, TransitionKind};
 pub use trim::FilmClipTrim;
 
+/// The **caps** of the battery: the bounds it keeps.
+///
+/// Every cap is **one name and one number**, and every one of them may
+/// be named from outside the battery: a reader who wants to know the
+/// bound of a thing may say the name of it and use the number.
+pub use captions::{MAX_CAPTION_CUES, MAX_CAPTION_TEXT, MAX_MILLISECONDS};
+pub use captiontracks::{MAX_TRACK_CUES, MAX_TRACK_TEXT};
+
 /// The film layer.
 ///
 /// It needs the core, and it says so.

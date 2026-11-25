@@ -32,7 +32,7 @@ use crate::styles::chain_of;
 pub const MIN_LEVEL: u32 = 1;
 
 /// The **most** a level may be.
-pub const MAX_LEVEL: u32 = 9;
+pub const MAX_OUTLINE_LEVEL: u32 = 9;
 
 /// The **level** a style carries of its own.
 pub fn level_of(style: &Node) -> Option<u32> {
@@ -96,11 +96,11 @@ commands! {
                             message: format!("a level is a whole number: {value} is not one"),
                         });
                     }
-                    if value < f64::from(MIN_LEVEL) || value > f64::from(MAX_LEVEL) {
+                    if value < f64::from(MIN_LEVEL) || value > f64::from(MAX_OUTLINE_LEVEL) {
                         return Err(EngineError::Failed {
                             id: id.clone(),
                             message: format!(
-                                "a level is a whole number from {MIN_LEVEL} to {MAX_LEVEL}: {value} is not one"
+                                "a level is a whole number from {MIN_LEVEL} to {MAX_OUTLINE_LEVEL}: {value} is not one"
                             ),
                         });
                     }

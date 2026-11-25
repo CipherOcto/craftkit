@@ -4604,9 +4604,10 @@ so.
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
 | **the batteries and the libraries name their caps** | **built.** Nine crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and six caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and eleven caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
+| **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73101,10 +73102,11 @@ This arc names all nine by a test beside each crate.
 
 ## 1156. The last caps are named, and the backlog is closed
 
-The tree keeps **one hundred and six** published caps. After §1156
-every one of them is named by a test: the two of the fixtures and the
-two of the kit itself are the last, and the backlog of named caps is
-**empty**.
+The tree keeps **one hundred and eleven** published caps — one hundred
+and six names at the time, and five of those names were two caps each.
+After §1156 every one of them is named by a test: the two of the
+fixtures and the two of the kit itself are the last, and the backlog of
+named caps is **empty**.
 
 ### What was built
 
@@ -73135,9 +73137,8 @@ two of the kit itself are the last, and the backlog of named caps is
 
 ### What it cost
 
-- **Four tests** — two in the fixtures and two in the kit — **two**
-  public modules, **one** public door for the vst3 fixture, and the
-  claim row above.
+- **Four tests** — two in the fixtures and two in the kit — **one**
+  public door for the vst3 fixture, and the claim row above.
 
 ### What it does not settle
 
@@ -73241,3 +73242,64 @@ that work itself.
   panel, a tool or an evaluator is proved by a test **anywhere**: a
   battery's command may be run by the studio's test, and that is the
   proof the tree wants.
+
+## 1159. The batteries publish their caps, and the rule asks for code
+
+§1158 held every crate to its own caps, and the rule was about the
+**name**: a cap named in a comment was a cap the rule held to be named.
+This arc makes the name mean something — a cap the test **uses** — and
+it takes the batteries' caps out of their private modules so that a
+test can use them at all.
+
+### What was built
+
+- **The batteries publish their caps.** The caps of the prose, film,
+  fx, layout, grid and xlsx crates lived in private modules, so the
+  battery's own tests could only mention a cap in a comment: **sixty-
+  nine** of the tree's caps were named in prose and in no code. Every
+  cap of those batteries is now published at the crate's root, and
+  every one of their tests **uses** the bound it proves: a test builds
+  its input from the cap (`MAX_PART + 1` characters) and asserts the
+  exact bound the tree refuses.
+- **The rule asks for the name in the code.** A cap named in a comment
+  is a name; a cap named in the **code** of a test is a cap the test
+  uses. The rule now reads the code view of the tests — the file with
+  its comments and its strings taken out — and holds a crate to a cap
+  that its own tests use.
+- **Five names that were two caps each are one cap each.** The prose
+  battery had a `MAX_LABEL` for its captions and a `MAX_LABEL` for its
+  figures, an `MAX_ENTRY` for its authorities and an `MAX_ENTRY` for
+  its index, and a `MAX_LEVEL` for its contents and a `MAX_LEVEL` for
+  its outline; the film battery had a `MAX_TEXT` and a `MAX_CUES` twice
+  each. They are named apart now (`MAX_CAPTION_LABEL` and
+  `MAX_FIGURE_LABEL`, and the rest), and the tree keeps **one hundred
+  and eleven** caps under one hundred and eleven names.
+
+### What the port found
+
+- **A cap that a comment names is a cap nothing uses.** The rule could
+  not tell a test that *proves* a bound from a test that *mentions* it,
+  and sixty-nine of the tree's caps were in the second kind: the test
+  said "a title over `MAX_PART` is refused" and typed 1 025 where the
+  bound was 1 024, so a change of the bound would have left the test
+  proving nothing.
+- **The private caps were private twice.** A cap in a private module is
+  textually public and practically private: the battery could not
+  publish it without publishing the module, and the module holds the
+  battery's own business. The cap and nothing else is published now.
+
+### What it cost
+
+- **Six batteries' caps published**, **sixty-nine tests rewritten
+  against the bound they prove**, **eleven caps renamed**, **one**
+  private cap renamed, **two** tests of the rule, and the claim row
+  above.
+
+### What it does not settle
+
+- **A cap that a test uses is not a cap the tree has proved.** The test
+  uses the bound and the tree refuses at it: that the bound is the
+  *right* number is still the tree's own judgement.
+- **The rule reads the code of the tests, and a test may name a cap in
+  a string.** A cap that a test writes into a message is a name in a
+  string and not in the code, and the rule does not count it.

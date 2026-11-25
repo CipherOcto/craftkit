@@ -34,7 +34,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Text};
 
 /// The most characters an entry may have.
-pub const MAX_ENTRY: usize = 200;
+pub const MAX_INDEX_ENTRY: usize = 200;
 
 /// The **marks** of a block: the entries it is marked with.
 pub fn marks_of(node: &craftkit_sdk::Node) -> Vec<Json> {
@@ -210,10 +210,10 @@ commands! {
             let entry = self.entry.0.trim().to_string();
             let subentry =
                 self.subentry.as_ref().map(|subentry| subentry.0.trim().to_string()).unwrap_or_default();
-            if entry.chars().count() > MAX_ENTRY {
+            if entry.chars().count() > MAX_INDEX_ENTRY {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("an entry is at most {MAX_ENTRY} characters long"),
+                    message: format!("an entry is at most {MAX_INDEX_ENTRY} characters long"),
                 });
             }
             // An entry that says **nothing** takes the marks away.

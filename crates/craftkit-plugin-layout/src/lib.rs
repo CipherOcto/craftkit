@@ -121,6 +121,17 @@ pub use shadows::LayoutItemShadow;
 pub use sides::LayoutPageSide;
 pub use styles::{LayoutItemStyle, LayoutStyleAdd, LayoutStyleFill, LayoutStyleStroke};
 
+/// The **caps** of the battery: the bounds it keeps.
+///
+/// Every cap is **one name and one number**, and every one of them may
+/// be named from outside the battery: a reader who wants to know the
+/// bound of a thing may say the name of it and use the number.
+pub use bookmarks::MAX_NAME;
+pub use grouping::MAX_ITEMS;
+pub use links::MAX_TARGET;
+pub use paint::MAX_WEIGHT;
+pub use styles::MAX_CHAIN;
+
 /// The layout layer.
 ///
 /// It needs the core, and it says so.
