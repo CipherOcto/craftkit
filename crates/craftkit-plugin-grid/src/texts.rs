@@ -59,11 +59,11 @@ pub const NAMES: &[&str] = &[
 ///
 /// The tree's bound: thirty-two thousand seven hundred and sixty-seven,
 /// and the tree refuses a text that is longer.
-const MAX_TEXT: usize = 32_767;
+const MAX_CELL_TEXT: usize = 32_767;
 
 /// The text of a result, with the tree's bound on it.
 fn text_val(text: String) -> Value {
-    if text.len() > MAX_TEXT && text.chars().count() > MAX_TEXT {
+    if text.len() > MAX_CELL_TEXT && text.chars().count() > MAX_CELL_TEXT {
         return Value::Error("#VALUE!".to_string());
     }
     Value::Text(text)

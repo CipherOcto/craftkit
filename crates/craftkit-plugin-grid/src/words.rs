@@ -44,7 +44,7 @@ pub const NAMES: &[&str] = &[
 ];
 
 /// The most characters a text may hold: the tree's bound.
-const MAX_TEXT: usize = 32_767;
+const MAX_WORDS_TEXT: usize = 32_767;
 
 /// A character written as its **half-width** form.
 ///
@@ -326,7 +326,7 @@ impl Book {
                 }
                 let times = times.trunc();
                 let total = text.chars().count() as f64 * times;
-                if total > MAX_TEXT as f64 {
+                if total > MAX_WORDS_TEXT as f64 {
                     return Value::Error("#VALUE!".to_string());
                 }
                 Value::Text(text.repeat(times as usize))

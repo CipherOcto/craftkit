@@ -198,6 +198,29 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The grid battery's caps are named; the other batteries' are not**
+  (§1149): the grid battery publishes twenty cap names and every one of
+  them is named by a test beside the battery. The caps a battery keeps
+  **inside itself** are not the tree's rules: the grid battery keeps
+  sixty-eight private caps and the prose battery five, and the tree's
+  reader only sees the published ones. After this arc **thirty-two**
+  published caps in **seventeen** crates are named by no test — six in
+  the xlsx crate, five in the audio crate, three each in the midi and
+  zip crates, two each in the kit and the xml crate, and one in each of
+  ten more.
+- **An address past the sheet was a cell** (§1149): a sheet is sixteen
+  thousand columns wide and a million rows tall, and the reader of an
+  address did not check either, so `XFE1` and `A1048577` were cells of
+  a sheet that has neither. The address is refused now. The caps of the
+  sheet's size are read in the **formula** path, and the two paths did
+  not agree.
+- **Two docs of the grid battery said the tree clamps** (§1149): the two
+  caps of a fraction's denominator said "the tree clamps to it", and the
+  tree refuses — a denominator with too many digits is not a fraction,
+  and a code that is not a fraction is not a format. The docs say what
+  the tree does now. A cap that is read only on one path is a cap with
+  two doors: the digits of a **free** denominator are bounded by one cap
+  and the value of a **fixed** one by the other.
 - **The prose battery's caps are named; the other batteries' are not**
   (§1148): the prose battery keeps twenty-nine cap names and every one
   of them is named by a test beside the battery. The outer gate's rule
@@ -231,7 +254,12 @@ These are the README's own honest notes, and they are still true of the tree:
   caps only, so a private cap that shares a name with a public one is
   invisible to it: the editing battery's `MAX_INDENT` was 1 584 points
   and the paragraph's was 10 000, and the private one is
-  `MAX_EDIT_INDENT` now (§1148).
+  `MAX_EDIT_INDENT` now (§1148). The same happened in the grid
+  battery, whose private caps for the text of a cell and of a word were
+  both `MAX_TEXT` beside a published `MAX_TEXT` of ten thousand: they
+  are `MAX_CELL_TEXT` and `MAX_WORDS_TEXT` now, and the prose
+  battery's private `MAX_LINE_SPACING` is `MAX_EDIT_LINE_SPACING`
+  (§1149).
 - **The same name means two different numbers** (§1143): the prose
   battery keeps `MAX_SPACE` — ten thousand points in the paragraph and
   three hundred in the columns — and `MAX_LINE_SPACING`, a hundred in

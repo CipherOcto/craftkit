@@ -403,6 +403,12 @@ impl Anchor {
         }
         let col = col.checked_sub(1)?;
         let row = digits.parse::<u32>().ok()?.checked_sub(1)?;
+        // An address that is **not in the sheet** is not an address: a
+        // sheet is `MAX_FORMULA_ROWS` rows tall and `MAX_COLS` columns
+        // wide, and the cell past the last one is not a cell.
+        if col as u64 >= MAX_COLS || row as u64 >= MAX_FORMULA_ROWS {
+            return None;
+        }
         Some(Anchor { cell: CellRef { col, row }, row_abs, col_abs })
     }
 

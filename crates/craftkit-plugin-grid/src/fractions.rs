@@ -45,12 +45,14 @@ pub struct Fraction {
 
 /// The most digits a **denominator** may have.
 ///
-/// The tree's own bound: seven digits, and the tree clamps to it.
+/// The tree's own bound: seven digits, and a denominator with more is
+/// refused — the code is then not a fraction at all.
 pub const MAX_DENOMINATOR_DIGITS: usize = 7;
 
 /// The largest **fixed denominator** a code may name.
 ///
-/// The tree's own bound: a billion, and the tree clamps to it.
+/// The tree's own bound: a billion, and a code that names more is
+/// refused — the code is then not a fraction at all.
 pub const MAX_FIXED_DENOMINATOR: u64 = 1_000_000_000;
 
 /// The **fraction** a code says, if it says one.

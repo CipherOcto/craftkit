@@ -476,22 +476,22 @@ commands! {
                 ("multiple", multiple)
             } else if let Some(at_least) = self.at_least {
                 let at_least = at_least.0;
-                if !at_least.is_finite() || !(0.0..=MAX_LINE_SPACING).contains(&at_least) {
+                if !at_least.is_finite() || !(0.0..=MAX_EDIT_LINE_SPACING).contains(&at_least) {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(
-                            "a minimum of points is between 0 and {MAX_LINE_SPACING}, and {at_least} is not"
+                            "a minimum of points is between 0 and {MAX_EDIT_LINE_SPACING}, and {at_least} is not"
                         ),
                     });
                 }
                 ("at_least", at_least)
             } else {
                 let exactly = self.exactly.map(|exactly| exactly.0).unwrap_or(0.0);
-                if !exactly.is_finite() || !(MIN_EXACT..=MAX_LINE_SPACING).contains(&exactly) {
+                if !exactly.is_finite() || !(MIN_EXACT..=MAX_EDIT_LINE_SPACING).contains(&exactly) {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(
-                            "an exact number of points is between {MIN_EXACT} and {MAX_LINE_SPACING}, and {exactly} is not"
+                            "an exact number of points is between {MIN_EXACT} and {MAX_EDIT_LINE_SPACING}, and {exactly} is not"
                         ),
                     });
                 }
@@ -569,7 +569,7 @@ fn spacing_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineErro
 }
 
 /// The **largest** a line spacing may be, in points.
-const MAX_LINE_SPACING: f64 = 1584.0;
+const MAX_EDIT_LINE_SPACING: f64 = 1584.0;
 
 /// The **smallest** a multiple of single spacing may be.
 const MIN_MULTIPLE: f64 = 0.06;

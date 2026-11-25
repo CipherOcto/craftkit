@@ -4597,6 +4597,7 @@ so.
 | **the reader says what it did not read** | **built.** The pdf battery's name tree says when it stopped at its depth (§1146) | §1146 |
 | **every reader of the pdf battery says what it did not read** | **built.** The structure tree, the marked content, the figures, the comments and the attachments each say when they stopped at their depth (§1147) | §1147 |
 | **every cap the prose battery keeps is named by a test** | **built.** All twenty-nine of the prose battery's cap names are named by a test beside the battery, and a source's title is bounded at last (§1148) | §1148 |
+| **every cap the grid battery publishes is named by a test** | **built.** All twenty of the grid battery's published cap names are named by a test beside the battery, and an address past the sheet is refused (§1149) | §1149 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72667,7 +72668,7 @@ every cap the prose battery keeps is now named by a test beside it.
 
 ### What was built
 
-- **Twenty-nine cap names, thirty tests.** The prose battery keeps
+- **Twenty-nine cap names, thirty tests.** The prose battery publishes
   twenty-nine distinct cap names — `MAX_PART` and `MAX_TAG`, the
   equation's `MAX_DEPTH` and `MAX_PARTS`, the paragraph's
   `MAX_PARAGRAPH_SPACE` and `MAX_LINE_SPACING` and `MAX_INDENT`, the
@@ -72718,3 +72719,71 @@ every cap the prose battery keeps is now named by a test beside it.
   the bases of a style, and `MAX_LABEL` truncates a label; a test that
   names them says that the cut is there and not that the material was
   refused.
+
+## 1149. The grid battery's caps are named
+
+§1148 brought the rule to the prose battery. The grid battery keeps
+**eighteen** published caps that no test named, and this arc brings the
+rule to it: every cap the grid battery publishes is now named by a test
+beside it.
+
+### What was built
+
+- **Eighteen cap names, twenty tests.** The grid battery's limit suite
+  grew from two tests to twenty, and it now names every published cap:
+  `MAX_COLS` and `MAX_FORMULA_ROWS`, `MAX_FORMAT_CHARS` and the two
+  caps of a fraction's denominator, `MAX_TEXT` of a header, `MAX_SCALE`
+  and `MAX_FIT_PAGES`, `MAX_MARGIN`, `MAX_ORDER` and `MAX_PERIOD` of a
+  trendline, `MAX_VARS`, `MAX_CONSTRAINTS`, `MAX_NODES`, `MAX_NODES_LP`
+  and `MAX_PIVOTS` of the solver, `MAX_SERIAL` of the calendar and
+  `MAX_ERRORS` of a sheet's errors.
+- **An address past the sheet is refused.** A sheet is sixteen thousand
+  columns wide and a million rows tall, and the tree said so in the
+  cap's own words — "an address that is not in the sheet is not an
+  address" — and did not do it: the reader of an address did not check
+  it, so `XFE1` and `A1048577` were cells of a sheet that has neither
+  that column nor that row. They are refused now.
+- **Two names that meant two numbers are one name now.** The grid
+  battery's private caps for the text of a cell and the text of a word
+  were both called `MAX_TEXT`, and the published cap of a header was a
+  third `MAX_TEXT` with another number; they are `MAX_CELL_TEXT` and
+  `MAX_WORDS_TEXT` now. The prose battery's private cap of a line
+  spacing is `MAX_EDIT_LINE_SPACING`.
+- **Two docs that said the tree clamps.** The two caps of a fraction's
+  denominator said "the tree clamps to it", and the tree refuses: a
+  denominator with too many digits is not a fraction, and a code that is
+  not a fraction is not a format. The docs say what the tree does.
+
+### What the port found
+
+- **A cap that could not bite.** The cap on a denominator's digits is
+  only read for a **free** denominator — one written in placeholders —
+  and a fixed denominator is bounded by the other cap, so the two caps
+  are two doors to one room. The tests prove both doors, and a third
+  test proves that a denominator **within** the limits is still a
+  fraction: a cap that refuses everything is not a cap, it is a wall.
+- **The error list is a list and not a stream.** The sheet's errors are
+  counted as they are read, and a sheet with ten thousand and one of
+  them is refused rather than half-written. The test fills one formula
+  down ten thousand and one rows, which is one command.
+
+### What it cost
+
+- **Eighteen tests** in the grid battery's own limit suite, **one
+  reader repaired**, **three names changed**, **two docs corrected**,
+  and the claim row above.
+
+### What it does not settle
+
+- **The caps a battery keeps inside itself are not the tree's rules.**
+  The grid battery keeps sixty-eight private caps and the prose
+  battery five, and nothing names them: they are the battery's own
+  business, and the tree's reader only sees the published ones.
+- **The outer gate still reaches only the kit.** After this arc
+  **thirty-two** caps in **seventeen** crates are published and named by
+  no test: six in the xlsx crate, five in the audio crate, three each
+  in the midi and zip crates, two each in the kit and the xml crate,
+  and one in each of ten more.
+- **A cap of a battery is not a rule of the tree.** The proof lives
+  beside the battery that owns it, and nothing makes the next battery
+  do the same.
