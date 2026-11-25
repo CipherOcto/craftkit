@@ -20,6 +20,7 @@ somebody will look for it.
 | [`survey-a2ui.md`](survey-a2ui.md) | a reading of a2ui's patterns against this tree, and what a downstream application would need this tree to grow |
 | [`survey-a2ui-review.md`](survey-a2ui-review.md) | the record of the adversarial review of that survey: every round, every finding and every fix |
 | [`a2ui-compat-layer.md`](a2ui-compat-layer.md) | the design and the arcs for an a2ui-compatible surface: what it adds, what it changes, and how it is built |
+| [`plans/README.md`](plans/README.md) | the plans: one per project in the family tree, the arcs each names, and the order across them |
 | [`../skills/craftkit-editing/SKILL.md`](../skills/craftkit-editing/SKILL.md) | the checklist for changing something |
 | [`../skills/craftkit-checking/SKILL.md`](../skills/craftkit-checking/SKILL.md) | the checklist for something that is broken |
 

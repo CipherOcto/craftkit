@@ -727,6 +727,15 @@ comes to the tree cold:
   README's counted block, which the gate checks (§1180). The row was
   corrected in place; the history of the claim is not in the README.
 
+- **"The README's sections stop at §1180."** They do, and the **plans**
+  reserve the ones after it: `docs/plans/` holds one plan per project in
+  the family tree, and between them they reserve **§1181 to §1292** for
+  **112 arcs** that have **not been built**. The reservation is a promise
+  about numbering, not a claim that the work exists — the README has no
+  such sections yet, and the port manifest has no rows for them either.
+  A plan that is not worked becomes a plan that is wrong, and the
+  numbering it holds is the thing to give up first.
+
 When the README and the code disagree, the **code** is right, and this file
 records the difference rather than the README's history.
 

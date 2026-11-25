@@ -4629,6 +4629,7 @@ so.
 | **the survey's open questions are answered** | **built.** Three of the four are closed with their reasons — the version counter, the SDK's path API and the eval's posture — and the fourth is given a trigger (§1178) | §1178 |
 | **the survey's question is answered and the stale notes are corrected** | **built.** The tree is meant to be driven by an agent, the survey's open question is answered, and the notes that had stopped being true are true again (§1179) | §1179 |
 | **the tree's counts of its own bounds are the tree's** | **built.** The counted block holds every crate's caps, the gate checks it, and the claim table's numbers are read against the tree (§1180) | §1180 |
+| **the family is surveyed and planned, one plan per project** | **built.** Thirteen plans name the arcs that would bring the family's work into this tree's batteries, each arc a rule, a landing site and a reserved section, and nothing in them is built (§1181) | §1181 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74655,3 +74656,63 @@ reads them back.
   is what §1148 and §1149 found, and it is not to be checked against
   today's tree: a note that says what was true then is not a stale
   claim, it is a record.
+
+## 1181. The family is surveyed and planned, one plan per project
+
+Every project in the family tree was read against the battery it feeds, and
+every one of them is now a **plan**: a document that names the arcs that would
+bring its work into this tree, and says what it would not bring.
+
+### What was built
+
+- **Thirteen plans, one per project**, under `docs/plans/`, with an index
+  that names them all and gives the order across them. Each plan's first
+  section is a **survey**: the upstream's own command registry read against
+  this tree's battery, one row per capability, with the upstream's `path:line`
+  and the battery's own state, and a verdict that is *port*, *later* or *out
+  of scope*.
+- **One hundred and twelve arcs, reserved as §1182 to §1293.** Every arc
+  names a **rule**, the crate and the file it lands in, the command it
+  carries, the test that proves it, and the README section it will hold. The
+  sections are reserved and empty, which is the honest state of work that
+  has not been done.
+- **The plans say what they will not do.** Each plan names the rows it holds
+  back — a whole new model, a new dependency, another battery's work — with
+  the reason, and each names what its survey could not read or decide.
+- **The tree's own notes are corrected.** `KNOWN-GAPS.md` §7 records that the
+  README's sections stop at §1181 and that the plans hold the ones after it,
+  so a reader who finds a reserved number knows it is a promise and not a
+  section.
+
+### What the survey found
+
+- **The batteries are not thin.** The sound battery answers most of what its
+  upstream asks, and the layout and prose batteries answer most of what the
+  page-layout project asks: the gaps are in the verbs and the small facts —
+  a track's own colour and comment, an item's own name, a range's own
+  operations — and not in the models.
+- **The gaps are of three kinds.** New models (a solid modeller, a table
+  style, a mesh gradient), new dependencies (the office document formats,
+  the other audio codecs, the colour-management model) and other batteries'
+  work (media, rendering, paths, caret typing). Only the first kind is
+  really a battery.
+- **One upstream cannot be built here.** The vector project's proof of
+  concept points at a checkout that does not exist on this machine and says
+  of itself that it proves no real rendering, no path geometry and no stable
+  plugin interface. It is read as a catalogue of patterns this tree has
+  already absorbed, and one of its rows is an arc.
+
+### What it cost
+
+- **Thirteen documents** and one index, no code, and no gate rule — the
+  plans are prose, and the gate has nothing to check in them yet.
+
+### What it does not settle
+
+- **The order is a recommendation.** The plans name the order they would
+  land in and the owner decides; an arc lands when it is written, tested and
+  green.
+- **Three questions are the owner's**: whether a release is near, whether
+  saved view preferences belong in the document, and whether the a2ui door's
+  message shapes may change — the door is this tree's contract with an
+  agent.
