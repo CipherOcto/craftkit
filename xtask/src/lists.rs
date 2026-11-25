@@ -1485,6 +1485,139 @@ pub fn the_batteries_counts_are_true(root: &Path) -> Result<Vec<String>, String>
     Ok(problems)
 }
 
+/// The counts the tree states of its own bounds are the tree's counts.
+///
+/// The README's **counted block** is written by `cargo xtask counts
+/// --write`, and it is the tree's answer to the question the prose keeps
+/// asking: how many caps are there. This rule reads the block back and
+/// compares it with what the tree holds — so a bound that is added and a
+/// block that is not written is a **finding**, and not a note that
+/// nobody reads.
+pub fn the_bounds_are_counted(root: &Path) -> Result<Vec<String>, String> {
+    let bounds = crate::index::bounds_of(root);
+    let readme_path = root.join("README.md");
+    let readme = crate::tree::read_text(&readme_path)
+        .map_err(|error| format!("could not read {}: {error}", readme_path.display()))?;
+    let Some(block) = crate::counts::the_block_in(&readme) else {
+        return Ok(vec![
+            "the README has no counted block: the counts of the tree's bounds are in it".to_string(),
+        ]);
+    };
+    let stated = stated_bounds(&block);
+    if stated.is_empty() {
+        return Ok(vec![
+            "the README's counted block holds no counts of the bounds: the tree's caps are counted in it"
+                .to_string(),
+        ]);
+    }
+    Ok(bounds_differences(&stated, &bounds))
+}
+
+/// The differences between the block **as it is written** and the tree
+/// **as it is**.
+///
+/// The comparison is a function of its own, so that a wrong block can be
+/// read without a wrong tree: the test says what the rule says when the
+/// numbers do not agree.
+pub fn bounds_differences(stated: &[(String, usize, usize)], bounds: &crate::index::Bounds) -> Vec<String> {
+    let mut problems: Vec<String> = Vec::new();
+    for (name, published, private) in &bounds.by_crate {
+        if *published == 0 && *private == 0 {
+            continue;
+        }
+        let Some((_, said_published, said_private)) =
+            stated.iter().find(|(crate_name, _, _)| crate_name == name)
+        else {
+            problems.push(format!(
+                "the README's counted block does not count the caps of `{name}`: the tree has {published} \
+                 published and {private} private"
+            ));
+            continue;
+        };
+        if *said_published != *published || *said_private != *private {
+            problems.push(format!(
+                "the README's counted block says `{name}` has {said_published} published and \
+                 {said_private} private caps, and the tree has {published} and {private}"
+            ));
+        }
+    }
+    let Some((_, said_published, said_private)) = stated.iter().find(|(name, _, _)| name == "the tree")
+    else {
+        problems.push(
+            "the README's counted block does not count the tree's caps: the row `the tree` is in it"
+                .to_string(),
+        );
+        return problems;
+    };
+    if *said_published != bounds.published || *said_private != bounds.private {
+        problems.push(format!(
+            "the README's counted block says the tree has {said_published} published and \
+             {said_private} private caps, and the tree has {} and {}",
+            bounds.published, bounds.private
+        ));
+    }
+    problems
+}
+
+/// The rows of the **bounds** table of the counted block.
+///
+/// The table is three columns wide: the crate, its published caps and
+/// its private ones. The rows of the commands table are two columns
+/// wide, and they are not rows of this one.
+pub fn stated_bounds(block: &str) -> Vec<(String, usize, usize)> {
+    let mut found = Vec::new();
+    for line in block.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix('|') else { continue };
+        let Some(rest) = rest.strip_suffix('|') else { continue };
+        let mut parts = rest.split('|').map(str::trim);
+        let (Some(name), Some(published), Some(private)) = (parts.next(), parts.next(), parts.next()) else {
+            continue;
+        };
+        if parts.next().is_some() {
+            continue;
+        }
+        let (Ok(published), Ok(private)) = (published.parse::<usize>(), private.parse::<usize>()) else {
+            continue;
+        };
+        found.push((name.to_string(), published, private));
+    }
+    found
+}
+
+/// The counts the **claim table** states of the tree's bounds are the
+/// tree's counts.
+///
+/// The claim table is prose about what is true **today**, so a number in
+/// it is a claim and not a memory: this rule reads the two numbers it
+/// states about the tree's caps and compares them with the tree.
+pub fn the_claims_counts_are_true(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let bounds = crate::index::bounds_of(root);
+    let readme_path = root.join("README.md");
+    let readme = crate::tree::read_text(&readme_path)
+        .map_err(|error| format!("could not read {}: {error}", readme_path.display()))?;
+    for row in crate::claims::rows(&readme) {
+        if let Some(stated) = the_number_before(&row.truth, "caps of the tree")
+            && stated != bounds.published
+        {
+            problems.push(format!(
+                "the claim table says the tree has **{stated} published caps**, and the tree has {}",
+                bounds.published
+            ));
+        }
+        if let Some(stated) = the_number_before(&row.truth, "crates keep a published cap")
+            && stated != bounds.crates
+        {
+            problems.push(format!(
+                "the claim table says **{stated} crates** keep a published cap, and {} crates do",
+                bounds.crates
+            ));
+        }
+    }
+    Ok(problems)
+}
+
 /// The counts a file states in its own words.
 ///
 /// **A bullet, and only a bullet.** A line that begins with a bullet and
@@ -1509,6 +1642,42 @@ pub fn stated_counts(text: &str) -> Vec<usize> {
     found
 }
 
+/// The value of one **number word**.
+pub fn word_value(word: &str) -> Option<usize> {
+    match word {
+        "one" => Some(1),
+        "two" => Some(2),
+        "three" => Some(3),
+        "four" => Some(4),
+        "five" => Some(5),
+        "six" => Some(6),
+        "seven" => Some(7),
+        "eight" => Some(8),
+        "nine" => Some(9),
+        "ten" => Some(10),
+        "eleven" => Some(11),
+        "twelve" => Some(12),
+        "thirteen" => Some(13),
+        "fourteen" => Some(14),
+        "fifteen" => Some(15),
+        "sixteen" => Some(16),
+        "seventeen" => Some(17),
+        "eighteen" => Some(18),
+        "nineteen" => Some(19),
+        "twenty" => Some(20),
+        "thirty" => Some(30),
+        "forty" => Some(40),
+        "fifty" => Some(50),
+        "sixty" => Some(60),
+        "seventy" => Some(70),
+        "eighty" => Some(80),
+        "ninety" => Some(90),
+        "hundred" => Some(100),
+        "thousand" => Some(1000),
+        _ => None,
+    }
+}
+
 /// A number in words: "one", "sixty-seven", "a hundred and forty-four".
 pub fn number_in_words(words: &str) -> Option<usize> {
     let words = words.trim().to_ascii_lowercase();
@@ -1525,40 +1694,52 @@ pub fn number_in_words(words: &str) -> Option<usize> {
         if word.is_empty() || word == "and" || word == "a" {
             continue;
         }
-        match word {
-            "one" => part += 1,
-            "two" => part += 2,
-            "three" => part += 3,
-            "four" => part += 4,
-            "five" => part += 5,
-            "six" => part += 6,
-            "seven" => part += 7,
-            "eight" => part += 8,
-            "nine" => part += 9,
-            "ten" => part += 10,
-            "eleven" => part += 11,
-            "twelve" => part += 12,
-            "thirteen" => part += 13,
-            "fourteen" => part += 14,
-            "fifteen" => part += 15,
-            "sixteen" => part += 16,
-            "seventeen" => part += 17,
-            "eighteen" => part += 18,
-            "nineteen" => part += 19,
-            "twenty" => part += 20,
-            "thirty" => part += 30,
-            "forty" => part += 40,
-            "fifty" => part += 50,
-            "sixty" => part += 60,
-            "seventy" => part += 70,
-            "eighty" => part += 80,
-            "ninety" => part += 90,
-            "hundred" => part = (part.max(1)) * 100,
-            "thousand" => total += part.max(1) * 1000,
-            _ => return None,
+        match word_value(word) {
+            Some(100) => part = (part.max(1)) * 100,
+            Some(1000) => total += part.max(1) * 1000,
+            Some(value) => part += value,
+            None => return None,
         }
     }
     Some(total + part)
+}
+
+/// Whether a **token** is made of number words.
+///
+/// "twenty-seven" and "135" are numbers; "the" and "**built.**" are not.
+/// The test is what tells a number from the words around it, and the
+/// words around it are what a sentence is made of.
+pub fn is_a_number_word(token: &str) -> bool {
+    let token = token.trim_matches(|character: char| !character.is_alphanumeric() && character != '-');
+    if token.is_empty() {
+        return false;
+    }
+    if token.parse::<usize>().is_ok() {
+        return true;
+    }
+    token.split('-').all(|part| {
+        let part = part.to_ascii_lowercase();
+        part == "and" || part == "a" || word_value(&part).is_some()
+    })
+}
+
+/// The number a piece of text states **before** a phrase.
+///
+/// The run of number words that ends at the phrase: "the hundred and
+/// thirty-five caps of the tree" says one hundred and thirty-five.
+pub fn the_number_before(text: &str, phrase: &str) -> Option<usize> {
+    let at = text.find(phrase)?;
+    let before = &text[..at];
+    let mut tokens: Vec<&str> = Vec::new();
+    for token in before.split_whitespace().rev() {
+        if is_a_number_word(token) {
+            tokens.push(token);
+        } else {
+            break;
+        }
+    }
+    tokens.reverse();
+    number_in_words(&tokens.join(" "))
 }
 
 /// The gate itself.
@@ -1617,6 +1798,12 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The counts a battery states in its own words are the tree's counts.
     problems.extend(the_batteries_counts_are_true(root)?);
+
+    // The counts the tree states of its own bounds are the tree's counts.
+    problems.extend(the_bounds_are_counted(root)?);
+
+    // The counts the claim table states of the tree's bounds are the tree's.
+    problems.extend(the_claims_counts_are_true(root)?);
 
     // Every port of the manifest is still in the tree.
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;

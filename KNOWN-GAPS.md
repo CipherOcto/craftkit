@@ -256,8 +256,9 @@ These are the README's own honest notes, and they are still true of the tree:
   comment is a name, and a name in a string is a name, and the unit
   tests widen the surface the rule looks at.
 - **Every published cap in the tree is named by a test** (§1154–§1156,
-  §1158, §1159): the tree keeps one hundred and thirty-five published
-  caps and every one of them is named by a test. The last four were the two of the fixtures
+  §1158, §1159): every published cap in the tree is named by a test, and
+  **how many** there are is written once, in the README's counted block,
+  which the gate checks (§1180). The last four were the two of the fixtures
   and the two of the kit: the fixtures' caps were named by their own
   unit tests and by nothing else, and the kit's two were proved by the
   **studio's** tests and by the **window's** — a proof in another
@@ -340,20 +341,19 @@ These are the README's own honest notes, and they are still true of the tree:
   The file is read, not refused: the answer holds the truth of what
   was read, and the truth of what was not is in the warnings beside it.
 - **The batteries' caps are published and named** (§1149, §1148,
-  §1158, §1159): the grid battery publishes thirty-two cap names and the
-  prose battery thirty-four, and **every** published cap in the tree is
-  named by a test beside the crate that keeps it. What §1148 and §1149
-  recorded — that fifty and thirty-two published caps in seventeen
-  crates were named by no test — was closed by §1158 and §1159, which
-  published the batteries' caps and asked each crate for the proof of
-  its own. The caps a battery keeps **inside itself** are not the tree's
-  rules: the grid battery keeps fifty-eight private caps and the prose
-  battery seven, counted as the outer gate counts them, and the rule
-  holds a private cap to one name and one number and to nothing else
-  (§1160). What stays is the rule's own weakness: the rule is about the
-  **name**, so a cap named in a comment is a cap it counts, and a cap
-  that **cuts** rather than refuses is named by the same test as one
-  that refuses.
+  §1158, §1159): **every** published cap in the tree is named by a test
+  beside the crate that keeps it. What §1148 and §1149 recorded — that
+  fifty and thirty-two published caps in seventeen crates were named by
+  no test — was closed by §1158 and §1159, which published the
+  batteries' caps and asked each crate for the proof of its own. The
+  caps a battery keeps **inside itself** are not the tree's rules: the
+  rule holds a private cap to one name and one number and to nothing
+  else (§1160). **How many** each battery publishes and keeps is written
+  once, in the README's counted block, and the gate checks it (§1180).
+  What stays is the rule's own weakness: the rule is about the **name**,
+  so a cap named in a comment is a cap it counts, and a cap that
+  **cuts** rather than refuses is named by the same test as one that
+  refuses.
 - **An address past the sheet was a cell** (§1149): a sheet is sixteen
   thousand columns wide and a million rows tall, and the reader of an
   address did not check either, so `XFE1` and `A1048577` were cells of
@@ -368,12 +368,13 @@ These are the README's own honest notes, and they are still true of the tree:
   two doors: the digits of a **free** denominator are bounded by one cap
   and the value of a **fixed** one by the other.
 - **The prose battery's caps are named, and so are the other
-  batteries'** (§1148, §1158, §1159): the prose battery keeps
-  thirty-four cap names and every one of them is named by a test beside
-  the battery. The outer gate's rule reaches only the **kit** (§1141),
-  so nothing held a battery to it when §1148 was written; §1158 and
-  §1159 gave every crate the rule and its own proof, and no published
-  cap in the tree is now named by no test. The rule is about the
+  batteries'** (§1148, §1158, §1159): every published cap of every
+  battery is named by a test beside the battery. The outer gate's rule
+  reaches only the **kit** (§1141), so nothing held a battery to it when
+  §1148 was written; §1158 and §1159 gave every crate the rule and its
+  own proof, and no published cap in the tree is now named by no test.
+  **How many** each battery has is written once, in the README's
+  counted block, and the gate checks it (§1180). The rule is about the
   **name**, and some of those caps cut rather than refuse — the chain
   of the styles is cut at `MAX_STYLE_CHAIN`, and a label is truncated at
   `MAX_LABEL` — so naming them is not the same as refusing them.
@@ -722,9 +723,9 @@ comes to the tree cold:
   batteries' caps: the tree keeps a published cap in **twenty-six**
   crates, and §1173 made two more of them — the image battery and the
   a2ui plugin — and gave the grid battery a second one. The claim row
-  now says twenty-seven, and the count of the tree's caps is a hundred
-  and thirty-five. The row was corrected in place; the history of the
-  claim is not in the README.
+  now says twenty-seven, and the count of the tree's caps is in the
+  README's counted block, which the gate checks (§1180). The row was
+  corrected in place; the history of the claim is not in the README.
 
 When the README and the code disagree, the **code** is right, and this file
 records the difference rather than the README's history.

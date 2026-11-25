@@ -92,6 +92,11 @@ pub fn counts(root: &Path) -> Result<Vec<(String, usize)>, String> {
 }
 
 /// The counted block, as the README should hold it.
+///
+/// The block is **two tables**: the commands each battery carries, and the
+/// bounds each crate keeps. The second table is the tree's answer to a
+/// question the prose keeps asking — how many caps are there — and it is
+/// written here so that it cannot be wrong.
 pub fn the_block(root: &Path) -> Result<String, String> {
     let counts = counts(root)?;
     let mut block = String::from(BEGIN);
@@ -99,6 +104,15 @@ pub fn the_block(root: &Path) -> Result<String, String> {
     for (battery, count) in counts {
         block.push_str(&format!("| {battery} | {count} |\n"));
     }
+    block.push_str("\n| crate | published caps | private caps |\n|---|---|---|\n");
+    let bounds = crate::index::bounds_of(root);
+    for (name, published, private) in &bounds.by_crate {
+        if *published == 0 && *private == 0 {
+            continue;
+        }
+        block.push_str(&format!("| {name} | {published} | {private} |\n"));
+    }
+    block.push_str(&format!("| the tree | {} | {} |\n", bounds.published, bounds.private));
     block.push_str(END);
     Ok(block)
 }
@@ -142,6 +156,10 @@ pub fn run(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
     for (battery, count) in &counts {
         println!("   {battery}: {count}");
     }
+    let bounds = crate::index::bounds_of(root);
+    println!("   published caps: {}", bounds.published);
+    println!("   crates that publish one: {}", bounds.crates);
+    println!("   private caps: {}", bounds.private);
     if !write {
         println!("   (the README's block is written with --write)");
         return Ok(crate::Outcome::Ran);

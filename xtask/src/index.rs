@@ -390,19 +390,22 @@ pub struct Bound {
     pub line: usize,
     /// The battery it belongs to.
     pub battery: String,
+    /// Whether the cap is **published**: a promise somebody else may rely
+    /// on. A private cap is the crate's own business.
+    pub published: bool,
 }
 
-/// The **limits** a file declares: the public constants whose names say
-/// they are a limit.
+/// The **caps** of a file, published and private alike.
 ///
-/// A limit is `MAX_…` or `…_LIMIT`: the first says it is the most of
-/// something, and the second says the same thing the other way round. A
-/// private constant is the program's own business and is not read: only
-/// a **public** limit is a promise or a cap somebody else may rely on.
+/// A cap is `MAX_…` or `…_LIMIT`: the first says it is the most of
+/// something, and the second says the same thing the other way round.
+/// A private cap is the program's own business, and the rule that reads
+/// the caps holds it to one name and one number and to nothing else.
 pub fn caps_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
     let mut found = Vec::new();
     for (number, line) in text.lines().enumerate() {
         let trimmed = line.trim();
+        let published = trimmed.starts_with("pub const ");
         let Some(rest) = trimmed.strip_prefix("pub const ").or_else(|| trimmed.strip_prefix("const ")) else {
             continue;
         };
@@ -419,12 +422,19 @@ pub fn caps_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
             file: file.to_path_buf(),
             line: number + 1,
             battery: battery.to_string(),
+            published,
         });
     }
     found
 }
 
-/// The **caps** of a file, published and private alike.
+/// The **limits** a file declares: the public constants whose names say
+/// they are a limit.
+///
+/// A limit is `MAX_…` or `…_LIMIT`: the first says it is the most of
+/// something, and the second says the same thing the other way round. A
+/// private constant is the program's own business and is not read: only
+/// a **public** limit is a promise or a cap somebody else may rely on.
 ///
 /// The rule of one name and one number is about the code's own clarity:
 /// two caps of the same name and different numbers leave a reader of
@@ -449,6 +459,7 @@ pub fn limits_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
             file: file.to_path_buf(),
             line: number + 1,
             battery: battery.to_string(),
+            published: true,
         });
     }
     found
@@ -479,6 +490,7 @@ pub fn promise_bounds_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
             file: file.to_path_buf(),
             line: number + 1,
             battery: battery.to_string(),
+            published: true,
         });
     }
     found
@@ -521,6 +533,80 @@ pub fn rust_files(directory: &Path) -> Vec<PathBuf> {
     walk(directory, &mut found);
     found.sort();
     found
+}
+
+/// The **crates** of the tree: every directory under `crates` and under
+/// `apps`, and the xtask.
+///
+/// The batteries live in `crates` and the doors in `apps`, and the xtask
+/// is the gate's own crate: all three are crates, and a rule that reads
+/// the tree's code reads all three.
+pub fn crate_directories(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for group in ["crates", "apps"] {
+        let Ok(entries) = std::fs::read_dir(root.join(group)) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                out.push(path);
+            }
+        }
+    }
+    let xtask = root.join("xtask");
+    if xtask.is_dir() {
+        out.push(xtask);
+    }
+    out.sort();
+    out
+}
+
+/// The **bounds** of the tree: the caps it publishes, the crates that
+/// publish one, and the caps a crate keeps to itself.
+///
+/// The counts are the tree's, read the way the gate reads them: a cap is
+/// a `MAX_…` or a `…_LIMIT` constant, published or not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bounds {
+    /// The published caps, in the whole tree.
+    pub published: usize,
+    /// The crates that publish at least one.
+    pub crates: usize,
+    /// The caps a crate keeps to itself, in the whole tree.
+    pub private: usize,
+    /// The published and the private caps of each crate, by name.
+    pub by_crate: Vec<(String, usize, usize)>,
+}
+
+/// The bounds of the tree.
+pub fn bounds_of(root: &Path) -> Bounds {
+    let mut published = 0usize;
+    let mut private = 0usize;
+    let mut crates = 0usize;
+    let mut by_crate = Vec::new();
+    for directory in crate_directories(root) {
+        let name = directory.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_default();
+        let mut pub_here = 0usize;
+        let mut priv_here = 0usize;
+        for file in rust_files(&directory) {
+            let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Everything) else {
+                continue;
+            };
+            for cap in caps_in(&text, &file, &name) {
+                if cap.published {
+                    pub_here += 1;
+                } else {
+                    priv_here += 1;
+                }
+            }
+        }
+        if pub_here > 0 {
+            crates += 1;
+        }
+        published += pub_here;
+        private += priv_here;
+        by_crate.push((name, pub_here, priv_here));
+    }
+    Bounds { published, crates, private, by_crate }
 }
 
 fn walk(directory: &Path, found: &mut Vec<PathBuf>) {
@@ -1437,6 +1523,7 @@ pub fn bounds_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
             file: file.to_path_buf(),
             line: number + 1,
             battery: battery.to_string(),
+            published: true,
         });
     }
     found

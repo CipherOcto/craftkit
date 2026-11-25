@@ -4628,6 +4628,7 @@ so.
 | **the three deliberate clamps say so** | **built.** The art battery's rate, the sound battery's repeat count and the camera's zoom are held and say they were held, and the camera's own lie about a zoom that is not a number is fixed (§1177) | §1177 |
 | **the survey's open questions are answered** | **built.** Three of the four are closed with their reasons — the version counter, the SDK's path API and the eval's posture — and the fourth is given a trigger (§1178) | §1178 |
 | **the survey's question is answered and the stale notes are corrected** | **built.** The tree is meant to be driven by an agent, the survey's open question is answered, and the notes that had stopped being true are true again (§1179) | §1179 |
+| **the tree's counts of its own bounds are the tree's** | **built.** The counted block holds every crate's caps, the gate checks it, and the claim table's numbers are read against the tree (§1180) | §1180 |
 
 ### The list of things that are honestly not there: empty
 
@@ -56202,6 +56203,50 @@ are checked now by asking the tree what it has.
 | fx | 47 |
 | sound | 144 |
 | vector | 67 |
+
+| crate | published caps | private caps |
+|---|---|---|
+| craftkit-a2ui-server | 1 | 0 |
+| craftkit-bridge | 0 | 1 |
+| craftkit-mcp-server | 0 | 1 |
+| craftkit-repl | 0 | 1 |
+| craftkit-studio | 0 | 2 |
+| craftkit-wasm | 0 | 1 |
+| craftkit-au-fixture | 1 | 0 |
+| craftkit-audio | 5 | 2 |
+| craftkit-clap | 0 | 4 |
+| craftkit-control | 1 | 0 |
+| craftkit-hyphen | 0 | 1 |
+| craftkit-image | 0 | 1 |
+| craftkit-mcp | 1 | 0 |
+| craftkit-midi | 3 | 1 |
+| craftkit-numeric | 1 | 0 |
+| craftkit-pdf-writer | 0 | 5 |
+| craftkit-plugin-a2ui | 1 | 0 |
+| craftkit-plugin-art | 1 | 0 |
+| craftkit-plugin-cad | 0 | 5 |
+| craftkit-plugin-clap | 0 | 2 |
+| craftkit-plugin-film | 6 | 30 |
+| craftkit-plugin-fx | 1 | 3 |
+| craftkit-plugin-grid | 32 | 58 |
+| craftkit-plugin-image | 1 | 0 |
+| craftkit-plugin-layout | 5 | 7 |
+| craftkit-plugin-pdf | 3 | 8 |
+| craftkit-plugin-prose | 34 | 7 |
+| craftkit-plugin-sound | 3 | 13 |
+| craftkit-plugin-text | 1 | 1 |
+| craftkit-plugin-vector | 1 | 12 |
+| craftkit-plugin-vst3 | 0 | 2 |
+| craftkit-raster | 2 | 1 |
+| craftkit-sdk | 17 | 11 |
+| craftkit-sound-time | 1 | 0 |
+| craftkit-text-layout | 1 | 0 |
+| craftkit-vst3 | 0 | 1 |
+| craftkit-vst3-fixture | 1 | 0 |
+| craftkit-xlsx | 6 | 9 |
+| craftkit-xml | 2 | 0 |
+| craftkit-zip | 3 | 0 |
+| the tree | 135 | 190 |
 <!-- the counts of the tree: end -->
 
 ### What the port found
@@ -74541,3 +74586,72 @@ corrects the second.
   would have been found by the next reader, or not at all.
 - **The contracts are still not written.** O10 waits for a release, and
   a release is still a question about what this tree is for.
+
+## 1180. The tree's counts of its own bounds are the tree's
+
+§1179 corrected four notes that had gone stale. It also found the
+reason they went stale: **nothing checked them**. This arc gives the
+tree's own numbers a place where the compiler writes them and the gate
+reads them back.
+
+### What was built
+
+- **The counted block holds the tree's bounds.** The block in the README
+  that `cargo xtask counts --write` writes now has a **second table**:
+  every crate of the tree with the caps it publishes and the caps it
+  keeps to itself, and a row for the tree. The numbers are the ones the
+  gate's own reader finds, so they cannot be wrong.
+- **The gate checks the block.** A new rule reads the block back and
+  compares it with what the tree holds: a crate that is missing from it,
+  a crate whose numbers are wrong and a tree row that is wrong are
+  **findings**, and not notes that nobody reads.
+- **The gate checks the claim table's numbers too.** The claim table is
+  prose about what is true **today**, so a number in it is a claim and
+  not a memory: the rule reads the two numbers it states about the
+  tree's caps — the caps themselves and the crates that publish one —
+  and compares them with the tree. The rule finds the number in words
+  ("the hundred and thirty-five caps of the tree") as readily as in
+  digits.
+- **The notes point at the block instead of repeating it.** The living
+  notes in `KNOWN-GAPS.md` §5 now say *where* the count is rather than
+  what it is, so there is **one** number about the tree's caps and it is
+  a checked one.
+- **`cargo xtask counts` says the whole story.** The command that
+  writes the block prints the published caps, the crates that publish
+  one and the private caps as well as the commands each battery
+  carries.
+
+### What the port found
+
+- **A number in prose is a claim, and a claim needs a writer.** The
+  tree's numbers were in three places at once — the claim table, the
+  notes and the sections of this README — and nothing wrote them, so
+  they rotted at the speed the tree moved. The house rule is that
+  "the compiler writes the declaration, the reader and the
+  registration"; the tree's own counts had no such compiler, and a
+  number without one is a number a reader has to remember to update.
+- **The tree already had the reader.** The rule that checks a
+  battery's own counts wanted for exactly this: it parses "one hundred
+  and thirty-five" out of a sentence and compares it with the index.
+  The machinery was there and the numbers were not using it.
+
+### What it cost
+
+- **One table in the README**, **two rules in the outer gate**, **two
+  helpers for reading a number**, **eight tests** in one file, and the
+  claim row above. The rules were checked by breaking the numbers on
+  purpose: the gate said so three times and once for each number.
+
+### What it does not settle
+
+- **Only the numbers that move are checked.** The rule reads the tree's
+  caps and the crates that publish one, and it says nothing about the
+  counts in the sections of this README — each of which is a record of
+  an arc and is written in the past tense on purpose. A number that is
+  *about* the tree today is checked; a number that is *about* an arc is
+  history.
+- **The notes still hold numbers that are history.** "Fifty and
+  thirty-two published caps in seventeen crates were named by no test"
+  is what §1148 and §1149 found, and it is not to be checked against
+  today's tree: a note that says what was true then is not a stale
+  claim, it is a record.
