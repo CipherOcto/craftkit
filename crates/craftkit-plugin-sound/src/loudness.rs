@@ -28,7 +28,7 @@
 use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{NodeRef, Outcome};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 commands! {
     /// The **loudness** of a clip.
@@ -47,7 +47,21 @@ commands! {
             let id = "sound.clip.loudness.read".to_string();
             let clip_id = self.clip.0;
             let (channels, rate) = crate::planar_of(&id, session, clip_id)?;
-            let mut meter = craftkit_audio::LoudnessMeter::new(rate as f32, channels.len().max(1));
+            // The **channels** of a material come from a file, and a file
+            // can say anything: a material with more channels than the
+            // meter holds is **refused**, and not measured with fewer
+            // channels than it has.
+            let count = channels.len().max(1);
+            if count > craftkit_audio::MAX_CHANNELS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "a sound has at most {} channels, and this one has {count}",
+                        craftkit_audio::MAX_CHANNELS
+                    ),
+                });
+            }
+            let mut meter = craftkit_audio::LoudnessMeter::new(rate as f32, count);
             meter.process(&channels);
             Ok(Outcome::new(format!("the clip `{clip_id}` is measured")).with_data(json!({
                 "clip": clip_id,

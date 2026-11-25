@@ -3122,7 +3122,8 @@ commands! {
             };
             // The **transients** of the material, in the material's own
             // samples.
-            let onsets = craftkit_audio::onsets(&sound.samples, sound.channels as usize, sound.rate, sensitivity);
+            let found = craftkit_audio::onsets(&sound.samples, sound.channels as usize, sound.rate, sensitivity);
+            let onsets = found.items;
             // The material's samples are the **session's** samples turned
             // into the source's rate, and the clip's offset says where in
             // the material the clip starts.
@@ -3180,6 +3181,9 @@ commands! {
                     "pieces": pieces,
                     "transients": cuts.len(),
                     "sensitivity": sensitivity,
+                    // The detector stopped at its bound: the rest of the
+                    // material was not read, and the answer says so.
+                    "truncated": found.truncated,
                 }),
             ))
 

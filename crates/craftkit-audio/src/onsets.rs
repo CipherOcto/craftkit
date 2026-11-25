@@ -28,6 +28,7 @@
 //!   energy first rises, which the frame's own start may be a little
 //!   after.
 
+use crate::Found;
 use crate::fft;
 
 /// The most onsets a sound may have.
@@ -37,7 +38,7 @@ use crate::fft;
 pub const MAX_ONSETS: usize = 10_000;
 
 /// The most channels a detector reads.
-const MAX_CHANNELS: usize = 32;
+const MAX_PLANES: usize = 32;
 
 /// The **onsets** of a sound, in samples from its start.
 ///
@@ -50,7 +51,7 @@ const MAX_CHANNELS: usize = 32;
 /// range is **clamped** into it — the sensitivity is a knob and not a
 /// fact about the sound, and a knob that is turned past its end is at
 /// its end.
-pub fn onsets(samples: &[f32], channels: usize, rate: u32, sensitivity: f64) -> Vec<usize> {
+pub fn onsets(samples: &[f32], channels: usize, rate: u32, sensitivity: f64) -> Found<usize> {
     let channels = channels.max(1);
     let frames = samples.len() / channels;
     let rate = rate.max(1);
@@ -60,12 +61,12 @@ pub fn onsets(samples: &[f32], channels: usize, rate: u32, sensitivity: f64) -> 
     let size = (((rate as f64 * 0.012) as usize).clamp(64, 8192)).next_power_of_two();
     let hop = size / 4;
     if frames < size || size < 2 {
-        return Vec::new();
+        return Found::whole(Vec::new());
     }
     // The **channels**: each one on its own, and the samples that are
     // not numbers are silence.
-    let mut planes: Vec<Vec<f32>> = Vec::with_capacity(channels.min(MAX_CHANNELS));
-    for channel in 0..channels.min(MAX_CHANNELS) {
+    let mut planes: Vec<Vec<f32>> = Vec::with_capacity(channels.min(MAX_PLANES));
+    for channel in 0..channels.min(MAX_PLANES) {
         let plane: Vec<f32> = (0..frames)
             .map(|frame| {
                 let value = samples.get(frame * channels + channel).copied().unwrap_or(0.0);
@@ -75,7 +76,7 @@ pub fn onsets(samples: &[f32], channels: usize, rate: u32, sensitivity: f64) -> 
         planes.push(plane);
     }
     if planes.is_empty() {
-        return Vec::new();
+        return Found::whole(Vec::new());
     }
     let count = planes.len() as f64;
     let bands = log_bands(size, rate as f64);
@@ -137,7 +138,7 @@ pub fn onsets(samples: &[f32], channels: usize, rate: u32, sensitivity: f64) -> 
         previous = current;
     }
     if flux.is_empty() {
-        return Vec::new();
+        return Found::whole(Vec::new());
     }
     // The **windows** the flux is measured in, in frames.
     let frames_of = |seconds: f64| (((seconds * rate as f64) as usize) / hop).max(1);
@@ -175,11 +176,13 @@ pub fn onsets(samples: &[f32], channels: usize, rate: u32, sensitivity: f64) -> 
         if found.last().is_none_or(|last| at > *last) {
             found.push(at);
             if found.len() >= MAX_ONSETS {
-                break;
+                // The detector stopped at its bound: the rest of the
+                // sound was not read, and the reading says so.
+                return Found::stopped(found);
             }
         }
     }
-    found
+    Found::whole(found)
 }
 
 /// The **bands**: twenty-four to the octave, from thirty hertz to

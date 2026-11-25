@@ -4599,6 +4599,7 @@ so.
 | **every cap the prose battery keeps is named by a test** | **built.** All twenty-nine of the prose battery's cap names are named by a test beside the battery, and a source's title is bounded at last (§1148) | §1148 |
 | **every cap the grid battery publishes is named by a test** | **built.** All twenty of the grid battery's published cap names are named by a test beside the battery, and an address past the sheet is refused (§1149) | §1149 |
 | **the xlsx reader says what it did not read** | **built.** The bags, the outline and the columns of a file are read against a bound, and the file is told when the bound bites (§1150) | §1150 |
+| **the audio crate's caps are named and its detectors say so** | **built.** The onsets, the transients and the notes of a sound are a reading that says when the detector stopped, and a pitch above the bound is refused (§1151) | §1151 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72850,3 +72851,72 @@ This arc holds it to the rule and names its six caps.
   ten more — the au fixture, the mcp server, the numeric crate, the
   art, film, layout and text batteries, the rasteriser, the sound
   time, the text layout and the vst3 fixture.
+
+## 1151. The audio crate's caps are named, and the detectors say so
+
+§1150 held the xlsx reader to one rule: a reader that stops at a bound
+must **say** that it stopped. The audio crate is a reader of sounds,
+and it had **three** detectors that stopped and said nothing. This arc
+holds it to the rule and names its five caps.
+
+### What was built
+
+- **Five caps, six tests.** The audio crate's limit suite is new: the
+  onsets of a sound (`MAX_ONSETS`), the transients of a sound
+  (`MAX_TRANSIENTS`), the frames of the pitch detector (`MAX_FRAMES`),
+  the top of the pitch it looks for (`MAX_HZ`) and the channels of the
+  loudness meter (`MAX_CHANNELS`).
+- **The detectors say so.** The onsets of a sound, the transients of a
+  sound and the notes of a sound are now a **reading**: the items that
+  were found and whether the detector stopped at its bound. The
+  detector that stops is the one that says it.
+- **The tree's answers say so too.** The sound battery's answer for the
+  transients of a clip and its answer for the notes of a clip now carry
+  `truncated`, so a reader of the answer can tell a whole reading from
+  a part of one.
+- **A pitch above the bound is not a pitch.** The detector looked for
+  a period from the top of its bounds downwards, and a tone above that
+  top has a shorter period than the search could see: it was given a
+  **wrong** pitch — an octave below the tone — and the crate's own
+  words say that a frame which cannot carry a pitch has no pitch
+  rather than a wrong one. The search now sees the period of such a
+  tone and **refuses** it.
+
+### What the port found
+
+- **A bound that cannot be reached.** The loudness meter holds state
+  for sixty-four channels, and the tree's own reader of a sound
+  refuses more than **eight** channels: the meter's bound cannot be
+  reached through the tree. The meter is asked for no more channels
+  than it holds, and the sound battery **refuses** a material with too
+  many channels rather than measuring it with fewer.
+- **Two names that meant two numbers.** The audio crate's detector of
+  onsets kept a private `MAX_CHANNELS` of thirty-two beside the
+  published `MAX_CHANNELS` of sixty-four: the private one is
+  `MAX_PLANES` now.
+- **A cap that no test can reach.** The pitch detector reads two
+  million frames of two thousand samples each: the sound it would take
+  to reach it is larger than the machine that runs the test. The test
+  names the cap and says what the tree reads; it cannot say what the
+  tree would read.
+
+### What it cost
+
+- **Six tests** in a new limit suite for the audio crate, **three**
+  detectors that say when they stop, **two** answers that carry the
+  flag, **one** pitch that is refused instead of wrong, **one** name
+  changed, and the claim row above.
+
+### What it does not settle
+
+- **A reading that says so is still a reading.** The flag says that
+  the detector stopped; it does not say how much of the sound is left
+  out.
+- **The tree's own reader is stricter than the battery's meter.** The
+  sound reader refuses eight channels and the meter holds sixty-four,
+  and the meter is the looser of the two. Nothing says which of them
+  is right.
+- **The outer gate still reaches only the kit.** After this arc
+  **twenty-one** caps in **fifteen** crates are published and named by
+  no test: three each in the midi and zip crates, two each in the kit
+  and the xml crate, and one in each of eleven more.

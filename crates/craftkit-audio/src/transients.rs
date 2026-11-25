@@ -27,6 +27,8 @@
 //! where the **sound** starts, and the two are often the same place and
 //! often are not.
 
+use crate::Found;
+
 /// The most transients a sound may have.
 ///
 /// Ten thousand is more than a person hears in a piece of music, and a
@@ -174,11 +176,11 @@ pub fn loud_ranges(
 ///
 /// The first frame of the sound is not an onset: the sound starts
 /// there, and there is nothing before it to rise from.
-pub fn transients(samples: &[f32], channels: usize, rate: u32, sensitivity: f64) -> Vec<usize> {
+pub fn transients(samples: &[f32], channels: usize, rate: u32, sensitivity: f64) -> Found<usize> {
     let channels = channels.max(1);
     let frames = samples.len() / channels;
     if frames < 2 {
-        return Vec::new();
+        return Found::whole(Vec::new());
     }
     let factor = factor_of(sensitivity);
     // The level of the **whole** sound: what a frame is measured
@@ -195,7 +197,7 @@ pub fn transients(samples: &[f32], channels: usize, rate: u32, sensitivity: f64)
     let threshold = overall * factor;
     let levels = levels(samples, channels);
     if levels.len() < 3 {
-        return Vec::new();
+        return Found::whole(Vec::new());
     }
     // The **gap** between two transients, in samples: the same gap at
     // every rate would be a different time at every rate.
@@ -228,8 +230,10 @@ pub fn transients(samples: &[f32], channels: usize, rate: u32, sensitivity: f64)
         }
         onsets.push(at);
         if onsets.len() >= MAX_TRANSIENTS {
-            break;
+            // The detector stopped at its bound: the rest of the sound
+            // was not read, and the reading says so.
+            return Found::stopped(onsets);
         }
     }
-    onsets
+    Found::whole(onsets)
 }

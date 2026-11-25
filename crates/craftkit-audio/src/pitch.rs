@@ -16,6 +16,8 @@
 //! frames are **capped**, the sample rate is **checked**, and a frame
 //! that cannot carry a pitch has **no pitch** rather than a wrong one.
 
+use crate::Found;
+
 /// The **most frames** the detector will look at.
 ///
 /// The tree's own cap: a sound that is longer than this is read as far
@@ -59,7 +61,12 @@ pub fn yin(frame: &[f32], sample_rate: f32, min_hz: f32, max_hz: f32, threshold:
         return None;
     }
     let max_tau = ((sample_rate / min_hz.max(20.0)) as usize).min(frame.len() / 2);
-    let min_tau = ((sample_rate / max_hz.max(min_hz + 1.0)) as usize).max(2);
+    // The **search** starts at the shortest period a frame can hold, and
+    // not at the one the top of the bounds says: a tone above `max_hz`
+    // has a shorter period than that, and the measure of it is found
+    // and then **refused**. A frame that cannot carry a pitch has no
+    // pitch, and not a wrong one.
+    let min_tau = 2usize;
     if max_tau <= min_tau.saturating_add(2) {
         return None;
     }
@@ -104,7 +111,16 @@ pub fn yin(frame: &[f32], sample_rate: f32, min_hz: f32, max_hz: f32, threshold:
             let denominator = left - 2.0 * middle + right;
             let shift = if denominator.abs() > 1.0e-9 { 0.5 * (left - right) / denominator } else { 0.0 };
             let period = lag as f32 + shift.clamp(-1.0, 1.0);
-            return (period > 0.0).then_some(sample_rate / period);
+            if period <= 0.0 {
+                return None;
+            }
+            let hz = sample_rate / period;
+            // The pitch is **outside the bounds** of the detector: it is
+            // not a pitch the detector claims to hear.
+            if hz < min_hz || hz > max_hz {
+                return None;
+            }
+            return Some(hz);
         }
         lag += 1;
     }
@@ -116,13 +132,20 @@ pub fn yin(frame: &[f32], sample_rate: f32, min_hz: f32, max_hz: f32, threshold:
 /// The tree's own rule: the sound is cut into frames, each frame is
 /// asked for its pitch, and a **run** of frames that sing the same
 /// note is a note — and a run of fewer than three frames is not.
-pub fn audio_to_notes(audio: &[f32], sample_rate: f32) -> Vec<DetectedNote> {
+pub fn audio_to_notes(audio: &[f32], sample_rate: f32) -> Found<DetectedNote> {
     let rate = if sample_rate.is_finite() && sample_rate > 0.0 { sample_rate } else { 48_000.0 };
     let window = ((rate * 0.046) as usize).clamp(256, 8192);
     let hop = window / 4;
     let mut frames: Vec<(usize, Option<u8>, f32)> = Vec::new();
     let mut position = 0usize;
-    while position + window <= audio.len() && frames.len() < MAX_FRAMES {
+    // Whether the detector stopped at its bound: the sound was longer
+    // than the frames the detector reads, and the reading says so.
+    let mut truncated = false;
+    while position + window <= audio.len() {
+        if frames.len() >= MAX_FRAMES {
+            truncated = true;
+            break;
+        }
         let Some(frame) = audio.get(position..position + window) else { break };
         let rms = (frame.iter().map(|sample| sample * sample).sum::<f32>() / window as f32).sqrt();
         // A **quiet** frame does not sing: there is no note in a silence.
@@ -158,5 +181,7 @@ pub fn audio_to_notes(audio: &[f32], sample_rate: f32) -> Vec<DetectedNote> {
         }
         index = next.max(index + 1);
     }
-    notes
+    // The detector stopped at its bound: the rest of the sound was not
+    // read, and the reading says so.
+    if truncated { Found::stopped(notes) } else { Found::whole(notes) }
 }

@@ -55,8 +55,35 @@ mod transients;
 pub use fft::{is_power_of_two, power};
 pub use loudness::{LoudnessMeter, MAX_CHANNELS, MIN_DB};
 pub use onsets::{MAX_ONSETS, onsets};
-pub use pitch::{DetectedNote, MAX_FRAMES, audio_to_notes, yin};
+pub use pitch::{DetectedNote, MAX_FRAMES, MAX_HZ, MIN_HZ, audio_to_notes, yin};
 pub use transients::{MAX_TRANSIENTS, levels, loud_ranges, transients};
+
+/// The **truth of a bounded reading**: what was found, and whether the
+/// reading stopped at its bound.
+///
+/// A detector that stops at a bound has found a part of the sound and
+/// not the whole of it, and a reader of the answer has to be able to
+/// tell the two apart. The flag says which it is.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Found<T> {
+    /// What was found.
+    pub items: Vec<T>,
+    /// Whether the reading stopped at its bound and the rest of the
+    /// sound was not read.
+    pub truncated: bool,
+}
+
+impl<T> Found<T> {
+    /// The reading of a detector that read all of it.
+    pub fn whole(items: Vec<T>) -> Found<T> {
+        Found { items, truncated: false }
+    }
+
+    /// The reading of a detector that stopped at its bound.
+    pub fn stopped(items: Vec<T>) -> Found<T> {
+        Found { items, truncated: true }
+    }
+}
 
 /// The **limits** a mix is made within.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

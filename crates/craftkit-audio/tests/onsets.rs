@@ -111,7 +111,7 @@ fn notes_starting_over_a_ringing_note_are_placed_on_their_attacks() {
         .enumerate()
         .map(|(k, (start, frequency))| (*start, note(frequency, 0.2 + 0.1 * (k % 3) as f32, 1.1)))
         .collect();
-    let found = onsets(&mix(4.0, &parts), 1, RATE, 0.5);
+    let found = onsets(&mix(4.0, &parts), 1, RATE, 0.5).items;
     let wanted: Vec<usize> = starts.iter().map(|start| at(*start)).collect();
     assert!(near(&found, &wanted, at(0.003)), "{found:?} and not {wanted:?}");
 }
@@ -121,7 +121,7 @@ fn notes_starting_over_a_ringing_note_are_placed_on_their_attacks() {
 #[test]
 fn quieter_hits_between_loud_ones_count() {
     let (sound, wanted) = drums(6.0);
-    let found = onsets(&sound, 1, RATE, 0.5);
+    let found = onsets(&sound, 1, RATE, 0.5).items;
     assert!(near(&found, &wanted, at(0.001)), "{found:?} and not {wanted:?}");
 }
 
@@ -147,7 +147,7 @@ fn a_held_chord_with_vibrato_and_chorus_has_no_transients() {
         })
         .collect();
     let found: Vec<usize> =
-        onsets(&sound, 1, RATE, 0.5).into_iter().filter(|found| *found > at(0.5)).collect();
+        onsets(&sound, 1, RATE, 0.5).items.into_iter().filter(|found| *found > at(0.5)).collect();
     assert!(found.is_empty(), "{found:?}");
 }
 
@@ -158,9 +158,12 @@ fn transients_do_not_depend_on_where_the_analysed_audio_starts() {
     let (mut sound, _) = drums(8.0);
     let from = at(3.3);
     sound.iter_mut().skip(from - at(0.4)).for_each(|value| *value *= 0.05);
-    let whole = onsets(&sound, 1, RATE, 0.5);
-    let part: Vec<usize> =
-        onsets(sound.get(from..).unwrap_or_default(), 1, RATE, 0.5).into_iter().map(|at| at + from).collect();
+    let whole = onsets(&sound, 1, RATE, 0.5).items;
+    let part: Vec<usize> = onsets(sound.get(from..).unwrap_or_default(), 1, RATE, 0.5)
+        .items
+        .into_iter()
+        .map(|at| at + from)
+        .collect();
     let settled =
         |found: &[usize]| found.iter().copied().filter(|found| *found > from + at(0.25)).collect::<Vec<_>>();
     assert!(!settled(&whole).is_empty());
@@ -182,7 +185,7 @@ fn a_fast_release_is_not_a_transient() {
         })
         .collect();
     let parts: Vec<(f32, Vec<f32>)> = starts.iter().map(|start| (*start, note.clone())).collect();
-    let found = onsets(&mix(4.5, &parts), 1, RATE, 0.5);
+    let found = onsets(&mix(4.5, &parts), 1, RATE, 0.5).items;
     let wanted: Vec<usize> = starts.iter().map(|start| at(*start)).collect();
     assert!(near(&found, &wanted, at(0.002)), "{found:?} and not {wanted:?}");
 }
@@ -196,6 +199,6 @@ fn channels_that_cancel_when_mixed_still_show_their_transients() {
         stereo.push(*value);
         stereo.push(-*value);
     }
-    let found = onsets(&stereo, 2, RATE, 0.5);
+    let found = onsets(&stereo, 2, RATE, 0.5).items;
     assert!(near(&found, &wanted, at(0.001)), "{found:?} and not {wanted:?}");
 }

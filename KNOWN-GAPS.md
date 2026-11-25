@@ -198,6 +198,28 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The audio crate's detectors say when they stop** (§1151): the
+  onsets, the transients and the notes of a sound are a reading — the
+  items that were found and whether the detector stopped at its bound —
+  and the sound battery's answers carry the flag. A pitch **above** the
+  detector's bound was given as a **wrong** pitch, an octave below the
+  tone, because the search started at the bound and could not see the
+  period of such a tone; the search sees it now and refuses it, which
+  is what the crate's own words say ("a frame that cannot carry a
+  pitch has no pitch rather than a wrong one").
+- **A bound that cannot be reached** (§1151): the loudness meter holds
+  state for sixty-four channels and the tree's own reader of a sound
+  refuses more than **eight** channels, so the meter's bound cannot be
+  reached through the tree. The sound battery refuses a material with
+  too many channels rather than measuring it with fewer, and the guard
+  is there for a reader that is less strict. Nothing says which of the
+  two bounds is the right one.
+- **A cap that no test can reach** (§1151): the pitch detector reads
+  two million frames of two thousand samples each, and the sound it
+  would take to reach that is larger than the machine that runs the
+  test. The test names the cap and says what the tree reads; it cannot
+  say what the tree would read. The same is true of `MAX_RESUMES` in
+  the kit (§1141).
 - **The xlsx reader's bounds now say what they do** (§1150): the bags
   of a file, the outline of a row and the columns of a sheet are read
   against a bound, and the file is told when the bound bites — the

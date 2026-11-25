@@ -30,7 +30,7 @@ fn a_fade() -> Vec<f32> {
 /// around them.
 #[test]
 fn the_hits_of_a_sound_are_found() {
-    let onsets = transients(&two_hits(), 1, 48_000, 0.5);
+    let onsets = transients(&two_hits(), 1, 48_000, 0.5).items;
     assert_eq!(onsets.len(), 2, "two hits and no more: {onsets:?}");
     assert!(onsets[0] >= 4_800 && onsets[0] <= 5_400, "the first hit is where it is: {onsets:?}");
     // The second hit starts at 26_400: the silence comes before each
@@ -42,14 +42,14 @@ fn the_hits_of_a_sound_are_found() {
 /// again.
 #[test]
 fn a_fade_has_no_transients() {
-    let onsets = transients(&a_fade(), 1, 48_000, 0.5);
+    let onsets = transients(&a_fade(), 1, 48_000, 0.5).items;
     assert!(onsets.is_empty(), "a fade starts once and does not start again: {onsets:?}");
 }
 
 /// **Silence** has no transients either.
 #[test]
 fn silence_has_no_transients() {
-    let onsets = transients(&vec![0.0_f32; 48_000], 1, 48_000, 0.5);
+    let onsets = transients(&vec![0.0_f32; 48_000], 1, 48_000, 0.5).items;
     assert!(onsets.is_empty(), "there is nothing in silence: {onsets:?}");
 }
 
@@ -64,8 +64,8 @@ fn the_sensitivity_is_how_small_a_rise_may_be() {
     samples.extend(std::iter::repeat_n(0.0_f32, 4_800));
     samples.extend(std::iter::repeat_n(0.05_f32, 12_000));
     samples.extend(std::iter::repeat_n(0.0_f32, 4_800));
-    let blunt = transients(&samples, 1, 48_000, 0.0);
-    let sensitive = transients(&samples, 1, 48_000, 1.0);
+    let blunt = transients(&samples, 1, 48_000, 0.0).items;
+    let sensitive = transients(&samples, 1, 48_000, 1.0).items;
     assert_eq!(blunt.len(), 1, "the blunt detector hears only the loud hit: {blunt:?}");
     assert_eq!(sensitive.len(), 2, "the sensitive one hears the quiet hit too: {sensitive:?}");
 }
@@ -80,7 +80,7 @@ fn two_hits_that_are_too_close_are_one_hit() {
     samples.extend(std::iter::repeat_n(0.0_f32, 480));
     samples.extend(std::iter::repeat_n(1.0_f32, 1_200));
     samples.extend(std::iter::repeat_n(0.0_f32, 4_800));
-    let onsets = transients(&samples, 1, 48_000, 0.5);
+    let onsets = transients(&samples, 1, 48_000, 0.5).items;
     assert_eq!(onsets.len(), 1, "the two hits are one: {onsets:?}");
 }
 
@@ -94,6 +94,6 @@ fn a_stereo_sound_is_read_across_both_channels() {
         stereo.push(sample);
         stereo.push(sample);
     }
-    let onsets = transients(&stereo, 2, 48_000, 0.5);
+    let onsets = transients(&stereo, 2, 48_000, 0.5).items;
     assert_eq!(onsets.len(), 2, "the two hits: {onsets:?}");
 }

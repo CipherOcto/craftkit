@@ -86,9 +86,10 @@ commands! {
                 }
                 out
             };
-            let notes = craftkit_audio::audio_to_notes(&mono, rate as f32);
+            let found = craftkit_audio::audio_to_notes(&mono, rate as f32);
             let rate = rate.max(1) as f64;
-            let notes: Vec<craftkit_sdk::serde_json::Value> = notes
+            let notes: Vec<craftkit_sdk::serde_json::Value> = found
+                .items
                 .iter()
                 .filter(|note| {
                     let hz = 440.0 * 2.0f64.powf((note.pitch as f64 - 69.0) / 12.0);
@@ -107,6 +108,9 @@ commands! {
                 "clip": clip_id,
                 "rate": rate,
                 "notes": notes,
+                // The detector stopped at its bound: the rest of the
+                // sound was not read, and the answer says so.
+                "truncated": found.truncated,
             })))
 
         }
