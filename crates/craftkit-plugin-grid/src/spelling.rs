@@ -42,13 +42,13 @@ const SYSTEM_LISTS: [&str; 3] =
     ["/usr/share/dict/words", "/usr/share/dict/american-english", "/usr/share/dict/british-english"];
 
 /// The **most** lines of a word list that are read.
-const MAX_SPELLING_LINES: usize = 2_000_000;
+pub const MAX_SPELLING_LINES: usize = 2_000_000;
 
 /// The **most** bytes of a word list that are read.
 const MAX_SPELLING_BYTES: u64 = 64 * 1024 * 1024;
 
 /// The **most** issues one check reports.
-const MAX_ISSUES: usize = 500;
+pub const MAX_ISSUES: usize = 500;
 
 /// The **most** characters a word may have for a suggestion to be made.
 ///
@@ -59,26 +59,40 @@ const MAX_WORD: usize = 64;
 /// The **most** suggestions one word gets.
 const MAX_SUGGESTIONS: usize = 6;
 
+/// The most **related words** the thesaurus answers with.
+pub const MAX_RELATED: usize = 20;
+
 /// The **suffixes** a word may have and still be a word: the
 /// inflections the list does not spell out.
 const INFLECTIONS: [&str; 8] = ["s", "es", "ed", "ing", "ly", "er", "ers", "'s"];
 
-/// The **words** of a word list: the file's lines, lowercased.
-fn words_of(path: &str) -> Option<std::collections::HashSet<String>> {
+/// The **words** of a word list: the file's lines, lowercased, and
+/// whether the list was **cut** at the tree's bound.
+///
+/// A list that is cut is a list the reader does not have whole, and a
+/// word the list holds beyond the cut would be called misspelled: the
+/// answer says so, because the answer must not lie about a word.
+fn words_of(path: &str) -> Option<(std::collections::HashSet<String>, bool)> {
     let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(path), MAX_SPELLING_BYTES).ok()?;
     let text = String::from_utf8(bytes).ok()?;
-    Some(
-        text.lines()
-            .take(MAX_SPELLING_LINES)
-            .map(|line| line.trim().to_lowercase())
-            .filter(|line| !line.is_empty())
-            .collect(),
-    )
+    let mut lines = text.lines();
+    let mut words = std::collections::HashSet::new();
+    let mut truncated = false;
+    for line in lines.by_ref().take(MAX_SPELLING_LINES) {
+        let line = line.trim().to_lowercase();
+        if !line.is_empty() {
+            words.insert(line);
+        }
+    }
+    if lines.next().is_some() {
+        truncated = true;
+    }
+    Some((words, truncated))
 }
 
 /// The **word list** to check against: the file that was named, or the
 /// system's.
-fn a_dictionary(path: Option<&str>) -> Option<std::collections::HashSet<String>> {
+fn a_dictionary(path: Option<&str>) -> Option<(std::collections::HashSet<String>, bool)> {
     match path {
         Some(path) => words_of(path),
         None => {
@@ -239,7 +253,7 @@ commands! {
             }
             // The **word list**: the one that was named, or the system's.
             let path = self.dictionary.as_ref().map(|path| path.0.trim().to_string());
-            let Some(words) = a_dictionary(path.as_deref()) else {
+            let Some((words, dictionary_truncated)) = a_dictionary(path.as_deref()) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: match path {
@@ -259,13 +273,21 @@ commands! {
                             "sheet": sheet,
                             "issues": Vec::<craftkit_sdk::serde_json::Value>::new(),
                             "done": true,
+                            "truncated": false,
+                            "dictionary_truncated": dictionary_truncated,
                         })));
                     }
                 },
             };
             let cells = crate::cells_of(&node);
             let mut issues: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
-            for row in area.start.row..=area.end.row {
+            // The check stops at the tree's bound: the sheet may hold
+            // more issues than the answer lists, and the answer says so.
+            // The flag is set when an issue is found that is **not**
+            // listed, so a sheet with exactly the bound's number of
+            // issues is not called cut.
+            let mut truncated = false;
+            'scan: for row in area.start.row..=area.end.row {
                 for column in area.start.col..=area.end.col {
                     let cell = CellRef { col: column, row };
                     let Some(entry) = cells.get(cell) else { continue };
@@ -277,21 +299,16 @@ commands! {
                         if is_known(&words, &taught, word) {
                             continue;
                         }
+                        if issues.len() >= MAX_ISSUES {
+                            truncated = true;
+                            break 'scan;
+                        }
                         issues.push(json!({
                             "cell": cell.to_text(),
                             "word": word,
                             "suggestions": suggestions(&words, word),
                         }));
-                        if issues.len() >= MAX_ISSUES {
-                            break;
-                        }
                     }
-                    if issues.len() >= MAX_ISSUES {
-                        break;
-                    }
-                }
-                if issues.len() >= MAX_ISSUES {
-                    break;
                 }
             }
             let done = issues.is_empty();
@@ -299,6 +316,8 @@ commands! {
                 "sheet": sheet,
                 "issues": issues,
                 "done": done,
+                "truncated": truncated,
+                "dictionary_truncated": dictionary_truncated,
             })))
 
         }
@@ -488,7 +507,7 @@ commands! {
             let id = "grid.thesaurus".to_string();
             let word = self.word.0.trim().to_lowercase();
             let path = self.dictionary.as_ref().map(|path| path.0.trim().to_string());
-            let Some(words) = a_dictionary(path.as_deref()) else {
+            let Some((words, dictionary_truncated)) = a_dictionary(path.as_deref()) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: match path {
@@ -501,6 +520,8 @@ commands! {
                 return Ok(Outcome::new("the word is too short to have a stem").with_data(json!({
                     "word": word,
                     "related": Vec::<String>::new(),
+                    "truncated": false,
+                    "dictionary_truncated": dictionary_truncated,
                 })));
             }
             let stem: String =
@@ -513,11 +534,17 @@ commands! {
                 .cloned()
                 .collect();
             related.sort();
-            related.truncate(20);
+            let truncated = related.len() > MAX_RELATED;
+            related.truncate(MAX_RELATED);
             Ok(Outcome::new(format!("{} related word(s)", related.len())).with_data(json!({
                 "word": word,
                 "stem": stem,
                 "related": related,
+                // The list of the related words is cut at the tree's
+                // bound, and the word list may be cut too: the answer
+                // says so.
+                "truncated": truncated,
+                "dictionary_truncated": dictionary_truncated,
             })))
 
         }

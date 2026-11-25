@@ -52,7 +52,7 @@ const GRIDLINE: [u8; 3] = [176, 176, 176];
 const MAX_EXPORT_LINES: usize = 200;
 
 /// The **most** characters of a cell's text that are drawn.
-const MAX_CHARS: usize = 10_000;
+pub const MAX_EXPORT_CHARS: usize = 10_000;
 
 /// The **most** cells a cell's text may run over.
 const MAX_SPILL: u32 = 64;
@@ -73,7 +73,7 @@ const HEADING_SIZE: f64 = 9.0;
 const HEADER_SIZE: f64 = 10.0;
 
 /// The **most** lines a header or a footer may hold.
-const MAX_HEADER_LINES: usize = 20;
+pub const MAX_HEADER_LINES: usize = 20;
 
 /// The **most** bytes of a picture file that are read.
 const MAX_PICTURE_BYTES: u64 = 40 * 1024 * 1024;
@@ -180,9 +180,15 @@ fn width_of(face: PdfFont, size: f64, text: &str) -> f64 {
     craftkit_pdf_writer::text_width(face, size as f32, text) as f64
 }
 
-/// The text of a cell, **broken into lines** that fit in `width`.
-fn wrap_lines(text: &str, face: PdfFont, size: f64, width: f64) -> Vec<String> {
+/// The text of a cell, **broken into lines** that fit in `width`, and
+/// whether any **line** was cut.
+///
+/// The lines of a cell's text are cut at the tree's bound, and the
+/// export says how many cells were cut short: a cell whose text is
+/// not all there is not the cell the user wrote.
+fn wrap_lines(text: &str, face: PdfFont, size: f64, width: f64) -> (Vec<String>, bool) {
     let mut out: Vec<String> = Vec::new();
+    let mut truncated = false;
     for paragraph in text.split('\n') {
         let mut line = String::new();
         for word in paragraph.split(' ') {
@@ -204,15 +210,17 @@ fn wrap_lines(text: &str, face: PdfFont, size: f64, width: f64) -> Vec<String> {
                 line = characters[cut..].iter().collect();
             }
             if out.len() >= MAX_EXPORT_LINES {
-                return out;
+                truncated = true;
+                return (out, truncated);
             }
         }
         out.push(line);
         if out.len() >= MAX_EXPORT_LINES {
+            truncated = true;
             break;
         }
     }
-    out
+    (out, truncated)
 }
 
 /// The **look** of a cell: its font, its alignment and its fill.
@@ -411,9 +419,11 @@ fn draw_header_footer(
     setup: &Setup,
     page_width: f64,
     page_height: f64,
-) {
+) -> usize {
     let (header, footer) = crate::headers::of_page(node, number, count);
     let margins = setup.margins;
+    // The **lines** that were cut, over the header and the footer.
+    let mut cut = 0usize;
     let size = HEADER_SIZE;
     let left = margins[0];
     let right = page_width - margins[1];
@@ -423,7 +433,12 @@ fn draw_header_footer(
             continue;
         }
         let face = PdfFont::styled(Family::Sans, section.bold, section.italic);
-        let lines: Vec<&str> = section.text.split('\n').take(MAX_HEADER_LINES).collect();
+        // The lines of the section are cut at the tree's bound, and the
+        // export says how many were cut: a header that is short is not
+        // the header the user wrote.
+        let mut lines_of_section = section.text.split('\n');
+        let lines: Vec<&str> = lines_of_section.by_ref().take(MAX_HEADER_LINES).collect();
+        cut += lines_of_section.count();
         let count = lines.len() as f64;
         for (line_number, line) in lines.iter().enumerate() {
             let measured = width_of(face, size, line);
@@ -442,7 +457,12 @@ fn draw_header_footer(
             continue;
         }
         let face = PdfFont::styled(Family::Sans, section.bold, section.italic);
-        let lines: Vec<&str> = section.text.split('\n').take(MAX_HEADER_LINES).collect();
+        // The lines of the section are cut at the tree's bound, and the
+        // export says how many were cut: a header that is short is not
+        // the header the user wrote.
+        let mut lines_of_section = section.text.split('\n');
+        let lines: Vec<&str> = lines_of_section.by_ref().take(MAX_HEADER_LINES).collect();
+        cut += lines_of_section.count();
         for (line_number, line) in lines.iter().enumerate() {
             let measured = width_of(face, size, line);
             let x = match index {
@@ -454,6 +474,7 @@ fn draw_header_footer(
             page.text(x as f32, y as f32, size as f32, face, [0, 0, 0], line);
         }
     }
+    cut
 }
 
 /// Whether a **target** is a URI that a PDF may carry.
@@ -478,6 +499,12 @@ struct Counts {
     borders: usize,
     /// The sparklines that were drawn.
     sparklines: usize,
+    /// The **lines of a header or a footer** that were cut.
+    header_lines_cut: usize,
+    /// The **points of a sparkline** that were cut.
+    spark_points_cut: usize,
+    /// The **texts of cells** that were cut.
+    cell_texts_cut: usize,
 }
 
 /// The **width** of a line of a border, in points, and the **dashes** it
@@ -541,7 +568,7 @@ fn draw_edge(page: &mut PdfPage, edge: &str, box_of: Rect, style: &str, colour: 
 }
 
 /// The **most** points a sparkline may have.
-const MAX_SPARK_POINTS: usize = 10_000;
+pub const MAX_SPARK_POINTS: usize = 10_000;
 
 /// The **colour** of the tree as four numbers between zero and one, as
 /// the three bytes a PDF wants.
@@ -574,15 +601,19 @@ struct Spark<'a> {
 /// missing; **columns** from the zero of the values; and **wins and
 /// losses**, a column up for a win and a column down for a loss. The
 /// one colour of the sparkline is the colour of every bar.
-fn draw_sparkline(page: &mut PdfPage, sparkline: &Spark<'_>) -> bool {
+fn draw_sparkline(page: &mut PdfPage, sparkline: &Spark<'_>, counts: &mut Counts) -> bool {
     let Spark { kind, values, colour, markers, x, y, width, height } = *sparkline;
     let (kind, values, colour, markers) = (kind, values, colour, markers);
     let (x, y, width, height) = (x, y, width, height);
     if !(width.is_finite() && height.is_finite()) || width < 1.0 || height < 1.0 {
         return false;
     }
+    // The points of the sparkline are cut at the tree's bound, and the
+    // export says how many were cut.
+    let mut points = values.iter();
     let values: Vec<Option<f64>> =
-        values.iter().take(MAX_SPARK_POINTS).map(|value| value.filter(|value| value.is_finite())).collect();
+        points.by_ref().take(MAX_SPARK_POINTS).map(|value| value.filter(|value| value.is_finite())).collect();
+    counts.spark_points_cut += points.count();
     let count = values.len();
     if count == 0 {
         return false;
@@ -795,8 +826,8 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
     }
     // The **header** and the **footer** of the page.
     let (page_width, page_height) = setup.page();
-    draw_header_footer(page, node, number, count, setup, page_width, page_height);
     let mut counts = Counts::default();
+    counts.header_lines_cut += draw_header_footer(page, node, number, count, setup, page_width, page_height);
     // The **merges** of the sheet: a merged cell is drawn over the whole
     // of its region, and the cells it covers are not drawn at all.
     let merges = crate::merges::merges_of(node);
@@ -906,7 +937,13 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
             if text.trim().is_empty() {
                 continue;
             }
-            let text: String = text.chars().take(MAX_CHARS).collect();
+            // The text of the cell is cut at the tree's bound, and the
+            // export says how many cells were cut short.
+            let mut characters = text.chars();
+            let text: String = characters.by_ref().take(MAX_EXPORT_CHARS).collect();
+            if characters.next().is_some() {
+                counts.cell_texts_cut += 1;
+            }
             let face = face_of(look.font.as_ref());
             let size = size_of(look.font.as_ref(), scale);
             // The **colour** of the text: the colour a conditional
@@ -934,8 +971,14 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
                 text = "#".repeat(count);
                 measured = width_of(face, size, &text);
             }
-            let lines =
-                if align.wrap { wrap_lines(&text, face, size, available.max(size)) } else { vec![text] };
+            let (lines, lines_cut) = if align.wrap {
+                wrap_lines(&text, face, size, available.max(size))
+            } else {
+                (vec![text], false)
+            };
+            if lines_cut {
+                counts.cell_texts_cut += 1;
+            }
             let line_height = size * LINE;
             let count = lines.len().max(1) as f64;
             let first_baseline = match align.vertical {
@@ -1058,7 +1101,7 @@ fn draw_page(page: &mut PdfPage, drawing: &Drawing<'_>, band: ((u32, u32), (u32,
         let width = crate::printing::column_width(node, cell.col) * scale;
         let height = crate::printing::row_height(node, cell.row) * scale;
         let sparkline = Spark { kind, values: &values, colour, markers, x, y, width, height };
-        if draw_sparkline(page, &sparkline) {
+        if draw_sparkline(page, &sparkline, &mut counts) {
             counts.sparklines += 1;
         }
     }
@@ -1211,6 +1254,12 @@ commands! {
                     counts.pictures += drawn.pictures;
                     counts.borders += drawn.borders;
                     counts.sparklines += drawn.sparklines;
+                    // What the page did **not** draw: the counts add up
+                    // over the pages, so a cut is counted once for
+                    // every page it happened on.
+                    counts.header_lines_cut += drawn.header_lines_cut;
+                    counts.spark_points_cut += drawn.spark_points_cut;
+                    counts.cell_texts_cut += drawn.cell_texts_cut;
                 }
                 // The **links**, the **pictures**, the **sparklines** and
                 // the **borders** of the sheet: the ones that were drawn
@@ -1252,6 +1301,12 @@ commands! {
                 "pictures_undrawn": pictures.saturating_sub(counts.pictures),
                 "borders": borders,
                 "borders_drawn": counts.borders,
+                // What the export did **not** draw: the answer says so.
+                "header_lines_cut": counts.header_lines_cut,
+                "spark_points_cut": counts.spark_points_cut,
+                "cell_texts_cut": counts.cell_texts_cut,
+                "truncated": counts.header_lines_cut + counts.spark_points_cut + counts.cell_texts_cut
+                    > 0,
                 "sparklines": sparklines,
                 "sparklines_drawn": counts.sparklines,
                 "bytes": bytes.len(),

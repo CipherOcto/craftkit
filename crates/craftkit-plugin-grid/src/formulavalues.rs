@@ -134,6 +134,11 @@ commands! {
             let mut parts: Vec<crate::formula::Expr> = Vec::new();
             parts_of(&expression, &mut parts);
             let mut steps: Vec<Json> = Vec::new();
+            // The **steps** of the audit are cut at the tree's bound: the
+            // answer says how many there were and how many it listed,
+            // because "the formula is audited in N steps" that is not
+            // the truth would be a lie.
+            let steps_total = parts.len();
             for part in parts.iter().rev().take(MAX_VALUE_STEPS) {
                 let value = book.evaluate(&name, part, &mut Vec::new());
                 steps.push(json!({
@@ -147,6 +152,8 @@ commands! {
                 "sheet": sheet,
                 "formula": text,
                 "steps": steps,
+                "steps_total": steps_total,
+                "truncated": steps_total > steps.len(),
                 "value": value.to_json(),
                 "type": kind_of(&value),
             })))
@@ -229,7 +236,7 @@ commands! {
 ///
 /// A long chain of operations is a long list, and a list of a million
 /// steps is not an audit.
-const MAX_VALUE_STEPS: usize = 200;
+pub const MAX_VALUE_STEPS: usize = 200;
 
 /// The parts of a formula that say something: a reference, an
 /// operation or a call.

@@ -629,12 +629,16 @@ pub use dates::MAX_SERIAL;
 pub use errors::MAX_ERRORS;
 pub use format::MAX_FORMAT_CHARS;
 pub use formula::{MAX_COLS, MAX_FORMULA_ROWS};
+pub use formulavalues::MAX_VALUE_STEPS;
 pub use fractions::{MAX_DENOMINATOR_DIGITS, MAX_FIXED_DENOMINATOR};
 pub use headers::MAX_TEXT;
 pub use importing::{MAX_COLUMNS, MAX_IMPORT_ROWS};
+pub use pdfexport::{MAX_EXPORT_CHARS, MAX_HEADER_LINES, MAX_SPARK_POINTS};
+pub use pivotfields::MAX_SAMPLES;
 pub use printing::MAX_MARGIN;
 pub use scaling::{MAX_FIT_PAGES, MAX_SCALE};
 pub use solver::{MAX_CONSTRAINTS, MAX_NODES, MAX_NODES_LP, MAX_PIVOTS, MAX_VARS};
+pub use spelling::{MAX_ISSUES, MAX_RELATED, MAX_SPELLING_LINES};
 pub use trendlines::{MAX_ORDER, MAX_PERIOD};
 
 /// The grid layer.

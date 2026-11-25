@@ -4597,18 +4597,19 @@ so.
 | **the reader says what it did not read** | **built.** The pdf battery's name tree says when it stopped at its depth (§1146) | §1146 |
 | **every reader of the pdf battery says what it did not read** | **built.** The structure tree, the marked content, the figures, the comments and the attachments each say when they stopped at their depth (§1147) | §1147 |
 | **every cap the prose battery keeps is named by a test** | **built.** All twenty-nine of the prose battery's cap names are named by a test beside the battery, and a source's title is bounded at last (§1148) | §1148 |
-| **every cap the grid battery publishes is named by a test** | **built.** All twenty of the grid battery's published cap names are named by a test beside the battery, and an address past the sheet is refused (§1149) | §1149 |
+| **every cap the grid battery publishes is named by a test** | **built.** All twenty-eight of the grid battery's published cap names are named by a test beside the battery, and an address past the sheet is refused (§1149) | §1149 |
 | **the xlsx reader says what it did not read** | **built.** The bags, the outline and the columns of a file are read against a bound, and the file is told when the bound bites (§1150) | §1150 |
 | **the audio crate's caps are named and its detectors say so** | **built.** The onsets, the transients and the notes of a sound are a reading that says when the detector stopped, and a pitch above the bound is refused (§1151) | §1151 |
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
 | **the batteries and the libraries name their caps** | **built.** Nine crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and eleven caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and fifteen caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
 | **one name, one number — the private caps too** | **built.** The rule of the name now reads every cap of a crate, and twenty-three private groups of caps are named apart (§1160) | §1160 |
+| **the grid battery says what it cut** | **built.** The issues, the related words, the samples, the steps and the export's own cuts now say that they stopped, and nine tests prove each of them (§1161) | §1161 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73354,3 +73355,76 @@ keeps **inside** itself.
 - **A cap that is published is a cap the world may use.** The private
   caps stay private: the rule holds them to one name and one number
   and to nothing else, and nothing asks a test to prove them.
+
+## 1161. The grid battery says what it cut
+
+§1146–§1150 brought the rule of the **saying so** to the pdf and xlsx
+readers, and §1151 to the audio crate's detectors: a reader that stops
+at a bound must say that it stopped. This arc brings it to the grid
+battery, which had **eight** places where it stopped and said nothing.
+
+### What was built
+
+- **The issues of a spelling check say when they were cut.** The check
+  stops at `MAX_ISSUES` — five hundred issues — and the answer used to
+  list five hundred of them and say nothing about the rest. It says
+  now: `truncated` tells a reader that the sheet holds more issues
+  than the answer lists, and `dictionary_truncated` says that the word
+  list itself was cut at `MAX_SPELLING_LINES`, so a word that was not
+  read is not called misspelled in silence.
+- **The related words of the thesaurus say when they were cut.** The
+  list was cut at twenty words, at a number that was written in the
+  code and nowhere else. It is `MAX_RELATED` now, it is published, and
+  the answer says it stopped.
+- **The samples of a pivot's field say when they were cut.** A field
+  of a pivot showed five samples and said nothing about the sixth; the
+  answer carries `samples_truncated` now, and the bound is
+  `MAX_SAMPLES`.
+- **The steps of an audit say when they were cut.** The audit of a
+  formula showed two hundred steps and said nothing about the rest; it
+  says how many steps there were (`steps_total`) and whether it
+  stopped (`truncated`), and the bound is `MAX_VALUE_STEPS`.
+- **The export says what it did not draw.** Three cuts of the PDF
+  export were silent: the **lines of a header** (`MAX_HEADER_LINES`),
+  the **points of a sparkline** (`MAX_SPARK_POINTS`) and the **text of
+  a cell** (`MAX_EXPORT_CHARS`). The answer carries
+  `header_lines_cut`, `spark_points_cut` and `cell_texts_cut`, and a
+  `truncated` that is true when any of them is.
+- **Nine tests name every cut.** The grid battery's new test file
+  names each bound **in code** — `MAX_ISSUES`, `MAX_RELATED`,
+  `MAX_SAMPLES`, `MAX_VALUE_STEPS`, `MAX_HEADER_LINES`,
+  `MAX_SPARK_POINTS`, `MAX_EXPORT_CHARS` — so the proof and the bound
+  cannot drift apart. One of the nine is the other half: a sheet with
+  exactly the bound's number of issues is **not** cut, and the answer
+  says so.
+
+### What the port found
+
+- **The bound of the issues was not a number of the tree's own.** The
+  check stopped at five hundred issues and at a word list of two
+  million lines, and neither number was a cap — a cap is a name, and a
+  number that nothing names is a number a reader cannot look up.
+- **The export's cuts were the worst of them.** The header of a page
+  was cut at twenty lines, a sparkline at ten thousand points and a
+  cell's text at ten thousand characters, and the export said nothing
+  about any of them: a PDF of a sheet whose header was cut short was a
+  PDF that looked right.
+- **The word list's cut was the one that could lie.** A word list cut
+  at its bound drops the words beyond it, and a dropped word is a word
+  the check calls misspelled — so the check was calling words
+  misspelled that the list holds, and it was not saying so.
+
+### What it cost
+
+- **Five answers changed**, **eight caps published** at the grid
+  battery's root, **nine tests** in a new file, and the claim row
+  above.
+
+### What it does not settle
+
+- **The tree's other batteries still cut in silence.** This arc is the
+  grid battery's; the prose battery's issues, the film battery's
+  captions and the rest are the same shape and are not yet answered.
+- **A cut that is not a bound is still a cut.** The export wraps the
+  text of a cell into lines and stops at `MAX_EXPORT_LINES`; that cap
+  is private and the number of lines cut is not in the answer yet.

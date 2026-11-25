@@ -43,7 +43,7 @@ use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 use crate::formula::{CellRef, Value};
 
 /// The most **samples** a field shows: the tree's own five.
-const MAX_SAMPLES: usize = 5;
+pub const MAX_SAMPLES: usize = 5;
 
 /// The **class** of a value: the order the tree puts the values in.
 ///
@@ -195,6 +195,10 @@ commands! {
                     items.push(value);
                 }
                 items.sort_by(compare);
+                // The **samples** of the field are cut at the tree's
+                // bound, and the answer says so: a reader of the answer
+                // must know that the samples are a part of the field.
+                let samples_truncated = items.len() > MAX_SAMPLES;
                 let samples: Vec<Json> = items
                     .iter()
                     .take(MAX_SAMPLES)
@@ -228,6 +232,7 @@ commands! {
                     "numeric": numeric && any,
                     "date": is_date,
                     "samples": samples,
+                    "samples_truncated": samples_truncated,
                     "areas": areas,
                 }));
             }
