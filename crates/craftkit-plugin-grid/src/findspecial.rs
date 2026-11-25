@@ -55,7 +55,7 @@ use crate::formula::{Area, CellRef, Cells, Value};
 /// The tree's own bound is four million; this one is a million, and
 /// the tree's is a bound on a rectangle of a sheet that is not walked
 /// cell by cell as often as this one is.
-const MAX_CELLS: u64 = 1_000_000;
+const MAX_FOUND_CELLS: u64 = 1_000_000;
 
 /// The most cells one answer lists.
 ///
@@ -290,10 +290,10 @@ commands! {
                     let Some(area) = scope else {
                         return Ok(answer(sheet, &name, kind, None, Vec::new()));
                     };
-                    if area.count() > MAX_CELLS {
+                    if area.count() > MAX_FOUND_CELLS {
                         return Err(EngineError::Failed {
                             id,
-                            message: format!("the range is too large to look through ({MAX_CELLS} cells max)"),
+                            message: format!("the range is too large to look through ({MAX_FOUND_CELLS} cells max)"),
                         });
                     }
                     // The **comments** and the **notes** of the sheet, and

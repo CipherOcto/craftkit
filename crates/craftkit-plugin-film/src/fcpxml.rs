@@ -91,7 +91,7 @@ const MAX_XML: usize = 4_000_000;
 const DEFAULT_RATE: (i64, i64) = (25, 1);
 
 /// The most a **size** may be, in pixels.
-const MAX_SIZE: u64 = 100_000;
+const MAX_FCXML_SIZE: u64 = 100_000;
 
 /// **Escape** a text for an XML attribute.
 fn escape(text: &str) -> String {
@@ -425,10 +425,10 @@ commands! {
                 });
             }
             let size = |value: f64, what: &str| -> Result<u64, EngineError> {
-                if !value.is_finite() || value <= 0.0 || value > MAX_SIZE as f64 {
+                if !value.is_finite() || value <= 0.0 || value > MAX_FCXML_SIZE as f64 {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: format!("{value} is not {what}: it is a number from one to {MAX_SIZE}"),
+                        message: format!("{value} is not {what}: it is a number from one to {MAX_FCXML_SIZE}"),
                     });
                 }
                 Ok(value.round() as u64)

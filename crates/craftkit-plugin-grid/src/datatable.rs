@@ -26,7 +26,7 @@ use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 use crate::formula::{Area, CellRef, Value};
 
 /// The tree's own **bound** on the cells of a data table.
-const MAX_CELLS: usize = 100_000;
+const MAX_TABLE_CELLS: usize = 100_000;
 
 commands! {
     /// The **data table** of a sheet.
@@ -107,10 +107,10 @@ commands! {
             // The **body** of the table: the range without its first row
             // and its first column.
             let body = Area::new(CellRef { row: area.start.row + 1, col: area.start.col + 1 }, area.end);
-            if body.count() > MAX_CELLS as u64 {
+            if body.count() > MAX_TABLE_CELLS as u64 {
                 return Err(EngineError::Failed {
                     id,
-                    message: format!("the table body is too large ({MAX_CELLS} cells max)"),
+                    message: format!("the table body is too large ({MAX_TABLE_CELLS} cells max)"),
                 });
             }
             // The **cells** of the sheet: the formulas and the inputs are

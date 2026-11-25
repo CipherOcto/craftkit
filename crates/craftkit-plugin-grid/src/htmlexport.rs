@@ -46,7 +46,7 @@ const MAX_EXPORT_ROWS: u64 = 100_001;
 ///
 /// A sparse sheet with one cell far to the right would otherwise be
 /// gigabytes of empty cells.
-const MAX_CELLS: u64 = 4_000_000;
+const MAX_EXPORT_CELLS: u64 = 4_000_000;
 
 commands! {
     /// **Export** a sheet as an HTML page.
@@ -115,11 +115,11 @@ commands! {
                     ),
                 });
             }
-            if rows * columns > MAX_CELLS {
+            if rows * columns > MAX_EXPORT_CELLS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "the sheet is too wide for a page: {} cells, at most {MAX_CELLS}",
+                        "the sheet is too wide for a page: {} cells, at most {MAX_EXPORT_CELLS}",
                         rows * columns
                     ),
                 });

@@ -34,7 +34,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Text};
 
 /// The most **deep** the structure tree is walked.
-const MAX_DEPTH: usize = 64;
+const MAX_FIGURE_DEPTH: usize = 64;
 
 /// The **type** of the elements that are figures.
 const FIGURE: &str = "Figure";
@@ -149,7 +149,7 @@ fn walk(
     out: &mut Vec<Figure>,
     truncated: &mut bool,
 ) {
-    if depth >= MAX_DEPTH {
+    if depth >= MAX_FIGURE_DEPTH {
         // The tree is deeper than the reader reads: what is below is in
         // the file and not in the answer, and the answer says so.
         *truncated = true;

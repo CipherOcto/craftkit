@@ -56,10 +56,10 @@ const BASE_HEIGHT: f64 = 1080.0;
 const MIN_SIZE: f64 = 4.0;
 
 /// The **largest** a caption may be, in the tree's pixels.
-const MAX_SIZE: f64 = 256.0;
+const MAX_LAYOUT_SIZE: f64 = 256.0;
 
 /// The **widest** an outline may be, in the tree's pixels.
-const MAX_OUTLINE: f64 = 64.0;
+const MAX_LAYOUT_OUTLINE: f64 = 64.0;
 
 /// The **widest** a line may be, as a fraction of the frame.
 const MAX_WIDTH: f64 = 0.9;
@@ -219,7 +219,7 @@ pub fn placement(
     }
     // The **scale** and the **size** of the letters.
     let scale = height / BASE_HEIGHT;
-    let size = number_in(style, "size", MIN_SIZE, MAX_SIZE, 54.0);
+    let size = number_in(style, "size", MIN_SIZE, MAX_LAYOUT_SIZE, 54.0);
     let px = (size * scale).clamp(MIN_SIZE, height);
     let Some(metrics) = Metrics::new(px) else {
         return Err("the size of the letters of a caption is a number that is positive".to_string());
@@ -267,7 +267,8 @@ pub fn placement(
         })
         .collect();
     // The **outline** grows the box.
-    let outline = (number_in(style, "outline", 0.0, MAX_OUTLINE, 0.0) * scale).clamp(0.0, MAX_OUTLINE);
+    let outline =
+        (number_in(style, "outline", 0.0, MAX_LAYOUT_OUTLINE, 0.0) * scale).clamp(0.0, MAX_LAYOUT_OUTLINE);
     let grow = outline.ceil() + 1.0;
     let left = xs.iter().zip(&widths).map(|(x, _)| x - padding - grow).fold(f64::MAX, f64::min).floor();
     let right = xs

@@ -33,7 +33,7 @@ use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 use crate::formula::Value;
 
 /// How many times a goal seek may halve the range.
-const MAX_STEPS: usize = 64;
+const MAX_GOAL_STEPS: usize = 64;
 
 commands! {
     /// The **goal**: the input that gives a result.
@@ -131,7 +131,7 @@ commands! {
             let mut high = high;
             let mut low_value = low_value;
             let mut steps = 0usize;
-            while steps < MAX_STEPS {
+            while steps < MAX_GOAL_STEPS {
                 let middle = (low + high) / 2.0;
                 let at_middle = crate::whatifs::trial(&mut book, &name, input, result, middle, &id)?;
                 let middle_value = number_of(&at_middle, &id, middle)?;

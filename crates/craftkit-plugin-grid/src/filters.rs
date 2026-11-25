@@ -630,11 +630,11 @@ commands! {
                     message: "the values of a filter are a list".to_string(),
                 });
             };
-            if values.len() > MAX_VALUES {
+            if values.len() > MAX_FILTER_VALUES {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "a filter holds {MAX_VALUES} values or fewer, and this one holds {}",
+                        "a filter holds {MAX_FILTER_VALUES} values or fewer, and this one holds {}",
                         values.len()
                     ),
                 });
@@ -677,7 +677,7 @@ commands! {
 }
 
 /// The most **values** a list filter may hold.
-const MAX_VALUES: usize = 1024;
+const MAX_FILTER_VALUES: usize = 1024;
 
 /// The most **characters** one value of a list filter may hold.
 const MAX_VALUE_CHARS: usize = 255;

@@ -32,7 +32,7 @@ use craftkit_sdk::{EngineError, Outcome, Text};
 use crate::formula::{CellRef, Value};
 
 /// The most **bytes** a workbook file may hold.
-const MAX_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_IMPORT_BYTES: u64 = 512 * 1024 * 1024;
 
 /// The most **cells** the links of one sheet may cover.
 ///
@@ -163,7 +163,7 @@ commands! {
                 return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
             }
             // The **bytes** are bounded before the file is read.
-            let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES)
+            let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_IMPORT_BYTES)
                 .map_err(|message| {
                     EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
                 })?;

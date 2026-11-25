@@ -31,7 +31,7 @@ use crate::formula::{Book, CellRef, Expr, Value};
 pub const NAMES: &[&str] = &["BESSELJ", "BESSELY", "BESSELI", "BESSELK"];
 
 /// The most points the **integral** of the first kind may use.
-const MAX_POINTS: f64 = 4_000_000.0;
+const MAX_INTEGRAL_POINTS: f64 = 4_000_000.0;
 
 /// The Euler–Mascheroni constant.
 const EULER: f64 = 0.577_215_664_901_532_9;
@@ -44,7 +44,7 @@ const EULER: f64 = 0.577_215_664_901_532_9;
 /// the rule closes in fast.
 fn j_of(n: u32, x: f64) -> Option<f64> {
     let points = (2.0 * (x.abs() + f64::from(n)) + 64.0).ceil();
-    if points > MAX_POINTS {
+    if points > MAX_INTEGRAL_POINTS {
         // A number that is **too large** for the sum is left to the
         // expansion for a large argument.
         return hankel(n, x.abs()).map(|(j, _)| if x < 0.0 && n % 2 == 1 { -j } else { j });

@@ -34,7 +34,7 @@ use craftkit_sdk::{Document, EngineError, Outcome};
 const COMMAND: &str = "pdf.attachments.read";
 
 /// The most **deep** a name tree is read.
-const MAX_DEPTH: usize = 8;
+const MAX_ATTACHMENT_DEPTH: usize = 8;
 
 /// One **attachment**: a file a file carries.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -129,7 +129,7 @@ fn walk(
     out: &mut Vec<Attachment>,
     truncated: &mut bool,
 ) {
-    if depth >= MAX_DEPTH {
+    if depth >= MAX_ATTACHMENT_DEPTH {
         // The tree is deeper than the reader reads: what is below is in
         // the file and not in the answer, and the answer says so.
         *truncated = true;

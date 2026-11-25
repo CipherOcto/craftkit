@@ -4608,6 +4608,7 @@ so.
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
+| **one name, one number — the private caps too** | **built.** The rule of the name now reads every cap of a crate, and twenty-three private groups of caps are named apart (§1160) | §1160 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73303,3 +73304,53 @@ test can use them at all.
 - **The rule reads the code of the tests, and a test may name a cap in
   a string.** A cap that a test writes into a message is a name in a
   string and not in the code, and the rule does not count it.
+
+## 1160. One name, one number — the private caps too
+
+§1144 brought the rule of one name and one number to a crate's
+**published** caps, and §1148–§1159 held every crate to its own caps
+by name. This arc makes the rule of the name reach the caps a crate
+keeps **inside** itself.
+
+### What was built
+
+- **The rule sees the private caps.** The rule of one name and one
+  number was about the code's own clarity — two caps of the same name
+  and different numbers leave a reader with no way to say which is
+  which — and a private cap is read by the crate's own code as much as
+  a published one is read by the world. The rule now reads every cap
+  of a crate, published or private, and it holds the private ones to
+  the same name.
+- **Twenty-three caps are named apart.** The film battery had a
+  `MAX_SIZE` for its caption style, a `MAX_SIZE` for its caption
+  layout and a `MAX_SIZE` for the size of an fcpxml file; the grid
+  battery had a `MAX_CELLS` in five places and a `MAX_POINTS` in two;
+  the pdf battery had a `MAX_DEPTH` in five. They are named for what
+  they bound now, and the tree has **one name and one number** for
+  every cap it keeps.
+- **A test proves it.** The rule's own test builds a crate with a
+  published cap and a private one of the same name and another number,
+  and the rule catches it.
+
+### What the port found
+
+- **The rule was reading half the tree's caps.** It read the
+  **published** caps and not the private ones, and the private ones
+  were where the clashes were: the tree's published caps were already
+  one name and one number each, and twenty-three private groups were
+  not.
+
+### What it cost
+
+- **Twenty-three caps renamed** across the film, grid and pdf
+  batteries, **one reader** in the gate, **one** test of the rule, and
+  the claim row above.
+
+### What it does not settle
+
+- **The rule reads the caps, and not the bounds.** A constant that is
+  not called a cap — `MAX_LENGTH`, `LIMIT_ROWS` — is not read by it,
+  and a name that two such constants share is invisible to the rule.
+- **A cap that is published is a cap the world may use.** The private
+  caps stay private: the rule holds them to one name and one number
+  and to nothing else, and nothing asks a test to prove them.

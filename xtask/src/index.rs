@@ -399,6 +399,38 @@ pub struct Bound {
 /// something, and the second says the same thing the other way round. A
 /// private constant is the program's own business and is not read: only
 /// a **public** limit is a promise or a cap somebody else may rely on.
+pub fn caps_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
+    let mut found = Vec::new();
+    for (number, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        let Some(rest) = trimmed.strip_prefix("pub const ").or_else(|| trimmed.strip_prefix("const ")) else {
+            continue;
+        };
+        let Some((name, rest)) = rest.split_once(':') else { continue };
+        let name = name.trim();
+        if !(name.starts_with("MAX_") || name.ends_with("_LIMIT")) {
+            continue;
+        }
+        let value =
+            rest.split_once('=').map(|(_, value)| value.trim().trim_end_matches(';').trim().to_string());
+        found.push(Bound {
+            name: name.to_string(),
+            value: value.unwrap_or_default(),
+            file: file.to_path_buf(),
+            line: number + 1,
+            battery: battery.to_string(),
+        });
+    }
+    found
+}
+
+/// The **caps** of a file, published and private alike.
+///
+/// The rule of one name and one number is about the code's own clarity:
+/// two caps of the same name and different numbers leave a reader of
+/// the source with no way to say which is which, and a private cap is
+/// read by the crate's own code as much as a published one is read by
+/// the world. §1160.
 pub fn limits_in(text: &str, file: &Path, battery: &str) -> Vec<Bound> {
     let mut found = Vec::new();
     for (number, line) in text.lines().enumerate() {

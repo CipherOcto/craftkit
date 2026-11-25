@@ -30,7 +30,7 @@ use craftkit_sdk::{Document, EngineError, Node, Outcome};
 const COMMAND: &str = "pdf.marked.read";
 
 /// The most **deep** a structure tree is read.
-const MAX_DEPTH: usize = 64;
+const MAX_MARKED_DEPTH: usize = 64;
 
 /// One **marked** element: what it is, and the text under it.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -127,7 +127,7 @@ fn walk(
     out: &mut Vec<Marked>,
     truncated: &mut bool,
 ) {
-    if depth >= MAX_DEPTH {
+    if depth >= MAX_MARKED_DEPTH {
         // The tree is deeper than the reader reads: what is below is in
         // the file and not in the answer, and the answer says so.
         *truncated = true;

@@ -198,6 +198,15 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **One name, one number — the private caps too** (§1160): the rule
+  read the **published** caps and not the private ones, and the private
+  ones were where the clashes were: the tree's published caps were
+  already one name and one number each, and twenty-three private groups
+  were not — the film battery's three `MAX_SIZE`, the grid battery's
+  five `MAX_CELLS` and two `MAX_POINTS`, the pdf battery's five
+  `MAX_DEPTH`, and more. The rule now reads every cap of a crate. The
+  private caps stay private: the rule holds them to one name and one
+  number and to nothing else, and nothing asks a test to prove them.
 - **The rule asks for the name in the code** (§1159): a cap named in a
   comment is a name, and a cap named in the **code** of a test is a cap
   the test uses. Sixty-nine of the tree's caps were named in prose and

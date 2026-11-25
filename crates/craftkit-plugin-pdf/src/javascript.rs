@@ -26,7 +26,7 @@ use craftkit_sdk::{Document, EngineError, Outcome};
 const COMMAND: &str = "pdf.scripts.read";
 
 /// The most **deep** a name tree is read.
-const MAX_DEPTH: usize = 8;
+const MAX_SCRIPT_DEPTH: usize = 8;
 
 /// One **script** of a file.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -102,12 +102,12 @@ fn walk(
     scripts: &mut Vec<Script>,
     skipped: &mut Vec<String>,
 ) {
-    if depth >= MAX_DEPTH {
+    if depth >= MAX_SCRIPT_DEPTH {
         // **The tree is deeper than the reader reads.** The scripts below
         // this point are in the file and not in the answer, and a file
         // that says more than the document does is a file that lies:
         // the part that was not read is **said**.
-        skipped.push(format!("a part of the tree is deeper than {MAX_DEPTH} and was not read"));
+        skipped.push(format!("a part of the tree is deeper than {MAX_SCRIPT_DEPTH} and was not read"));
         return;
     }
     // The **names** of this part of the tree: a name and the script it

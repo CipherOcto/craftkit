@@ -42,10 +42,10 @@ use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, T
 const MIN_SIZE: f64 = 4.0;
 
 /// The **largest** a caption may be, in the tree's pixels.
-const MAX_SIZE: f64 = 400.0;
+const MAX_CAPTION_SIZE: f64 = 400.0;
 
 /// The **widest** an outline may be, in the tree's pixels.
-const MAX_OUTLINE: f64 = 40.0;
+const MAX_STYLE_OUTLINE: f64 = 40.0;
 
 /// The **largest** a margin may be, as a fraction of the height of the
 /// frame.
@@ -292,11 +292,11 @@ commands! {
             }
             // The **numbers**: each one inside its range.
             let size = match self.size {
-                Some(size) => Some(number_in(command, "size", size.0, MIN_SIZE, MAX_SIZE)?),
+                Some(size) => Some(number_in(command, "size", size.0, MIN_SIZE, MAX_CAPTION_SIZE)?),
                 None => None,
             };
             let outline = match self.outline {
-                Some(outline) => Some(number_in(command, "outline", outline.0, 0.0, MAX_OUTLINE)?),
+                Some(outline) => Some(number_in(command, "outline", outline.0, 0.0, MAX_STYLE_OUTLINE)?),
                 None => None,
             };
             let margin = match self.margin {

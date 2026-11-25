@@ -30,7 +30,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, Outcome};
 
 /// The most **deep** a structure tree is read.
-const MAX_DEPTH: usize = 64;
+const MAX_STRUCTURE_DEPTH: usize = 64;
 
 /// One **element** of a structure tree.
 #[derive(Debug, Clone, PartialEq)]
@@ -104,7 +104,7 @@ fn element_of(
 
 /// The **children** of an element: the elements below it.
 fn children_of(document: &Document, value: &Json, depth: usize, truncated: &mut bool) -> Vec<Element> {
-    if depth >= MAX_DEPTH {
+    if depth >= MAX_STRUCTURE_DEPTH {
         // The tree is deeper than the reader reads: what is below is in
         // the file and not in the answer, and the answer says so.
         *truncated = true;

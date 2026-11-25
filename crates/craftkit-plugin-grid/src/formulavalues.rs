@@ -134,7 +134,7 @@ commands! {
             let mut parts: Vec<crate::formula::Expr> = Vec::new();
             parts_of(&expression, &mut parts);
             let mut steps: Vec<Json> = Vec::new();
-            for part in parts.iter().rev().take(MAX_STEPS) {
+            for part in parts.iter().rev().take(MAX_VALUE_STEPS) {
                 let value = book.evaluate(&name, part, &mut Vec::new());
                 steps.push(json!({
                     "expression": part.to_text(),
@@ -229,7 +229,7 @@ commands! {
 ///
 /// A long chain of operations is a long list, and a list of a million
 /// steps is not an audit.
-const MAX_STEPS: usize = 200;
+const MAX_VALUE_STEPS: usize = 200;
 
 /// The parts of a formula that say something: a reference, an
 /// operation or a call.

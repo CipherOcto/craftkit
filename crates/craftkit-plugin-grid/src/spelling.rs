@@ -42,10 +42,10 @@ const SYSTEM_LISTS: [&str; 3] =
     ["/usr/share/dict/words", "/usr/share/dict/american-english", "/usr/share/dict/british-english"];
 
 /// The **most** lines of a word list that are read.
-const MAX_LINES: usize = 2_000_000;
+const MAX_SPELLING_LINES: usize = 2_000_000;
 
 /// The **most** bytes of a word list that are read.
-const MAX_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_SPELLING_BYTES: u64 = 64 * 1024 * 1024;
 
 /// The **most** issues one check reports.
 const MAX_ISSUES: usize = 500;
@@ -65,11 +65,11 @@ const INFLECTIONS: [&str; 8] = ["s", "es", "ed", "ing", "ly", "er", "ers", "'s"]
 
 /// The **words** of a word list: the file's lines, lowercased.
 fn words_of(path: &str) -> Option<std::collections::HashSet<String>> {
-    let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(path), MAX_BYTES).ok()?;
+    let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(path), MAX_SPELLING_BYTES).ok()?;
     let text = String::from_utf8(bytes).ok()?;
     Some(
         text.lines()
-            .take(MAX_LINES)
+            .take(MAX_SPELLING_LINES)
             .map(|line| line.trim().to_lowercase())
             .filter(|line| !line.is_empty())
             .collect(),

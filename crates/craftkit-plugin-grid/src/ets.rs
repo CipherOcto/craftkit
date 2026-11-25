@@ -38,7 +38,7 @@ pub const NAMES: &[&str] =
     &["FORECAST.ETS", "FORECAST.ETS.CONFINT", "FORECAST.ETS.SEASONALITY", "FORECAST.ETS.STAT"];
 
 /// The most points a series may hold.
-const MAX_POINTS: usize = 200_000;
+const MAX_SERIES_POINTS: usize = 200_000;
 
 /// The longest season the tree supports.
 const MAX_SEASON: usize = 8_760;
@@ -328,7 +328,7 @@ fn series_of(
     if values.len() != timeline.len() {
         return Err(Fault::NotAvailable);
     }
-    if values.len() > MAX_POINTS {
+    if values.len() > MAX_SERIES_POINTS {
         return Err(Fault::NotNumber);
     }
     let mut points: Vec<(f64, Option<f64>)> = Vec::with_capacity(values.len());
@@ -368,7 +368,7 @@ fn series_of(
     let Some(span) = axis.position(system, last).map(|span| span.round()) else {
         return Err(Fault::NotNumber);
     };
-    if !(span >= 1.0 && span < MAX_POINTS as f64) {
+    if !(span >= 1.0 && span < MAX_SERIES_POINTS as f64) {
         return Err(Fault::NotNumber);
     }
     let length = span as usize + 1;

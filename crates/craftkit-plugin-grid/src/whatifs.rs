@@ -36,7 +36,7 @@ use crate::formula::{Book, CellRef, Value};
 /// The work is one evaluation of the sheet for each value, and the
 /// number of them is bounded so that a what-if cannot take the machine
 /// for the whole afternoon.
-const MAX_VALUES: usize = 256;
+const MAX_WHATIF_VALUES: usize = 256;
 
 /// The **cell** a name says, if it says one.
 pub(crate) fn cell_of(text: &str, id: &str, what: &str) -> Result<CellRef, EngineError> {
@@ -97,10 +97,10 @@ commands! {
                     message: "a what-if tries a value or more".to_string(),
                 });
             }
-            if list.len() > MAX_VALUES {
+            if list.len() > MAX_WHATIF_VALUES {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a what-if tries {} values or fewer", MAX_VALUES),
+                    message: format!("a what-if tries {} values or fewer", MAX_WHATIF_VALUES),
                 });
             }
             let mut values: Vec<f64> = Vec::with_capacity(list.len());

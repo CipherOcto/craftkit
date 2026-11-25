@@ -44,7 +44,7 @@ const COMMAND: &str = "grid.scenario";
 const MAX_NAME: usize = 255;
 
 /// The tree's own **bound** on the changing cells of a scenario.
-const MAX_CELLS: usize = 32;
+const MAX_SCENARIO_CELLS: usize = 32;
 
 /// The tree's own **bound** on the scenarios of a workbook.
 const MAX_SCENARIOS: usize = 1000;
@@ -204,11 +204,11 @@ commands! {
                     message: "a scenario has no changing cells".to_string(),
                 });
             }
-            if list.len() > MAX_CELLS {
+            if list.len() > MAX_SCENARIO_CELLS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "a scenario has at most {MAX_CELLS} changing cells, and this one has {}",
+                        "a scenario has at most {MAX_SCENARIO_CELLS} changing cells, and this one has {}",
                         list.len()
                     ),
                 });

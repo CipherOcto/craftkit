@@ -37,7 +37,7 @@ use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Text};
 use crate::formula::{CellRef, Cells, Value};
 
 /// The most **cells** the sources may hold.
-const MAX_CELLS: u64 = 5_000_000;
+const MAX_CONSOLIDATED_CELLS: u64 = 5_000_000;
 
 /// The most **sources** there may be.
 const MAX_SOURCES: usize = 255;
@@ -303,7 +303,7 @@ commands! {
                     });
                 };
                 total = total.saturating_add(area.count());
-                if total > MAX_CELLS {
+                if total > MAX_CONSOLIDATED_CELLS {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: "the sources are too large".to_string(),

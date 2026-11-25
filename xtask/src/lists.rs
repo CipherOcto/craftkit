@@ -794,7 +794,10 @@ pub fn every_command_is_run_by_a_test(root: &Path) -> Result<Vec<String>, String
             let Ok(text) = crate::tree::read_rust(&file, crate::tree::Subject::Production) else {
                 continue;
             };
-            for cap in crate::index::limits_in(&text, &file, &crate_name) {
+            // Every cap of the crate, published and private: the rule
+            // is about the code's own clarity, and a private cap is
+            // read by the crate's own code as much as a published one.
+            for cap in crate::index::caps_in(&text, &file, &crate_name) {
                 numbers.entry(cap.name).or_default().insert(cap.value.replace(['_', ' '], ""));
             }
         }
@@ -1982,6 +1985,33 @@ mod tests {
         .expect("the test is written");
         let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
         assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// And a **private** cap that shares a name with a published one and
+    /// holds another number is caught.
+    ///
+    /// The rule is about the code's own clarity: a private cap is read
+    /// by the crate's own code as much as a published one is read by
+    /// the world, and two caps of one name and two numbers leave a
+    /// reader of the source with no way to say which is which. §1160.
+    #[test]
+    fn a_private_cap_that_shares_a_name_with_another_number_is_caught() {
+        let root = crate::temp::dir("lists-one-name-private").expect("a temporary folder");
+        let crate_directory = root.join("crates").join("craftkit-thing");
+        std::fs::create_dir_all(crate_directory.join("src")).expect("the directory is made");
+        std::fs::create_dir_all(crate_directory.join("tests")).expect("the directory is made");
+        std::fs::write(
+            crate_directory.join("src").join("lib.rs"),
+            "pub const MAX_THING: usize = 10;\nconst MAX_THING: usize = 20;\n",
+        )
+        .expect("the source is written");
+        std::fs::write(
+            crate_directory.join("tests").join("thing.rs"),
+            "#[test]\nfn a_test() { let thing = MAX_THING; }\n",
+        )
+        .expect("the test is written");
+        let problems = every_command_is_run_by_a_test(&root).expect("the tree is read");
+        assert!(problems.iter().any(|problem| problem.contains("MAX_THING")), "{problems:?}");
     }
 
     /// And the same name with **two numbers** is caught.

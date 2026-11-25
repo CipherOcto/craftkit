@@ -49,7 +49,7 @@ const LINE: f64 = 1.2;
 const GRIDLINE: [u8; 3] = [176, 176, 176];
 
 /// The **most** lines one cell's text may be broken into.
-const MAX_LINES: usize = 200;
+const MAX_EXPORT_LINES: usize = 200;
 
 /// The **most** characters of a cell's text that are drawn.
 const MAX_CHARS: usize = 10_000;
@@ -203,12 +203,12 @@ fn wrap_lines(text: &str, face: PdfFont, size: f64, width: f64) -> Vec<String> {
                 out.push(characters[..cut].iter().collect());
                 line = characters[cut..].iter().collect();
             }
-            if out.len() >= MAX_LINES {
+            if out.len() >= MAX_EXPORT_LINES {
                 return out;
             }
         }
         out.push(line);
-        if out.len() >= MAX_LINES {
+        if out.len() >= MAX_EXPORT_LINES {
             break;
         }
     }
