@@ -4602,6 +4602,7 @@ so.
 | **the audio crate's caps are named and its detectors say so** | **built.** The onsets, the transients and the notes of a sound are a reading that says when the detector stopped, and a pitch above the bound is refused (§1151) | §1151 |
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
+| **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73008,3 +73009,35 @@ can reach.
   **fifteen** caps in **thirteen** crates are published and named by
   no test: two each in the kit and the xml crate, and one in each of
   eleven more.
+
+## 1154. The xml crate's caps are named
+
+The xml crate reads a part of XML, and its two caps are about how deep
+a part may be and how many elements it may hold. This arc names both by
+a test beside the crate.
+
+### What was built
+
+- **Two caps, three tests.** The xml crate's limit suite is new: the
+  depth of a part (`MAX_DEPTH`) and the number of the elements of a
+  part (`MAX_XML_NODES`). A part nested deeper than the tree reads is
+  refused, and a part with more elements than the tree holds is
+  refused.
+
+### What the port found
+
+- **The tree refuses both, and says which.** The depth is refused with
+  "the part is deeper than 256" and the count with "the part holds
+  more than 1000000 elements": two refusals that name their own bound.
+
+### What it cost
+
+- **Three tests** in a new limit suite for the xml crate, and the claim
+  row above.
+
+### What it does not settle
+
+- **The crate's own caps are not the tree's rules.** The xml crate
+  keeps bounds of its own that no test names, and the two here are the
+  published ones.
+

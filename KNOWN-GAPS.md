@@ -198,6 +198,9 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The xml crate's caps are named** (§1154): the depth of a part and
+  the number of the elements of a part are each named by a test beside
+  the crate, and both are refusals that name their own bound.
 - **The midi crate's caps are named** (§1152): the tracks of a file, the
   events of a file and the velocity of a note are each named by a test
   beside the crate. The **budget of the events** is one budget for the
