@@ -57,7 +57,7 @@ fn a_field_code_over_the_limit_is_refused() {
     assert!(error.to_string().contains("at most"), "{error}");
 }
 
-/// A **space** over `MAX_SPACE` is refused.
+/// A **space** over `MAX_PARAGRAPH_SPACE` is refused.
 ///
 /// The room above and below a paragraph is a number from zero to the
 /// limit, and a number outside it is not a space.
@@ -82,7 +82,7 @@ fn a_line_spacing_over_the_limit_is_refused() {
     assert!(error.to_string().contains("from zero to"), "{error}");
 }
 
-/// A bookmark **name** over `MAX_NAME` is refused.
+/// A bookmark **name** over `MAX_BOOKMARK_NAME` is refused.
 #[test]
 fn a_bookmark_name_over_the_limit_is_refused() {
     let mut session = session();

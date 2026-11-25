@@ -36,7 +36,7 @@ fn a_workbook(session: &mut Session) -> u64 {
     outcome.data["id"].as_u64().expect("the workbook has an id")
 }
 
-/// A text with **more rows** than `MAX_ROWS` allows is refused.
+/// A text with **more rows** than `MAX_IMPORT_ROWS` allows is refused.
 ///
 /// The text of an import comes from outside, and a text of ten thousand
 /// and one rows is refused rather than half-read.
