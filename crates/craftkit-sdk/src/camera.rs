@@ -83,8 +83,16 @@ impl Camera {
     ///
     /// A zoom outside the caps is **clamped**: the wheel can send
     /// anything, and a camera that refuses to move feels broken.
-    pub fn set_zoom(&mut self, zoom: f64) {
-        self.zoom = clamp_zoom(zoom);
+    ///
+    /// The value says whether the zoom was **held**: a caller that asks
+    /// for a zoom the camera cannot give is told so. A zoom that is not
+    /// a number is not a zoom at all, and the camera does not move for
+    /// it.
+    pub fn set_zoom(&mut self, zoom: f64) -> bool {
+        let held = clamp_zoom(zoom, self.zoom);
+        let clamped = zoom.is_finite() && held != zoom;
+        self.zoom = held;
+        clamped
     }
 
     /// Multiply the zoom, within the caps.
@@ -94,7 +102,7 @@ impl Camera {
         if !factor.is_finite() || factor <= 0.0 {
             return;
         }
-        self.zoom = clamp_zoom(self.zoom * factor);
+        self.zoom = clamp_zoom(self.zoom * factor, self.zoom);
     }
 
     /// **Zoom about a point of the screen.**
@@ -119,7 +127,7 @@ impl Camera {
             return;
         }
         let anchor = self.to_world(at);
-        let zoom = clamp_zoom(self.zoom * factor);
+        let zoom = clamp_zoom(self.zoom * factor, self.zoom);
         self.zoom = zoom;
         self.offset = Point::new(anchor.x - at.x / zoom, anchor.y - at.y / zoom);
     }
@@ -190,7 +198,7 @@ impl Camera {
         let height = if height.is_finite() && height > 0.0 { height } else { 1.0 };
         let across = if rect.w > 0.0 && rect.w.is_finite() { width / rect.w } else { 1.0 };
         let down = if rect.h > 0.0 && rect.h.is_finite() { height / rect.h } else { 1.0 };
-        let zoom = clamp_zoom(across.min(down));
+        let zoom = clamp_zoom(across.min(down), 1.0);
         let centre = Point::new(rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
         Camera { zoom, offset: centre }
     }
@@ -207,10 +215,12 @@ impl Camera {
 }
 
 /// The zoom, within the caps.
-fn clamp_zoom(zoom: f64) -> f64 {
+///
+/// A zoom that is not a number is not a zoom: the camera keeps the zoom
+/// it has.
+fn clamp_zoom(zoom: f64, current: f64) -> f64 {
     if zoom.is_nan() {
-        // Not a number is not a zoom: the camera stays where it is.
-        return 1.0;
+        return current;
     }
     zoom.clamp(Camera::MIN_ZOOM, Camera::MAX_ZOOM)
 }
@@ -239,12 +249,22 @@ mod tests {
         assert_eq!(camera.zoom(), Camera::MAX_ZOOM, "the zoom is as big as it goes");
     }
 
+    /// A zoom that is **held** at a cap is said to be held.
+    #[test]
+    fn a_zoom_that_is_held_says_so() {
+        let mut camera = camera();
+        assert!(!camera.set_zoom(2.0), "a zoom the camera can give is not held");
+        assert!(camera.set_zoom(10_000.0), "a zoom over the cap is held");
+        assert!(camera.set_zoom(0.0001), "and a zoom under it is held too");
+    }
+
     /// A zoom that is not a number does not move the camera.
     #[test]
     fn a_zoom_that_is_not_a_number_does_not_move_the_camera() {
         let mut camera = camera();
-        camera.set_zoom(f64::NAN);
-        assert_eq!(camera.zoom(), 1.0, "the camera is where it was");
+        camera.set_zoom(2.0);
+        assert!(!camera.set_zoom(f64::NAN), "a zoom that is not a number is not held");
+        assert_eq!(camera.zoom(), 2.0, "the camera is where it was");
         camera.set_zoom(f64::INFINITY);
         assert_eq!(camera.zoom(), Camera::MAX_ZOOM, "infinity is as big as it goes");
     }

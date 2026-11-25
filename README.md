@@ -4604,7 +4604,7 @@ so.
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
 | **the batteries and the libraries name their caps** | **built.** Twenty-seven crates keep a published cap; each of them is named by a test beside the crate that keeps it (§1155, §1159) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and thirty-four caps of the tree are all named, the last of them by the fixtures, the kit and the three head bounds (§1156, §1173) | §1156 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and thirty-five caps of the tree are all named, the last of them by the fixtures, the kit and the three head bounds (§1156, §1173) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
@@ -4625,6 +4625,7 @@ so.
 | **the erase says when it was coarse** | **built.** The vector battery holds the samples of a side at a published bound, and both of its erasers say when the geometry is coarser than the caller asked for (§1174) | §1174 |
 | **the measurement says what it ignored** | **built.** The text battery's metric keeps a run it can never use, and the measurement now says how many of the metric's runs were left out (§1175) | §1175 |
 | **the commit rule names its exception** | **built.** The commits that are already in the tree and carry no section number are accepted as they are, and a commit made from now on names its section (§1176) | §1176 |
+| **the three deliberate clamps say so** | **built.** The art battery's rate, the sound battery's repeat count and the camera's zoom are held and say they were held, and the camera's own lie about a zoom that is not a number is fixed (§1177) | §1177 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74336,3 +74337,64 @@ past and kept for the future.
 - **The history is not rewritten.** Two hundred and eighty commits keep
   the messages they have; the rule is relaxed for the past, and the past
   itself is left as it is.
+
+## 1177. The three deliberate clamps say so
+
+The survey of §1170 found three bounds the tree holds rather than refuses,
+and they were recorded as deliberate. The owner has decided how they
+stand: a knob that is held is a knob that **says what it did**, and the
+camera's own note about a zoom that is not a number was wrong.
+
+### What was built
+
+- **The art battery's rate says it was held.** `art.element.retime`
+  answers `clamped` when the rate was held at `MIN_RATE` or `MAX_RATE`.
+  The knob keeps its meaning — a rate of a hundred is "as fast as the
+  tree allows" — and the caller is told that is what it got.
+- **The sound battery's repeat count says it was held.**
+  `sound.track.repeat` answers `clamped` when the count was held at
+  `MAX_SOUND_REPEATS`, which is now a **published** bound at the
+  battery's root and is named by a test beside it.
+- **The camera says it held the zoom.** `Camera::set_zoom` returns
+  whether the zoom was held, and `view.restore` answers `clamped` when
+  the document's view holds a zoom the camera cannot give.
+- **The camera's note about a zoom that is not a number was wrong.** The
+  code said "the camera stays where it is" and set the zoom to one. A
+  camera at two was moved to one by a zoom that was not a number, and
+  the test that said it did not move passed because the camera happened
+  to be at one already. The camera does not move for it now, and the
+  test starts from a zoom that would show the difference.
+
+### What the port found
+
+- **A clamp and a lie are the same defect.** The house's rule is "refuse,
+  do not clamp", and these three were recorded as deliberate departures
+  from it. But the rule the tree has been tightening for a hundred arcs
+  is not "never hold a value" — it is that **a value the tree holds
+  must say so**. The film battery's playhead and the fx battery's time
+  were both held, and both were fixed by saying so rather than by
+  refusing. These three were the same shape and were left behind.
+- **The camera's own test was not testing what it said.** The test was
+  called "a zoom that is not a number does not move the camera" and it
+  began with the camera at the zoom the code set it to. A test that
+  cannot fail is not a test, and this one could not fail.
+
+### What it cost
+
+- **Three answers changed**, **one camera method that now says what it
+  did**, **one bound published**, **six tests** in four files, and the
+  claim rows above. After this arc the tree keeps one hundred and
+  thirty-five published caps under one hundred and thirty-five names,
+  and twenty-seven crates keep one.
+
+### What it does not settle
+
+- **The clamps stay clamps.** A rate over the cap is a rate of five, and
+  a count over the bound is a count of nine hundred and ninety-nine: a
+  knob's domain is the knob's, and refusing "as fast as the tree allows"
+  would refuse a request that means something. What the arc settles is
+  that the caller is told, and may refuse the answer itself.
+- **The front end that drives the camera is not a command.** The window's
+  wheel and pinch call the camera's own methods, and the camera's caps
+  are published: a front end may hold the zoom it cannot have, and it
+  reads the zoom the camera has.

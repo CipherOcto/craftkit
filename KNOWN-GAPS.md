@@ -274,7 +274,12 @@ These are the README's own honest notes, and they are still true of the tree:
 - **The camera's zoom is a third deliberate clamp** (§1156): a zoom
   above `MAX_ZOOM` is clamped, and the camera says so in its own
   words. The tree now has a test of its own for it. The art battery's
-  rate and the sound battery's repeat count are the other two.
+  rate and the sound battery's repeat count are the other two. **§1177
+  settled the half of it that was open**: the camera says when it held
+  a zoom (`Camera::set_zoom` returns it and `view.restore` answers
+  `clamped`), and the camera's note about a zoom that is not a number
+  was wrong — the code moved the camera to one, and the test passed
+  because the camera was already at one. It does not move for it now.
 - **The midi crate's caps are named** (§1152): the tracks of a file, the
   events of a file and the velocity of a note are each named by a test
   beside the crate. The **budget of the events** is one budget for the
@@ -415,7 +420,11 @@ These are the README's own honest notes, and they are still true of the tree:
   application's rule" and the count is "a knob and not a fact about the
   material" — and both are recorded here rather than changed: a clamp
   the tree's own documentation promises is a decision, and changing it
-  is the owner's. A test now says what each knob does.
+  is the owner's. A test now says what each knob does. **§1177 settled
+  the half of it that was open**: the clamps stay, and each of them now
+  answers `clamped` when it held its value, so a clamp is no longer
+  silent. What stays open is whether a knob should be a refusal at all,
+  and the owner has decided that it is not.
 - **A cap in a private module is textually public and practically
   private** (§1142): the batteries' caps are `pub const` inside private
   modules, so the outer gate reads the text and sees a promise while no
@@ -614,9 +623,12 @@ These are the README's own honest notes, and they are still true of the tree:
     bound. The **grid** battery reads a head the same way and says so
     too (`MAX_GRID_HEAD_BYTES`), and the **a2ui** plugin reads a picture
     up to `MAX_A2UI_PICTURE_BYTES` and does not read one beyond it.
-  - **The deliberate departures stay deliberate**: the art battery's
-    rate, the sound battery's repeat count and the camera's zoom are
-    held rather than refused, and they are recorded above.
+  - **The deliberate departures stay deliberate, and they say so**:
+    §1177 fixed the three of them — the art battery's rate, the sound
+    battery's repeat count and the camera's zoom are held rather than
+    refused, and each of them now says that it held its value. What
+    stays is the shape: a knob's domain is the knob's, and "as fast as
+    the tree allows" is a request that means something.
 - **A reader that stops at a bound must say that it stopped, and the
   batteries say it.** The pdf and xlsx readers and the audio crate's
   detectors say it now (§1146, §1147, §1150, §1151); the grid battery

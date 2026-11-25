@@ -9,7 +9,7 @@
 //! and the command says so in its own documentation; a knob is not a
 //! fact about the material, and the test below says what the knob does.
 
-use craftkit_plugin_sound::MAX_NAME_CHARS;
+use craftkit_plugin_sound::{MAX_NAME_CHARS, MAX_SOUND_REPEATS};
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -87,7 +87,8 @@ fn a_repeat_count_of_zero_is_clamped_to_one() {
     assert_eq!(outcome.data["repeats"], 1, "one is none: {outcome:?}");
 }
 
-/// A repeat count **over the limit** is clamped to the limit.
+/// A repeat count **over the limit** is held at the limit, and the
+/// answer says it was held.
 ///
 /// The tree's repeat is a number from one to nine hundred and
 /// ninety-nine, and a repeat of ten thousand times is a track of ten
@@ -99,7 +100,29 @@ fn a_repeat_count_over_the_limit_is_clamped() {
     let outcome = session
         .execute("sound.track.repeat", &json!({ "track": track, "start": 0, "end": 24_000, "count": 1_000 }))
         .expect("the range is repeated");
-    assert_eq!(outcome.data["repeats"], 999, "nine hundred and ninety-nine: {outcome:?}");
+    assert_eq!(outcome.data["repeats"], MAX_SOUND_REPEATS, "nine hundred and ninety-nine: {outcome:?}");
+    assert_eq!(
+        outcome.data["clamped"].as_bool(),
+        Some(true),
+        "the count was held, and the answer says so: {outcome:?}"
+    );
+}
+
+/// A repeat count **within the limit** is not held, and the answer says
+/// so.
+#[test]
+fn a_repeat_count_within_the_limit_is_not_clamped() {
+    let mut session = session();
+    let (track, _) = a_track(&mut session, "repeat-within");
+    let outcome = session
+        .execute("sound.track.repeat", &json!({ "track": track, "start": 0, "end": 24_000, "count": 2 }))
+        .expect("the range is repeated");
+    assert_eq!(outcome.data["repeats"], 2, "two is two: {outcome:?}");
+    assert_eq!(
+        outcome.data["clamped"].as_bool(),
+        Some(false),
+        "a count that was not held is not said to be held: {outcome:?}"
+    );
 }
 
 /// A **name** over `MAX_NAME_CHARS` is refused.

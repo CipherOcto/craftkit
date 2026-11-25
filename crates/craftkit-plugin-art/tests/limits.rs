@@ -5,11 +5,11 @@
 //! checked before they are used, and a limit that no test names is a
 //! limit nothing proves holds.
 //!
-//! **The rate is a knob, and it is clamped.** A rate outside its
-//! bounds is not refused: it is brought inside them, and the command
-//! says which rate the element plays at. This is a deliberate
-//! departure from the tree's own "refuse, do not clamp" rule, and the
-//! tests below say plainly what the knob does.
+//! **The rate is a knob, and it is held.** A rate outside its bounds is
+//! not refused: it is brought inside them, and the command says which
+//! rate the element plays at **and that it held it**. This is a
+//! deliberate departure from the tree's own "refuse, do not clamp" rule,
+//! and the tests below say plainly what the knob does.
 
 use craftkit_plugin_art::{MAX_RATE, MIN_RATE};
 use craftkit_sdk::serde_json::json;
@@ -64,6 +64,11 @@ fn a_rate_over_the_limit_is_clamped_to_the_limit() {
         .expect("the element is retimed");
     let rate = outcome.data["rate"].as_f64().expect("the answer has a rate");
     assert_eq!(rate, MAX_RATE, "a rate of a hundred plays at five: {outcome:?}");
+    assert_eq!(
+        outcome.data["clamped"].as_bool(),
+        Some(true),
+        "the rate was held, and the answer says so: {outcome:?}"
+    );
 }
 
 /// A rate **under `MIN_RATE`** is clamped to `MIN_RATE`.
@@ -78,6 +83,11 @@ fn a_rate_under_the_limit_is_clamped_to_the_limit() {
         .expect("the element is retimed");
     let rate = outcome.data["rate"].as_f64().expect("the answer has a rate");
     assert_eq!(rate, MIN_RATE, "a rate of a thousandth plays at a hundredth: {outcome:?}");
+    assert_eq!(
+        outcome.data["clamped"].as_bool(),
+        Some(true),
+        "the rate was held, and the answer says so: {outcome:?}"
+    );
 }
 
 /// A rate **within the bounds** is kept as it is.
@@ -92,6 +102,11 @@ fn a_rate_within_the_limits_is_kept() {
         .expect("the element is retimed");
     let rate = outcome.data["rate"].as_f64().expect("the answer has a rate");
     assert_eq!(rate, 2.5, "the rate is the rate that was asked for: {outcome:?}");
+    assert_eq!(
+        outcome.data["clamped"].as_bool(),
+        Some(false),
+        "a rate that was not held is not said to be held: {outcome:?}"
+    );
 }
 
 /// A rate of **zero** is refused.

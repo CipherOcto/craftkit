@@ -14,7 +14,10 @@ use craftkit_sdk::{EngineError, NodeRef, Number, Outcome};
 /// The tree's repeat is a number from one to nine hundred and
 /// ninety-nine, and the bound is here too: a repeat of ten thousand
 /// times is a track of ten thousand times the material.
-const MAX_REPEATS: u32 = 999;
+///
+/// A count over the bound is **held** at it, and the answer says so:
+/// the count is a knob, and a knob that is held says what it did.
+pub const MAX_SOUND_REPEATS: u32 = 999;
 
 commands! {
     /// **Repeat** the material of a range of a track.
@@ -48,10 +51,13 @@ commands! {
             start: Option<Number>,
             /// Where the range ends, in samples.
             end: Option<Number>,
-            /// How many times the range is repeated.
+            /// How many times the range is repeated: one makes one copy
+            /// of the material.
             ///
-            /// One is none. The number is **clamped** into its bounds: it is a
-            /// knob and not a fact about the material.
+            /// The number is a knob and not a fact about the material, and
+            /// it is **held** at the bound rather than refused. A count
+            /// that was held is said to be held: the answer carries
+            /// `clamped`.
             count: Option<Number>,
         },
         run: {
@@ -67,16 +73,20 @@ commands! {
                     message: format!("the node `{track}` is a `{}` and not a track", node.kind),
                 });
             }
-            // The **count**: how many times, and it is a knob.
-            let count = match self.count {
-                Some(count) if count.0.is_finite() => (count.0 as u32).clamp(1, MAX_REPEATS),
+            // The **count**: how many times, and it is a knob. A count
+            // over the bound is **held** at it, and the answer says so.
+            let (count, clamped) = match self.count {
+                Some(count) if count.0.is_finite() => {
+                    let held = (count.0 as u32).clamp(1, MAX_SOUND_REPEATS);
+                    (held, held != count.0 as u32)
+                }
                 Some(_) => {
                     return Err(EngineError::Failed {
                         id,
                         message: "the count is a number of times".to_string(),
                     });
                 }
-                None => 1,
+                None => (1, false),
             };
             let (start, end) = crate::range_of(session, track, &id, self.start, self.end)?;
             let length = end - start;
@@ -85,7 +95,7 @@ commands! {
             let copies = crate::copies_of_range(session, track, start, end);
             if copies.is_empty() {
                 return Ok(Outcome::new("there is no material in the range to repeat")
-                    .with_data(serde_json::json!({ "repeats": 0, "clips": Vec::<u64>::new() })));
+                    .with_data(serde_json::json!({ "repeats": 0, "clips": Vec::<u64>::new(), "clamped": clamped })));
             }
             let playlist = crate::playlist_of(session, track, None)?;
             // The **repeats**: the copies are laid after the range, again
@@ -114,7 +124,7 @@ commands! {
                 }
             }
             Ok(Outcome::changed(format!("repeated the range {count} time(s)"))
-                .with_data(serde_json::json!({ "repeats": count, "clips": made })))
+                .with_data(serde_json::json!({ "repeats": count, "clips": made, "clamped": clamped })))
 
         }
     }

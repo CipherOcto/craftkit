@@ -420,7 +420,7 @@ macro_rules! element_command {
                         message: "an element is not zero ticks long".to_string(),
                     });
                 }
-                let rate = rate(1.0, $id)?;
+                let (rate, _clamped) = rate(1.0, $id)?;
                 let trim_start = match &self.trim_start {
                     Some(trim) => whole(*trim, $id, "a trim")?,
                     None => 0,
@@ -1034,8 +1034,9 @@ impl TrimElement {
 /// **Retime** an element: change how fast its media plays.
 ///
 /// The rate is the application's own: it is clamped, not refused, and
-/// the bounds are the ones the application uses. The length on the
-/// timeline follows from the rate, and nobody writes it down.
+/// the bounds are the ones the application uses. A rate that was
+/// **held** is said to be held: the answer carries `clamped`. The length
+/// on the timeline follows from the rate, and nobody writes it down.
 #[derive(Command)]
 #[command(id = "art.element.retime", area = "art", layer = "art", icon = "clock", mutates, undoable)]
 pub struct RetimeElement {
@@ -1048,7 +1049,7 @@ pub struct RetimeElement {
 impl RetimeElement {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = self.element.0;
-        let rate = rate(self.rate.0, "art.element.retime")?;
+        let (rate, clamped) = rate(self.rate.0, "art.element.retime")?;
         let Some(node) = session.document_mut()?.node_mut(id) else {
             return Err(EngineError::Failed {
                 id: "art.element.retime".to_string(),
@@ -1057,8 +1058,9 @@ impl RetimeElement {
         };
         node.data["rate"] = serde_json::json!(rate);
         let duration = timeline_duration(node);
-        Ok(Outcome::changed(format!("the element {id} plays at {rate}"))
-            .with_data(serde_json::json!({ "element": id, "rate": rate, "duration": duration })))
+        Ok(Outcome::changed(format!("the element {id} plays at {rate}")).with_data(
+            serde_json::json!({ "element": id, "rate": rate, "duration": duration, "clamped": clamped }),
+        ))
     }
 }
 
@@ -1163,14 +1165,18 @@ fn timeline_duration(node: &Node) -> u64 {
 /// The bounds are the application's: a rate of a hundredth is slow
 /// enough and a rate of five is fast enough, and a rate outside them is
 /// clamped rather than refused — the same thing the application does.
-fn rate(value: f64, id: &str) -> Result<f64, EngineError> {
+///
+/// The second value says whether the rate was **held**: a rate that was
+/// held is a rate the caller asked for and did not get.
+fn rate(value: f64, id: &str) -> Result<(f64, bool), EngineError> {
     if !value.is_finite() || value <= 0.0 {
         return Err(EngineError::Failed {
             id: id.to_string(),
             message: "a rate is a number above zero".to_string(),
         });
     }
-    Ok(value.clamp(MIN_RATE, MAX_RATE))
+    let held = value.clamp(MIN_RATE, MAX_RATE);
+    Ok((held, held != value))
 }
 
 /// A whole number, and not a fraction and not a NaN.

@@ -578,6 +578,9 @@ pub use midi::{
 /// track are two different things, and they have two different bounds:
 /// `MAX_NAME_CHARS` and `MAX_MIDI_NAME_CHARS`. One is refused and one
 /// is cut, and the one that is cut says so.
+///
+/// The third is the **count** of a repeat: `MAX_SOUND_REPEATS`. It is a
+/// knob, and a knob that is held says what it did.
 pub use midi::MAX_MIDI_NAME_CHARS;
 pub use mixer::{
     BusKind, BusPayload, InsertKind, InsertPayload, LaneKind, LanePayload, SendKind, SendPayload,
@@ -590,6 +593,7 @@ pub use remove::{SoundClipRemove, SoundMarkerRemove, SoundTrackRemove};
 pub use rename::MAX_NAME_CHARS;
 pub use rename::{SoundClipRename, SoundTrackRename};
 pub use render::SoundClipRender;
+pub use repeat::MAX_SOUND_REPEATS;
 pub use repeat::SoundTrackRepeat;
 pub use split::SoundTrackSplitMono;
 pub use surround::{SoundTrackSurround, SoundTrackSurroundDelete};

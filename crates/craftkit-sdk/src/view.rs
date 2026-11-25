@@ -94,7 +94,10 @@ impl RestoreView {
                 message: "the view in the document is not a view".to_string(),
             });
         }
-        session.camera_mut().set_zoom(zoom);
+        // The camera **holds** a zoom outside its caps, and the answer
+        // says so: a document that asks for a zoom the camera cannot
+        // give is a document that is read at the zoom the camera has.
+        let clamped = session.camera_mut().set_zoom(zoom);
         // The view says where the middle of the screen is, so it is put
         // there: `look_at` is absolute and `pan` is not.
         session.camera_mut().look_at(crate::Point::new(x, y));
@@ -102,6 +105,55 @@ impl RestoreView {
         Ok(Outcome::new(format!("the view is at {}", camera.zoom())).with_data(crate::serde_json::json!({
             "zoom": camera.zoom(),
             "offset": { "x": camera.offset().x, "y": camera.offset().y },
+            "clamped": clamped,
         })))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::serde_json::json;
+    use crate::{CommandSpec, Document, Registry};
+
+    /// A session with the view's own command in it.
+    fn a_session() -> Session {
+        let mut commands: Registry<CommandSpec> = Registry::new();
+        commands.register(RESTORE_VIEW.clone()).expect("the command is registered");
+        Session::new(commands, Registry::new())
+    }
+
+    /// A document that remembers that zoom.
+    ///
+    /// A document is handed to a session whole, and this is how one says
+    /// where the view was — a zoom the camera may not be able to give.
+    fn a_document_with(zoom: f64) -> Document {
+        let mut document = Document::new("the document");
+        document.data = json!({ VIEW_KEY: { "zoom": zoom, "offset": { "x": 0.0, "y": 0.0 } } });
+        document
+    }
+
+    /// A zoom the camera **cannot give** is held, and the answer says so.
+    ///
+    /// A document comes from outside, and a zoom outside the camera's
+    /// caps is a zoom the camera does not have: it is read at the cap,
+    /// and the reader is told.
+    #[test]
+    fn a_zoom_over_the_cap_is_held_and_says_so() {
+        let mut session = a_session();
+        session.set_document(a_document_with(1_000.0));
+        let outcome = session.execute("view.restore", &json!({})).expect("the view is restored");
+        assert_eq!(session.camera().zoom(), crate::Camera::MAX_ZOOM, "the camera is as big as it goes");
+        assert_eq!(outcome.data["clamped"].as_bool(), Some(true), "the zoom was held: {outcome:?}");
+    }
+
+    /// A zoom the camera **can give** is not held, and the answer says so.
+    #[test]
+    fn a_zoom_within_the_cap_is_not_held() {
+        let mut session = a_session();
+        session.set_document(a_document_with(4.0));
+        let outcome = session.execute("view.restore", &json!({})).expect("the view is restored");
+        assert_eq!(session.camera().zoom(), 4.0, "the zoom came back");
+        assert_eq!(outcome.data["clamped"].as_bool(), Some(false), "the zoom was not held: {outcome:?}");
     }
 }
