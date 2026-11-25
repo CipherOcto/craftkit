@@ -597,11 +597,15 @@ These are the README's own honest notes, and they are still true of the tree:
     kept, and it is never used, because the walk does not look that
     far"), so it is a rule and not an accident; what is missing is that
     the **measurement** does not say that a run of it was ignored.
-  - **vector** — `vector.path.erase` samples a contour at no more than
-    `MAX_SAMPLES` (four thousand and ninety-six) however fine the
-    eraser is asked to be: the geometry is coarser than the caller
-    asked for, and nothing says so. It is the last of the surveyed
-    stops, and it is a *quality* of a computed value and not a read.
+  - **vector** — §1174 fixed it: `vector.path.erase` samples a contour
+    at no more than `MAX_VECTOR_SAMPLES` (four thousand and ninety-six)
+    however fine the eraser is asked to be, and the geometry is coarser
+    than the caller asked for. Both of the battery's erasers answer
+    `clamped` now, and the clamp is reported only when there is
+    something beyond the bound. What is still true: the samples are
+    **held** rather than the erase refused, so a caller who needs a
+    finer walk than the bound allows cannot have one — and the answer
+    says so.
   - **image** — §1173 fixed it: the head of a picture is read up to
     `MAX_IMAGE_HEAD_BYTES` (a mebibyte), the reader says whether the file
     is longer than the bound, `image.add` and `image.measure` answer
@@ -622,11 +626,13 @@ These are the README's own honest notes, and they are still true of the tree:
   and the film battery says it when it holds a playhead or cuts a
   caption file's pairs (§1170). The **kit's own head reader** says it
   now, and so do the three callers of it: the image battery, the grid
-  battery and the a2ui plugin (§1173). The **rest** of the batteries were
-  surveyed in §1170 with a written contract, and the stops they do not
-  say are named in the list above. Nothing *checks* a battery for a cut
-  that is silent: the next one to be found is found by a reader, not by
-  the tree.
+  battery and the a2ui plugin (§1173). The **vector** battery's erasers
+  say it too, though theirs is not a read but a walk (§1174). The **rest**
+  of the batteries were surveyed in §1170 with a written contract, and
+  the stops they do not say are named in the list above; **one** of them
+  is still open — the text battery's metric does not say that a run of
+  it was ignored. Nothing *checks* a battery for a cut that is silent:
+  the next one to be found is found by a reader, not by the tree.
 
 ---
 

@@ -120,6 +120,15 @@ mod spline;
 mod svgexport;
 mod svgimport;
 
+/// The most **samples** one side of a contour is sampled at.
+///
+/// The eraser walks a contour by sampling it, and a side that is long
+/// against a narrow eraser needs many samples to be walked finely. The
+/// samples are held at this bound, and the geometry is then coarser
+/// than the caller asked for — the answer of an erase says so with
+/// `clamped`.
+pub const MAX_VECTOR_SAMPLES: usize = 4096;
+
 pub use anchors::{VectorPathAnchorsMiddle, VectorPathAnchorsSet};
 pub use blob::VectorPathBlob;
 pub use colour::{VectorColourConvert, VectorColourGamut};

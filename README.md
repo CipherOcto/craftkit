@@ -4603,8 +4603,8 @@ so.
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
-| **the batteries and the libraries name their caps** | **built.** Twenty-six crates keep a published cap; each of them is named by a test beside the crate that keeps it (§1155, §1159) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and thirty-three caps of the tree are all named, the last of them by the fixtures, the kit and the three head bounds (§1156, §1173) | §1156 |
+| **the batteries and the libraries name their caps** | **built.** Twenty-seven crates keep a published cap; each of them is named by a test beside the crate that keeps it (§1155, §1159) | §1155 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and thirty-four caps of the tree are all named, the last of them by the fixtures, the kit and the three head bounds (§1156, §1173) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
@@ -4622,6 +4622,7 @@ so.
 | **the grid battery stops lying about its solver** | **built.** The solver answers feasible when it did not prove its answer, the goal says when its search stopped, and two of the survey's claims were wrong (§1171) | §1171 |
 | **the last of the surveyed stops say so** | **built.** The fx time, the prose style chain and the pdf's ancestors and page tree answer when they stop, and six tests prove them (§1172) | §1172 |
 | **the head reader says when it stopped** | **built.** The kit's head reader says whether the file is longer than the bound, three callers say it in their answers, and a refusal of a cut head names the bound (§1173) | §1173 |
+| **the erase says when it was coarse** | **built.** The vector battery holds the samples of a side at a published bound, and both of its erasers say when the geometry is coarser than the caller asked for (§1174) | §1174 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74160,9 +74161,9 @@ callers the words to say it.
 
 - **One signature changed** in the SDK, **three callers** changed with
   it, **three bounds published**, **eleven tests** in four files (three
-  of them in the SDK's own), and the claim rows above. The tree keeps
-  one hundred and thirty-three published caps under one hundred and
-  thirty-three names, and twenty-six crates keep one.
+  of them in the SDK's own), and the claim rows above. After this arc
+  the tree keeps one hundred and thirty-three published caps under one
+  hundred and thirty-three names, and twenty-six crates keep one.
 
 ### What it does not settle
 
@@ -74175,3 +74176,57 @@ callers the words to say it.
   however fine it is asked to be, and the geometry is coarser than the
   caller asked for. It is the last of the surveyed stops, and it is a
   *quality* and not a read: the next arc, if there is one.
+
+## 1174. The erase says when it was coarse
+
+§1170's survey named the vector battery's erase among the stops the
+tree does not say, and §1173 took the head reader. This arc takes the
+last one: the erase, whose geometry is coarser than the caller asked
+for and who says nothing about it.
+
+### What was built
+
+- **Both of the vector battery's erasers say when the geometry is
+  coarse.** A side of a contour is walked by sampling it, and the
+  samples a side needs are three times its longest edge over the
+  half-width of the eraser. A side that is long against a narrow eraser
+  needs more samples than the bound allows, and the samples are **held**
+  at the bound: the geometry is then coarser than the caller asked for.
+  `vector.path.erase` and `vector.path.erase.region` answer `clamped`.
+- **The bound is published.** `MAX_VECTOR_SAMPLES` is the vector
+  battery's first published cap, it is at the crate's root, and a test
+  beside the battery names it in **code**.
+- **The clamp is reported only when there is something beyond the
+  bound.** A side that needs fewer samples than the bound allows is
+  sampled as finely as it was asked for, and the answer says nothing.
+
+### What the port found
+
+- **The last stop was not a read, and it was still a lie.** The
+  eraser does not read: it computes. A caller that asks for a fine
+  eraser over a long side gets a coarse result and no word about it,
+  and the result is a *shape* — the worst kind of quiet, because the
+  shape is what the caller then measures, draws and hands on.
+- **Two erasers, one walk.** The eraser with a flat tip and the eraser
+  with a shaped tip share the same walk of the contour, and the walk
+  is where the bound is. One answer each, and both say the same word.
+
+### What it cost
+
+- **Two answers changed**, **one cap published**, **four tests** in one
+  file, and the claim rows above. After this arc the tree keeps one
+  hundred and thirty-four published caps under one hundred and
+  thirty-four names, and twenty-seven crates keep one.
+
+### What it does not settle
+
+- **The clamp is still a clamp.** The tree holds the samples at the
+  bound rather than refusing the erase, and a caller who needs a
+  finer walk than the bound allows cannot have one. What the arc
+  settles is that the caller is **told**: the answer says the geometry
+  is coarser than it was asked for, and the caller may refuse it.
+- **The three deliberate departures stay deliberate.** The art
+  battery's rate, the sound battery's repeat count and the camera's
+  zoom are held rather than refused, and they are recorded in the
+  `KNOWN-GAPS`. They are knobs, and a knob that is held is a knob
+  that says what it did.

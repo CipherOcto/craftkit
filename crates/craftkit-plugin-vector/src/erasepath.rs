@@ -30,9 +30,6 @@ const DEFAULT_WIDTH: f64 = 8.0;
 /// for more.
 const SAMPLES: usize = 24;
 
-/// The most **samples** one side is sampled at.
-const MAX_SAMPLES: usize = 4096;
-
 commands! {
     /// Take away the parts of a path that are **under a drag**.
     vector.path.erase {
@@ -70,6 +67,11 @@ commands! {
             let under = |point: Point| distance_to_drag(&drag, point) <= half;
             let mut pieces: Vec<SubPath> = Vec::new();
             let mut erased = false;
+            // Whether the geometry is **coarser** than the caller asked
+            // for: a side is sampled at no more than `MAX_VECTOR_SAMPLES`
+            // points, and a side that is longer than that against a
+            // narrow eraser is sampled more coarsely than it was asked.
+            let mut clamped = false;
             for contour in &vector.path.subpaths {
                 // A closed contour may leave its **closing edge** out, and
                 // the edge is part of the shape: it is a side of its own
@@ -79,16 +81,17 @@ commands! {
                     contour.segments.push(Segment::Line { to: contour.start });
                 }
                 match erase_contour(&contour, half, &under) {
-                    Some(parts) => {
+                    Some(erased_contour) => {
                         erased = true;
-                        pieces.extend(parts);
+                        clamped = clamped || erased_contour.clamped;
+                        pieces.extend(erased_contour.pieces);
                     }
                     None => pieces.push(contour),
                 }
             }
             if !erased {
                 return Ok(Outcome::new("nothing of the path was under the drag")
-                    .with_data(json!({ "id": self.path.0 })));
+                    .with_data(json!({ "id": self.path.0, "clamped": clamped })));
             }
             let whole = vector.path.subpaths.len() == 1;
             if whole {
@@ -113,12 +116,14 @@ commands! {
                 for piece in pieces {
                     ids.push(add_piece(session, &name, &vector, Path::single(piece))?);
                 }
-                Ok(Outcome::changed("the parts under the drag are gone").with_data(json!({ "ids": ids })))
+                Ok(Outcome::changed("the parts under the drag are gone")
+                    .with_data(json!({ "ids": ids, "clamped": clamped })))
             } else {
                 // The pieces stay contours of the path.
                 vector.path = Path { subpaths: pieces, rule: vector.path.rule };
                 write_back(session, self.path.0, &vector)?;
-                Ok(Outcome::changed("the parts under the drag are gone").with_data(json!({ "id": self.path.0 })))
+                Ok(Outcome::changed("the parts under the drag are gone")
+                    .with_data(json!({ "id": self.path.0, "clamped": clamped })))
             }
 
         }
@@ -207,14 +212,25 @@ fn distance_to_line(one: Point, two: Point, at: Point) -> f64 {
 
 /// The **pieces** of a contour with the parts under the drag taken away.
 ///
+/// The **pieces** of a contour that survive an erase, and whether the
+/// erase was **coarser** than it was asked to be.
+pub(crate) struct Erased {
+    /// The stretches of the contour that are left.
+    pub pieces: Vec<SubPath>,
+    /// Whether a side was sampled at fewer points than its width asked
+    /// for: the geometry is coarser than the caller asked for.
+    pub clamped: bool,
+}
+
 /// The contour is sampled, the parts under the drag are found by
 /// halving the way at every crossing, and what is left is the stretches
 /// that survive — each a stretch of the contour as it was.
-pub(crate) fn erase_contour(
-    contour: &SubPath,
-    step: f64,
-    under: &dyn Fn(Point) -> bool,
-) -> Option<Vec<SubPath>> {
+///
+/// The answer says whether the sampling was **coarser** than the width
+/// asked for: a side is sampled at no more than `MAX_VECTOR_SAMPLES` points,
+/// and a side that is longer than that against a narrow eraser is
+/// sampled more coarsely than it was asked to be.
+pub(crate) fn erase_contour(contour: &SubPath, step: f64, under: &dyn Fn(Point) -> bool) -> Option<Erased> {
     let sides = contour.segments.len();
     if sides == 0 {
         return None;
@@ -224,6 +240,7 @@ pub(crate) fn erase_contour(
     let mut runs: Vec<Vec<(usize, f64, f64)>> = Vec::new();
     let mut current: Vec<(usize, f64, f64)> = Vec::new();
     let mut any = false;
+    let mut clamped = false;
     for index in 0..sides {
         let side = contour.segments[index];
         let from = if index == 0 { contour.start } else { contour.segments[index - 1].end() };
@@ -239,7 +256,14 @@ pub(crate) fn erase_contour(
         };
         let wanted = (3.0 * edge / step).ceil();
         let samples = if wanted.is_finite() && wanted > SAMPLES as f64 {
-            (wanted as usize).min(MAX_SAMPLES)
+            // The side is longer than the eraser is wide, so it is
+            // sampled more finely than the default. The samples are
+            // **held** at the bound when even that is not enough, and
+            // the geometry is then coarser than the caller asked for.
+            if wanted > crate::MAX_VECTOR_SAMPLES as f64 {
+                clamped = true;
+            }
+            (wanted as usize).min(crate::MAX_VECTOR_SAMPLES)
         } else {
             SAMPLES
         };
@@ -310,7 +334,7 @@ pub(crate) fn erase_contour(
         .filter(|run| run.len() > 1 || run[0].2 - run[0].1 > 1e-4)
         .filter_map(|run| piece_of(contour, run))
         .collect();
-    Some(pieces)
+    Some(Erased { pieces, clamped })
 }
 
 /// The **piece** a run of the contour makes.

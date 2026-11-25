@@ -108,20 +108,18 @@ commands! {
                 let after = geom::area(&left).abs();
                 if (before - after).abs() <= 1e-9 {
                     return Ok(Outcome::new("none of the shape was under the tip")
-                        .with_data(json!({ "id": self.path.0 })));
+                        .with_data(json!({ "id": self.path.0, "clamped": false })));
                 }
                 if left.is_empty() {
                     // The whole shape was under the tip: it is gone.
                     session.document_mut()?.remove_node(self.path.0);
-                    return Ok(
-                        Outcome::changed("the shape is taken away").with_data(json!({ "removed": self.path.0 }))
-                    );
+                    return Ok(Outcome::changed("the shape is taken away")
+                        .with_data(json!({ "removed": self.path.0, "clamped": false })));
                 }
                 vector.path = left;
                 write_back(session, self.path.0, &vector)?;
-                return Ok(
-                    Outcome::changed("the area under the tip is gone").with_data(json!({ "id": self.path.0 }))
-                );
+                return Ok(Outcome::changed("the area under the tip is gone")
+                    .with_data(json!({ "id": self.path.0, "clamped": false })));
             }
             // An open path loses the **outline** under the tip.
             let short = size * roundness / 100.0;
@@ -129,23 +127,28 @@ commands! {
             let under = |point: Point| distance_to_drag(&round, tip.squash(point)) <= size / 2.0;
             let mut pieces: Vec<SubPath> = Vec::new();
             let mut erased = false;
+            // Whether the geometry is **coarser** than the caller asked
+            // for: a side is sampled at no more than `MAX_VECTOR_SAMPLES`
+            // points, and a side that is longer than that against a
+            // narrow tip is sampled more coarsely than it was asked.
+            let mut clamped = false;
             for contour in &vector.path.subpaths {
                 let mut contour = contour.clone();
                 if contour.closed && closing_segment(&contour).is_none() {
                     contour.segments.push(Segment::Line { to: contour.start });
                 }
                 match erase_contour(&contour, short / 2.0, &under) {
-                    Some(parts) => {
+                    Some(erased_contour) => {
                         erased = true;
-                        pieces.extend(parts);
+                        clamped = clamped || erased_contour.clamped;
+                        pieces.extend(erased_contour.pieces);
                     }
                     None => pieces.push(contour),
                 }
             }
             if !erased {
-                return Ok(
-                    Outcome::new("none of the path was under the tip").with_data(json!({ "id": self.path.0 }))
-                );
+                return Ok(Outcome::new("none of the path was under the tip")
+                    .with_data(json!({ "id": self.path.0, "clamped": clamped })));
             }
             if whole {
                 // One path per piece: the first keeps the node, and the
@@ -169,11 +172,13 @@ commands! {
                 for piece in pieces {
                     ids.push(add_piece(session, &name, &vector, Path::single(piece))?);
                 }
-                Ok(Outcome::changed("the parts under the tip are gone").with_data(json!({ "ids": ids })))
+                Ok(Outcome::changed("the parts under the tip are gone")
+                    .with_data(json!({ "ids": ids, "clamped": clamped })))
             } else {
                 vector.path = Path { subpaths: pieces, rule: vector.path.rule };
                 write_back(session, self.path.0, &vector)?;
-                Ok(Outcome::changed("the parts under the tip are gone").with_data(json!({ "id": self.path.0 })))
+                Ok(Outcome::changed("the parts under the tip are gone")
+                    .with_data(json!({ "id": self.path.0, "clamped": clamped })))
             }
 
         }
