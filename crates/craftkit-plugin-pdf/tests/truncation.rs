@@ -177,3 +177,45 @@ fn the_list_of_the_children_is_cut_at_the_bound() {
     assert_eq!(items.len(), MAX_OUTLINE_ITEMS, "the list is cut at the bound: {data:?}");
     assert_eq!(data["truncated"], json!(true), "the reader says it stopped: {data:?}");
 }
+
+/// The **hidden report** of a file whose outline is deeper than the
+/// bound says that it stopped.
+///
+/// The report counts the bookmarks of the file, and the count is a count
+/// of a cut tree when the outline is deeper than the reader reads: the
+/// report says so, because a count of less than the file holds is a
+/// count the reader has to be told about.
+#[test]
+fn the_hidden_report_says_when_the_bookmarks_are_cut() {
+    let mut session = session();
+    let depth = MAX_OUTLINE_DEPTH + 2;
+    let path = a_file_with_a_chain("thedeepebookmarks", depth);
+    the_outline(&mut session, &path);
+    let outcome = session.execute("pdf.hidden.scan", &json!({})).expect("the file is scanned");
+    assert_eq!(outcome.data["truncated"], json!(true), "the report says it stopped: {outcome:?}");
+    let categories = outcome.data["categories"].as_array().expect("there are categories");
+    let bookmarks = categories
+        .iter()
+        .find(|category| category["category"] == json!("Bookmarks"))
+        .expect("there is a category for the bookmarks");
+    let count = bookmarks["count"].as_u64().expect("the category has a count");
+    assert!(count < depth as u64, "the count is a count of a cut tree: {outcome:?}");
+}
+
+/// The **hidden report** of a file whose outline is within the bound is
+/// not cut, and it says so.
+#[test]
+fn the_hidden_report_of_a_whole_outline_is_not_cut() {
+    let mut session = session();
+    let path = a_file_with_a_chain("thewholebookmarks", 3);
+    the_outline(&mut session, &path);
+    let outcome = session.execute("pdf.hidden.scan", &json!({})).expect("the file is scanned");
+    assert_eq!(outcome.data["truncated"], json!(false), "nothing was cut: {outcome:?}");
+    let categories = outcome.data["categories"].as_array().expect("there are categories");
+    let bookmarks = categories
+        .iter()
+        .find(|category| category["category"] == json!("Bookmarks"))
+        .expect("there is a category for the bookmarks");
+    let count = bookmarks["count"].as_u64().expect("the category has a count");
+    assert_eq!(count, 3, "the count is the count of the bookmarks: {outcome:?}");
+}

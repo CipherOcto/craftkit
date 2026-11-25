@@ -453,7 +453,7 @@ fn the_whole(value: &serde_json::Value) -> Option<i64> {
 /// shows nothing. The sign says whether the node is open or closed, and
 /// the root is always open.
 fn recount(session: &mut Session, root: u64) -> Result<(), EngineError> {
-    let tree = collect(session, root);
+    let (tree, _) = collect(session, root);
     // The **open** nodes: the sign of the count they have says so, and
     // the root is open whatever it says.
     let mut open: HashSet<u64> = HashSet::new();
@@ -488,34 +488,46 @@ fn recount(session: &mut Session, root: u64) -> Result<(), EngineError> {
     Ok(())
 }
 
-/// The **number** of the bookmarks of the file.
+/// The **number** of the bookmarks of the file, and whether the walk
+/// stopped.
 ///
 /// The tree's own rule: the items of the outline, and not the node
 /// that holds them.
-pub fn count_of(session: &Session) -> usize {
-    let Some(root) = the_root(session) else { return 0 };
-    collect(session, root).len().saturating_sub(1)
+///
+/// The walk stops at the bounds of the outline — its depth and its
+/// number of items — and it says that it stopped: a count of a cut
+/// tree is a count of less than the file holds.
+pub fn count_of(session: &Session) -> (usize, bool) {
+    let Some(root) = the_root(session) else { return (0, false) };
+    let (tree, truncated) = collect(session, root);
+    (tree.len().saturating_sub(1), truncated)
 }
 
-/// Every node of an outline, with its children: the tree, from the top.
-fn collect(session: &Session, root: u64) -> Vec<(u64, Vec<u64>)> {
+/// Every node of an outline, with its children: the tree, from the top —
+/// and whether the walk stopped.
+fn collect(session: &Session, root: u64) -> (Vec<(u64, Vec<u64>)>, bool) {
     let mut tree: Vec<(u64, Vec<u64>)> = Vec::new();
     let mut seen = HashSet::new();
     let mut stack: Vec<(u64, usize)> = vec![(root, 0)];
+    // Whether the walk stopped at a bound: the tree it gives is a tree
+    // of less than the file holds, and the caller says so.
+    let mut truncated = false;
     while let Some((node, depth)) = stack.pop() {
         if depth > MAX_OUTLINE_DEPTH || tree.len() >= MAX_OUTLINE_ITEMS {
+            truncated = true;
             continue;
         }
         if !seen.insert(node) {
             continue;
         }
-        let (children, _) = the_children(session, node);
+        let (children, cut) = the_children(session, node);
+        truncated = truncated || cut;
         tree.push((node, children.clone()));
         for child in children.into_iter().rev() {
             stack.push((child, depth + 1));
         }
     }
-    tree
+    (tree, truncated)
 }
 
 /// The **tree** of bookmarks, as the caller gets it.

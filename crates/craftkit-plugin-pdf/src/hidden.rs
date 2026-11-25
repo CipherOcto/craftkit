@@ -104,7 +104,7 @@ fn holds(entries: &[(String, Json)], key: &str) -> bool {
 /// The **hidden information** of a file: what each category holds.
 ///
 /// The answer is the count of each category, in the tree's own order.
-pub fn scan(session: &Session) -> Vec<(String, usize)> {
+pub fn scan(session: &Session) -> (Vec<(String, usize)>, bool) {
     let document = session.document();
     let pages = pages_of(document);
     let annotations: Vec<(u64, String)> =
@@ -156,8 +156,10 @@ pub fn scan(session: &Session) -> Vec<(String, usize)> {
     // The **layers that are off**.
     let layers = crate::optional::layers_of(document).iter().filter(|layer| !layer.visible).count();
 
-    // The **bookmarks**: the items of the outline.
-    let bookmarks = crate::outline::count_of(session);
+    // The **bookmarks**: the items of the outline. The walk over the
+    // outline stops at the bounds of the outline, and the count is a
+    // count of a cut tree when it does: the report says so.
+    let (bookmarks, outline_truncated) = crate::outline::count_of(session);
 
     // The **links, actions and scripts**.
     let links = annotations.iter().filter(|(_, subtype)| subtype == "Link").count();
@@ -209,11 +211,12 @@ pub fn scan(session: &Session) -> Vec<(String, usize)> {
         links_actions_scripts,
         private,
     ];
-    CATEGORIES
+    let counts = CATEGORIES
         .iter()
         .enumerate()
         .map(|(at, name)| (name.to_string(), counts.get(at).copied().unwrap_or_default()))
-        .collect()
+        .collect();
+    (counts, outline_truncated)
 }
 
 /// The **categories** that are the annotations of a page: the comments,
@@ -381,7 +384,7 @@ commands! {
             category: Option<craftkit_sdk::Text>,
         },
         run: {
-            let counts = scan(session);
+            let (counts, truncated) = scan(session);
             let listed: Vec<Json> = match &self.category {
                 None => counts
                     .iter()
@@ -402,6 +405,11 @@ commands! {
             Ok(Outcome::new(format!("the file hides {total} thing(s)")).with_data(json!({
                 "categories": listed,
                 "total": total,
+                // A count of the report is a count of a **cut** tree:
+                // the bookmarks of a file whose outline is deeper or
+                // wider than the reader reads are not all of them, and
+                // the report says that it stopped.
+                "truncated": truncated,
             })))
 
         }

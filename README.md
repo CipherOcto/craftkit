@@ -4616,6 +4616,7 @@ so.
 | **the sound battery says when it cut a name** | **built.** The name of a track of a file is cut at a published bound and the import says so, and the two names of the battery are told apart (§1165) | §1165 |
 | **the pdf battery says what it did not read of an outline** | **built.** The outline of a file is read to a depth and to a number of items, and the reader says that it stopped at one of them (§1166) | §1166 |
 | **the prose battery says when it cut a label** | **built.** The label of a table of figures is cut at a published bound, and the answer says that it was (§1167) | §1167 |
+| **the pdf battery says when it counted a cut tree** | **built.** The hidden report counts the bookmarks with the same walk that reads the outline, and it says that it stopped (§1168) | §1168 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73788,3 +73789,52 @@ figures**, whose label is cut at a bound and was not saying so.
   label: the answer of the table says that the label it was asked for
   was cut, and the captions it holds are the ones whose cut label is the
   same.
+
+## 1168. The pdf battery says when it counted a cut tree
+
+§1166 gave the pdf battery's outline a way to say that it stopped, and
+it left the **count** of the bookmarks to the next arc. This arc closes
+it.
+
+### What was built
+
+- **The hidden report says that a count is a count of a cut tree.** The
+  report of what a file hides counts the bookmarks of the file, and the
+  count is taken with the same walk that reads the outline — the walk
+  that stops at the bounds of the depth and of the number of items. The
+  answer of `pdf.hidden.scan` now carries `truncated`: the report says
+  that it stopped, so a reader of the count knows that the file holds
+  more bookmarks than the report counted.
+- **Two tests prove it.** A file whose outline is deeper than the bound
+  gives a report that says it stopped, and the count of the bookmarks
+  is **less** than the file holds; a file whose outline is within the
+  bound gives a report that says it did not stop, and the count is the
+  count.
+
+### What the port found
+
+- **The count had its own walk and its own silence.** The report and the
+  reader of the outline are two different readers of the same tree: the
+  reader was taught to say so in §1166, and the report was not. A file
+  with a deep outline gave a report that counted sixty-three bookmarks
+  and said that the file hides sixty-three bookmarks.
+- **The report's numbers are the tree's own.** The nine categories of
+  the report are the tree's, and a number in a report is a fact about
+  the file: a count of less than the file holds is not a fact, and the
+  report did not know the difference.
+
+### What it cost
+
+- **One answer changed** — `pdf.hidden.scan` — **two tests** in the
+  truncation file, and the claim row above.
+
+### What it does not settle
+
+- **The tree's other batteries have not been surveyed this way.** The
+  grid, the prose, the sound and the pdf batteries answer it now
+  (§1161–§1168), and the others have not been looked at with the same
+  care.
+- **A report that counts a cut tree is still a report of the tree.** The
+  count of the bookmarks is the count of a walk that stopped; the
+  bookmarks themselves are in the file and in the document, and the
+  report does not say which ones it did not count.
