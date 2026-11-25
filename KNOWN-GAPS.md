@@ -549,12 +549,13 @@ These are the README's own honest notes, and they are still true of the tree:
 - **The document model is still small.** The *seam* is the thing being
   demonstrated: a version is a contribution, a step is a contribution, and the
   chain is checked. A document worth versioning is a different piece of work.
-- **Only the grid battery says when it stops.** A reader that stops at a
-  bound must say that it stopped, and the pdf and xlsx readers and the audio
-  crate's detectors say it now (§1146, §1147, §1150, §1151); the grid
-  battery says it too (§1161). The prose battery's issues, the film
-  battery's captions, the layout battery's boxes and the rest are the same
-  shape and are **not** answered yet, and nothing checks a battery for a cut
+- **Only the grid and the prose batteries say when they stop.** A reader
+  that stops at a bound must say that it stopped, and the pdf and xlsx
+  readers and the audio crate's detectors say it now (§1146, §1147, §1150,
+  §1151); the grid battery says it too (§1161), and so does the prose
+  battery's accessibility check (§1162). The film battery's captions, the
+  layout battery's boxes and the rest are the same shape and are **not**
+  answered yet, and nothing checks a battery for a cut
   that is silent: the next one to be found is found by a reader, not by the
   tree.
 

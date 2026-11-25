@@ -4610,6 +4610,7 @@ so.
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
 | **one name, one number — the private caps too** | **built.** The rule of the name now reads every cap of a crate, and twenty-three private groups of caps are named apart (§1160) | §1160 |
 | **the grid battery says what it cut** | **built.** The issues, the related words, the samples, the steps and the export's own cuts now say that they stopped, and nine tests prove each of them (§1161) | §1161 |
+| **the prose battery says what it cut** | **built.** The accessibility check now says how many issues there were, how many it lists and how many columns of a table it did not look at, and five tests prove each of them (§1162) | §1162 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73428,3 +73429,67 @@ battery, which had **eight** places where it stopped and said nothing.
 - **A cut that is not a bound is still a cut.** The export wraps the
   text of a cell into lines and stops at `MAX_EXPORT_LINES`; that cap
   is private and the number of lines cut is not in the answer yet.
+
+## 1162. The prose battery says what it cut
+
+§1161 brought the rule of the **saying so** to the grid battery. This arc
+brings it to the prose battery's **accessibility check**, whose answer
+told a caller that a document had five hundred issues when it had five
+hundred and one.
+
+### What was built
+
+- **The checker says how many issues there were, and how many it lists.**
+  The report was cut at `MAX_ACCESSIBILITY_ISSUES` — five hundred issues —
+  and the answer's `count` was the count of the issues that *fitted*, so a
+  document with more issues than the bound was told it had exactly the
+  bound. The count is now the count of the issues there were, `listed` is
+  the count of the ones in the list, and `truncated` says whether any were
+  left out.
+- **The columns of a table are cut too, and the answer says so.** The
+  checker looked at the first sixty-three columns of a table and said
+  nothing about the rest, so an empty column past the bound was an empty
+  column nobody was told about. The answer carries `columns_cut`: how many
+  columns were not looked at. The bound is `MAX_ACCESSIBILITY_COLUMNS`.
+- **Both bounds are published.** They were `MAX_ISSUES` and `COLUMNS`, and
+  the first of them is a name the grid battery already publishes, so the
+  two are `MAX_ACCESSIBILITY_ISSUES` and `MAX_ACCESSIBILITY_COLUMNS` — two
+  crates may not publish one name. They are at the prose battery's root,
+  and the prose battery now publishes **thirty-four** caps.
+- **Five tests name every cut.** The new test file names each bound **in
+  code** — `MAX_ACCESSIBILITY_ISSUES`, `MAX_ACCESSIBILITY_COLUMNS` — so the
+  proof and the bound cannot drift apart. Two of the five are the other
+  half: a document with exactly the bound's number of issues is **not**
+  cut, and a table with exactly the bound's number of columns is looked at
+  whole.
+
+### What the port found
+
+- **The count was the lie.** The answer said `count` and `issues`, and the
+  two agreed with each other — and both were wrong in the same way. A
+  reader could not tell a document with five hundred issues from a
+  document with five thousand, and the answer gave no sign that anything
+  was missing.
+- **A cut column is a cut issue.** The sixty-three-column bound did not
+  only stop the looking: an empty column past it would have been an
+  **issue**, and the issues past the bound were never counted either, so
+  the count was under the truth twice over.
+- **The bounds were not bounds.** `MAX_ISSUES` and `COLUMNS` were numbers
+  in the middle of a file — one of them a name another battery already
+  owns, and neither of them a thing a reader could look up.
+
+### What it cost
+
+- **One answer changed** — `prose.accessibility` — **two caps published**
+  at the prose battery's root, **five tests** in a new file, and the claim
+  row above.
+
+### What it does not settle
+
+- **The tree's other batteries still cut in silence.** This arc is the
+  prose battery's; the film battery's captions, the layout battery's boxes
+  and the rest are the same shape and are not yet answered.
+- **The report is still built whole before it is cut.** The bound is on the
+  answer, not on the work: a document with a million issues is read and
+  sorted before the report holds five hundred of them. The bound keeps the
+  answer small, and it does not keep the work small.

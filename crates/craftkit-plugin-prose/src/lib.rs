@@ -214,6 +214,7 @@ pub use tables::{
 pub use theme::ProseDocumentTheme;
 pub use titles::ProseDocumentTitle;
 
+pub use accessibility::{MAX_ACCESSIBILITY_COLUMNS, MAX_ACCESSIBILITY_ISSUES};
 /// The **caps** of the battery: the bounds it keeps.
 ///
 /// Every cap is **one name and one number**, and every one of them may

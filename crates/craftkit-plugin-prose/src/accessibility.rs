@@ -37,6 +37,12 @@
 //!
 //! The issues come first as **errors**, then as warnings, then as
 //! tips, and the order of the document is kept within each kind.
+//!
+//! The report is **cut** at a bound — a hostile document cannot make the
+//! report endless — and the report **says what it cut**: it says how
+//! many issues there were, how many of them are listed, and whether any
+//! were left out. A report that says "there is one issue" when there are
+//! five hundred is a report that lies.
 
 use craftkit_derive::commands;
 
@@ -49,14 +55,21 @@ const BLANK_RUN: usize = 3;
 
 /// The most issues a document may report: a hostile document cannot
 /// make the report endless.
-const MAX_ISSUES: usize = 500;
+///
+/// The name is the battery's own, and not `MAX_ISSUES`: the grid
+/// battery publishes a cap of that name, and two crates may not publish
+/// one name.
+pub const MAX_ACCESSIBILITY_ISSUES: usize = 500;
 
 /// The link words that say nothing about where the link goes.
 const CLICK_HERE: &str = "click here";
 
 /// The most **columns** of a table that are looked at: a hostile
 /// table cannot make the report endless.
-const COLUMNS: usize = 63;
+///
+/// The columns past this one are not looked at, and the report says how
+/// many of them there were.
+pub const MAX_ACCESSIBILITY_COLUMNS: usize = 63;
 
 /// Whether a **cell** is empty: nothing, or a text with nothing in
 /// it.
@@ -145,9 +158,31 @@ fn runs_of(node: &Node) -> Vec<Run> {
     out
 }
 
+/// The **report** of the checker: what is wrong with a document, and
+/// what was left out of the answer.
+///
+/// The **issues** are cut at `MAX_ACCESSIBILITY_ISSUES`, and the report
+/// says so: `total` is how many issues there were, `truncated` says
+/// whether any of them were left out, and `columns_cut` says how many
+/// columns of a table were not looked at.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Report {
+    /// The issues, in the order the report gives them.
+    pub issues: Vec<Issue>,
+    /// How many issues there were, before the report was cut.
+    pub total: usize,
+    /// Whether any issue was left out of the report.
+    pub truncated: bool,
+    /// How many **columns** of a table were not looked at.
+    pub columns_cut: usize,
+}
+
 /// The **issues** of a document: what is wrong with it.
-pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
+pub fn report_of(document: &Document, node: &Node) -> Report {
     let mut issues: Vec<Issue> = Vec::new();
+    // The **columns** of a table that were not looked at: the report
+    // says how many of them there were.
+    let mut columns_cut = 0usize;
     // The **pictures**: a picture that says nothing about itself.
     for media in node.children.iter().filter(|child| child.kind == "prose.media") {
         // A **decorative** picture says nothing on purpose, and it is
@@ -246,7 +281,8 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
                 }
                 let width = grid.iter().map(|row| row.len()).max().unwrap_or(0);
                 if width >= 2 {
-                    for column in 0..width.min(COLUMNS) {
+                    let looked = width.min(MAX_ACCESSIBILITY_COLUMNS);
+                    for column in 0..looked {
                         let empty = grid.iter().all(|row| match row.get(column) {
                             Some(cell) => is_empty(cell),
                             None => true,
@@ -263,6 +299,9 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
                             });
                         }
                     }
+                    // The columns past the bound are **not looked at**,
+                    // and the report says how many there were.
+                    columns_cut += width - looked;
                 }
             }
         }
@@ -336,8 +375,13 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
     }
     // The **errors** come first, then the warnings, then the tips.
     issues.sort_by_key(Issue::rank);
-    issues.truncate(MAX_ISSUES);
-    issues
+    // The report is **cut** at the bound, and it says what it cut: the
+    // count is the count of the issues there were, not the count of the
+    // ones that fitted.
+    let total = issues.len();
+    let truncated = total > MAX_ACCESSIBILITY_ISSUES;
+    issues.truncate(MAX_ACCESSIBILITY_ISSUES);
+    Report { issues, total, truncated, columns_cut }
 }
 
 commands! {
@@ -367,12 +411,21 @@ commands! {
                     message: format!("the node `{document}` is a `{}` and not a document", node.kind),
                 });
             }
-            let issues = issues_of(session.document(), &node);
-            let count = issues.len();
-            Ok(Outcome::new(format!("the document has {count} issue(s)")).with_data(json!({
+            let report = report_of(session.document(), &node);
+            let count = report.total;
+            let listed = report.issues.len();
+            let message = if report.truncated {
+                format!("the document has {count} issue(s), and the report lists {listed} of them")
+            } else {
+                format!("the document has {count} issue(s)")
+            };
+            Ok(Outcome::new(message).with_data(json!({
                 "document": document,
-                "issues": issues.iter().map(Issue::to_json).collect::<Vec<_>>(),
+                "issues": report.issues.iter().map(Issue::to_json).collect::<Vec<_>>(),
                 "count": count,
+                "listed": listed,
+                "truncated": report.truncated,
+                "columns_cut": report.columns_cut,
             })))
 
         }
