@@ -4619,6 +4619,7 @@ so.
 | **the pdf battery says when it counted a cut tree** | **built.** The hidden report counts the bookmarks with the same walk that reads the outline, and it says that it stopped (§1168) | §1168 |
 | **one name, one number — the whole tree** | **built.** A published cap's name belongs to one crate, the gate says the ones that do not, and ten names are named apart (§1169) | §1169 |
 | **the tree's bounds are surveyed** | **built.** Every battery's bounds were read with a written contract, the film battery's three silent stops now say so, and the rest are named one by one (§1170) | §1170 |
+| **the grid battery stops lying about its solver** | **built.** The solver answers feasible when it did not prove its answer, the goal says when its search stopped, and two of the survey's claims were wrong (§1171) | §1171 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73983,3 +73984,65 @@ looked at. This arc **looks**.
 - **The survey is a reading, not a rule.** Nothing checks a battery for
   a cut that is silent: the next one to be found is found by a reader,
   not by the tree.
+
+## 1171. The grid battery stops lying about its solver
+
+§1170 surveyed the tree's bounds and named the stops the batteries do
+not say. This arc takes the one of them that is not a silence but a
+**lie**, and it takes the claims the survey got wrong.
+
+### What was built
+
+- **The solver says when it stopped.** `grid.solver.solve` answered
+  **"optimal"** whenever it found a solution — including when its
+  branch and bound stopped at the bound of the tree before it had
+  proved the answer was the best one. A solution that was not proved is
+  **feasible**, and the answer now says so: the status is "feasible"
+  and the answer carries `converged`.
+- **The search of a goal says when it stopped.** `grid.goal` halves its
+  range at every step and now answers `truncated`, so a search that
+  stopped at the bound of the tree is not told apart from a search that
+  found the goal.
+- **Three tests prove both.** The solver's two halves are there — a
+  program whose proof runs out of the budget answers "feasible" and
+  `converged: false`, and a program that is proved answers "optimal" and
+  `converged: true` — and the goal's answer says that the search did not
+  stop.
+
+### What the port found
+
+- **The solver's answer was a lie, not a silence.** Every other stop in
+  the tree loses something and says nothing; this one *said* something
+  false. A caller that read "optimal" and built on it would be wrong
+  about the program it had solved, and nothing in the answer would have
+  told it so.
+- **Two of the survey's claims were wrong.** The **level** of a group
+  cannot be deeper than the tree's own: the commands refuse it and the
+  xlsx reader cuts it *with a word* ("the outline level of a row is
+  nine, and the most a row may have is seven; it was cut"). The
+  **spill** of a cell cannot reach the bound either: the text runs over
+  the columns of the page it is drawn on, and a page holds about eight
+  columns, not sixty-four. A survey that reports a bound as a defect
+  without asking whether it can bite sends the next arc after a ghost.
+- **The goal's bound cannot bite either — and now the answer says so if
+  it ever does.** The search halves its range at every step, so it comes
+  within the tree's tolerance in about thirty-six of the sixty-four
+  steps it is allowed.
+
+### What it cost
+
+- **Two answers changed** — `grid.solver.solve` and `grid.goal` —
+  **three tests** in the truncation file, and the claim row above.
+
+### What it does not settle
+
+- **The grid's criterion cut stays as it is.** The `SUMIF` family cuts a
+  criterion over the bound of the tree and matches the cut text, where
+  the single-criterion case **refuses** it. The code says so in its own
+  words and the tests prove it, so it is a rule and not an accident: it
+  is recorded in the `KNOWN-GAPS`, and changing it is a change of
+  behaviour rather than a change of truth.
+- **The other batteries' stops are still where §1170 put them**: the
+  pdf's inherited attributes and its flattened pages, the prose style
+  chain, the fx step, the vector erase and the text battery's metric
+  run.

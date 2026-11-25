@@ -402,3 +402,46 @@ fn a_long_word_gets_no_suggestions_and_the_issue_says_so() {
     assert_eq!(issue["suggestions_omitted"], json!(true), "the issue says they were not made: {issue:?}");
     assert_eq!(data["suggestions_omitted"], json!(true), "the answer says so: {data:?}");
 }
+
+/// The **solver** that runs out of its budget says so.
+///
+/// The search of the solver stops at the bound of the tree, and a
+/// solution that was not proved to be the best one is not "optimal":
+/// the answer says that the search stopped.
+#[test]
+fn the_solver_that_runs_out_of_its_budget_says_so() {
+    let mut session = session();
+    let outcome = session
+        .execute(
+            "grid.solver.solve",
+            &json!({
+                "objective": [3.0, 2.0, 2.0, 1.0],
+                "binary": [true, true, true, true],
+                "constraints": [{ "coefficients": [2.0, 2.0, 2.0, 2.0], "sense": "<=", "rhs": 5.0 }],
+                "maximise": true,
+                "max_nodes": 2.0,
+            }),
+        )
+        .expect("the program is solved");
+    assert_ne!(outcome.data["status"], json!("optimal"), "the answer is not a lie: {outcome:?}");
+    assert_eq!(outcome.data["converged"], json!(false), "the answer says it stopped: {outcome:?}");
+}
+
+/// The **solver** that proves its answer says so.
+#[test]
+fn the_solver_that_proves_its_answer_says_so() {
+    let mut session = session();
+    let outcome = session
+        .execute(
+            "grid.solver.solve",
+            &json!({
+                "objective": [3.0, 2.0, 2.0, 1.0],
+                "binary": [true, true, true, true],
+                "constraints": [{ "coefficients": [1.0, 1.0, 1.0, 1.0], "sense": "<=", "rhs": 3.0 }],
+                "maximise": true,
+            }),
+        )
+        .expect("the program is solved");
+    assert_eq!(outcome.data["status"], json!("optimal"), "the answer is proved: {outcome:?}");
+    assert_eq!(outcome.data["converged"], json!(true), "the answer says it stopped: {outcome:?}");
+}

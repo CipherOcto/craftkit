@@ -142,6 +142,9 @@ commands! {
                         "value": middle,
                         "result": middle_value,
                         "steps": steps,
+                        // The search did not stop at the bound: the
+                        // goal is the one the sheet reaches.
+                        "truncated": false,
                     })));
                 }
                 let low_side = (middle_value - target).signum() == (low_value - target).signum();
@@ -155,6 +158,10 @@ commands! {
                     break;
                 }
             }
+            // Whether the search **stopped** at the bound: a search that
+            // stopped at its bound did not find the goal, and the answer
+            // says so.
+            let stopped = steps >= MAX_GOAL_STEPS;
             let value = (low + high) / 2.0;
             let at_value = crate::whatifs::trial(&mut book, &name, input, result, value, &id)?;
             let found = number_of(&at_value, &id, value)?;
@@ -164,6 +171,9 @@ commands! {
                 "result": found,
                 "steps": steps,
                 "width": (high - low).abs(),
+                // The search stopped at the bound of the tree, and the
+                // answer says that it stopped.
+                "truncated": stopped,
             })))
 
         }

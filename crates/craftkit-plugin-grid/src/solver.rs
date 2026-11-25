@@ -939,14 +939,19 @@ commands! {
             } else {
                 (solve_lp(&costs, &rows, &low, &high, &mut budget), 0usize)
             };
-            let (status, values, objective) = match outcome {
-                Verdict::Solved(values, objective, _converged) => {
+            let (status, values, objective, converged) = match outcome {
+                Verdict::Solved(values, objective, converged) => {
                     let objective = if maximise { -objective } else { objective };
-                    ("optimal", values, objective)
+                    // The search may stop at a bound before it has
+                    // proved the answer is the best one: a solution that
+                    // was not proved is **feasible**, and the answer says
+                    // that it was not proved.
+                    let status = if converged { "optimal" } else { "feasible" };
+                    (status, values, objective, converged)
                 }
-                Verdict::Infeasible => ("infeasible", Vec::new(), f64::NAN),
-                Verdict::Unbounded => ("unbounded", Vec::new(), f64::NAN),
-                Verdict::Limit => ("limit", Vec::new(), f64::NAN),
+                Verdict::Infeasible => ("infeasible", Vec::new(), f64::NAN, false),
+                Verdict::Unbounded => ("unbounded", Vec::new(), f64::NAN, false),
+                Verdict::Limit => ("limit", Vec::new(), f64::NAN, false),
             };
             let values: Vec<Json> = values.iter().map(|value| json!(value)).collect();
             Ok(Outcome::new(format!("the program is {status}")).with_data(json!({
@@ -954,6 +959,10 @@ commands! {
                 "objective": if objective.is_finite() { json!(objective) } else { Json::Null },
                 "values": values,
                 "nodes": nodes,
+                // Whether the search **proved** the answer is the best
+                // one: a solver that stops at its bound has not, and the
+                // answer says so.
+                "converged": converged,
             })))
 
         }

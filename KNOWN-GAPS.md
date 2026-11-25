@@ -572,14 +572,22 @@ These are the README's own honest notes, and they are still true of the tree:
   - **prose** — `prose.style.character.read` and `prose.block.character`
     stop the chain of base styles at `MAX_STYLE_CHAIN` (thirty-two),
     and the chain in the answer looks whole.
-  - **grid** — `grid.row.groups` and `grid.column.groups` hold a level
-    at `MAX_LEVEL` with no word; `grid.export.pdf` clips a spill past
-    `MAX_SPILL` (sixty-four columns) without counting it; the
-    `SUMIF` family cuts a criterion at `MAX_CRITERION_UNITS` (two
-    hundred and fifty-five) before it matches; `grid.goal` stops its
-    search at `MAX_GOAL_STEPS` (sixty-four) and says only how many
-    steps it took; and `grid.solver.solve` answers **"optimal"** when
-    its pivot budget runs out, which is a lie about the answer.
+  - **grid** — the `SUMIF` family cuts a criterion at
+    `MAX_CRITERION_UNITS` (two hundred and fifty-five) before it
+    matches, where the single-criterion case refuses it: the code says
+    so in its own words and the tests prove it, so it is a rule and not
+    an accident. The **solver** answered **"optimal"** when its branch
+    and bound stopped at the bound of the tree before it had proved the
+    answer was the best one — that was a lie, and §1171 fixed it: a
+    solution that was not proved is "feasible" and the answer carries
+    `converged`. The **goal** now says when its search stopped
+    (`truncated`), though the search halves its range and so comes
+    within the bound long before it is reached. Two of the survey's
+    claims were **wrong**: a group's level cannot be deeper than the
+    tree's own (the commands refuse it and the xlsx reader cuts it
+    with a word), and a cell's spill cannot reach `MAX_SPILL` (the text
+    runs over the columns of the page it is drawn on, and a page holds
+    about eight columns).
   - **fx** — `fx.time.step` holds the frame at `MAX_FRAME` with no
     word, the same shape as the film battery's playhead, which §1170
     fixed.
