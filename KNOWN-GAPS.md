@@ -255,22 +255,22 @@ These are the README's own honest notes, and they are still true of the tree:
   gate. What stays is the weakness the tree already knows: a name in a
   comment is a name, and a name in a string is a name, and the unit
   tests widen the surface the rule looks at.
-- **Every published cap in the tree is named by a test** (§1154–§1156):
-  the tree keeps one hundred and six published caps and every one of
-  them is named by a test. The last four were the two of the fixtures
+- **Every published cap in the tree is named by a test** (§1154–§1156,
+  §1158, §1159): the tree keeps one hundred and thirty-five published
+  caps and every one of them is named by a test. The last four were the two of the fixtures
   and the two of the kit: the fixtures' caps were named by their own
   unit tests and by nothing else, and the kit's two were proved by the
   **studio's** tests and by the **window's** — a proof in another
   crate's house. The kit has a test of its own for both now.
-- **The rule that reads the tree's caps has a blind spot** (§1156): it
-  looks in the `tests` of a crate and not in the `#[cfg(test)]` modules
-  of its source, because it reads the production code and cannot tell a
+- **The rule that reads the tree's caps had a blind spot** (§1156): it
+  looked in the `tests` of a crate and not in the `#[cfg(test)]` modules
+  of its source, because it read the production code and could not tell a
   unit test from the code around it. A cap that only a unit test names
-  is invisible to it — the two fixtures' caps were. The blind spot is
-  recorded rather than closed: closing it means teaching the reader to
-  tell a test from the code around it, and that is a change to the
-  reader the tree trusts. It is closed now (§1157): the reader hands
-  back the tests as well as the production code.
+  was invisible to it — the two fixtures' caps were. The blind spot is
+  closed (§1157): the reader hands back the tests as well as the
+  production code. What stays is the weakness the tree already knows: a
+  name in a comment is a name, and the unit tests widen the surface the
+  rule looks at.
 - **The camera's zoom is a third deliberate clamp** (§1156): a zoom
   above `MAX_ZOOM` is clamped, and the camera says so in its own
   words. The tree now has a test of its own for it. The art battery's
@@ -339,16 +339,21 @@ These are the README's own honest notes, and they are still true of the tree:
   columns of a sheet past its width are not read and the file is told.
   The file is read, not refused: the answer holds the truth of what
   was read, and the truth of what was not is in the warnings beside it.
-- **The grid battery's caps are named; the other batteries' are not**
-  (§1149): the grid battery publishes twenty cap names and every one of
-  them is named by a test beside the battery. The caps a battery keeps
-  **inside itself** are not the tree's rules: the grid battery keeps
-  sixty-eight private caps and the prose battery five, and the tree's
-  reader only sees the published ones. After this arc **thirty-two**
-  published caps in **seventeen** crates are named by no test — six in
-  the xlsx crate, five in the audio crate, three each in the midi and
-  zip crates, two each in the kit and the xml crate, and one in each of
-  ten more.
+- **The batteries' caps are published and named** (§1149, §1148,
+  §1158, §1159): the grid battery publishes thirty-two cap names and the
+  prose battery thirty-four, and **every** published cap in the tree is
+  named by a test beside the crate that keeps it. What §1148 and §1149
+  recorded — that fifty and thirty-two published caps in seventeen
+  crates were named by no test — was closed by §1158 and §1159, which
+  published the batteries' caps and asked each crate for the proof of
+  its own. The caps a battery keeps **inside itself** are not the tree's
+  rules: the grid battery keeps fifty-eight private caps and the prose
+  battery seven, counted as the outer gate counts them, and the rule
+  holds a private cap to one name and one number and to nothing else
+  (§1160). What stays is the rule's own weakness: the rule is about the
+  **name**, so a cap named in a comment is a cap it counts, and a cap
+  that **cuts** rather than refuses is named by the same test as one
+  that refuses.
 - **An address past the sheet was a cell** (§1149): a sheet is sixteen
   thousand columns wide and a million rows tall, and the reader of an
   address did not check either, so `XFE1` and `A1048577` were cells of
@@ -362,14 +367,15 @@ These are the README's own honest notes, and they are still true of the tree:
   the tree does now. A cap that is read only on one path is a cap with
   two doors: the digits of a **free** denominator are bounded by one cap
   and the value of a **fixed** one by the other.
-- **The prose battery's caps are named; the other batteries' are not**
-  (§1148): the prose battery keeps twenty-nine cap names and every one
-  of them is named by a test beside the battery. The outer gate's rule
-  still reaches only the **kit** (§1141), so nothing holds a battery to
-  it: after this arc **fifty** caps in **seventeen** crates are named by
-  no test, and the grid battery alone keeps eighteen. The rule is about
-  the **name**, and some of those caps cut rather than refuse — the
-  chain of the styles is cut at `MAX_CHAIN`, and a label is truncated at
+- **The prose battery's caps are named, and so are the other
+  batteries'** (§1148, §1158, §1159): the prose battery keeps
+  thirty-four cap names and every one of them is named by a test beside
+  the battery. The outer gate's rule reaches only the **kit** (§1141),
+  so nothing held a battery to it when §1148 was written; §1158 and
+  §1159 gave every crate the rule and its own proof, and no published
+  cap in the tree is now named by no test. The rule is about the
+  **name**, and some of those caps cut rather than refuse — the chain
+  of the styles is cut at `MAX_STYLE_CHAIN`, and a label is truncated at
   `MAX_LABEL` — so naming them is not the same as refusing them.
 - **A source's title had no bound** (§1148): the parts of a source were
   bounded — the author 256 characters, the year 32, the tag 64, the
@@ -425,12 +431,14 @@ These are the README's own honest notes, and they are still true of the tree:
   answers `clamped` when it held its value, so a clamp is no longer
   silent. What stays open is whether a knob should be a refusal at all,
   and the owner has decided that it is not.
-- **A cap in a private module is textually public and practically
-  private** (§1142): the batteries' caps are `pub const` inside private
-  modules, so the outer gate reads the text and sees a promise while no
-  caller can name the number. The rule of §1141 therefore reaches the
-  **kit** and not the batteries, and the batteries prove their caps by a
-  test beside them instead.
+- **A cap in a private module was textually public and practically
+  private** (§1142): the batteries' caps were `pub const` inside private
+  modules, so the outer gate read the text and saw a promise while no
+  caller could name the number. The rule of §1141 therefore reached the
+  **kit** and not the batteries. The batteries publish their caps at
+  their roots now (§1159), and a **private** cap is a private cap: the
+  rule holds it to one name and one number and to nothing else
+  (§1160), and nothing asks a test to prove it.
 - **A limit of the kit that no test names is caught** (§1141): the same
   rule, read over the **kit's own public limits** — the constants whose
   names say they are one, `MAX_…` and `…_LIMIT` — and the rule is about

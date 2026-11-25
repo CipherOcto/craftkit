@@ -4627,6 +4627,7 @@ so.
 | **the commit rule names its exception** | **built.** The commits that are already in the tree and carry no section number are accepted as they are, and a commit made from now on names its section (§1176) | §1176 |
 | **the three deliberate clamps say so** | **built.** The art battery's rate, the sound battery's repeat count and the camera's zoom are held and say they were held, and the camera's own lie about a zoom that is not a number is fixed (§1177) | §1177 |
 | **the survey's open questions are answered** | **built.** Three of the four are closed with their reasons — the version counter, the SDK's path API and the eval's posture — and the fourth is given a trigger (§1178) | §1178 |
+| **the survey's question is answered and the stale notes are corrected** | **built.** The tree is meant to be driven by an agent, the survey's open question is answered, and the notes that had stopped being true are true again (§1179) | §1179 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74468,3 +74469,75 @@ a decision that is not argued is a decision that is not a decision.
 - **The tree's own gate cannot check a decision.** Nothing reads
   `KNOWN-GAPS.md` §8 and says that a decision was carried out, so the
   closures are a promise the tree keeps by reading them.
+
+## 1179. The survey's question is answered, and the stale notes are corrected
+
+Two questions were still open in the tree's own documents: the a2ui
+survey's question — *which application wants an agent to choose its
+commands?* — and a handful of notes in `KNOWN-GAPS.md` that had
+stopped being true as the tree moved. This arc answers the first and
+corrects the second.
+
+### What was built
+
+- **The survey's open question is answered.** The tree says in its first
+  line that it is "a working, tested workspace meant to be copied and
+  re-purposed into an application **or driven directly by an agent**".
+  So the answer is the first of the survey's three: the tree is meant to
+  be driven by an agent, and the **application is downstream** — a copy
+  of the scaffold is what an agent drives, and the copy is where the
+  product decision lives. Two things follow, and both are already true:
+  the package (O1, O2, O5, O8, O11) was built in full, so the question
+  no longer changes what is built — it names *who the tree is for*; and
+  the **posture** follows from it, because a scaffold that an agent
+  drives directly has no business reaching a host on its own and no
+  business holding a credential.
+- **The survey's rows for O6, O7, O9 and O10 now say what happened.**
+  Each points at §1178, and the survey's own recommendation no longer
+  calls O9 "blocked".
+- **Four stale notes in `KNOWN-GAPS.md` are true again.** The grid and
+  prose batteries' caps are **published and named** — what §1148 and
+  §1149 recorded as fifty and thirty-two caps in seventeen crates is
+  closed by §1158 and §1159 — and the numbers are the tree's: thirty-two
+  published cap names and fifty-eight private ones in the grid battery,
+  thirty-four and seven in the prose battery. The tree keeps **one
+  hundred and thirty-five** published caps, not a hundred and six. A cap
+  in a private module **was** textually public and practically private;
+  the batteries publish their caps at their roots now. And the rule that
+  reads the tree's caps **had** a blind spot: it is closed (§1157), and
+  the note now says so in its own tense.
+
+### What the port found
+
+- **A note in the present tense is a claim, and it decays.** The notes
+  that had gone stale were written as what was true when they were
+  written — "the prose battery keeps twenty-nine cap names", "the tree
+  keeps one hundred and six published caps" — and the tree moved under
+  them. They were not wrong when they were written; they were wrong
+  when they were read, which is the only time a note is read. The house
+  rule that a false note is corrected in place applies to these as much
+  as to the README's claim rows.
+- **The question and the package were the same question.** The survey
+  said the answer to its open question decides whether O1–O2, O5 and O8
+  are worth doing at all. They were done anyway — and the reason they
+  were done is the answer: the tree is meant to be driven by an agent.
+  So the question did not go unanswered for twenty arcs; it was answered
+  by the tree's own first line, and the tree was built to fit.
+
+### What it cost
+
+- **Two files** — the survey's closing sections and the notes in
+  `KNOWN-GAPS.md` §5 — and the claim row above. No code, no test and no
+  gate: prose is checked by the reader, and a reader who checks the
+  numbers against the tree is the thing this arc is for.
+
+### What it does not settle
+
+- **A stale note is found by a reader, and nothing else.** There is no
+  gate that says "the numbers in `KNOWN-GAPS.md` §5 are the numbers of
+  the tree": the claim table in the README is checked by the digest, and
+  the drift record in §7 is checked by nothing. Four stale notes were
+  found here by reading the whole file against the tree — the fifth
+  would have been found by the next reader, or not at all.
+- **The contracts are still not written.** O10 waits for a release, and
+  a release is still a question about what this tree is for.

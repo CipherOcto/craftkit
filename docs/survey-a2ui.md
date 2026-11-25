@@ -1083,11 +1083,11 @@ not a front end.
 | 5 | **O4.1** classify the doors | **not one line** — see §3.2: a decision, the bridge's `evaluators`, the studio's hits, and a change to the rule itself | no | `FRONT_ENDS` names the doors, and `cargo test -p craftkit-gates` is green with them in it — **done** (README §1116) |
 | 6 | **O4.2** the parity matrix | **a project, not a task** — six doors and two transport libraries; the honest first cut is a table, and keeping it is a rule in the outer gate | no | the table exists, and every cell that says something names the test that proves it — **done** ([`door-parity.md`](door-parity.md)): the six doors side by side, cell by cell, **every cell that says something naming the test that proves it**, and the outer gate checking that a cell names a test and that the test is there. **And the harness is built** (README §1128): `apps/craftkit-parity` drives five of the six doors with the same questions and says where they differ |
 | 7 | **O3** recipe **claim** check | **small**, but it is a judgement, not a link — the link half is already done by `cargo xtask lists` (`xtask/src/lists.rs:55`) | no | a named claim in a recipe is checked against the tree, and a broken claim is reported — **done** (README §1119): the battery list is checked by the tree's own gate, on a stated line |
-| 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it — **the sharp case is closed** (README §1121): a session can gain a command while it runs, and every door lists what the session has; **the panel's side is closed too** (README §1127): a panel is a battery's contribution and a fixed set, and everything else is the kit's own, read from the session every time the window draws — so a version counter would notice what the window already notices |
-| 9 | **O7** paths resolving inside the SDK | **large**, and architecture-defining | no | a path resolves to a plain JSON value inside the SDK, and no front end names a `Plan` — **its constraint holds**: the a2ui layer resolves the paths and the door gets plain values, and the gate refuses a front end that names the plan (§1115); the general API in the SDK is not built |
+| 8 | **O6** registry reconciliation | **medium**, and only the "appeared" direction exists | no | the registry carries a version counter and a panel reconciles against it — **closed, and the counter is not wanted** (README §1178): the sharp case was closed by §1121 and the panel's side by §1127, so a version counter would notice what the window already notices; the registry is grow-only, so a stale id is an error rather than a silent drop |
+| 9 | **O7** paths resolving inside the SDK | **large**, and architecture-defining | no | a path resolves to a plain JSON value inside the SDK, and no front end names a `Plan` — **closed as not wanted** (README §1178): its constraint holds — the a2ui layer resolves the paths and the door gets plain values, and the gate refuses a front end that names the plan (§1115) — and a general API would be a second way to read the document, which the tree refuses everywhere else |
 | 10 | **O11** the a2ui compat layer — **scope superseded by [`a2ui-compat-layer.md`](a2ui-compat-layer.md)** | **medium** — three crates (L3, L4, an app), eleven components, one new derive macro, **the SVG path-data reader promoted to L2** (and it learns arcs), and **changes to the SDK, to the derive crate and to the vector plugin**; **no** change to the raster or the window | **yes** | yes — an a2ui-speaking agent can drive craftkit |
-| — | **O9** evals | **blocked on a posture decision** — the tree has no outbound network and no secret-management story; that is a decision memo, not an opportunity | measures the claim | — |
-| — | **O10** contracts | **high**, and the README must keep the bounds; do it when the contracts have stopped moving | no | — |
+| — | **O9** evals | **decided** (README §1178) — no outbound network and no credentials in the kit, because the tree is a scaffold meant to be copied; the model call belongs to the host program, and the engine is already the scorer | measures the claim | — |
+| — | **O10** contracts | **high**, and the README must keep the bounds; do it when the contracts have stopped moving | no | — **the trigger is named** (README §1178): a release, and the tree has none — the first step is a release workflow |
 
 **Blockers a reader will meet in the first hour**, beyond the costs above:
 
@@ -1118,9 +1118,11 @@ bounds derived into it, the model's own output feeding the existing
 the schema mapping moved in from `craftkit-mcp`) **and the vector plugin** (the
 SVG path-data reader moves to L2 and learns arcs), and **nothing else** in the
 tree. O3, O4, O6, O7 and O10 are adjacent (§7);
-**O9 is adjacent as well, and blocked** on the posture decision.
+**O9 is adjacent as well, and its posture is decided** (§1178): no outbound
+network and no credentials in the kit, and the model call belongs to the
+host program.
 
-**The open question, still unanswered.** Which application wants an agent to
+**The open question, answered** (§1178). Which application wants an agent to
 choose its commands? craftkit is a scaffold, and the answer decides whether
 O1–O2, O5 and O8 are worth doing at all:
 
@@ -1134,8 +1136,25 @@ O1–O2, O5 and O8 are worth doing at all:
   exercise is a **recipe** (`docs/recipes/`) describing the pattern, and no
   code at all.
 
-That question is not answered inside this repository, and this document does
-not assume an answer.
+**The answer is the first of the three, and the tree says so in its first
+line**: craftkit is "a working, tested workspace meant to be copied and
+re-purposed into an application **or driven directly by an agent**"
+(`AGENTS.md`). The tree is meant to be driven by an agent — that is the
+a2ui door and the agent door, and it is why the package was built at all.
+The **application** is downstream: a copy of the scaffold is what an agent
+drives, and the copy is where the product decision lives.
+
+Two things follow, and both are already true of the tree:
+
+- **The package was built in full anyway.** O1, O2, O5, O8 and O11 are
+  done (§1113, §1114, §1117, §1118), so the question no longer changes
+  what is built — it names *who the tree is for*.
+- **The posture follows the answer.** A scaffold that an agent drives
+  directly has no business reaching a host on its own and no business
+  holding a credential: the **model call belongs to the host program**,
+  which asks the model, runs what it gets through `Session::execute` and
+  scores what the engine refused. That is the survey's own idea — the
+  scorer must be the engine — and it is the tree's decision (§1178).
 
 ## 7. What serves the claim, and the one-line version
 
