@@ -484,6 +484,16 @@ impl Metric {
         None
     }
 
+    /// The number of the metric's **runs** that are too long to be used.
+    ///
+    /// A run is looked for at no more than `MAX_RUN` characters, and a
+    /// run longer than that is never matched: it is kept, and it is
+    /// never used. A measurement that used the metric says how many of
+    /// them there are.
+    fn runs_ignored(&self) -> usize {
+        self.runs.keys().filter(|run| run.chars().count() > MAX_RUN).count()
+    }
+
     /// The width of a word: its runs, its characters and its pairs.
     ///
     /// The word is read from the left: at every place the **longest
@@ -1855,6 +1865,11 @@ impl LinesEvaluator {
                 value: json!({
                     "lines": lines,
                     "line_count": breaks.lines.len(),
+                    // The metric's runs that are too long to be used: the
+                    // widths below are the widths of the characters and
+                    // of the runs that **do** fit, and a run that does
+                    // not is not in them.
+                    "runs_ignored": metric.runs_ignored(),
                     "method": match breaks.method {
                         Method::Optimal => "optimal",
                         Method::Greedy => "greedy",

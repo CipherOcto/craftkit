@@ -4623,6 +4623,7 @@ so.
 | **the last of the surveyed stops say so** | **built.** The fx time, the prose style chain and the pdf's ancestors and page tree answer when they stop, and six tests prove them (§1172) | §1172 |
 | **the head reader says when it stopped** | **built.** The kit's head reader says whether the file is longer than the bound, three callers say it in their answers, and a refusal of a cut head names the bound (§1173) | §1173 |
 | **the erase says when it was coarse** | **built.** The vector battery holds the samples of a side at a published bound, and both of its erasers say when the geometry is coarser than the caller asked for (§1174) | §1174 |
+| **the measurement says what it ignored** | **built.** The text battery's metric keeps a run it can never use, and the measurement now says how many of the metric's runs were left out (§1175) | §1175 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74230,3 +74231,54 @@ for and who says nothing about it.
   zoom are held rather than refused, and they are recorded in the
   `KNOWN-GAPS`. They are knobs, and a knob that is held is a knob
   that says what it did.
+
+## 1175. The measurement says what it ignored
+
+§1170's survey named the text battery's metric among the stops the tree
+does not say: a run longer than the bound is kept, and never used, and
+the measurement that uses the metric does not say so. §1173 took the head
+reader, §1174 the erase. This arc takes the last one.
+
+### What was built
+
+- **The measurement says how many runs it ignored.** A metric's run is
+  looked for at no more than `MAX_RUN` characters, and a run longer than
+  that is never matched: it is kept, and it is never used. The
+  measurement of a paragraph now answers `runs_ignored` — the number of
+  the metric's runs that are too long to be used — beside the widths it
+  reports.
+- **The count is of the metric, and it is zero when every run fits.** A
+  metric whose runs are all within the bound says zero, and a reader
+  knows the width it read is the metric's own.
+
+### What the port found
+
+- **The rule was in the code and not in the answer.** The metric's own
+  words said it: "a metric may **hold** a longer run: it is kept, and it
+  is never used, because the walk does not look that far". So the tree
+  had decided that a long run is kept rather than refused — and had said
+  nothing to the reader of the width. A width that is the width of the
+  characters rather than the width of the run is a **different number**,
+  and the reader was given it as though it were the same one.
+- **A run of nine characters is not a small mistake.** The width of a
+  word with a nine-character run is the sum of nine advances where the
+  metric said one run of a hundred: a reader who measures and a reader
+  who draws are both wrong, and neither is told.
+
+### What it cost
+
+- **One answer changed** — the `text.lines` measurement — **one method
+  on the metric**, **two tests** in one file, and the claim row above.
+  The tree keeps one hundred and thirty-four published caps under one
+  hundred and thirty-four names, and twenty-seven crates keep one.
+
+### What it does not settle
+
+- **The long run is still kept.** The metric does not refuse it: the
+  bound is on the **work**, not on the table, and a typeface may hold a
+  cluster the walk does not look for. What the arc settles is that the
+  measurement says how many of them there are.
+- **The three deliberate departures stay deliberate.** The art battery's
+  rate, the sound battery's repeat count and the camera's zoom are held
+  rather than refused, and they are recorded in the `KNOWN-GAPS`. They
+  are knobs, and a knob that is held is a knob that says what it did.

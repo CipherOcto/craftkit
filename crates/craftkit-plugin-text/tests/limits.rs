@@ -64,6 +64,14 @@ fn the_width(session: &Session) -> f64 {
     lines[0]["width"].as_f64().expect("the line has a width")
 }
 
+/// The number of the metric's runs that were **too long to be used**, as
+/// the measurement says it.
+fn runs_ignored(session: &Session) -> u64 {
+    let plan = session.evaluate();
+    let item = plan.items.iter().find(|item| item.kind == "text.lines").expect("the lines are in the plan");
+    item.value["runs_ignored"].as_u64().expect("the measurement says how many runs were ignored")
+}
+
 /// A run of **exactly `MAX_RUN` characters** is used.
 ///
 /// A run is looked for at every place of a word, and the longest one
@@ -94,4 +102,25 @@ fn a_run_over_the_limit_is_not_used() {
     let natural = (MAX_RUN + 1) as f64 * 1.0;
     assert!((width - natural).abs() < 1e-6, "the natural width is used: {width}");
     assert!((width - 100.0).abs() > 1e-6, "and the run of nine is not: {width}");
+}
+
+/// The measurement says that a run of the metric was **ignored**.
+///
+/// A run that is too long to be looked for is kept and never used, and
+/// the width that is reported is the width of the characters instead. A
+/// reader of the measurement is told how many of the metric's runs were
+/// left out.
+#[test]
+fn the_measurement_says_a_run_was_ignored() {
+    let mut session = session();
+    a_paragraph(&mut session, "abcdefghi", json!({ "abcdefghi": 100.0 }));
+    assert_eq!(runs_ignored(&session), 1, "the run of nine was ignored: it is not in the width");
+}
+
+/// The measurement says **nothing** when every run of the metric fits.
+#[test]
+fn the_measurement_says_nothing_when_every_run_fits() {
+    let mut session = session();
+    a_paragraph(&mut session, "abcdefgh", json!({ "abcdefgh": 100.0 }));
+    assert_eq!(runs_ignored(&session), 0, "the run of eight is used: it is in the width");
 }

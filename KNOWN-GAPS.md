@@ -592,11 +592,12 @@ These are the README's own honest notes, and they are still true of the tree:
   - **fx** — §1172 fixed it: `fx.time.step` holds the frame at
     `MAX_FRAME` and answers `clamped`, the same shape as the film
     battery's playhead, which §1170 fixed.
-  - **text** — a metric run longer than `MAX_RUN` (eight characters) is
-    kept and never used. The code says so in its own words ("it is
-    kept, and it is never used, because the walk does not look that
-    far"), so it is a rule and not an accident; what is missing is that
-    the **measurement** does not say that a run of it was ignored.
+  - **text** — §1175 fixed it: a metric run longer than `MAX_RUN`
+    (eight characters) is kept and never used, and the measurement of a
+    paragraph now answers `runs_ignored` — the number of the metric's
+    runs that are too long to be used. The run is still kept rather than
+    refused, and that is the tree's rule and not an accident: the bound
+    is on the work and not on the table.
   - **vector** — §1174 fixed it: `vector.path.erase` samples a contour
     at no more than `MAX_VECTOR_SAMPLES` (four thousand and ninety-six)
     however fine the eraser is asked to be, and the geometry is coarser
@@ -616,7 +617,7 @@ These are the README's own honest notes, and they are still true of the tree:
   - **The deliberate departures stay deliberate**: the art battery's
     rate, the sound battery's repeat count and the camera's zoom are
     held rather than refused, and they are recorded above.
-- **A reader that stops at a bound must say that it stopped, and five
+- **A reader that stops at a bound must say that it stopped, and the
   batteries say it.** The pdf and xlsx readers and the audio crate's
   detectors say it now (§1146, §1147, §1150, §1151); the grid battery
   says it too (§1161, §1163, §1164), the prose battery's accessibility
@@ -629,9 +630,9 @@ These are the README's own honest notes, and they are still true of the tree:
   battery and the a2ui plugin (§1173). The **vector** battery's erasers
   say it too, though theirs is not a read but a walk (§1174). The **rest**
   of the batteries were surveyed in §1170 with a written contract, and
-  the stops they do not say are named in the list above; **one** of them
-  is still open — the text battery's metric does not say that a run of
-  it was ignored. Nothing *checks* a battery for a cut that is silent:
+  the stops they do not say are named in the list above; **none** of them
+  is open now — the text battery's metric says how many of its runs it
+  ignored (§1175). Nothing *checks* a battery for a cut that is silent:
   the next one to be found is found by a reader, not by the tree.
 
 ---
