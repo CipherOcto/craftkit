@@ -4592,7 +4592,7 @@ so.
 | **every bound the tree promises is named by a test** | **built.** The outer gate reads every promise bound the tree declares and says the ones that no test names (§1139) | §1139 |
 | **the reader reads a specification and not a mention of one** | **built.** The reader that finds the evaluators, layers and formats reads the specification and not the type that names it (§1140) | §1140 |
 | **every limit the kit keeps is named by a test** | **built.** The outer gate reads every limit the kit declares and says the ones that no test names (§1141) | §1141 |
-| **every limit a battery keeps is proved by the battery's own test** | **built.** The layout, film and fx batteries each prove their caps by exceeding them (§1142) | §1142 |
+| **every limit a battery keeps is proved by the battery's own test** | **built.** The layout, film, fx, grid and prose batteries each prove their caps by exceeding them (§1142, §1143) | §1142 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72421,3 +72421,50 @@ the proof found a hole.
   decision, not a fix.
 - **The rule is still about the name.** A cap that is named by a test is
   named; the gate cannot see whether the test **exceeded** it.
+
+## 1143. The grid and prose batteries prove their caps too
+
+§1142 reached three batteries of sixteen. This arc reaches two more, and
+finds a naming problem the kit's own bound registry forbids elsewhere.
+
+### What was built
+
+- **The grid battery proves its import caps.** Two tests: a text with
+  more than ten thousand rows is refused, and a text with more than two
+  hundred and fifty-six columns is refused.
+- **The prose battery proves its caps.** Four tests: a field code over
+  the limit is refused, a space over the limit is refused, a line
+  spacing over the limit is refused, and a bookmark name over the limit
+  is refused.
+
+### What the port found
+
+- **The same name means two different numbers.** The prose battery keeps
+  `MAX_SPACE` — ten thousand points in the paragraph and three hundred
+  in the columns — and `MAX_LINE_SPACING`, a hundred in the paragraph
+  and fifteen hundred and eighty-four in the editing. The kit's own
+  bound registry refuses two crates publishing one name, because a
+  reader would have no way to say which is which; the batteries' caps
+  are private and the registry never sees them, so the same confusion
+  is still there. A test that names `MAX_SPACE` does not say which
+  limit it means.
+- **The numbers a battery keeps are not one kind of thing.** A cap on
+  what a caller may send is a promise to refuse, and a cap on what the
+  program may build is the program's own business. The grid's import
+  caps are the first kind; the prose battery's are both.
+
+### What it cost
+
+- **Two test files** of two and four tests, and the claim row above.
+
+### What it does not settle
+
+- **The batteries are still not all done.** The prose battery alone
+  keeps about thirty caps, and the grid about twenty; this arc proved
+  six of them.
+- **The names are still ambiguous.** Two `MAX_SPACE`s in one battery is
+  a reader's problem, and the fix is the batteries' own: one name, one
+  number. Nothing in the tree holds them to that yet.
+- **The rule is still about the name.** The gate cannot see whether a
+  test **exceeded** the limit, and it cannot tell two caps of the same
+  name apart.

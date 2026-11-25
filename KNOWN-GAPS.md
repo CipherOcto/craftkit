@@ -198,6 +198,16 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The same name means two different numbers** (§1143): the prose
+  battery keeps `MAX_SPACE` — ten thousand points in the paragraph and
+  three hundred in the columns — and `MAX_LINE_SPACING`, a hundred in
+  the paragraph and fifteen hundred and eighty-four in the editing. The
+  kit's own bound registry refuses two crates publishing one name,
+  because a reader would have no way to say which is which; the
+  batteries' caps are private and the registry never sees them, so the
+  confusion is still there. A test that names `MAX_SPACE` does not say
+  which limit it means, and nothing in the tree holds a battery to one
+  name, one number.
 - **The art battery clamps where the house says refuse** (§1142): a rate
   outside the domain's bounds is **clamped** to the bound, and the tree
   has a test that says so. The house rule says an out-of-range
