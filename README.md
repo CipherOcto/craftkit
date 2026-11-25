@@ -4596,6 +4596,7 @@ so.
 | **one name, one number** | **built.** The outer gate says a cap that is declared with two different numbers in one crate (§1144) | §1144 |
 | **the reader says what it did not read** | **built.** The pdf battery's name tree says when it stopped at its depth (§1146) | §1146 |
 | **every reader of the pdf battery says what it did not read** | **built.** The structure tree, the marked content, the figures, the comments and the attachments each say when they stopped at their depth (§1147) | §1147 |
+| **every cap the prose battery keeps is named by a test** | **built.** All twenty-nine of the prose battery's cap names are named by a test beside the battery, and a source's title is bounded at last (§1148) | §1148 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72655,3 +72656,65 @@ This arc gives each of them a way to say so.
   the document.
 - **The image pixels and the outline's items are still caps that skip
   silently.** They are not depth caps, and they have not been looked at.
+
+## 1148. The prose battery's caps are named
+
+§1141 brought the rule to the **kit**: every limit the kit keeps is
+named by a test, and the outer gate says the ones that are not. The
+batteries keep their own caps, and the prose battery had **twenty-five**
+of them that no test named. This arc brings the rule to that battery:
+every cap the prose battery keeps is now named by a test beside it.
+
+### What was built
+
+- **Twenty-nine cap names, thirty tests.** The prose battery keeps
+  twenty-nine distinct cap names — `MAX_PART` and `MAX_TAG`, the
+  equation's `MAX_DEPTH` and `MAX_PARTS`, the paragraph's
+  `MAX_PARAGRAPH_SPACE` and `MAX_LINE_SPACING` and `MAX_INDENT`, the
+  numbering's `MAX_LEVELS`, the styles' `MAX_CHAIN`, and the rest — and
+  every one of them is named by a test in
+  `crates/craftkit-plugin-prose/tests/limits.rs`.
+- **A source's title is bounded.** The title of a source was the one
+  part of a source with **no bound at all**: an author was 256
+  characters, a year 32, a tag 64, a publisher 1 024 — and the title
+  was whatever a reader sent. A title is now refused at `MAX_PART`, like
+  every other part of a source.
+- **Two names that meant two numbers.** The editing battery's bound on
+  an indent was called `MAX_INDENT` and was 1 584 points; the
+  paragraph's bound on an indent was called `MAX_INDENT` and was 10 000
+  points. The private one is now `MAX_EDIT_INDENT`, and a reader who
+  says `MAX_INDENT` means one number.
+
+### What the port found
+
+- **Three of the twenty-five tests were wrong, and the tree was right
+  twice.** A test claimed a source's title was refused and the title was
+  not refused at all — it had no bound. A test sent an `indent` and the
+  style's parameter is `indent_left`. A test built an equation eleven
+  levels deep and called it 2 047 parts; the parts of an equation are
+  counted across the whole tree, so a deep and narrow equation is
+  twenty-three parts and never reaches the limit. The tests were
+  repaired and the hole they found was closed.
+- **The chain of styles counts the style itself.** The chain is the
+  bases the walk reached and the style it started from, so a chain that
+  stops at the limit is one longer than the limit says.
+
+### What it cost
+
+- **Thirty tests** in the prose battery's own limit suite, **one bound
+  added** to the battery, **one name changed**, and the claim row above.
+
+### What it does not settle
+
+- **The outer gate still reaches only the kit.** The rule of §1141 is
+  about the kit's own public limits; the batteries prove their caps by
+  a test beside them, and nothing makes them do it. After this arc
+  **fifty** caps in **seventeen** crates are still named by no test, and
+  the grid battery alone keeps eighteen.
+- **The rule is about the name.** A cap named in a comment is a cap the
+  count holds, and a cap whose test says nothing about the number is
+  still a proof.
+- **Some caps cut rather than refuse.** `MAX_CHAIN` cuts the walk over
+  the bases of a style, and `MAX_LABEL` truncates a label; a test that
+  names them says that the cut is there and not that the material was
+  refused.

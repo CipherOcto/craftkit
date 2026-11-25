@@ -271,6 +271,28 @@ commands! {
                 }
                 None => None,
             };
+            // The **title** of a source: a part like any other, and as
+            // long as a part may be. A title with no bound was the one
+            // part of a source a reader could not trust.
+            let title = match &self.title {
+                Some(title) => {
+                    let title = title.0.trim();
+                    if title.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a source has a title".to_string(),
+                        });
+                    }
+                    if title.chars().count() > MAX_PART {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the title of a source is at most {MAX_PART} characters long"),
+                        });
+                    }
+                    Some(title.to_string())
+                }
+                None => None,
+            };
             // The **source** that is there, if it is there.
             let tag = match &self.tag {
                 Some(tag) => Some(tag_of(&tag.0, &id)?),
@@ -285,19 +307,12 @@ commands! {
                 Some(at) => sources[at].clone(),
                 None => {
                     // A **new** source needs a title, and a tag.
-                    let Some(title) = &self.title else {
+                    let Some(title) = &title else {
                         return Err(EngineError::Failed {
                             id: id.clone(),
                             message: "a source has a title".to_string(),
                         });
                     };
-                    let title = title.0.trim();
-                    if title.is_empty() {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: "a source has a title".to_string(),
-                        });
-                    }
                     let tag = match tag {
                         Some(tag) => tag,
                         None => {
@@ -319,14 +334,7 @@ commands! {
             if let Some(author) = author {
                 source["author"] = json!(author);
             }
-            if let Some(title) = &self.title {
-                let title = title.0.trim();
-                if title.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "a source has a title".to_string(),
-                    });
-                }
+            if let Some(title) = &title {
                 source["title"] = json!(title);
             }
             if let Some(year) = year {

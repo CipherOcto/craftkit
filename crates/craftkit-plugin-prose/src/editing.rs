@@ -529,8 +529,9 @@ fn alignment_of(name: &str) -> Option<&'static str> {
     }
 }
 
-/// The **largest** an indent may be, in points.
-const MAX_INDENT: f64 = 1584.0;
+/// The **largest** an indent may be, in points. This is the editing
+/// battery's own bound: a style's indent is bounded by `MAX_INDENT`.
+const MAX_EDIT_INDENT: f64 = 1584.0;
 
 /// The **largest** a spacing may be, in points.
 const MAX_SPACING: f64 = 1584.0;
@@ -541,11 +542,11 @@ fn indent_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineError
         return Ok(None);
     };
     let points = value.0;
-    if !points.is_finite() || !(-MAX_INDENT..=MAX_INDENT).contains(&points) {
+    if !points.is_finite() || !(-MAX_EDIT_INDENT..=MAX_EDIT_INDENT).contains(&points) {
         return Err(EngineError::Failed {
             id: id.to_string(),
             message: format!(
-                "an indent is between -{MAX_INDENT} and {MAX_INDENT} points, and {points} is not"
+                "an indent is between -{MAX_EDIT_INDENT} and {MAX_EDIT_INDENT} points, and {points} is not"
             ),
         });
     }

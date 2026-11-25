@@ -198,6 +198,20 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
+- **The prose battery's caps are named; the other batteries' are not**
+  (§1148): the prose battery keeps twenty-nine cap names and every one
+  of them is named by a test beside the battery. The outer gate's rule
+  still reaches only the **kit** (§1141), so nothing holds a battery to
+  it: after this arc **fifty** caps in **seventeen** crates are named by
+  no test, and the grid battery alone keeps eighteen. The rule is about
+  the **name**, and some of those caps cut rather than refuse — the
+  chain of the styles is cut at `MAX_CHAIN`, and a label is truncated at
+  `MAX_LABEL` — so naming them is not the same as refusing them.
+- **A source's title had no bound** (§1148): the parts of a source were
+  bounded — the author 256 characters, the year 32, the tag 64, the
+  other parts 1 024 — and the title was whatever a reader sent. The
+  title is bounded now, at `MAX_PART`, and the test that claimed it was
+  bounded found the hole because it did not pass.
 - **The readers of the pdf battery now say when they stop** (§1146,
   §1147): the JavaScript name tree, the structure tree, the marked
   content, the figures, the comments and the attachments each read their
@@ -213,7 +227,11 @@ These are the README's own honest notes, and they are still true of the tree:
   crates, held inside one. The rule is about the **public** caps, and it
   compares the numbers as they are written: two caps that hold the same
   number and spell it differently are the same number, but nothing
-  checks that the two are the same kind.
+  checks that the two are the same kind. The rule reads the **public**
+  caps only, so a private cap that shares a name with a public one is
+  invisible to it: the editing battery's `MAX_INDENT` was 1 584 points
+  and the paragraph's was 10 000, and the private one is
+  `MAX_EDIT_INDENT` now (§1148).
 - **The same name means two different numbers** (§1143): the prose
   battery keeps `MAX_SPACE` — ten thousand points in the paragraph and
   three hundred in the columns — and `MAX_LINE_SPACING`, a hundred in
