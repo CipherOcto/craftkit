@@ -714,8 +714,8 @@ comes to the tree cold:
   batteries' caps: the tree keeps a published cap in **twenty-six**
   crates, and §1173 made two more of them — the image battery and the
   a2ui plugin — and gave the grid battery a second one. The claim row
-  now says twenty-six, and the count of the tree's caps is a hundred
-  and thirty-three. The row was corrected in place; the history of the
+  now says twenty-seven, and the count of the tree's caps is a hundred
+  and thirty-five. The row was corrected in place; the history of the
   claim is not in the README.
 
 When the README and the code disagree, the **code** is right, and this file
@@ -727,32 +727,66 @@ records the difference rather than the README's history.
 
 The a2ui survey read this tree against a2ui and found opportunities as
 well as defects. The defects are repaired and the opportunities that need
-no product decision are taken (`docs/survey-a2ui.md` §6). What is left
-**waits for a question nobody has answered**, and it is written down here
-so that it is not rediscovered as a surprise:
+no product decision are taken (`docs/survey-a2ui.md` §6). What was left
+**waited for a question nobody had answered**. The owner has answered
+them, and the answers are here with their reasons, so that a reader who
+disagrees knows what to argue with:
 
-- **O6 — the registry reconciles against itself.** The registry grows
-  while a program runs, and a panel that was drawn before a plugin
-  arrived does not know about it. The remedy the survey proposed was a
-  **version counter** and a reconciliation step. The **sharpest case**
-  was closed first: a session can gain a command while it runs, and every
-  door reads its list from the session it runs the commands in, so a door
-  never offers a command the session does not have (§1121). The **panel's
-  side** is closed too (§1127): a panel is a battery's **contribution** —
-  a fixed set of the commands that battery brought — and the commands
-  that are not a panel's are the kit's own, read from the session every
-  time the window draws. A command that arrives while the program runs is
-  a button with the rest, and a version counter would be a way of
-  noticing what the window already notices.
-- **O7 — a path resolves to a plain value, inside the SDK.** The a2ui
-  layer resolves its own paths and the door gets plain values, and the
-  gate refuses a front end that names the plan — so the *constraint*
-  holds. The general API in the SDK does not exist, and it is **large**
-  and architecture-defining: it touches the SDK's own data model.
-- **O9 — evals.** The tree has no outbound network and no
-  secret-management story, so an eval that calls a model needs **two**
-  decisions — a posture and a credential story — and not one. That is a
-  memo, not an arc.
-- **O10 — contracts.** The bounds are in the README and the code, and
-  the contracts would be a second place they live. **High**, and the
-  honest moment to write them is when they have stopped moving.
+- **O6 — the registry reconciles against itself: closed, and the version
+  counter is not wanted.** The **sharpest case** was closed first: a
+  session can gain a command while it runs, and every door reads its
+  list from the session it runs the commands in, so a door never offers
+  a command the session does not have (§1121). The **panel's side** is
+  closed too (§1127): a panel is a battery's **contribution** — a fixed
+  set of the commands that battery brought — and the commands that are
+  not a panel's are the kit's own, read from the session every time the
+  window draws. A command that arrives while the program runs is a
+  button with the rest. The survey's remedy was a **version counter**
+  and a reconciliation step, and the reason it is not wanted is that it
+  would be a way of *noticing* what the window already notices — while
+  adding a public concept to the SDK's contribution model. The registry
+  is **grow-only**, so "disappeared" cannot happen, and a stale id is an
+  **error** under the house's own rule rather than something to drop
+  quietly. What would reopen this is a registry that can **shrink**: a
+  plugin that unloads. The tree has no such thing.
+- **O7 — a path resolves to a plain value, inside the SDK: closed as not
+  wanted.** The a2ui layer resolves its own paths and the door gets
+  plain values, and the gate refuses a front end that names the plan — so
+  the *constraint* the survey cared about holds. A **general** API would
+  have to say what a path may resolve to, and that is a decision about
+  the data model: the tree's own rule is that the document carries the
+  payload and the tree is containment and relations, and an API that
+  resolves any path to any value is a **second way** to read the
+  document — the thing the tree refuses everywhere else ("one source,
+  five views"). The cost was **large** and the benefit is unproven: the
+  one surface that wanted it has its own resolution, and a second
+  surface that needed one would find the SDK's API *and* that layer's,
+  and there would be two ways to do one thing. What would reopen this is
+  a **second** surface that must resolve paths; then the SDK would have
+  one way to do it rather than two.
+- **O9 — evals: closed with a posture, and the engine is the scorer.** The
+  tree's posture is **no outbound network** and **no credentials in the
+  kit**, and that is a property of a scaffold meant to be copied: a tree
+  whose every copy can reach a host is a tree that every copy must be
+  trusted with, and a tree that holds a credential is a tree whose
+  copies must all be given one. The survey's own best idea survives the
+  decision — *the scorer must be the engine* — and the engine is already
+  here: a host program asks a model for commands, runs them through
+  `Session::execute`, and scores what the engine refused. The **model
+  call belongs to the host**, not to the kit, and the kit's part is the
+  engine. A program that wants an eval adds its own command or its own
+  plugin; the tree's rule that everything user-visible is a command is
+  what makes that possible without a special door. What would reopen
+  this is a tree that is a **product** rather than a scaffold, and that
+  is a decision about what this tree is.
+- **O10 — contracts: still open, and the trigger is named.** The bounds
+  are in the README and the code, and the contracts would be a second
+  place they live. The extraction must **replace** prose and not sit
+  beside it, and the inner gate reads the bounds out of the README, so
+  the extraction is not a pure move. The honest moment to write them is
+  when they have stopped moving — and they have not: four arcs of this
+  session changed the public surface, and the tree's published caps went
+  from a hundred and thirty to a hundred and thirty-five. The **trigger**
+  is a release, and the tree has no release: there is one workflow in the
+  tree and it is CI. So the first step is a release workflow, and the
+  contracts follow it.

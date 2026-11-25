@@ -4626,6 +4626,7 @@ so.
 | **the measurement says what it ignored** | **built.** The text battery's metric keeps a run it can never use, and the measurement now says how many of the metric's runs were left out (§1175) | §1175 |
 | **the commit rule names its exception** | **built.** The commits that are already in the tree and carry no section number are accepted as they are, and a commit made from now on names its section (§1176) | §1176 |
 | **the three deliberate clamps say so** | **built.** The art battery's rate, the sound battery's repeat count and the camera's zoom are held and say they were held, and the camera's own lie about a zoom that is not a number is fixed (§1177) | §1177 |
+| **the survey's open questions are answered** | **built.** Three of the four are closed with their reasons — the version counter, the SDK's path API and the eval's posture — and the fourth is given a trigger (§1178) | §1178 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74398,3 +74399,72 @@ camera's own note about a zoom that is not a number was wrong.
   wheel and pinch call the camera's own methods, and the camera's caps
   are published: a front end may hold the zoom it cannot have, and it
   reads the zoom the camera has.
+
+## 1178. The survey's open questions are answered
+
+The a2ui survey left four questions that nobody had answered. The owner
+has answered them, and this arc records the answers with their reasons:
+a decision that is not argued is a decision that is not a decision.
+
+### What was built
+
+- **O6 is closed, and the version counter is not wanted.** The sharpest
+  case was closed in §1121 and the panel's side in §1127, and the
+  survey's remedy — a **version counter** and a reconciliation step —
+  would be a way of *noticing* what the window already notices, while
+  adding a public concept to the SDK's contribution model. The registry
+  is grow-only, so "disappeared" cannot happen, and a stale id is an
+  **error** under the house's own rule rather than something to drop
+  quietly. What would reopen it is a registry that can **shrink**.
+- **O7 is closed as not wanted.** A general API that resolves any path
+  to any value is a **second way** to read the document, and the tree
+  refuses that everywhere else. The one surface that wanted it has its
+  own resolution, and a second surface that needed one would find two
+  ways to do one thing. What would reopen it is a **second** surface.
+- **O9 is closed with a posture.** The tree has **no outbound network**
+  and **no credentials in the kit**, and that is a property of a
+  scaffold meant to be copied. The survey's own best idea survives: the
+  scorer must be the engine, and the engine is already here — a host
+  program asks a model for commands, runs them through
+  `Session::execute`, and scores what the engine refused. The **model
+  call belongs to the host**.
+- **O10 stays open, and the trigger is named.** The contracts are not
+  to be written until they have stopped moving, and they have not: four
+  arcs of this session changed the public surface and the tree's
+  published caps went from a hundred and thirty to a hundred and
+  thirty-five. The trigger is a **release**, and the tree has none —
+  there is one workflow in the tree and it is CI. So the first step is a
+  release workflow, and the contracts follow it.
+- **The parity harness is green.** The nine tests that drive the six
+  doors and compare their answers — with each other and with the
+  session — pass after every arc of this session.
+
+### What the port found
+
+- **A question that waits is cheaper to answer than to keep.** Three of
+  the four had been open for a while, and each had been carrying its
+  own reasoning in the survey. The reasoning was mostly the answer; what
+  was missing was the *decision*, and a decision without a reason is a
+  preference.
+- **Two of the four are about the tree's shape and one is about its
+  posture.** O6 and O7 ask what the SDK should grow, and both answers
+  are "not this"; O9 asks what the tree should be, and the answer is
+  what it has always been — a scaffold, not a product. What they have
+  in common is that each answer names the thing that would reopen it,
+  so a reader who disagrees knows what to bring.
+
+### What it cost
+
+- **One file** — the survey's open list in `KNOWN-GAPS.md` §8 — and the
+  claim row above. No code, no test and no gate: a decision is prose,
+  and the prose is checked by the reader.
+
+### What it does not settle
+
+- **A release is not a plan.** O10's trigger is named and the first step
+  is named with it, but the tree's release is still the one thing nobody
+  has asked for: there is one workflow in the tree and it is CI, and a
+  release is a decision about what the tree is for.
+- **The tree's own gate cannot check a decision.** Nothing reads
+  `KNOWN-GAPS.md` §8 and says that a decision was carried out, so the
+  closures are a promise the tree keeps by reading them.
