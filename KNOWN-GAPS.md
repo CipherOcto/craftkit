@@ -661,11 +661,18 @@ comes to the tree cold:
 
 - **"A commit points at the section that describes it."** `CONTRIBUTING.md`
   says the message ends with the README section's number — `feat(cad): the
-  table of a drawing — §1600`. Of the tree's **2 546** commits, **2 267**
-  carry one. The **twenty-three** commits of the a2ui arc do not — they
-  say `feat(v2): <what it does>` and name what they touch instead, and
-  the last of them carries the number again. The rule is still the
-  house's, and the history is not rewritten.
+  table of a drawing — §1600`. Of the tree's **2 597** commits, **2 317**
+  carry one in their subject, and **280** do not. Those are the tree's
+  early history, before the sections were numbered (**215** of them, in
+  three runs between the twentieth and the twenty-ninth of October), and
+  the arc that moved the v2 tree to the repository root and read a2ui
+  against it (**65** of them, between the eleventh and the twenty-fourth
+  of November). Those name what they touch instead —
+  `feat(v2): <what it does>`. `CONTRIBUTING.md` §4 now records them as a
+  **dated exception**: the commits that are already in the tree are
+  accepted, the history is not rewritten, and a commit made from now on
+  names its section. The rule is still the house's; what is relaxed is
+  the reading of the past, not the rule itself.
 
 - **"There is no numeric core."** There is now `craftkit-numeric`, a typed
   value (a length in millimetres, an angle in radians), at L3, because a

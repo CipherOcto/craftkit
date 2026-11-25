@@ -102,6 +102,19 @@ docs: <what it does> — §NNN
   `commit-msg` hook refuses them, because a message that is pasted into a
   shell can run what it contains. Write `MAX_NODES`, not `` `MAX_NODES` ``.
 
+**The one exception, and it is an exception and not a norm.** The tree's
+history before the sections were numbered carries no section number: the v2
+rewrite and the a2ui arc name what they touch instead — `feat(v2): <what it
+does>` — and the commits of the survey that came after them do the same for
+the twenty-three of the a2ui arc. Those commits are accepted as they are and
+the history is not rewritten; `KNOWN-GAPS.md` §7 counts them.
+
+What makes it an exception is that it is **dated and bounded**: it covers
+the commits that are already in the tree, and nothing else. A commit made
+from now on names its section — whatever the arc, whatever the scope, and
+however many commits the arc is made of. A new commit without a section
+number is a commit that breaks this rule, and the rule is the house's.
+
 Examples from this tree's history:
 
 ```text

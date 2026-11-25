@@ -4624,6 +4624,7 @@ so.
 | **the head reader says when it stopped** | **built.** The kit's head reader says whether the file is longer than the bound, three callers say it in their answers, and a refusal of a cut head names the bound (§1173) | §1173 |
 | **the erase says when it was coarse** | **built.** The vector battery holds the samples of a side at a published bound, and both of its erasers say when the geometry is coarser than the caller asked for (§1174) | §1174 |
 | **the measurement says what it ignored** | **built.** The text battery's metric keeps a run it can never use, and the measurement now says how many of the metric's runs were left out (§1175) | §1175 |
+| **the commit rule names its exception** | **built.** The commits that are already in the tree and carry no section number are accepted as they are, and a commit made from now on names its section (§1176) | §1176 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74282,3 +74283,56 @@ reader, §1174 the erase. This arc takes the last one.
   rate, the sound battery's repeat count and the camera's zoom are held
   rather than refused, and they are recorded in the `KNOWN-GAPS`. They
   are knobs, and a knob that is held is a knob that says what it did.
+
+## 1176. The commit rule names its exception
+
+The house's rule is that a commit points at the README section that
+describes it. The tree's own history does not: two hundred and eighty of
+its commits name what they touch instead. The rule is relaxed for the
+past and kept for the future.
+
+### What was built
+
+- **`CONTRIBUTING.md` §4 names the exception.** The commits that are
+  already in the tree and carry no section number are accepted as they
+  are, and the history is not rewritten. What makes it an exception is
+  that it is **dated and bounded**: a commit made from now on names its
+  section — whatever the arc, whatever the scope, and however many
+  commits the arc is made of.
+- **The drift record is corrected.** `KNOWN-GAPS.md` §7 said that
+  twenty-three commits of the a2ui arc carry no number. The truth is two
+  hundred and eighty commits in eleven runs, and the record now says so
+  with the counts of the tree.
+
+### What the port found
+
+- **The record was half right and internally inconsistent.** It said
+  that of the tree's 2 546 commits, 2 267 carry one — which leaves two
+  hundred and seventy-nine without — and then said that twenty-three do
+  not. The two sentences could not both be true. Neither matched the
+  tree: the tree has 2 596 commits, 2 316 of them carry a number in their
+  subject, and 280 do not.
+- **The commits that lack a number are not one arc.** They come in
+  eleven runs: the first eleven commits of the workspace, a run of one
+  hundred and ninety-three from the twentieth to the twenty-seventh of
+  October, two small ones, nine more, and then the sixty-five of the arc
+  that moved the v2 tree to the repository root and read a2ui against it.
+  Reading them as "the a2ui arc" made the exception look smaller and
+  tidier than it is, and the tidiness was the falsehood.
+
+### What it cost
+
+- **Two files**: `CONTRIBUTING.md` §4 and the drift record in
+  `KNOWN-GAPS.md` §7. No code, no test and no gate — a commit message is
+  not the tree's behaviour, and the tree's behaviour did not change.
+
+### What it does not settle
+
+- **Nothing checks the rule.** The `commit-msg` hook refuses shell
+  metacharacters and says nothing about a section number; the rule is
+  the house's and a reader's eye is what holds it. A hook that required
+  a section would refuse the exception's own commits, and the exception
+  is the reason there is no such hook.
+- **The history is not rewritten.** Two hundred and eighty commits keep
+  the messages they have; the rule is relaxed for the past, and the past
+  itself is left as it is.
