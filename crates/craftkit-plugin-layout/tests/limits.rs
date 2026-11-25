@@ -102,3 +102,85 @@ fn a_link_target_over_the_limit_is_refused() {
         .expect_err("that target is too long");
     assert!(error.to_string().contains("at most"), "{error}");
 }
+
+/// A **document**, and its id.
+fn a_document(session: &mut Session) -> u64 {
+    let outcome = session
+        .execute("layout.document.add", &json!({ "name": "the document" }))
+        .expect("the document is added");
+    outcome.data["id"].as_u64().expect("the document has an id")
+}
+
+/// A **style** in a document, based on that base.
+fn a_style(session: &mut Session, document: u64, name: &str, based_on: Option<u64>) -> u64 {
+    let mut params = json!({ "document": document, "name": name });
+    if let Some(base) = based_on {
+        params["based_on"] = json!(base);
+    }
+    let outcome = session.execute("layout.style.add", &params).expect("the style is added");
+    outcome.data["style"].as_u64().expect("the style has an id")
+}
+
+/// What the plan says of a node.
+fn said_of(session: &mut Session, node: u64) -> craftkit_sdk::serde_json::Value {
+    let plan = session.evaluate();
+    let entry = plan.items.iter().find(|entry| entry.node == node).expect("the node is in the plan");
+    entry.value.clone()
+}
+
+/// A **chain of styles** stops at `MAX_CHAIN`.
+///
+/// The chain of a style is walked from the style upwards, and the walk
+/// is bounded: a chain of forty styles is cut at the limit, and the
+/// bases beyond it are not inherited. The tree reports the furthest
+/// base the walk reached as the style's **base**, and that base is the
+/// last one within the limit.
+#[test]
+fn a_chain_of_styles_stops_at_the_limit() {
+    let mut session = session();
+    let document = a_document(&mut session);
+    // Forty styles, each one based on the one before it.
+    let mut styles = Vec::new();
+    for index in 0..40 {
+        let base = styles.last().copied();
+        let style = a_style(&mut session, document, &format!("the style {index}"), base);
+        styles.push(style);
+    }
+    let deepest = styles[0];
+    let last = styles[39];
+    // The deepest style is filled, and its fill is **not** inherited:
+    // the walk was cut before it.
+    session
+        .execute("layout.style.fill", &json!({ "style": deepest, "colour": "#00ff00" }))
+        .expect("the deepest style is filled");
+    let said = said_of(&mut session, last);
+    assert!(said["fill"].is_null(), "the fill beyond the limit is not inherited: {said:?}");
+    // The base the tree reports is the thirty-second one up: the walk
+    // reached thirty-two bases and no more.
+    assert_eq!(said["base"], json!(styles[7]), "the chain stops at the limit: {said:?}");
+    assert_ne!(said["base"], json!(deepest), "and the deepest base is not in it: {said:?}");
+}
+
+/// A **chain of styles within the limit** is walked to its end.
+///
+/// This is the other half of the test above: a cap that cut every chain
+/// would not be a cap, it is a wall.
+#[test]
+fn a_chain_within_the_limit_is_walked_to_its_end() {
+    let mut session = session();
+    let document = a_document(&mut session);
+    let mut styles = Vec::new();
+    for index in 0..5 {
+        let base = styles.last().copied();
+        let style = a_style(&mut session, document, &format!("the style {index}"), base);
+        styles.push(style);
+    }
+    let deepest = styles[0];
+    let last = styles[4];
+    session
+        .execute("layout.style.fill", &json!({ "style": deepest, "colour": "#00ff00" }))
+        .expect("the deepest style is filled");
+    let said = said_of(&mut session, last);
+    assert_eq!(said["fill"]["colour"], json!([0.0, 1.0, 0.0, 1.0]), "the base's fill is under it: {said:?}");
+    assert_eq!(said["base"], json!(deepest), "and the base is the deepest: {said:?}");
+}

@@ -318,7 +318,8 @@ pub enum LayoutError {
     /// The measure was not a number, or was negative.
     BadMeasure,
     /// The paragraph had more break opportunities than the optimal
-    /// breaker will look at. The greedy breaker is used instead.
+    /// breaker will look at. The paragraph is refused, and the greedy
+    /// breaker is not used for it.
     TooLong {
         /// How many there were.
         breaks: usize,
@@ -344,8 +345,9 @@ impl std::error::Error for LayoutError {}
 /// The most break opportunities the optimal breaker will look at.
 ///
 /// The optimal breaker is quadratic in the number of breaks, and a
-/// paragraph with ten thousand of them would take a while. The greedy
-/// breaker is used past this number, and the paragraph says so.
+/// paragraph with ten thousand of them would take a while. Past this
+/// number the paragraph is **refused** with [`LayoutError::TooLong`],
+/// and the caller is told how many break opportunities it had.
 pub const MAX_BREAKS: usize = 5_000;
 
 /// A number that is a number.
@@ -572,9 +574,10 @@ struct Best {
 ///
 /// The **optimal** breaker minimises the whole paragraph at once: it
 /// chooses the set of breaks that makes the fewest demerits. When it
-/// cannot fit the paragraph — or the paragraph has more break
-/// opportunities than [`MAX_BREAKS`] — the **greedy** breaker is used,
-/// and [`Breaks::method`] says which one ran.
+/// cannot fit the paragraph, the **greedy** breaker is used, and
+/// [`Breaks::method`] says which one ran. A paragraph with more break
+/// opportunities than [`MAX_BREAKS`] is refused with
+/// [`LayoutError::TooLong`].
 ///
 /// The measure is the width of the column, in the caller's units.
 pub fn break_paragraph(items: &[Item], measure: f64, params: &Params) -> Result<Breaks, LayoutError> {

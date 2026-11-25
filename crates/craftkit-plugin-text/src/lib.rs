@@ -393,12 +393,15 @@ struct Metric {
     em_mm: f64,
 }
 
-/// The longest run a metric may hold: eight characters.
+/// The longest run a metric will **look for**: eight characters.
 ///
 /// A run is looked for at every position of a word, and the longest one
 /// wins, so the number of characters a run may have is the number of
 /// places that are looked at. Eight is enough for the clusters a
 /// typeface has and small enough to bound the work.
+///
+/// A metric may **hold** a longer run: it is kept, and it is never
+/// used, because the walk does not look that far.
 pub const MAX_RUN: usize = 8;
 
 impl Metric {

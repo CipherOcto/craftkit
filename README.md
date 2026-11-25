@@ -4603,6 +4603,8 @@ so.
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
+| **the batteries and the libraries name their caps** | **built.** Nine crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and six caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73041,3 +73043,58 @@ a test beside the crate.
   keeps bounds of its own that no test names, and the two here are the
   published ones.
 
+## 1155. The batteries and the libraries name their caps
+
+Nine crates kept a published cap that no test named: the numeric crate,
+the crate of the sound's time, the rasteriser, the crate of the text's
+layout, the mcp server, and the film, art, text and layout batteries.
+This arc names all nine by a test beside each crate.
+
+### What was built
+
+- **Nine caps, nine suites.** The numeric crate's millimetres
+  (`MAX_MILLIMETRES`), the sound's position (`MAX_POSITION`), the
+  picture's pixels (`MAX_IMAGE_PIXELS`), the paragraph's break
+  opportunities (`MAX_BREAKS`), the mcp server's suggestions
+  (`MAX_SUGGESTIONS`), the film's cue times (`MAX_MILLISECONDS`), the
+  art battery's rate (`MAX_RATE`), the text battery's run (`MAX_RUN`)
+  and the layout battery's chain (`MAX_CHAIN`) are each named by a test
+  in the crate that keeps them.
+- **The suggestions say what they did not send.** The mcp server cuts
+  the suggestions of an argument at its cap and answers with the count
+  that matched before the cut, so a reader of the answer knows that
+  there were more.
+- **The chain of the layout's styles is cut at the limit.** The chain
+  of a style is the bases it inherits from, and the walk over them is
+  bounded: the chain the tree reports stops at the limit.
+
+### What the port found
+
+- **Two docs said the tree falls back and the tree refuses.** The
+  crate of the text's layout said that a paragraph with too many break
+  opportunities is broken by the greedy breaker and that the paragraph
+  says so; the tree **refuses** the paragraph and says how many break
+  opportunities it had. The doc says so now. The text battery said
+  that a metric may hold runs of up to eight characters; a metric may
+  hold a longer run, and it is never used, and the doc says that too.
+- **A clamp that is a clamp.** The art battery's rate is clamped into
+  its domain on purpose, and the test says what the knob does: a rate
+  above the cap comes out at the cap. The tree does not change here.
+
+### What it cost
+
+- **Nine suites** and the tests in them, **two** docs corrected, and
+  the claim row above.
+
+### What it does not settle
+
+- **A cap is named by a test and not thereby proved.** The tests prove
+  what the tree does at the cap; they do not prove that the cap is the
+  right number.
+- **The rule reads test files, and a crate's own unit test is not one.**
+  The rule that reads the tree's caps looks in the `tests` of a crate
+  and not in the `#[cfg(test)]` modules of its source, because it
+  cannot tell a unit test from the code around it. A cap that only a
+  unit test names is invisible to it.
+
+| **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |

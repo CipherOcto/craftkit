@@ -62,7 +62,8 @@ fn a_cue_with_too_much_text_is_refused() {
 /// A cue that is **later than a year** is refused.
 ///
 /// The time of a cue is a whole number of milliseconds, and the tree
-/// says how far a caption may reach.
+/// says how far a caption may reach: a cue's time may be at most
+/// `MAX_MILLISECONDS`, which is a year.
 #[test]
 fn a_cue_that_is_too_late_is_refused() {
     let mut session = session();
@@ -72,4 +73,49 @@ fn a_cue_that_is_too_late_is_refused() {
         .execute("film.captions.write", &json!({ "path": path, "cues": cues }))
         .expect_err("that cue is too late");
     assert!(error.to_string().contains("not between zero and a year"), "{error}");
+}
+
+/// A cue whose **start** is over `MAX_MILLISECONDS` is refused.
+///
+/// The cap is on the start as well as on the end: a cue that begins
+/// after a year begins later than the tree will reach.
+#[test]
+fn a_cue_that_starts_too_late_is_refused() {
+    let mut session = session();
+    let path = craftkit_scratch::file("captions.srt").expect("the scratch file is there");
+    let cues = vec![json!({ "start": 31_536_000_001i64, "end": 31_536_000_002i64, "text": "a cue" })];
+    let error = session
+        .execute("film.captions.write", &json!({ "path": path, "cues": cues }))
+        .expect_err("that cue starts too late");
+    assert!(error.to_string().contains("the `start` of the cue 0 is not between zero and a year"), "{error}");
+}
+
+/// A cue whose **start** is **before zero** is refused.
+///
+/// The time of a cue is a whole number of milliseconds from the start
+/// of the programme, and a time before the start is not a time.
+#[test]
+fn a_cue_that_starts_before_zero_is_refused() {
+    let mut session = session();
+    let path = craftkit_scratch::file("captions.srt").expect("the scratch file is there");
+    let cues = vec![json!({ "start": -1i64, "end": 1i64, "text": "a cue" })];
+    let error = session
+        .execute("film.captions.write", &json!({ "path": path, "cues": cues }))
+        .expect_err("that cue starts before the programme");
+    assert!(error.to_string().contains("the `start` of the cue 0 is not between zero and a year"), "{error}");
+}
+
+/// A cue that ends **exactly** at `MAX_MILLISECONDS` is kept.
+///
+/// The cap is the last time a cue may have and not the first time it
+/// may not: a year is a year, and a cue that ends there is a cue.
+#[test]
+fn a_cue_that_ends_at_the_limit_is_kept() {
+    let mut session = session();
+    let path = craftkit_scratch::file("captions.srt").expect("the scratch file is there");
+    let cues = vec![json!({ "start": 0, "end": 31_536_000_000i64, "text": "a cue" })];
+    session
+        .execute("film.captions.write", &json!({ "path": path, "cues": cues }))
+        .expect("a cue of a year is a cue");
+    assert!(path.exists(), "and the file is written: {path:?}");
 }

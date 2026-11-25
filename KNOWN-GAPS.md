@@ -201,6 +201,25 @@ These are the README's own honest notes, and they are still true of the tree:
 - **The xml crate's caps are named** (§1154): the depth of a part and
   the number of the elements of a part are each named by a test beside
   the crate, and both are refusals that name their own bound.
+- **Every published cap in the tree is named by a test** (§1154–§1156):
+  the tree keeps one hundred and six published caps and every one of
+  them is named by a test. The last four were the two of the fixtures
+  and the two of the kit: the fixtures' caps were named by their own
+  unit tests and by nothing else, and the kit's two were proved by the
+  **studio's** tests and by the **window's** — a proof in another
+  crate's house. The kit has a test of its own for both now.
+- **The rule that reads the tree's caps has a blind spot** (§1156): it
+  looks in the `tests` of a crate and not in the `#[cfg(test)]` modules
+  of its source, because it reads the production code and cannot tell a
+  unit test from the code around it. A cap that only a unit test names
+  is invisible to it — the two fixtures' caps were. The blind spot is
+  recorded rather than closed: closing it means teaching the reader to
+  tell a test from the code around it, and that is a change to the
+  reader the tree trusts.
+- **The camera's zoom is a third deliberate clamp** (§1156): a zoom
+  above `MAX_ZOOM` is clamped, and the camera says so in its own
+  words. The tree now has a test of its own for it. The art battery's
+  rate and the sound battery's repeat count are the other two.
 - **The midi crate's caps are named** (§1152): the tracks of a file, the
   events of a file and the velocity of a note are each named by a test
   beside the crate. The **budget of the events** is one budget for the
