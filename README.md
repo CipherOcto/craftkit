@@ -4603,8 +4603,8 @@ so.
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
-| **the batteries and the libraries name their caps** | **built.** Ten crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-six caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **the batteries and the libraries name their caps** | **built.** Eleven crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-eight caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
@@ -4614,6 +4614,7 @@ so.
 | **the grid export says which lines it did not draw** | **built.** The lines of a cell are cut at a published bound, the export says how many of them were cut, and the cut of the text and the cut of the lines are told apart (§1163) | §1163 |
 | **the grid battery says what it did not offer** | **built.** The suggestions of a spelling issue are cut at a published bound, a word too long for the suggestions says so, and three tests prove both (§1164) | §1164 |
 | **the sound battery says when it cut a name** | **built.** The name of a track of a file is cut at a published bound and the import says so, and the two names of the battery are told apart (§1165) | §1165 |
+| **the pdf battery says what it did not read of an outline** | **built.** The outline of a file is read to a depth and to a number of items, and the reader says that it stopped at one of them (§1166) | §1166 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73553,9 +73554,10 @@ closes that.
 
 ### What it does not settle
 
-- **The tree's other batteries still cut in silence.** The film battery's
-  captions, the layout battery's boxes, the text battery's word list and
-  the sound battery's names are the same shape and are not yet answered.
+- **The tree's other batteries have not been surveyed this way.** The
+  grid, the prose and the sound batteries answer it now (§1161, §1162,
+  §1163, §1164, §1165), and the others have not been looked at with
+  the same care.
 - **A cell that is too tall is drawn anyway.** The lines are cut at the
   bound, but the cell is still drawn with the lines that fit in it: the
   export does not say how much of the cell overflowed its row.
@@ -73612,9 +73614,10 @@ spelling check offers for a word. This arc closes it.
 
 ### What it does not settle
 
-- **The tree's other batteries still cut in silence.** The film battery's
-  captions, the layout battery's boxes, the text battery's word list and
-  the sound battery's names are the same shape and are not yet answered.
+- **The tree's other batteries have not been surveyed this way.** The
+  grid, the prose and the sound batteries answer it now (§1161, §1162,
+  §1163, §1164, §1165), and the others have not been looked at with
+  the same care.
 - **A cut word list makes a cut set of suggestions.** The suggestions are
   drawn from the word list, and the list may itself be cut at
   `MAX_SPELLING_LINES`: the answer says that too
@@ -73673,10 +73676,70 @@ the first bounds the battery has ever published.
 
 ### What it does not settle
 
-- **The tree's other batteries still cut in silence.** The film battery's
-  captions, the layout battery's boxes and the text battery's word list
-  are the same shape and are not yet answered.
+- **The tree's other batteries have not been surveyed this way.** The
+  grid, the prose, the sound and the pdf batteries answer it now
+  (§1161–§1166), and the others have not been looked at with the same
+  care.
 - **A name that is cut is a name the user cannot fix.** The answer says
   that the name was cut, and the cut name is what the track carries: the
   answer does not offer the whole name, because the whole name is not a
   name the tree keeps.
+
+## 1166. The pdf battery says what it did not read of an outline
+
+§1147 gave the pdf battery's readers a way to say that they stopped,
+and it left one thing in its own words: the **outline's items** were
+still caps that skipped silently. This arc closes it.
+
+### What was built
+
+- **The outline says that it stopped.** `pdf.outline.read` now carries
+  `truncated`: the reader stopped at the bound of the outline's depth or
+  at the bound of the number of its items, and the bookmarks below the
+  depth and beyond the number are in the file and not in the answer.
+- **Both bounds are published.** They were private numbers in the
+  middle of a file: `MAX_OUTLINE_DEPTH` — sixty-four levels — and
+  `MAX_OUTLINE_ITEMS` — four thousand and ninety-six items. The pdf
+  battery keeps **two** caps, and they are at its root: they are the
+  first caps the battery has published.
+- **Three tests name every bound, and they reach the bound.** A file
+  whose outline is a chain of sixty-six bookmarks is cut, and the reader
+  says so; a file whose outline has four thousand and ninety-seven
+  siblings is cut at the number of items, and the reader says so; and an
+  outline that is within both bounds is **not** cut, and the reader says
+  that too.
+
+### What the port found
+
+- **The reader could not reach its own bound.** The depth of an outline
+  is the depth of the file's bookmarks, and the commands that make an
+  outline refuse to put a bookmark under one that is already at the
+  bound of the depth — so the tree of a file can be deeper than any tree
+  the commands can make, and the reader has to say that it stopped.
+- **The list of the children was cut and said nothing.** A file with
+  four thousand and ninety-seven siblings under its root had the last
+  one dropped, and the answer held four thousand and ninety-six items
+  as if that were all of them.
+- **The bounds were private.** A reader that stops at a bound nobody
+  can look up cannot be checked by anybody: the bound is the promise,
+  and the promise was in a file nobody was told about.
+
+### What it cost
+
+- **One answer changed** — `pdf.outline.read` — **two caps published**
+  at the pdf battery's root, **three tests** in a new file, and the
+  claim row above.
+- **The claim table's counts are up to date again**: the tree keeps **a
+  hundred and twenty-eight** published caps.
+
+### What it does not settle
+
+- **The tree's other batteries have not been surveyed this way.** The
+  grid, the prose, the sound and the pdf batteries say now when they
+  stop; the others have not been looked at with the same care, and
+  nothing checks a battery for a cut that is silent: the next one to be
+  found is found by a reader, not by the tree.
+- **The count of the bookmarks in a file is still a count of a cut
+  tree.** The hidden-text report counts the outline's items with the
+  same walk, and the walk stops at the same bounds: the report says how
+  many bookmarks there are and not that there were more.

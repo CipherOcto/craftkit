@@ -43,10 +43,10 @@ use crate::{a_reference, add_reference, entries_of, pairs_of, the_next_number, t
 ///
 /// An outline comes from a file, and a file may be hostile: the count
 /// is a bound, and a walk that stops is a walk that finishes.
-const MAX_OUTLINE_ITEMS: usize = 4096;
+pub const MAX_OUTLINE_ITEMS: usize = 4096;
 
 /// How deep an outline may be.
-const MAX_OUTLINE_DEPTH: usize = 64;
+pub const MAX_OUTLINE_DEPTH: usize = 64;
 
 commands! {
     /// Put a **bookmark** in the outline.
@@ -198,7 +198,7 @@ commands! {
             let item = session.document_mut()?.add_node_with(title.clone(), "pdf.object", None, data);
             // The **list** of the parent's children: the new bookmark goes
             // at the end of it, and the list is relinked.
-            let children = the_children(session, parent);
+            let (children, _) = the_children(session, parent);
             let last = children.last().copied();
             match last {
                 Some(last) => {
@@ -314,10 +314,17 @@ commands! {
                     message: "the document has no outline".to_string(),
                 })?,
             };
-            let items = the_tree(session, root, 0);
+            let (items, truncated) = the_tree(session, root, 0);
             let count = items.len();
             Ok(Outcome::new(format!("{count} bookmark(s)"))
-                .with_data(serde_json::json!({ "root": root, "items": items })))
+                .with_data(serde_json::json!({
+                    "root": root,
+                    "items": items,
+                    // The reader stops at the bounds of the outline, and
+                    // it says that it stopped: the file holds bookmarks
+                    // that are not in the answer.
+                    "truncated": truncated,
+                })))
 
         }
     }
@@ -389,18 +396,23 @@ fn the_parent(session: &Session, node: u64) -> Option<u64> {
 /// the next of each.
 ///
 /// The walk is cycle-safe: a broken outline is not followed for ever.
-fn the_children(session: &Session, node: u64) -> Vec<u64> {
+fn the_children(session: &Session, node: u64) -> (Vec<u64>, bool) {
     let mut children = Vec::new();
     let mut seen = HashSet::new();
     let mut current = the_value(session, node, "First").and_then(|value| the_node_of(session, &value));
     while let Some(child) = current {
-        if !seen.insert(child) || children.len() >= MAX_OUTLINE_ITEMS {
+        if children.len() >= MAX_OUTLINE_ITEMS {
+            // The list of the children is **cut** at the bound, and the
+            // reader says so: the file holds more of them.
+            return (children, true);
+        }
+        if !seen.insert(child) {
             break;
         }
         children.push(child);
         current = the_value(session, child, "Next").and_then(|value| the_node_of(session, &value));
     }
-    children
+    (children, false)
 }
 
 /// The **count** of a node: what its dictionary says.
@@ -497,7 +509,7 @@ fn collect(session: &Session, root: u64) -> Vec<(u64, Vec<u64>)> {
         if !seen.insert(node) {
             continue;
         }
-        let children = the_children(session, node);
+        let (children, _) = the_children(session, node);
         tree.push((node, children.clone()));
         for child in children.into_iter().rev() {
             stack.push((child, depth + 1));
@@ -507,12 +519,17 @@ fn collect(session: &Session, root: u64) -> Vec<(u64, Vec<u64>)> {
 }
 
 /// The **tree** of bookmarks, as the caller gets it.
-fn the_tree(session: &Session, node: u64, depth: usize) -> Vec<serde_json::Value> {
+fn the_tree(session: &Session, node: u64, depth: usize) -> (Vec<serde_json::Value>, bool) {
     if depth > MAX_OUTLINE_DEPTH {
-        return Vec::new();
+        // The tree is **cut** at the bound of its depth, and the reader
+        // says so: the file holds bookmarks below it.
+        return (Vec::new(), true);
     }
     let mut items = Vec::new();
-    for child in the_children(session, node) {
+    let mut truncated = false;
+    let (children, cut) = the_children(session, node);
+    truncated = truncated || cut;
+    for child in children {
         let node_data = session.document().node(child);
         let title = node_data
             .and_then(|node| {
@@ -538,8 +555,10 @@ fn the_tree(session: &Session, node: u64, depth: usize) -> Vec<serde_json::Value
         item.insert("title".to_string(), serde_json::json!(title));
         item.insert("count".to_string(), serde_json::json!(count));
         item.insert("destination".to_string(), serde_json::json!(destination));
-        item.insert("children".to_string(), serde_json::json!(the_tree(session, child, depth + 1)));
+        let (children, cut) = the_tree(session, child, depth + 1);
+        truncated = truncated || cut;
+        item.insert("children".to_string(), serde_json::json!(children));
         items.push(serde_json::Value::Object(item));
     }
-    items
+    (items, truncated)
 }

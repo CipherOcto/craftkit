@@ -549,16 +549,20 @@ These are the README's own honest notes, and they are still true of the tree:
 - **The document model is still small.** The *seam* is the thing being
   demonstrated: a version is a contribution, a step is a contribution, and the
   chain is checked. A document worth versioning is a different piece of work.
-- **Only the grid, the prose and the sound batteries say when they stop.** A reader
+- **Only four batteries have been surveyed for silent cuts.** A reader
   that stops at a bound must say that it stopped, and the pdf and xlsx
   readers and the audio crate's detectors say it now (§1146, §1147, §1150,
   §1151); the grid battery says it too (§1161, §1163, §1164), the prose
-  battery's accessibility check says it (§1162), and the sound battery
-  says it when it cuts a name (§1165). The film battery's captions, the
-  layout battery's boxes and the rest are the same shape and are **not**
-  answered yet, and nothing checks a battery for a cut
-  that is silent: the next one to be found is found by a reader, not by the
-  tree.
+  battery's accessibility check says it (§1162), the sound battery says
+  it when it cuts a name (§1165), and the pdf battery's outline says it
+  (§1166). The **other** batteries — the film, the layout, the text, the
+  art, the cad, the vector, the fx and the image — have **not** been
+  looked at with the same care: a survey of the caps of the tree and of
+  every `.truncate` and `.take` in it found that the film battery's cuts
+  are the *format's own* (a caption is thirty-two columns by fifteen
+  rows, and a window is the size the file says), and no other battery's
+  cut is known to be silent. Nothing checks a battery for a cut that is
+  silent: the next one to be found is found by a reader, not by the tree.
 
 ---
 

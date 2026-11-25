@@ -271,6 +271,13 @@ pub use metadata::PdfMetadataWrite;
 pub use number::PdfObjectNumber;
 pub use optional::PdfLayersRead;
 pub use outline::{PdfOutlineAdd, PdfOutlineRead};
+
+/// The **caps** of the battery: the bounds it keeps.
+///
+/// The outline of a file is read to a depth and to a number of items,
+/// and the reader says that it stopped: the file holds bookmarks that
+/// are not in the answer.
+pub use outline::{MAX_OUTLINE_DEPTH, MAX_OUTLINE_ITEMS};
 pub use pages::PdfPageRemove;
 pub use pagetext::PdfPageText;
 pub use patterns::{PdfRedactPatternFind, PdfRedactPatterns};
