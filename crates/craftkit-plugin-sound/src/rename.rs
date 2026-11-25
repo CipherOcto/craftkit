@@ -21,7 +21,12 @@ use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 ///
 /// The tree's bound is its own, and a name that is longer is a name
 /// with a mistake in it.
-const MAX_NAME_CHARS: usize = 256;
+/// The most characters the **name of a clip** may have.
+///
+/// A name over this bound is **refused**, not cut: the name a user
+/// gives is the name the user means. The name a **file** gives a track
+/// is a different thing and has its own bound: `MAX_MIDI_NAME_CHARS`.
+pub const MAX_NAME_CHARS: usize = 256;
 
 /// The name of a node, ready to be put on it.
 ///

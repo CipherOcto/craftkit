@@ -9,6 +9,7 @@
 //! and the command says so in its own documentation; a knob is not a
 //! fact about the material, and the test below says what the knob does.
 
+use craftkit_plugin_sound::MAX_NAME_CHARS;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -106,7 +107,7 @@ fn a_repeat_count_over_the_limit_is_clamped() {
 fn a_name_over_the_limit_is_refused() {
     let mut session = session();
     let (_, clip) = a_track(&mut session, "rename");
-    let name = "n".repeat(257);
+    let name = "n".repeat(MAX_NAME_CHARS + 1);
     let error = session
         .execute("sound.clip.rename", &json!({ "clip": clip, "name": name }))
         .expect_err("that name is too long");

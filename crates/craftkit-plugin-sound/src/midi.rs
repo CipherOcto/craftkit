@@ -562,6 +562,8 @@ commands! {
             // A **track** for every part of the file, each with a clip of
             // its own.
             let mut made = Vec::with_capacity(parts.len());
+            // The names of the tracks that were **cut** at the bound.
+            let mut names_cut = 0usize;
             for (index, part) in parts.iter().enumerate() {
                 let mut sequence = part.sequence.clone();
                 sequence.sort();
@@ -576,7 +578,10 @@ commands! {
                         ),
                     });
                 }
-                let name = name_of(part, index);
+                let (name, name_cut) = name_of(part, index);
+                if name_cut {
+                    names_cut += 1;
+                }
                 let track = crate::add_track(session, &name)?;
                 let playlist = crate::playlist_of(session, track, None)?;
                 let mut clip = ClipPayload::new();
@@ -596,6 +601,10 @@ commands! {
             Ok(Outcome::changed(format!("imported the tracks of `{path}`")).with_data(serde_json::json!({
                 "tracks": made,
                 "count": made.len(),
+                // What the import did **not** keep: the names of the
+                // tracks that were cut at the bound.
+                "names_cut": names_cut,
+                "truncated": names_cut > 0,
                 "tempos": imported.tempos,
                 "meters": imported.meters,
                 "keys": imported.keys,
@@ -1811,18 +1820,28 @@ commands! {
 }
 
 /// The **name** of a track of a file: the name the file gives it, or
-/// the number of the track when it has none.
+/// the number of the track when it has none — and whether the name was
+/// **cut**.
 ///
 /// The name is **bounded**: a file may name a track with a very long
-/// string, and a name that long is not a name.
-fn name_of(track: &craftkit_midi::SmfTrack, index: usize) -> String {
+/// string, and a name that long is not a name. The name is cut at the
+/// bound, and the import says how many names were cut: a track whose
+/// name is not the name the file gave it is not the track the file
+/// meant.
+fn name_of(track: &craftkit_midi::SmfTrack, index: usize) -> (String, bool) {
     let name = track.name.trim();
     let name = if name.is_empty() { format!("MIDI {}", index + 1) } else { name.to_string() };
-    name.chars().take(MAX_NAME_CHARS).collect()
+    let cut = name.chars().count() > MAX_MIDI_NAME_CHARS;
+    let name = name.chars().take(MAX_MIDI_NAME_CHARS).collect();
+    (name, cut)
 }
 
-/// The most characters a **name** may have.
-const MAX_NAME_CHARS: usize = 256;
+/// The most characters the **name of a track of a file** may have.
+///
+/// The name is cut at this bound, and the import says so. The name a
+/// user gives a clip is a different thing and has its own bound:
+/// `MAX_NAME_CHARS`.
+pub const MAX_MIDI_NAME_CHARS: usize = 256;
 
 /// How long a **clip** is: the room the notes need, at the tempo the
 /// document says where the clip is.

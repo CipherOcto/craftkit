@@ -571,6 +571,14 @@ pub use midi::{
     SoundClipMidiQuantize, SoundClipMidiRead, SoundClipMidiTranspose, SoundClipMidiVelocity,
     SoundTrackMidiImport,
 };
+
+/// The **caps** of the battery: the bounds it keeps.
+///
+/// The name a **user** gives a clip and the name a **file** gives a
+/// track are two different things, and they have two different bounds:
+/// `MAX_NAME_CHARS` and `MAX_MIDI_NAME_CHARS`. One is refused and one
+/// is cut, and the one that is cut says so.
+pub use midi::MAX_MIDI_NAME_CHARS;
 pub use mixer::{
     BusKind, BusPayload, InsertKind, InsertPayload, LaneKind, LanePayload, SendKind, SendPayload,
     SoundBusAdd, SoundInsertAdd, SoundInsertMove, SoundInsertRemove, SoundLaneAdd, SoundRouteAdd,
@@ -579,6 +587,7 @@ pub use mixer::{
 pub use pitch::SoundClipPitchRead;
 pub use recording::{SoundTrackMonitor, SoundTrackRecord};
 pub use remove::{SoundClipRemove, SoundMarkerRemove, SoundTrackRemove};
+pub use rename::MAX_NAME_CHARS;
 pub use rename::{SoundClipRename, SoundTrackRename};
 pub use render::SoundClipRender;
 pub use repeat::SoundTrackRepeat;

@@ -4603,8 +4603,8 @@ so.
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
-| **the batteries and the libraries name their caps** | **built.** Nine crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-four caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **the batteries and the libraries name their caps** | **built.** Ten crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and twenty-six caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
@@ -4613,6 +4613,7 @@ so.
 | **the prose battery says what it cut** | **built.** The accessibility check now says how many issues there were, how many it lists and how many columns of a table it did not look at, and five tests prove each of them (§1162) | §1162 |
 | **the grid export says which lines it did not draw** | **built.** The lines of a cell are cut at a published bound, the export says how many of them were cut, and the cut of the text and the cut of the lines are told apart (§1163) | §1163 |
 | **the grid battery says what it did not offer** | **built.** The suggestions of a spelling issue are cut at a published bound, a word too long for the suggestions says so, and three tests prove both (§1164) | §1164 |
+| **the sound battery says when it cut a name** | **built.** The name of a track of a file is cut at a published bound and the import says so, and the two names of the battery are told apart (§1165) | §1165 |
 
 ### The list of things that are honestly not there: empty
 
@@ -73619,3 +73620,63 @@ spelling check offers for a word. This arc closes it.
   `MAX_SPELLING_LINES`: the answer says that too
   (`dictionary_truncated`), and a word beyond the cut is still called
   misspelled.
+
+## 1165. The sound battery says when it cut a name
+
+§1162, §1163 and §1164 brought the rule of the **saying so** to the
+prose and grid batteries. This arc brings it to the sound battery, and to
+the first bounds the battery has ever published.
+
+### What was built
+
+- **The name of a track of a file is cut, and the import says so.** A
+  file may name a track with a very long string; the name is cut at
+  `MAX_MIDI_NAME_CHARS` — two hundred and fifty-six characters — and the
+  answer of `sound.track.midi.import` carries `names_cut` and a
+  `truncated` that is true when a name was cut.
+- **The two names of the battery are told apart.** The name a **user**
+  gives a clip is **refused** when it is too long (`MAX_NAME_CHARS`): the
+  name the user means is not cut. The name a **file** gives a track is
+  **cut** (`MAX_MIDI_NAME_CHARS`), because a file is not asked. One name
+  was both of them, and the two now have names of their own.
+- **Both bounds are published.** The sound battery keeps **two** caps,
+  and they are at its root: they are the first caps the battery has
+  published, and a bound that is private is a bound a reader cannot look
+  up.
+- **Two tests name every bound.** The new test file names
+  `MAX_MIDI_NAME_CHARS` in **code**, and one of the two is the other
+  half: a name of exactly the bound's length is not cut. The bound of
+  the clip's name is named in code too, in the battery's limit suite.
+
+### What the port found
+
+- **The cut was invisible.** The import brought in a track with a name
+  the file never gave it, and said nothing: the user had a track called
+  by the first two hundred and fifty-six characters of a name that went
+  on for a thousand more.
+- **One name, two rules.** `MAX_NAME_CHARS` was the bound of the name a
+  user gives and the bound of the name a file gives, and the two rules
+  were opposite: one refused and one cut. A reader who looked the name
+  up had no way to say which rule it was.
+- **The battery published nothing at all.** Every other battery had
+  named its caps by §1156; the sound battery kept eleven of them and
+  showed none.
+
+### What it cost
+
+- **One answer changed** — `sound.track.midi.import` — **two caps
+  published** at the sound battery's root, **two tests** in a new file,
+  one limit test brought onto the bound it proves, and the claim row
+  above.
+- **The claim table's counts are up to date again**: the tree keeps **a
+  hundred and twenty-six** published caps.
+
+### What it does not settle
+
+- **The tree's other batteries still cut in silence.** The film battery's
+  captions, the layout battery's boxes and the text battery's word list
+  are the same shape and are not yet answered.
+- **A name that is cut is a name the user cannot fix.** The answer says
+  that the name was cut, and the cut name is what the track carries: the
+  answer does not offer the whole name, because the whole name is not a
+  name the tree keeps.
