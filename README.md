@@ -4595,6 +4595,7 @@ so.
 | **every limit a battery keeps is proved by the battery's own test** | **built.** The layout, film, fx, grid, prose and sound batteries each prove their caps by exceeding them (§1142, §1143, §1145) | §1142 |
 | **one name, one number** | **built.** The outer gate says a cap that is declared with two different numbers in one crate (§1144) | §1144 |
 | **the reader says what it did not read** | **built.** The pdf battery's name tree says when it stopped at its depth (§1146) | §1146 |
+| **every reader of the pdf battery says what it did not read** | **built.** The structure tree, the marked content, the figures, the comments and the attachments each say when they stopped at their depth (§1147) | §1147 |
 
 ### The list of things that are honestly not there: empty
 
@@ -72613,3 +72614,44 @@ not read.
 - **The rule is still about the name.** The gate cannot see whether a
   test exceeded the cap, and it cannot see whether a reader said what
   it did not read.
+
+## 1147. The five readers say what they did not read
+
+§1146 repaired the JavaScript name tree and wrote down the other five:
+the structure tree, the marked content, the figures, the comments and
+the attachments each read their tree to a depth and then **stopped**,
+and the part below the depth was in the file and not in the answer.
+This arc gives each of them a way to say so.
+
+### What was built
+
+- **Every one of the five says it.** Each reader now reports whether it
+  stopped at its depth, and each answer carries it: `truncated`. The
+  answer says "I did not read all of this", which is what a reader of
+  the file needs to know.
+- **A test proves it.** The attachments' name tree is a chain of kids
+  deeper than the reader reads, and the answer says it stopped.
+
+### What the port found
+
+- **The answer had no place to say it.** The JavaScript reader could say
+  because its answer already had a list of what it skipped; the other
+  five had nowhere to put it, and a reader that has nowhere to put it
+  says nothing. The fix is a field, and the field is **additive**: what
+  was in the answer before is still there.
+
+### What it cost
+
+- **Five readers** and the five answers that carry them, **one test**
+  that proves the shape of the thing, and the claim row above.
+
+### What it does not settle
+
+- **The flag is a flag, not a note.** `truncated` says that the reader
+  stopped; it does not say *what* was not read, and the file's own
+  names are not in the answer.
+- **The flag is per answer, not per document.** A reader that says it
+  stopped says it about the thing it read, and nothing carries it into
+  the document.
+- **The image pixels and the outline's items are still caps that skip
+  silently.** They are not depth caps, and they have not been looked at.

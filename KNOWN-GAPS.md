@@ -198,14 +198,15 @@ These are the README's own honest notes, and they are still true of the tree:
   written about in a string is a kind the gate counts, and a kind that is
   created and read in a test is a kind the gate cannot tell from one that
   is only written about.
-- **Five readers of the pdf battery still stop silently** (§1146): the
-  structure tree, the marked content, the figures, the comments and the
-  attachments each read their tree to a depth and then **stop**, and the
-  part below the depth is in the file and not in the answer, with
-  nothing saying so. The JavaScript name tree was repaired (§1146) —
-  its answer already had a place to say it — and these five need an
-  answer that can say it, which is a change to the shape of what they
-  return.
+- **The readers of the pdf battery now say when they stop** (§1146,
+  §1147): the JavaScript name tree, the structure tree, the marked
+  content, the figures, the comments and the attachments each read their
+  tree to a depth, and each now **says** that it stopped — the
+  JavaScript in the list of what it skipped, the other five in a
+  `truncated` field of their answer. The flag is a flag and not a note:
+  it says that the reader stopped and not *what* was not read. The
+  image's pixels and the outline's items are caps that skip silently and
+  have not been looked at.
 - **One name, one number** (§1144): the `lists` phase reads the caps
   of every crate and says a name that is declared with two different
   numbers — the same rule the kit's own bound registry holds between

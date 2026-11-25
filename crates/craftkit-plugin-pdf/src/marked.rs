@@ -89,37 +89,48 @@ fn node_of_number(document: &Document, number: u64) -> Option<&Node> {
 
 /// The **marked content** of a tagged document: every element of the
 /// structure tree, with the text under it.
-pub fn marked_of(document: &Document) -> Vec<Marked> {
+pub fn marked_of(document: &Document) -> (Vec<Marked>, bool) {
     let mut out: Vec<Marked> = Vec::new();
-    let Some(catalog) = crate::preflight::the_catalog(document) else { return out };
+    let mut truncated = false;
+    let Some(catalog) = crate::preflight::the_catalog(document) else { return (out, truncated) };
     let catalog_entries = entries_of(catalog);
     let Some(root) =
         entry(&catalog_entries, "StructTreeRoot").and_then(|root| crate::preflight::node_of(document, root))
     else {
-        return out;
+        return (out, truncated);
     };
     let root_entries = entries_of(root);
     // The root of the tree may be an element itself, and the element
     // that is the document is below it.
     if entry(&root_entries, "S").is_some() {
-        walk(document, root, None, 0, &mut out);
-        return out;
+        walk(document, root, None, 0, &mut out, &mut truncated);
+        return (out, truncated);
     }
-    let Some(children) = entry(&root_entries, "K") else { return out };
+    let Some(children) = entry(&root_entries, "K") else { return (out, truncated) };
     let listed: Vec<Json> = match children {
         Json::Array(list) => list.clone(),
         one => vec![one.clone()],
     };
     for child in listed {
         let Some(node) = crate::preflight::node_of(document, &child) else { continue };
-        walk(document, node, None, 0, &mut out);
+        walk(document, node, None, 0, &mut out, &mut truncated);
     }
-    out
+    (out, truncated)
 }
 
 /// Walk the **structure tree**, and read the text under each element.
-fn walk(document: &Document, node: &Node, page: Option<u64>, depth: usize, out: &mut Vec<Marked>) {
+fn walk(
+    document: &Document,
+    node: &Node,
+    page: Option<u64>,
+    depth: usize,
+    out: &mut Vec<Marked>,
+    truncated: &mut bool,
+) {
     if depth >= MAX_DEPTH {
+        // The tree is deeper than the reader reads: what is below is in
+        // the file and not in the answer, and the answer says so.
+        *truncated = true;
         return;
     }
     let entries = entries_of(node);
@@ -148,7 +159,7 @@ fn walk(document: &Document, node: &Node, page: Option<u64>, depth: usize, out: 
     out.push(marked);
     // The **elements** below it.
     if let Some(content) = entry(&entries, "K") {
-        children_of(document, content, page, depth, out);
+        children_of(document, content, page, depth, out, truncated);
     }
 }
 
@@ -189,10 +200,17 @@ fn text_of_content(document: &Document, value: &Json, page: Option<u64>) -> Stri
 }
 
 /// The **elements** below an element: the tree goes on down.
-fn children_of(document: &Document, value: &Json, page: Option<u64>, depth: usize, out: &mut Vec<Marked>) {
+fn children_of(
+    document: &Document,
+    value: &Json,
+    page: Option<u64>,
+    depth: usize,
+    out: &mut Vec<Marked>,
+    truncated: &mut bool,
+) {
     if let Json::Array(list) = value {
         for item in list {
-            children_of(document, item, page, depth, out);
+            children_of(document, item, page, depth, out, truncated);
         }
         return;
     }
@@ -200,7 +218,7 @@ fn children_of(document: &Document, value: &Json, page: Option<u64>, depth: usiz
     if let Some(node) = crate::preflight::node_of(document, value) {
         let entries = entries_of(node);
         if entry(&entries, "S").is_some() {
-            walk(document, node, page, depth + 1, out);
+            walk(document, node, page, depth + 1, out, truncated);
         }
         return;
     }
@@ -208,7 +226,7 @@ fn children_of(document: &Document, value: &Json, page: Option<u64>, depth: usiz
     if let Some(entries) = dictionary_of(value)
         && let Some(content) = entry(&entries, "K")
     {
-        children_of(document, content, page, depth, out);
+        children_of(document, content, page, depth, out, truncated);
     }
 }
 
@@ -348,7 +366,7 @@ commands! {
         },
         run: {
             let id = COMMAND.to_string();
-            let all = marked_of(session.document());
+            let (all, truncated) = marked_of(session.document());
             let listed: Vec<Json> = match &self.kind {
                 None => all.iter().map(|marked| marked.to_json()).collect(),
                 Some(kind) => {
@@ -371,6 +389,7 @@ commands! {
             Ok(Outcome::new(format!("the file has {count} marked element(s)")).with_data(json!({
                 "marked": listed,
                 "count": count,
+                "truncated": truncated,
             })))
 
         }

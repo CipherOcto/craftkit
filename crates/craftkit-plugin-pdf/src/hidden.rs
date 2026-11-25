@@ -131,7 +131,7 @@ pub fn scan(session: &Session) -> Vec<(String, usize)> {
 
     // The **attachments**: the files inside the file and the
     // annotations that attach them.
-    let embedded = crate::attachments::attachments_of(document).len();
+    let embedded = crate::attachments::attachments_of(document).0.len();
     let attached = annotations.iter().filter(|(_, subtype)| subtype == "FileAttachment").count();
     let attachments = embedded + attached;
 

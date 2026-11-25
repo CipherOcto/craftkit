@@ -127,15 +127,16 @@ fn kind_of(entries: &[(String, Json)]) -> Option<String> {
 /// The tree's own rule: the figures are the elements whose type is
 /// `Figure`, and the page of a figure is the page it says or the page
 /// it is under.
-pub fn figures_of(document: &Document) -> Vec<Figure> {
-    let Some(catalog) = crate::preflight::the_catalog(document) else { return Vec::new() };
+pub fn figures_of(document: &Document) -> (Vec<Figure>, bool) {
+    let mut truncated = false;
+    let Some(catalog) = crate::preflight::the_catalog(document) else { return (Vec::new(), truncated) };
     let catalog_entries = entries_of(catalog);
-    let Some(root) = entry(&catalog_entries, "StructTreeRoot") else { return Vec::new() };
-    let Some(root) = crate::preflight::node_of(document, root) else { return Vec::new() };
+    let Some(root) = entry(&catalog_entries, "StructTreeRoot") else { return (Vec::new(), truncated) };
+    let Some(root) = crate::preflight::node_of(document, root) else { return (Vec::new(), truncated) };
     let roles = role_map(document, root);
     let mut out: Vec<Figure> = Vec::new();
-    walk(document, root, &roles, None, 0, &mut out);
-    out
+    walk(document, root, &roles, None, 0, &mut out, &mut truncated);
+    (out, truncated)
 }
 
 /// The **elements** below a node, and the figures among them.
@@ -146,8 +147,12 @@ fn walk(
     page: Option<u64>,
     depth: usize,
     out: &mut Vec<Figure>,
+    truncated: &mut bool,
 ) {
     if depth >= MAX_DEPTH {
+        // The tree is deeper than the reader reads: what is below is in
+        // the file and not in the answer, and the answer says so.
+        *truncated = true;
         return;
     }
     let entries = entries_of(node);
@@ -168,7 +173,7 @@ fn walk(
         // A child that is **not a reference** is a marked content
         // number, and it is not a thing of the tree.
         let Some(child) = crate::preflight::node_of(document, &child) else { continue };
-        walk(document, child, roles, own_page, depth + 1, out);
+        walk(document, child, roles, own_page, depth + 1, out, truncated);
     }
 }
 
@@ -182,7 +187,7 @@ commands! {
         },
         run: {
             let document = session.document();
-            let figures = figures_of(document);
+            let (figures, truncated) = figures_of(document);
             let tagged = crate::preflight::the_catalog(document)
                 .map(|catalog| {
                     let catalog_entries = entries_of(catalog);
@@ -208,6 +213,7 @@ commands! {
                 .collect();
             Ok(Outcome::new(format!("the file has {} figure(s)", figures.len())).with_data(json!({
                 "tagged": tagged,
+                "truncated": truncated,
                 "figures": figures,
             })))
 
@@ -240,7 +246,7 @@ commands! {
             };
             // The node must be a **figure**: an alternate text is the text
             // of a figure and not of anything else.
-            let figures = figures_of(session.document());
+            let (figures, _truncated) = figures_of(session.document());
             if !figures.iter().any(|held| held.id == figure) {
                 return Err(EngineError::Failed {
                     id: id.clone(),

@@ -80,12 +80,17 @@ fn text_of(value: &Json) -> Option<String> {
 }
 
 /// The **element** a node holds.
-fn element_of(document: &Document, node: &craftkit_sdk::Node, depth: usize) -> Option<Element> {
+fn element_of(
+    document: &Document,
+    node: &craftkit_sdk::Node,
+    depth: usize,
+    truncated: &mut bool,
+) -> Option<Element> {
     let entries = entries_of(node);
     // An element says what it **is**.
     let kind = entry(&entries, "S").and_then(|kind| kind.as_str())?;
     let children = match entry(&entries, "K") {
-        Some(children) => children_of(document, children, depth),
+        Some(children) => children_of(document, children, depth, truncated),
         None => Vec::new(),
     };
     Some(Element {
@@ -98,8 +103,11 @@ fn element_of(document: &Document, node: &craftkit_sdk::Node, depth: usize) -> O
 }
 
 /// The **children** of an element: the elements below it.
-fn children_of(document: &Document, value: &Json, depth: usize) -> Vec<Element> {
+fn children_of(document: &Document, value: &Json, depth: usize, truncated: &mut bool) -> Vec<Element> {
     if depth >= MAX_DEPTH {
+        // The tree is deeper than the reader reads: what is below is in
+        // the file and not in the answer, and the answer says so.
+        *truncated = true;
         return Vec::new();
     }
     let listed: Vec<Json> = match value {
@@ -111,7 +119,7 @@ fn children_of(document: &Document, value: &Json, depth: usize) -> Vec<Element> 
         // A child that is **not a reference** is a marked content
         // number, and it is not a thing of the tree.
         let Some(node) = crate::preflight::node_of(document, &child) else { continue };
-        let Some(element) = element_of(document, node, depth + 1) else { continue };
+        let Some(element) = element_of(document, node, depth + 1, truncated) else { continue };
         out.push(element);
     }
     out
@@ -127,28 +135,30 @@ fn children_of(document: &Document, value: &Json, depth: usize) -> Vec<Element> 
 ///
 /// A document that is not tagged has no structure tree, and the answer
 /// is nothing.
-pub fn structure_of(document: &Document) -> Option<Element> {
-    let catalog = crate::preflight::the_catalog(document)?;
+pub fn structure_of(document: &Document) -> (Option<Element>, bool) {
+    let mut truncated = false;
+    let Some(catalog) = crate::preflight::the_catalog(document) else { return (None, truncated) };
     let catalog_entries = entries_of(catalog);
-    let root = entry(&catalog_entries, "StructTreeRoot")?;
-    let root = crate::preflight::node_of(document, root)?;
+    let Some(root) = entry(&catalog_entries, "StructTreeRoot") else { return (None, truncated) };
+    let Some(root) = crate::preflight::node_of(document, root) else { return (None, truncated) };
     let entries = entries_of(root);
     // The root of the tree may be an element itself.
     if entry(&entries, "S").is_some() {
-        return element_of(document, root, 1);
+        let element = element_of(document, root, 1, &mut truncated);
+        return (element, truncated);
     }
-    let children = entry(&entries, "K")?;
+    let Some(children) = entry(&entries, "K") else { return (None, truncated) };
     let listed: Vec<Json> = match children {
         Json::Array(list) => list.clone(),
         one => vec![one.clone()],
     };
     for child in listed {
         let Some(node) = crate::preflight::node_of(document, &child) else { continue };
-        if let Some(element) = element_of(document, node, 1) {
-            return Some(element);
+        if let Some(element) = element_of(document, node, 1, &mut truncated) {
+            return (Some(element), truncated);
         }
     }
-    None
+    (None, truncated)
 }
 
 commands! {
@@ -164,16 +174,19 @@ commands! {
         },
         run: {
             let document = session.document();
-            let Some(root) = structure_of(document) else {
+            let (root, truncated) = structure_of(document);
+            let Some(root) = root else {
                 return Ok(Outcome::new("the file is not tagged").with_data(json!({
                     "tagged": false,
                     "structure": Json::Null,
+                    "truncated": truncated,
                 })));
             };
             let tree = root.to_json();
             Ok(Outcome::new("the file is tagged").with_data(json!({
                 "tagged": true,
                 "structure": tree,
+                "truncated": truncated,
             })))
 
         }

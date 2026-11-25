@@ -51,19 +51,23 @@ fn entry<'a>(entries: &'a [(String, Json)], key: &str) -> Option<&'a Json> {
 }
 
 /// The **pages** of the file, in the order of the tree of pages.
-fn pages_of(document: &Document) -> Vec<u64> {
-    let Some(catalog) = crate::preflight::the_catalog(document) else { return Vec::new() };
+fn pages_of(document: &Document) -> (Vec<u64>, bool) {
+    let mut truncated = false;
+    let Some(catalog) = crate::preflight::the_catalog(document) else { return (Vec::new(), truncated) };
     let catalog_entries = crate::entries_of(&catalog.data);
-    let Some(pages) = entry(&catalog_entries, "Pages") else { return Vec::new() };
-    let Some(node) = crate::preflight::node_of(document, pages) else { return Vec::new() };
+    let Some(pages) = entry(&catalog_entries, "Pages") else { return (Vec::new(), truncated) };
+    let Some(node) = crate::preflight::node_of(document, pages) else { return (Vec::new(), truncated) };
     let mut out: Vec<u64> = Vec::new();
-    walk_pages(document, node.id, 0, &mut out);
-    out
+    walk_pages(document, node.id, 0, &mut out, &mut truncated);
+    (out, truncated)
 }
 
 /// Walk the **tree of pages**, and take the pages of it in order.
-fn walk_pages(document: &Document, node: u64, depth: usize, out: &mut Vec<u64>) {
+fn walk_pages(document: &Document, node: u64, depth: usize, out: &mut Vec<u64>, truncated: &mut bool) {
     if depth >= MAX_DEPTH {
+        // The tree is deeper than the reader reads: the pages below are
+        // in the file and not in the answer, and the answer says so.
+        *truncated = true;
         return;
     }
     let Some(current) = document.node(node) else { return };
@@ -79,7 +83,7 @@ fn walk_pages(document: &Document, node: u64, depth: usize, out: &mut Vec<u64>) 
     for kid in kids {
         let Some(kid_node) = crate::preflight::node_of(document, &kid) else { continue };
         let id = kid_node.id;
-        walk_pages(document, id, depth + 1, out);
+        walk_pages(document, id, depth + 1, out, truncated);
     }
 }
 
@@ -622,7 +626,7 @@ commands! {
         },
         run: {
             let document = session.document();
-            let pages = pages_of(document);
+            let (pages, truncated) = pages_of(document);
             // The **pages** that are asked for.
             let wanted: Vec<(usize, u64)> = match self.page {
                 Some(page) => {
@@ -688,6 +692,7 @@ commands! {
             Ok(Outcome::new(format!("the file holds {count} comment(s)")).with_data(json!({
                 "comments": comments,
                 "count": count,
+                "truncated": truncated,
             })))
 
         }

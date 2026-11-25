@@ -108,21 +108,31 @@ fn text_of(value: &Json) -> Option<String> {
 }
 
 /// The **attachments** of a document.
-pub fn attachments_of(document: &Document) -> Vec<Attachment> {
+pub fn attachments_of(document: &Document) -> (Vec<Attachment>, bool) {
     let mut out: Vec<Attachment> = Vec::new();
-    let Some(catalog) = crate::preflight::the_catalog(document) else { return out };
+    let mut truncated = false;
+    let Some(catalog) = crate::preflight::the_catalog(document) else { return (out, truncated) };
     let catalog_entries = crate::entries_of(&catalog.data);
-    let Some(names) = entry(&catalog_entries, "Names") else { return out };
-    let Some(names_entries) = entries_of_value(document, names) else { return out };
-    let Some(embedded) = entry(&names_entries, "EmbeddedFiles") else { return out };
-    let Some(tree) = entries_of_value(document, embedded) else { return out };
-    walk(document, &tree, 0, &mut out);
-    out
+    let Some(names) = entry(&catalog_entries, "Names") else { return (out, truncated) };
+    let Some(names_entries) = entries_of_value(document, names) else { return (out, truncated) };
+    let Some(embedded) = entry(&names_entries, "EmbeddedFiles") else { return (out, truncated) };
+    let Some(tree) = entries_of_value(document, embedded) else { return (out, truncated) };
+    walk(document, &tree, 0, &mut out, &mut truncated);
+    (out, truncated)
 }
 
 /// Walk a **name tree**, and read the attachments under it.
-fn walk(document: &Document, tree: &[(String, Json)], depth: usize, out: &mut Vec<Attachment>) {
+fn walk(
+    document: &Document,
+    tree: &[(String, Json)],
+    depth: usize,
+    out: &mut Vec<Attachment>,
+    truncated: &mut bool,
+) {
     if depth >= MAX_DEPTH {
+        // The tree is deeper than the reader reads: what is below is in
+        // the file and not in the answer, and the answer says so.
+        *truncated = true;
         return;
     }
     // The **names** of this part of the tree: a name and the file that
@@ -143,7 +153,7 @@ fn walk(document: &Document, tree: &[(String, Json)], depth: usize, out: &mut Ve
     if let Some(kids) = entry(tree, "Kids").and_then(|kids| kids.as_array()) {
         for kid in kids {
             let Some(kid_entries) = entries_of_value(document, kid) else { continue };
-            walk(document, &kid_entries, depth + 1, out);
+            walk(document, &kid_entries, depth + 1, out, truncated);
         }
     }
 }
@@ -204,7 +214,7 @@ commands! {
         },
         run: {
             let id = COMMAND.to_string();
-            let all = attachments_of(session.document());
+            let (all, truncated) = attachments_of(session.document());
             let listed: Vec<Json> = match &self.name {
                 None => all.iter().map(|attachment| attachment.to_json()).collect(),
                 Some(name) => {
@@ -227,6 +237,7 @@ commands! {
             Ok(Outcome::new(format!("the file carries {count} attachment(s)")).with_data(json!({
                 "attachments": listed,
                 "count": count,
+                "truncated": truncated,
             })))
 
         }
