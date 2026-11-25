@@ -31,9 +31,6 @@ use craftkit_derive::commands;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
-/// The most bytes of a picture that are read to measure it.
-const MAX_HEAD_BYTES: u64 = 1024 * 1024;
-
 /// The **pictures** of a sheet: the cell and what it holds.
 pub fn pictures_of(sheet: &Node) -> Vec<(String, Json)> {
     let Some(map) = sheet.data.get("pictures").and_then(|pictures| pictures.as_object()) else {
@@ -48,9 +45,20 @@ pub fn picture_of(sheet: &Node, cell: &str) -> Option<Json> {
 }
 
 /// The **size** of a picture file, read from its head.
-fn measure(path: &str) -> Result<craftkit_image::Size, String> {
-    let head = craftkit_sdk::files::read_prefix_bounded(std::path::Path::new(path), MAX_HEAD_BYTES)?;
-    craftkit_image::size(&head)
+///
+/// The second value says whether the reader **stopped** at the bound: the
+/// file is longer than the head that was read.
+fn measure(path: &str) -> Result<(craftkit_image::Size, bool), String> {
+    let (head, stopped) =
+        craftkit_sdk::files::read_prefix_bounded(std::path::Path::new(path), crate::MAX_GRID_HEAD_BYTES)?;
+    match craftkit_image::size(&head) {
+        Ok(size) => Ok((size, stopped)),
+        Err(message) => Err(if stopped {
+            format!("{message}: the head of the file was cut at {} bytes", crate::MAX_GRID_HEAD_BYTES)
+        } else {
+            message
+        }),
+    }
 }
 
 /// The **format** of a picture, from the name of the file.
@@ -112,7 +120,7 @@ commands! {
                     message: "a picture is a file, and a file has a name".to_string(),
                 });
             }
-            let size = measure(&path).map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
+            let (size, stopped) = measure(&path).map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
             let format = format_of(&path).unwrap_or("unknown");
             let alt = self.alt.as_ref().map(|alt| alt.0.clone()).unwrap_or_default();
             let picture = json!({
@@ -135,6 +143,7 @@ commands! {
                 "sheet": sheet,
                 "cell": address,
                 "picture": picture,
+                "head_truncated": stopped,
             })))
 
         }

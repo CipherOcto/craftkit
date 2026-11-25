@@ -16,21 +16,16 @@
 
 use craftkit_sdk::picture::Picture;
 
-/// The most bytes a picture's file may hold.
-///
-/// A picture on a canvas is a few megabytes at most, and the limit is
-/// written down here rather than inherited: a path from outside is a
-/// number from outside, and the tree bounds them.
-const MAX_BYTES: u64 = 8 * 1024 * 1024;
-
 /// The picture in a file, if the file holds one.
 ///
-/// The file is read **once more than the limit allows**, so that a file
-/// over the limit is known to be over it.
+/// The file is read up to the limit, and the reader says whether it
+/// **stopped**: a file over the limit is over it, and it is not a picture
+/// this function can hold.
 pub fn picture_of(path: &str) -> Option<Picture> {
     let path = std::path::Path::new(path);
-    let bytes = craftkit_sdk::files::read_prefix_bounded(path, MAX_BYTES + 1).ok()?;
-    if bytes.len() as u64 > MAX_BYTES {
+    let (bytes, stopped) =
+        craftkit_sdk::files::read_prefix_bounded(path, crate::MAX_A2UI_PICTURE_BYTES).ok()?;
+    if stopped {
         return None;
     }
     let picture = craftkit_png::read(&bytes, &craftkit_png::Limits::default()).ok()?;

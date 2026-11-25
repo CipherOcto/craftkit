@@ -47,6 +47,16 @@ pub mod tree;
 
 use craftkit_derive::Layer;
 
+/// The most bytes of a **picture** that are read.
+///
+/// A picture on a canvas is a few megabytes at most, and the limit is
+/// written down here rather than inherited: a path from outside is a
+/// number from outside, and the tree bounds them.
+///
+/// The reader says when it **stopped** at this bound, and a picture that
+/// is beyond it is not read at all.
+pub const MAX_A2UI_PICTURE_BYTES: u64 = 8 * 1024 * 1024;
+
 /// The **a2ui layer**.
 ///
 /// The layer is declared **here**, by the plugin that needs it: the

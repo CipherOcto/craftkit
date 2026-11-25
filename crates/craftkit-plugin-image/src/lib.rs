@@ -122,7 +122,7 @@ pub struct AddPicture {
 impl AddPicture {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let path = self.path.0.clone();
-        let size = measure(&path)?;
+        let (size, stopped) = measure(&path)?;
         let name = match &self.name {
             Some(name) => name.0.clone(),
             None => file_name(&path),
@@ -145,6 +145,7 @@ impl AddPicture {
             "width": size.width,
             "height": size.height,
             "format": size.format.name(),
+            "head_truncated": stopped,
             "path": path,
         })))
     }
@@ -195,7 +196,7 @@ pub struct MeasurePicture {
 impl MeasurePicture {
     fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
         let path = self.path.0.clone();
-        let size = measure(&path)?;
+        let (size, stopped) = measure(&path)?;
         Ok(Outcome::new(format!("{} by {}", size.width, size.height)).with_data(json!({
             "width": size.width,
             "height": size.height,
@@ -203,6 +204,7 @@ impl MeasurePicture {
             "aspect": size.aspect(),
             "format": size.format.name(),
             "path": path,
+            "head_truncated": stopped,
         })))
     }
 }
@@ -217,16 +219,33 @@ pub struct ImagePanel;
 /// The header is at the front of the file, and a megabyte of it is more
 /// than any picture needs. The limit is this program's, and the kit's
 /// own number is beside it.
-const MAX_HEAD_BYTES: u64 = 1024 * 1024;
+///
+/// The reader says when it **stopped** at this bound: the answer carries
+/// `head_truncated`, and a refusal names the bound.
+pub const MAX_IMAGE_HEAD_BYTES: u64 = 1024 * 1024;
 
 /// The size of the picture in that file.
 ///
 /// Only the **head** of the file is read: the size is in the header, and
 /// the pixels are not needed to know how big the picture is.
-fn measure(path: &str) -> Result<craftkit_image::Size, EngineError> {
-    let head = craftkit_sdk::files::read_prefix_bounded(std::path::Path::new(path), MAX_HEAD_BYTES)
-        .map_err(|message| EngineError::Failed { id: "image".to_string(), message })?;
-    craftkit_image::size(&head).map_err(|message| EngineError::Failed { id: "image".to_string(), message })
+///
+/// The second value says whether the reader **stopped** at the bound: the
+/// file is longer than the head that was read.
+fn measure(path: &str) -> Result<(craftkit_image::Size, bool), EngineError> {
+    let (head, stopped) =
+        craftkit_sdk::files::read_prefix_bounded(std::path::Path::new(path), MAX_IMAGE_HEAD_BYTES)
+            .map_err(|message| EngineError::Failed { id: "image".to_string(), message })?;
+    match craftkit_image::size(&head) {
+        Ok(size) => Ok((size, stopped)),
+        Err(message) => Err(EngineError::Failed {
+            id: "image".to_string(),
+            message: if stopped {
+                format!("{message}: the head of the file was cut at {MAX_IMAGE_HEAD_BYTES} bytes")
+            } else {
+                message
+            },
+        }),
+    }
 }
 
 /// The **pixels** of a picture, read from its file.

@@ -523,6 +523,15 @@ use craftkit_sdk::{
     Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text,
 };
 
+/// The most bytes of a picture's **head** that are read to measure it.
+///
+/// The header is at the front of the file, and a megabyte of it is more
+/// than any picture needs.
+///
+/// The reader says when it **stopped** at this bound: the answer carries
+/// `head_truncated`, and a refusal names the bound.
+pub const MAX_GRID_HEAD_BYTES: u64 = 1024 * 1024;
+
 pub use advancedfilter::GridFilterAdvanced;
 pub use align::GridCellAlign;
 pub use autofit::{GridColumnAutofit, GridRowAutofit};

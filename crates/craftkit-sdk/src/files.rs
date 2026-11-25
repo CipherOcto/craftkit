@@ -73,7 +73,12 @@ pub fn read_text_bounded(path: &Path, limit: ByteLimit) -> Result<String, String
 ///
 /// The head is **not** a smaller file: a file whose header is not in the
 /// bytes is a file this call cannot measure, and the caller is told so.
-pub fn read_prefix_bounded(path: &Path, limit: ByteLimit) -> Result<Vec<u8>, String> {
+///
+/// The **second** value says whether the reader **stopped**: the file is
+/// longer than the limit, and there is more of it than was read. A file
+/// that is exactly as long as the limit is not cut — there is nothing
+/// beyond the bound to have missed.
+pub fn read_prefix_bounded(path: &Path, limit: ByteLimit) -> Result<(Vec<u8>, bool), String> {
     use std::io::Read;
 
     let mut file = std::fs::File::open(path)
@@ -92,7 +97,15 @@ pub fn read_prefix_bounded(path: &Path, limit: ByteLimit) -> Result<Vec<u8>, Str
         buffer.extend_from_slice(&chunk[..count]);
         read += count as u64;
     }
-    Ok(buffer)
+    // Whether there is **more** of the file than the limit: one byte past
+    // the limit says so, and a file that is exactly as long as the limit
+    // has nothing beyond it.
+    let mut beyond = [0u8; 1];
+    let stopped = match file.read(&mut beyond) {
+        Ok(count) => count > 0,
+        Err(error) => return Err(format!("`{}` could not be read: {error}", path.display())),
+    };
+    Ok((buffer, stopped))
 }
 
 /// The length of a file, in bytes.
@@ -155,5 +168,32 @@ mod tests {
         let path = craftkit_scratch::file("craftkit-files-not-there").expect("the scratch is made");
         let error = read_bounded(&path, 1024).expect_err("there is no such file");
         assert!(error.contains("could not be read"), "{error}");
+    }
+
+    #[test]
+    fn a_head_that_fits_is_read_and_is_not_cut() {
+        let path = temporary("head-fits", b"hello");
+        let (bytes, stopped) = read_prefix_bounded(&path, 1024).expect("the head is read");
+        assert_eq!(bytes, b"hello");
+        assert!(!stopped, "a file inside the bound is not cut: {stopped}");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_head_that_is_too_big_is_read_and_says_it_stopped() {
+        let path = temporary("head-too-big", &[0; 2048]);
+        let (bytes, stopped) = read_prefix_bounded(&path, 1024).expect("the head is read");
+        assert_eq!(bytes.len(), 1024, "the head is as long as the bound");
+        assert!(stopped, "a file beyond the bound is cut");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_file_that_is_exactly_as_long_as_the_bound_is_not_cut() {
+        let path = temporary("head-exact", &[0; 1024]);
+        let (bytes, stopped) = read_prefix_bounded(&path, 1024).expect("the head is read");
+        assert_eq!(bytes.len(), 1024, "the whole file is read");
+        assert!(!stopped, "there is nothing beyond the bound to have missed");
+        let _ = std::fs::remove_file(&path);
     }
 }

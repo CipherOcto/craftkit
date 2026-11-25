@@ -4603,8 +4603,8 @@ so.
 | **the midi crate's caps are named** | **built.** The tracks of a file, the events of a file and the velocity of a note are each named by a test beside the crate (§1152) | §1152 |
 | **the zip crate's caps are named** | **built.** The size of a part, the number of the entries and the total of a package are each named by a test beside the crate (§1153) | §1153 |
 | **the xml crate's caps are named** | **built.** The depth of a part and the number of the elements of a part are each named by a test beside the crate (§1154) | §1154 |
-| **the batteries and the libraries name their caps** | **built.** Eleven crates keep a published cap; each of them is now named by a test beside the crate that keeps it (§1155) | §1155 |
-| **every published cap in the tree is named by a test** | **built.** The hundred and thirty caps of the tree are all named, the last of them by the fixtures and the kit (§1156) | §1156 |
+| **the batteries and the libraries name their caps** | **built.** Twenty-six crates keep a published cap; each of them is named by a test beside the crate that keeps it (§1155, §1159) | §1155 |
+| **every published cap in the tree is named by a test** | **built.** The hundred and thirty-three caps of the tree are all named, the last of them by the fixtures, the kit and the three head bounds (§1156, §1173) | §1156 |
 | **the rule can see a unit test** | **built.** The reader hands back the tests as well as the production code, and a cap named only by a unit test is no longer invisible (§1157) | §1157 |
 | **the rule holds every crate to its own caps** | **built.** Every cap of every crate is named by a test of that crate, and the rule says the ones that are not (§1158) | §1158 |
 | **the batteries publish their caps and the rule asks for code** | **built.** Sixty-nine caps that only a comment named are now used in code by the test that proves them (§1159) | §1159 |
@@ -4621,6 +4621,7 @@ so.
 | **the tree's bounds are surveyed** | **built.** Every battery's bounds were read with a written contract, the film battery's three silent stops now say so, and the rest are named one by one (§1170) | §1170 |
 | **the grid battery stops lying about its solver** | **built.** The solver answers feasible when it did not prove its answer, the goal says when its search stopped, and two of the survey's claims were wrong (§1171) | §1171 |
 | **the last of the surveyed stops say so** | **built.** The fx time, the prose style chain and the pdf's ancestors and page tree answer when they stop, and six tests prove them (§1172) | §1172 |
+| **the head reader says when it stopped** | **built.** The kit's head reader says whether the file is longer than the bound, three callers say it in their answers, and a refusal of a cut head names the bound (§1173) | §1173 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74108,3 +74109,69 @@ is not there and is not told.
   points however fine it is asked to be, and the geometry is coarser
   than the caller asked for. It is the last of the surveyed stops, and
   it is a *quality* and not a read: the next arc, if there is one.
+
+## 1173. The head reader says when it stopped
+
+§1170's survey named the image battery's head read among the stops the
+tree does not say. This arc gives the reader the fact it has had all
+along — the file was longer than the bound — and gives the three
+callers the words to say it.
+
+### What was built
+
+- **The kit's head reader says whether it stopped.**
+  `craftkit_sdk::files::read_prefix_bounded` reads the head of a file
+  up to the caller's limit, and now says whether the file is **longer**
+  than the limit: the reader stopped, and there is more of the file than
+  was read. A file that is exactly as long as the limit is **not** cut —
+  there is nothing beyond the bound to have missed.
+- **The image battery says it.** `image.add` and `image.measure` answer
+  `head_truncated`, and a refusal of a head that was cut **names the
+  bound**: the caller is told where the read stopped.
+- **The grid battery says it.** `grid.picture.set` answers
+  `head_truncated`, and its refusal names the bound in the same way.
+- **The a2ui plugin says it.** A picture beyond the bound is not read at
+  all, and the reader's word is what says so — the plugin no longer
+  reads one byte more than the limit to find out by itself.
+- **Three bounds are published, and named apart.**
+  `MAX_IMAGE_HEAD_BYTES` and `MAX_GRID_HEAD_BYTES` are the two head
+  bounds of the tree — one mebibyte each, and two crates that may not
+  publish one name — and `MAX_A2UI_PICTURE_BYTES` is the a2ui plugin's
+  own. Each is at its crate's root, and each is named by a test beside
+  the crate that keeps it.
+
+### What the port found
+
+- **The bound was in the wrong place.** The SDK's reader is the
+  mechanism every program uses for the head of a file, and it was the
+  one reader in the tree that stopped at a bound **and said nothing**:
+  it handed back the bytes and left the caller to guess whether the
+  file was longer. Three callers had each worked around it — the a2ui
+  read one byte more than the limit so that it could tell by the
+  length, and the two batteries could not tell at all.
+- **A refusal that does not name the bound is a refusal the caller
+  cannot act on.** A file that is not a picture and is longer than the
+  bound was refused with a sentence about the bytes — "these bytes are
+  not a picture this crate can measure" — and not a word about the
+  read. The read was the thing that stopped, and the sentence was
+  about something else.
+
+### What it cost
+
+- **One signature changed** in the SDK, **three callers** changed with
+  it, **three bounds published**, **eleven tests** in four files (three
+  of them in the SDK's own), and the claim rows above. The tree keeps
+  one hundred and thirty-three published caps under one hundred and
+  thirty-three names, and twenty-six crates keep one.
+
+### What it does not settle
+
+- **The a2ui's picture is read whole, and it is not a head.** A picture
+  is decoded, and a decode needs the whole file; there is nothing to
+  read but all of it. A file beyond the bound is not read in part and
+  not read at all, and that is a refusal rather than a cut.
+- **The vector battery's erase is still a silent quality.** The erase
+  samples a contour at no more than four thousand and ninety-six points
+  however fine it is asked to be, and the geometry is coarser than the
+  caller asked for. It is the last of the surveyed stops, and it is a
+  *quality* and not a read: the next arc, if there is one.

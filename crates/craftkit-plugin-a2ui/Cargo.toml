@@ -20,3 +20,6 @@ craftkit-png = { workspace = true }
 [dev-dependencies]
 # The **scratch**: a path a test may write in, and the removal of it.
 craftkit-scratch = { workspace = true }
+# The **rasteriser**, and only for the tests: it writes the PNG the tests
+# read. Nothing that ships links it.
+craftkit-raster = { workspace = true }

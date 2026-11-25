@@ -146,6 +146,76 @@ fn a_cell_that_is_covered_by_a_merge_is_refused() {
     assert!(outcome.to_string().contains("merge"), "{outcome}");
 }
 
+/// A **PNG file** with a tail of bytes after it, long enough that the
+/// head of it is cut at the battery's bound.
+///
+/// The size is in the header, and the header is at the front: the picture
+/// is still measured, and the answer says that the head was cut.
+fn a_png_file_with_a_long_tail(name: &str) -> String {
+    let mut image = craftkit_raster::Image::new(2, 2, Colour::WHITE);
+    image.blend(0, 0, Colour::BLACK, craftkit_sdk::BlendMode::Normal);
+    let mut bytes = image.to_png();
+    bytes.resize(craftkit_plugin_grid::MAX_GRID_HEAD_BYTES as usize + 1, 0);
+    let path =
+        craftkit_scratch::file(&format!("craftkit-v2-grid-picture-{name}.png")).expect("the scratch is made");
+    std::fs::write(&path, &bytes).expect("the picture is written");
+    path.to_string_lossy().to_string()
+}
+
+/// **A picture inside the bound is not cut.**
+#[test]
+fn a_picture_inside_the_bound_is_not_cut() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    let path = a_png_file("whole", 4, 3);
+    let outcome = session
+        .execute("grid.picture.set", &json!({ "sheet": sheet, "cell": "B2", "path": path }))
+        .expect("the picture is set");
+    assert_eq!(
+        outcome.data.get("head_truncated").and_then(|cut| cut.as_bool()),
+        Some(false),
+        "a picture inside the bound is not cut: {:?}",
+        outcome.data
+    );
+}
+
+/// **A picture beyond the bound says that its head was cut.**
+#[test]
+fn a_picture_beyond_the_bound_says_its_head_was_cut() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    let path = a_png_file_with_a_long_tail("cut");
+    let outcome = session
+        .execute("grid.picture.set", &json!({ "sheet": sheet, "cell": "B2", "path": path }))
+        .expect("the picture is set");
+    assert_eq!(
+        outcome.data.get("head_truncated").and_then(|cut| cut.as_bool()),
+        Some(true),
+        "a head that stopped at the bound says so: {:?}",
+        outcome.data
+    );
+}
+
+/// **A file that is not a picture and is longer than the bound is
+/// refused, and the refusal names the bound.**
+#[test]
+fn a_refusal_of_a_cut_head_names_the_bound() {
+    let mut session = session();
+    let sheet = a_sheet(&mut session);
+    let path = craftkit_scratch::file("craftkit-v2-grid-picture-cut-not-a-picture.bin")
+        .expect("the scratch is made");
+    std::fs::write(&path, vec![0u8; craftkit_plugin_grid::MAX_GRID_HEAD_BYTES as usize + 1])
+        .expect("the file is written");
+    let error = session
+        .execute("grid.picture.set", &json!({ "sheet": sheet, "cell": "B2", "path": path.to_string_lossy() }))
+        .expect_err("these bytes are not a picture");
+    let message = error.to_string();
+    assert!(
+        message.contains(&craftkit_plugin_grid::MAX_GRID_HEAD_BYTES.to_string()),
+        "the refusal names the bound: {message}"
+    );
+}
+
 /// **A picture may be taken away.**
 #[test]
 fn a_picture_may_be_taken_away() {

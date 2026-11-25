@@ -615,6 +615,7 @@ dependencies = [
  "craftkit-a2ui",
  "craftkit-derive",
  "craftkit-png",
+ "craftkit-raster",
  "craftkit-scratch",
  "craftkit-sdk",
 ]

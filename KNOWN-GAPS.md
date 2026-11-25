@@ -592,10 +592,6 @@ These are the README's own honest notes, and they are still true of the tree:
   - **fx** — §1172 fixed it: `fx.time.step` holds the frame at
     `MAX_FRAME` and answers `clamped`, the same shape as the film
     battery's playhead, which §1170 fixed.
-  - **vector** — `vector.path.erase` samples a contour at
-    `MAX_SAMPLES` (four thousand and ninety-six) however fine the
-    eraser is asked to be: the geometry is coarser than the caller
-    asked for, and nothing says so.
   - **text** — a metric run longer than `MAX_RUN` (eight characters) is
     kept and never used. The code says so in its own words ("it is
     kept, and it is never used, because the walk does not look that
@@ -606,9 +602,13 @@ These are the README's own honest notes, and they are still true of the tree:
     eraser is asked to be: the geometry is coarser than the caller
     asked for, and nothing says so. It is the last of the surveyed
     stops, and it is a *quality* of a computed value and not a read.
-  - **image** — the head of a picture is read up to `MAX_HEAD_BYTES`
-    (a mebibyte) and the size of the picture is then refused; the
-    refusal does not name the bound.
+  - **image** — §1173 fixed it: the head of a picture is read up to
+    `MAX_IMAGE_HEAD_BYTES` (a mebibyte), the reader says whether the file
+    is longer than the bound, `image.add` and `image.measure` answer
+    `head_truncated`, and a refusal of a head that was cut names the
+    bound. The **grid** battery reads a head the same way and says so
+    too (`MAX_GRID_HEAD_BYTES`), and the **a2ui** plugin reads a picture
+    up to `MAX_A2UI_PICTURE_BYTES` and does not read one beyond it.
   - **The deliberate departures stay deliberate**: the art battery's
     rate, the sound battery's repeat count and the camera's zoom are
     held rather than refused, and they are recorded above.
@@ -620,7 +620,9 @@ These are the README's own honest notes, and they are still true of the tree:
   (§1165), the pdf battery's outline and its hidden report say it
   (§1166, §1168), the prose battery's table of figures says it (§1167),
   and the film battery says it when it holds a playhead or cuts a
-  caption file's pairs (§1170). The **rest** of the batteries were
+  caption file's pairs (§1170). The **kit's own head reader** says it
+  now, and so do the three callers of it: the image battery, the grid
+  battery and the a2ui plugin (§1173). The **rest** of the batteries were
   surveyed in §1170 with a written contract, and the stops they do not
   say are named in the list above. Nothing *checks* a battery for a cut
   that is silent: the next one to be found is found by a reader, not by
@@ -681,6 +683,14 @@ comes to the tree cold:
   (§1125). It is true on **every** path now: a pair says what each
   spelling takes, the plugin's catalogue carries it, and the schema
   publishes the pair as required (§1129).
+- **"Eleven crates keep a published cap."** That was true when §1155
+  wrote it, and it stopped being true when §1159 published the
+  batteries' caps: the tree keeps a published cap in **twenty-six**
+  crates, and §1173 made two more of them — the image battery and the
+  a2ui plugin — and gave the grid battery a second one. The claim row
+  now says twenty-six, and the count of the tree's caps is a hundred
+  and thirty-three. The row was corrected in place; the history of the
+  claim is not in the README.
 
 When the README and the code disagree, the **code** is right, and this file
 records the difference rather than the README's history.
