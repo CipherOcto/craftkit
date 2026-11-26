@@ -4,6 +4,10 @@ The upstream is a large collection of format crates; this tree reads and writes 
 small fraction of those formats today. This plan names the capabilities worth
 porting, the arcs that would port them, and the order the arcs would come in.
 
+The plan holds **seventeen arcs** and reserves **§1253 to §1359** of the README:
+nine arcs for the first wave and eight for the second, and the second wave is
+the whole upstream.
+
 Nothing here is built. Every arc below is future work, and every capability
 named as absent is absent as of this writing.
 
@@ -37,11 +41,12 @@ library, and the batteries call it.**
 Eight rows are PORT, and the settings row is two arcs — the settings file
 itself, and the atomic replacement of a file — so the ports are nine arcs.
 
-The LATER rows are named but not planned here. The OpenDocument workbook, the
-word-processing document format and its model, the layered image format, camera
-raw, the other audio codecs, colour management, the foreign design containers
-and the shared widget library are each a project of its own rather than a
-command, and each would deserve its own plan before it deserves an arc.
+The LATER rows are named here, and each is an arc of the second wave in §2.
+The OpenDocument workbook, the word-processing document format and its model,
+the layered image format, camera raw, the other audio codecs, colour
+management, the foreign design containers and the shared widget library are
+each a project of its own rather than a command, and each is now planned as
+an arc.
 
 The SKIP row is out of scope for a reason that is not technical: mail, cloud,
 presence, e-sign and the AI-provider abstractions are vendor services and
@@ -51,15 +56,50 @@ collaboration, and neither is this tree's business.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | TIFF is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-tiff` | `src/lib.rs` | `craftkit-tiff::Tiff::read` | `crates/craftkit-tiff/tests/tiff.rs` | §1252 |
-| **B** | WebP is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-webp` | `src/lib.rs` | `craftkit-webp::WebP::read` | `crates/craftkit-webp/tests/webp.rs` | §1253 |
-| **C** | every mesh container is read into one neutral mesh model | `docs/plans/craft-libs.md` | `craftkit-mesh` | `src/lib.rs` | `craftkit-mesh::Mesh::read` | `crates/craftkit-mesh/tests/mesh.rs` | §1254 |
-| **D** | the legacy binary workbook is read by the grid battery | `docs/plans/craft-libs.md` | `craftkit-plugin-grid` | `src/xls.rs` | `grid.workbook.import.xls` | `crates/craftkit-plugin-grid/tests/xls.rs` | §1255 |
-| **E** | a metafile is read and written into one neutral vector picture | `docs/plans/craft-libs.md` | `craftkit-metafile` | `src/lib.rs` | `craftkit-metafile::Metafile::read` | `crates/craftkit-metafile/tests/metafile.rs` | §1256 |
-| **F** | the machine-output languages are written by the vector battery | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/machine_output.rs` | `vector.machine.output.export` | `crates/craftkit-plugin-vector/tests/machine_output.rs` | §1257 |
-| **G** | the settings file is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-settings` | `src/lib.rs` | `craftkit-settings::Settings::save` | `crates/craftkit-settings/tests/settings.rs` | §1258 |
-| **H** | a file is replaced atomically, or not at all | `docs/plans/craft-libs.md` | `craftkit-atomic` | `src/lib.rs` | `craftkit-atomic::replace` | `crates/craftkit-atomic/tests/atomic.rs` | §1259 |
-| **I** | an EPS file is interpreted, not only written | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/eps.rs` | `vector.eps.import` | `crates/craftkit-plugin-vector/tests/eps.rs` | §1260 |
+| **A** | TIFF is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-tiff` | `src/lib.rs` | `craftkit-tiff::Tiff::read` | `crates/craftkit-tiff/tests/tiff.rs` | §1253 |
+| **B** | WebP is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-webp` | `src/lib.rs` | `craftkit-webp::WebP::read` | `crates/craftkit-webp/tests/webp.rs` | §1254 |
+| **C** | every mesh container is read into one neutral mesh model | `docs/plans/craft-libs.md` | `craftkit-mesh` | `src/lib.rs` | `craftkit-mesh::Mesh::read` | `crates/craftkit-mesh/tests/mesh.rs` | §1255 |
+| **D** | the legacy binary workbook is read by the grid battery | `docs/plans/craft-libs.md` | `craftkit-plugin-grid` | `src/xls.rs` | `grid.workbook.import.xls` | `crates/craftkit-plugin-grid/tests/xls.rs` | §1256 |
+| **E** | a metafile is read and written into one neutral vector picture | `docs/plans/craft-libs.md` | `craftkit-metafile` | `src/lib.rs` | `craftkit-metafile::Metafile::read` | `crates/craftkit-metafile/tests/metafile.rs` | §1257 |
+| **F** | the machine-output languages are written by the vector battery | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/machine_output.rs` | `vector.machine.output.export` | `crates/craftkit-plugin-vector/tests/machine_output.rs` | §1258 |
+| **G** | the settings file is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-settings` | `src/lib.rs` | `craftkit-settings::Settings::save` | `crates/craftkit-settings/tests/settings.rs` | §1259 |
+| **H** | a file is replaced atomically, or not at all | `docs/plans/craft-libs.md` | `craftkit-atomic` | `src/lib.rs` | `craftkit-atomic::replace` | `crates/craftkit-atomic/tests/atomic.rs` | §1260 |
+| **I** | an EPS file is interpreted, not only written | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/eps.rs` | `vector.eps.import` | `crates/craftkit-plugin-vector/tests/eps.rs` | §1261 |
+
+**The second wave: the whole upstream.**
+
+| arc | rule | from | to | module | command | test | section |
+|---|---|---|---|---|---|---|---|
+| **J** | the OpenDocument workbook is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-ods` | `src/lib.rs` | `ods.workbook.read` | `crates/craftkit-ods/tests/ods.rs` | §1352 |
+| **K** | the word-processing document and its model are one shared library, and the battery's own commands over it are the word plan's arc | `docs/plans/craft-libs.md` | `craftkit-word` | `src/lib.rs` | `word.document.read` | `crates/craftkit-word/tests/word.rs` | §1353 |
+| **L** | the layered image format is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-psd` | `src/lib.rs` | `psd.image.read` | `crates/craftkit-psd/tests/psd.rs` | §1354 |
+| **M** | the camera raw containers are read into one neutral raw image | `docs/plans/craft-libs.md` | `craftkit-raw` | `src/lib.rs` | `raw.image.read` | `crates/craftkit-raw/tests/raw.rs` | §1355 |
+| **N** | the other audio codecs are read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-audio` | `src/lib.rs` | `audio.codec.read` | `crates/craftkit-audio/tests/audio.rs` | §1356 |
+| **O** | every colour in the tree is a colour in a space, and this arc is what says which space | `docs/plans/craft-libs.md` | `craftkit-cms` | `src/lib.rs` | `cms.profile.read` | `crates/craftkit-cms/tests/cms.rs` | §1357 |
+| **P** | other tools' native design containers are read by one shared library | `docs/plans/craft-libs.md` | `craftkit-foreign` | `src/lib.rs` | `foreign.container.read` | `crates/craftkit-foreign/tests/foreign.rs` | §1358 |
+| **Q** | the widgets the tree's own front ends draw are drawn once and shared, in code, with no image and no font file anywhere | `docs/plans/craft-libs.md` | `craftkit-ui` | `src/lib.rs` | `ui.widget.draw` | `crates/craftkit-ui/tests/ui.rs` | §1359 |
+
+The second wave is the rest of the upstream, and it is **eight arcs**, one for
+each row the survey rated LATER. The survey's "later" verdicts were judgements
+about **size** — how much work a row was — and not about **scope**: what was
+in scope was never in question, and the owner has now decided that every
+capability the upstream has is in scope. So a row that was held back is now
+an arc, and nothing is held back.
+
+**A shared library is a library, not a battery.** The crate is named, and the
+batteries that use it get **their own commands** — the command ids in this
+table name the capability the library owns, and a battery that exposes one of
+them to a door exposes it in the battery's own terms. The **word-processing
+model and its reader** are the library, and the **battery's commands** over it
+are the prose plan's arc (`docs/plans/wordcraft.md`); the **other audio
+codecs** are the library, and the **sound battery's commands** over them are
+the sound plan's business. The same answer does not live in two places: the
+library answers for the format, the battery answers for the work.
+
+**Arc Q is a front-end crate**, and it changes nothing about the thin front
+end: a front end still never writes the document, never calls the evaluator,
+and never keeps a value the evaluator computes. What the crate shares is the
+drawing of the widgets, and that is drawn once, in code.
 
 **Six of the nine arcs land in new shared library crates** — `craftkit-tiff`,
 `craftkit-webp`, `craftkit-mesh`, `craftkit-metafile`, `craftkit-settings` and
@@ -68,12 +108,17 @@ layer the file formats live in. **Three land in an existing battery crate**:
 the legacy workbook in the grid battery, and the machine-output languages and
 the EPS reader in the vector battery.
 
+**Every arc of the second wave adds a crate** — seven shared libraries, at the
+layer the file formats live in, and one front-end crate, where the front ends
+live — and each of them carries the three extra edits below.
+
 An arc that adds a crate carries **three extra edits** on top of its own three:
 the workspace `Cargo.toml`, the row in the layer table, and the row in
 `docs/architecture.md`. A crate that is not in the layer table is a finding, so
 an arc that added a crate and forgot those edits would not build.
 
-The arcs reserve **§1252–§1260** of the README, one section per arc, in
+The arcs reserve **§1253–§1261** of the README, one section per arc, in
+order, and the second wave reserves **§1352–§1359**, one section per arc, in
 order.
 
 The arcs are in the survey's order, and they are deliberately not one
@@ -95,6 +140,14 @@ anything depends on them.
 | G | the app-owned TOML settings file, with recovery from a damaged file | small — a small file format and a policy |
 | H | the atomic replacement of a file, with the write-to-temporary and rename | small — one system call sequence, carefully |
 | I | the EPS interpreter, painting into a raster or a PDF | large — a whole language, with a stack |
+| J | the OpenDocument workbook reader and writer, a third workbook dialect | large — an office format, and a workbook model beside the two that exist |
+| K | the word document model, with the reader and writer over it | large — a document model of its own, and a format on top of it |
+| L | the layered image reader and writer, with the layers and channels | large — a layered picture, kept losslessly |
+| M | the camera raw readers, with the demosaicing and the tone curve they need | large — five containers and a colour reconstruction |
+| N | the other audio codecs: the decoders and the encoders | large — several compressors and a set of channel layouts |
+| O | the colour management library: profiles, intents, transforms and gamut checks | large — and it touches everything that has a colour |
+| P | the readers for other tools' native design containers | large — several private formats and a neutral model for them |
+| Q | the shared widget crate: the tree's own front ends' widgets, drawn once in code | medium — a front-end crate, and a drawing in code |
 
 The order runs from the self-contained formats to the ones that reach the
 document model. A, B and E are libraries with no battery in them and can land
@@ -102,6 +155,13 @@ in any order; C is the largest and wants the model settled first; D, F and I
 touch batteries and so want the libraries they call to exist; G and H are small
 and are worth doing early, because H is what makes G's save safe and G is what
 every future front end will want.
+
+The second wave follows the first, and it follows the same discipline: **O**
+before the others that have a colour, because a colour in a space is what the
+rest of the wave is drawn in; **K** and **N** before the batteries that call
+them, because the batteries' own commands come after the library they call;
+and **Q** last, because a shared widget is worth sharing once there is more
+than one front end to share it with.
 
 ## 4. The tests
 
@@ -116,28 +176,44 @@ every future front end will want.
 | G | settings are written, read back, and equal; a damaged settings file is recovered by rule and the recovery is reported; a settings file with an unknown key is read without failing |
 | H | the replacement is atomic: a reader never sees a half-written file; a failure before the rename leaves the old file untouched; the temporary file is taken back |
 | I | an EPS is interpreted into a picture; an unknown operator is refused; a malformed file is refused rather than half-painted |
+| J | an OpenDocument workbook round-trips: the same workbook written and read back gives the same cells; a cell with a formula is read with its formula; a file that is not a workbook is refused |
+| K | a word document round-trips through the shared model: the same paragraphs written and read back are the same paragraphs; a document that names a part that is not there is refused |
+| L | a layered image round-trips, layer for layer and channel for channel, with the alpha unchanged; a file with an unknown layer type is read, not refused; a truncated file is refused |
+| M | a raw container is read into the neutral raw image, and the same file read twice is the same image; a container that is not raw is refused; a damaged frame is refused rather than half-read |
+| N | every codec round-trips: what is written is what is read back, sample for sample; a file with a broken frame header is refused; a channel layout that is not supported is refused |
+| O | a colour in a space converts into another space and back; a malformed profile is refused; a colour outside the destination gamut is reported, not clamped |
+| P | each foreign container is read into the neutral model; a container naming a missing external file is refused; an unknown version is refused, not guessed |
+| Q | each widget draws something, and the drawing is not empty; no widget needs an image file or a font file; the widget crate writes no document |
 
 ## 5. What it does not do
 
-The rows the survey rated LATER are not in this plan, each for its own reason.
-The **OpenDocument workbook** is a third workbook dialect, and one is already
-in the tree. The **word-processing document format and its model** is a document
-model of its own, not a format reader. The **layered image format** is lossless
-editing of a layered picture, which is a different capability from reading a
-flat one. **Camera raw** needs a demosaicing and a tone curve, which is a
-project rather than a container. The **other audio codecs** are several
-compressors and a set of channel layouts. **Colour management** is profiles,
-intents and transforms, and it touches everything that has a colour. The
-**foreign design containers** are readers for other tools' private formats, and
-a neutral model for them does not exist here yet. The **shared widget
-library** is a user-interface dependency, and this tree draws its own widgets
-in code.
+Everything else the upstream has is an arc above. The **OpenDocument
+workbook**, the **word-processing document format and its model**, the
+**layered image format**, **camera raw**, the **other audio codecs**,
+**colour management**, the **foreign design containers** and the **shared
+widget library** are the second wave; the eight rows the survey rated PORT are
+the first, and they are nine arcs. The plan refuses one thing.
 
-**Mail, cloud, presence, e-sign and the AI-provider abstractions** are out of
-scope entirely: they are vendor services and collaboration features, and
-neither belongs in this tree.
+**The mail, cloud, presence and chat, e-sign and AI-provider abstractions**
+are refused, and the reason is this tree's own posture rather than a
+judgement about the upstream: the kit makes no outbound call and holds no
+credential, and the decision recorded for the model call belongs to the host
+(`KNOWN-GAPS.md` §5). A client for a vendor's service would be a client for
+nothing.
+
+What is ported instead is named in one line: the **model** each of those
+abstractions carries — a message, a chat, a signature, a model's request — is
+a fact a battery can hold, and where a battery holds it, it is that battery's
+arc.
 
 ## 6. The open questions
+
+The second wave leaves open what the first wave did not have to answer: which
+battery owns each format in practice, and whether a colour space travels with
+the document or is fixed by the tree; what a raw file's tone curve does to the
+colours of the document that holds it; and how a word document's fonts are
+held in a tree that holds no font file. Those are answered by the arcs as they
+land, and each of them belongs to the arc that carries the capability.
 
 The upstream has no roadmap and no gap document, so its own priorities are
 only in its README and its changelog, and this plan reads priorities out of

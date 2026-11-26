@@ -8,7 +8,8 @@ plan for the compatible surface, and it does not replace it. The two meet at
 the **door** — `apps/craftkit-a2ui-server` — and at the **layer** —
 `crates/craftkit-a2ui` and `crates/craftkit-plugin-a2ui` — and nothing else.
 Nothing in this file says that any of it exists today: every arc below is
-future work.
+future work. The plan holds **ten arcs** — the first wave in §1264–§1271 and
+the second wave in §1372–§1373 — and reserves **§1264 to §1373**.
 
 ## 0. The rule
 
@@ -48,25 +49,27 @@ the way the specification words them. An arc that changed nothing but the
 wording would be dishonest; an arc that changes the shape is real work.
 
 The verdicts are the survey's, and they are the reason this plan exists: the
-**PORT** rows are the work, the **LATER** rows are named and deferred, and the
-**SKIP** rows are work that is already done or work the tree does on purpose.
+**PORT** rows are the first wave, the **LATER** rows are the second wave below,
+and the **SKIP** rows are work that is already done or work the tree does on
+purpose.
 
 ## 2. The arcs
 
 An arc is three edits: a row in the port manifest, a row in the README's claim
-table, and a README section. This plan reserves **§1263–§1270** — eight
-sections, one per arc, in the order below.
+table, and a README section. This plan reserves **§1264–§1271** — eight
+sections, one per arc, in the order below — and **§1372–§1373** for the second
+wave that follows the first table.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | a data-model update replaces the value at a path, and nothing else in the model changes | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/model.rs` | `craftkit-a2ui::model::set` | `crates/craftkit-a2ui/tests/model.rs` | §1263 |
-| **B** | a renderer function call carries its nested `callFunction`, its `catalogId` and its `functionCallId` | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/functions.rs` | `craftkit-a2ui::functions::declaration` | `crates/craftkit-a2ui/tests/functions.rs` | §1264 |
-| **C** | the check rules are evaluated, and a failing check disables its control | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/checks.rs` | `craftkit-a2ui::checks::evaluate` | `crates/craftkit-a2ui/tests/checks.rs` | §1265 |
-| **D** | typing writes the user's input into the local model, at the bound path | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/bindings.rs` | `craftkit-a2ui::bindings::write` | `crates/craftkit-a2ui/tests/bindings.rs` | §1266 |
-| **E** | every renderer-side call is answered with a `rendererFunctionResponse` | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.component.invoke` | `apps/craftkit-a2ui-server/tests/protocol.rs` | §1267 |
-| **F** | `metadata.extensions` is carried through, not refused | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.create` | `apps/craftkit-a2ui-server/tests/door.rs` | §1268 |
-| **G** | a fault in a surface is sent to the agent as an `error` message | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.apply` | `apps/craftkit-a2ui-server/tests/stream.rs` | §1269 |
-| **H** | a template child list is generated from a data-model path, and `@index` names the item | `docs/plans/a2ui-spec.md` | `craftkit-plugin-a2ui` | `src/tree.rs` | `a2ui.surface.apply` | `crates/craftkit-plugin-a2ui/tests/tree.rs` | §1270 |
+| **A** | a data-model update replaces the value at a path, and nothing else in the model changes | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/model.rs` | `craftkit-a2ui::model::set` | `crates/craftkit-a2ui/tests/model.rs` | §1264 |
+| **B** | a renderer function call carries its nested `callFunction`, its `catalogId` and its `functionCallId` | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/functions.rs` | `craftkit-a2ui::functions::declaration` | `crates/craftkit-a2ui/tests/functions.rs` | §1265 |
+| **C** | the check rules are evaluated, and a failing check disables its control | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/checks.rs` | `craftkit-a2ui::checks::evaluate` | `crates/craftkit-a2ui/tests/checks.rs` | §1266 |
+| **D** | typing writes the user's input into the local model, at the bound path | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/bindings.rs` | `craftkit-a2ui::bindings::write` | `crates/craftkit-a2ui/tests/bindings.rs` | §1267 |
+| **E** | every renderer-side call is answered with a `rendererFunctionResponse` | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.component.invoke` | `apps/craftkit-a2ui-server/tests/protocol.rs` | §1268 |
+| **F** | `metadata.extensions` is carried through, not refused | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.create` | `apps/craftkit-a2ui-server/tests/door.rs` | §1269 |
+| **G** | a fault in a surface is sent to the agent as an `error` message | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.apply` | `apps/craftkit-a2ui-server/tests/stream.rs` | §1270 |
+| **H** | a template child list is generated from a data-model path, and `@index` names the item | `docs/plans/a2ui-spec.md` | `craftkit-plugin-a2ui` | `src/tree.rs` | `a2ui.surface.apply` | `crates/craftkit-plugin-a2ui/tests/tree.rs` | §1271 |
 
 **Four arcs land in the layer and four in the door.** Arcs A, B, C and D are
 the layer's own work: the model, the function table, the check rules and the
@@ -74,6 +77,28 @@ bindings. Arcs E, F and G are the door's: what it answers with, what it
 accepts, and how it says that something went wrong. Arc H is the plugin's, and
 it is the one arc that changes how a surface is built rather than how it is
 described.
+
+**The second wave: the whole upstream.**
+
+| arc | rule | from | to | module | command | test | section |
+|---|---|---|---|---|---|---|---|
+| **I** | a name that does not fit the specification's identifier rules is refused by name, and a refusal is an error and not a renamed thing | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/names.rs` | `a2ui.name.check` | `crates/craftkit-a2ui/tests/names.rs` | §1372 |
+| **I** | the door applies the identifier rules to every name an agent supplies | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.name.apply` | `apps/craftkit-a2ui-server/tests/names.rs` | §1372 |
+| **J** | the catalogue says what may hold what, and the tree's own parent rules are replaced by the catalogue's table rather than kept beside it | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/catalog.rs` | `a2ui.catalog.parents` | `crates/craftkit-a2ui/tests/parents.rs` | §1373 |
+
+**What the second wave is.** The first wave carries the specification's
+**messages** — what a renderer is told and what it answers. The second wave
+carries the specification's own **rules**: what a name may be
+(`specification/v1_0/docs/a2ui_protocol.md:1256-1275`) and what may hold what
+(`specification/v1_0/test/cases/composition_constraints.json:1`). The house
+rule applies to these as much as to anything else: **a rule about a name is a
+command like any other**, so it is declared, registered and reachable through
+the same registry as the rest. Arc I is the identifier rules and the reserved
+`@` namespace, applied to the names an **agent** supplies; it lands in the
+crate that owns the door's own rules and in the door that applies them, and
+the two rows share one section. Arc J is the catalogue's own
+`allowedParents` composition constraints, and it lands in the layer beside the
+catalogue it constrains.
 
 **And the other plan stays.** `docs/a2ui-compat-layer.md` owns the
 compatible surface — the catalogue, the components, the door's commands. This
@@ -94,12 +119,19 @@ first, and the other plan's arc follows it.
 | F | extensions carried through the door instead of refused | small — one accepted field and the test that shows it arrives |
 | G | a fault sent as a message the agent reads | small — one message shape on top of the existing fault path |
 | H | a template child list, generated per item, with `@index` | medium — a second branch of the tree, a binding of the item, and the layout that follows |
+| I | the identifier rules, checked against every name an agent supplies | medium — the rule itself in the layer, the door's application of it, and the refusal that names the offending name |
+| J | the catalogue's own `allowedParents` table, in one place | medium — the table, the check that reads it, and the tree's own parent rules taken out of their old place |
 
-**The order is A, B, C, D, E, F, G, H.** The layer comes before the door
+**The order is A, B, C, D, E, F, G, H, I, J.** The layer comes before the door
 because the door answers in the layer's shapes: a reply that names a call
 (Arc E) means nothing until the call itself is shaped the way the
 specification words it (Arc B). C and D are independent of A and B and of each
 other, but they share the model, so they follow it.
+
+**The second wave is last.** I and J are the specification's own rules, and a
+rule is applied to what the arcs before it build: the names an agent supplies
+(Arc I) and the parents the catalogue allows (Arc J) are only settled once the
+messages they arrive in are settled.
 
 **E, F and G are the cheap three**, and they are the three a renderer would
 notice first: a call with no answer, a payload with no home, a fault with no
@@ -122,25 +154,29 @@ The house rule: the crate's own rule has a test.
 - **F** — a surface whose metadata carries `extensions` is accepted, and the extensions reach the surface; an absent `extensions` is still accepted.
 - **G** — a surface fault reaches the agent as an `error` message naming the surface; a refusal that is not a fault stays a refusal.
 - **H** — a template child list is generated once per item of the bound path, with `@index` naming the item; a path that does not resolve to a list is refused; the reserved `@` names are still refused.
+- **I** — a name that fits the specification's identifier rules is accepted; a name that does not is refused **by name**, and the refusal is an error rather than a renamed thing; the reserved `@` namespace is refused for agent-supplied names as well as for the tree's own.
+- **J** — the catalogue's `allowedParents` table decides what may hold what; a component placed under a parent the table does not allow is refused; and the tree's own parent rules are replaced by that table rather than kept beside it, so there is one table of parents in one place.
 
 ## 5. What it does not do
 
-**The LATER rows, named.**
+**Nothing in the specification's surface is refused.** The two rows the survey
+held back are the second wave's arcs above: the identifier rules and the
+reserved `@` namespace are **Arc I**, and the catalogue's own `allowedParents`
+composition constraints are **Arc J**. What the survey marked **LATER** is no
+longer deferred; it is work.
 
-- **The UAX #31 identifier rules and the reserved `@` namespace.** The tree refuses the reserved `@` functions already; what it does not do is check the **agent-supplied** names against the specification's identifier rules. This is later because it is a naming policy rather than a capability, and because a wrong name is a refusal, not a wrong picture.
-- **The catalogue's own `allowedParents` composition constraints.** Craftkit uses its own parent rules, and they are stricter in some places and looser in others. Adopting the specification's own table is later because it is a change of house rules, and a change of house rules is a decision, not a port.
+**The five rows the survey marked as present are parity, not gaps.** The
+single-message instantiation, the whole model in the metadata of every message,
+the `action` and `callAgentFunction` messages, and the capabilities handshake
+with the inline catalogue: the door already does them. They are named here as
+parity, and they are not arcs.
 
-**The SKIP rows, named.**
-
-- **Single-message instantiation.** The door answers it already.
-- **`sendDataModel`.** The door already puts the whole model in the metadata of every message it sends for that surface.
-- **The `action` and `callAgentFunction` messages.** The door already sends them.
-- **The capabilities handshake and inline catalogues.** The door already serves the catalogue it publishes.
-- **The seven basic-catalog components craftkit refuses.** They are refused on purpose: the house rule is that an unknown component is refused and not faked, and a component that is half-implemented would be faked. Making them real is the other plan's work, not this one's.
-
-**And the wider scope.** This plan is about the specification's own conformance
-only. It does not add a component, does not change the catalogue's shape, does
-not add a door, and does not touch a front end.
+**The seven basic-catalogue components craftkit refuses are the other plan's
+work.** `docs/a2ui-compat-layer.md` owns them. They are refused on purpose
+here, and the refusal is the house rule: an unknown component is refused and
+not faked, and a component that was half-implemented would be faked. Making
+them real is that plan's arcs, not this one's — so they are **owned
+elsewhere**, and are not refused forever.
 
 ## 6. The open questions
 
@@ -153,6 +189,14 @@ the contract. What is still open is the **shape**: whether the door keeps
 JSON-RPC as its transport and carries the protocol's messages inside it, or
 answers in the protocol's messages directly, is a design choice this plan
 does not settle.
+
+**What the second wave leaves open is the shape of the rules themselves.**
+Arcs I and J say that the identifier rules and the `allowedParents` table are
+applied; they do not settle how those rules are written down — where the
+identifier rules live in the layer, whether the `allowedParents` table is
+read from the catalogue at run time or generated from it, and what the tree
+does with a parent rule the catalogue does not mention. Those are design
+choices this plan does not settle.
 
 **The specification's conformance suite and its per-language SDK directories
 were not read.** Recent upstream commits in either may have a protocol-level

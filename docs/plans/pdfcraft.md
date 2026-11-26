@@ -2,14 +2,15 @@
 
 The upstream is a set of PDF libraries written in Rust, and this plan is about
 the parts of it the `craftkit-plugin-pdf` battery does not yet reach. It is
-fourteen arcs, and it reserves README sections **§1183 to §1196** — one
+twenty-five arcs, and it reserves README sections **§1184 to §1307** — one
 section per arc, in the order the arcs are written here.
 
 ## 0. The rule
 
-Every arc here adds a command to the PDF battery, and every one of them is
-written the way the tree writes a command: a named rule, a typed parameter,
-and a test.
+Every arc here adds a command to the battery that owns the capability —
+most of them to the PDF battery, and the one that measures to the CAD
+battery — and every one of them is written the way the tree writes a command:
+a named rule, a typed parameter, and a test.
 
 ## 1. What the survey found
 
@@ -50,12 +51,13 @@ half is missing.
 The rows the survey marked **later** — extracting pages into new files, text
 replace, running a document's scripts, signing, OCR, export to other
 document formats, optimizing, print imposition, page enhancement, and
-auto-tagging a structure tree — are not arcs now. They are named in §5 with
-the reason each one waits.
+auto-tagging a structure tree — are the **second wave** of this plan's arcs
+(§2): the survey's verdict there was a judgement about size, not about
+scope, and the owner has said the family is fully ported.
 
 The survey marked one row **skip**: measuring area, distance and perimeter on
-a page, because craftkit measures in its vector and CAD batteries. That is
-named in §5 too.
+a page, because craftkit measures in its vector and CAD batteries. It is an
+arc too, and it lands in the CAD battery.
 
 ## 2. The arcs
 
@@ -67,35 +69,61 @@ document the arcs come from, not the survey it follows.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | the document can be searched, and the search answers with the pages it matched on | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/find.rs` | `pdf.find.text` | `crates/craftkit-plugin-pdf/tests/find.rs` | §1183 |
-| **B** | a page can be moved, and the page order it lands in is the order that is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageorder.rs` | `pdf.pages.move`, `pdf.pages.reverse` | `crates/craftkit-plugin-pdf/tests/pageorder.rs` | §1184 |
-| **C** | a page can be duplicated, and the copy is a page of the document, not a reference to one | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pagecopy.rs` | `pdf.pages.duplicate` | `crates/craftkit-plugin-pdf/tests/pagecopy.rs` | §1185 |
-| **D** | a blank page can be inserted, and it is inserted where it was asked for | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageinsert.rs` | `pdf.page.blank.insert` | `crates/craftkit-plugin-pdf/tests/pageinsert.rs` | §1186 |
-| **E** | pages of another document can be inserted, and they are inserted as pages of this one | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageimport.rs` | `pdf.pages.import` | `crates/craftkit-plugin-pdf/tests/pageimport.rs` | §1187 |
-| **F** | a link annotation is a thing the battery can add, read, change and remove | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/links.rs` | `pdf.links.add`, `pdf.links.list`, `pdf.links.edit`, `pdf.links.delete` | `crates/craftkit-plugin-pdf/tests/links.rs` | §1188 |
-| **G** | an optional-content layer can be switched on and off, and what the battery reads is what the document shows | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/layers.rs` | `pdf.layers.set` | `crates/craftkit-plugin-pdf/tests/layers.rs` | §1189 |
-| **H** | a comment can be given a status, locked, and answered | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/commentstatus.rs` | `pdf.comment.status`, `pdf.comment.lock`, `pdf.comment.reply` | `crates/craftkit-plugin-pdf/tests/commentstatus.rs` | §1190 |
-| **I** | a document can be checked for accessibility, and the check is a report | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/a11y.rs` | `pdf.a11y.check` | `crates/craftkit-plugin-pdf/tests/a11y.rs` | §1191 |
-| **J** | the XFDF the battery writes carries the comments as well as the field values | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/xfdf.rs` | `pdf.xfdf.export`, `pdf.xfdf.import` | `crates/craftkit-plugin-pdf/tests/xfdf.rs` | §1192 |
-| **K** | the preflight report says what the colours of the document are | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/preflightcolour.rs` | `pdf.preflight.colour` | `crates/craftkit-plugin-pdf/tests/preflightcolour.rs` | §1193 |
-| **L** | a page can be numbered, and the number is stamped on the page | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pagenumbers.rs` | `pdf.marks.number` | `crates/craftkit-plugin-pdf/tests/pagenumbers.rs` | §1194 |
-| **M** | the colours of the page content can be converted, and the conversion is written into the document | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/colourconvert.rs` | `pdf.colour.convert` | `crates/craftkit-plugin-pdf/tests/colourconvert.rs` | §1195 |
-| **N** | the images a page carries can be exported, and what is exported is what the page holds | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/imageexport.rs` | `pdf.images.export` | `crates/craftkit-plugin-pdf/tests/imageexport.rs` | §1196 |
+| **A** | the document can be searched, and the search answers with the pages it matched on | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/find.rs` | `pdf.find.text` | `crates/craftkit-plugin-pdf/tests/find.rs` | §1184 |
+| **B** | a page can be moved, and the page order it lands in is the order that is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageorder.rs` | `pdf.pages.move`, `pdf.pages.reverse` | `crates/craftkit-plugin-pdf/tests/pageorder.rs` | §1185 |
+| **C** | a page can be duplicated, and the copy is a page of the document, not a reference to one | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pagecopy.rs` | `pdf.pages.duplicate` | `crates/craftkit-plugin-pdf/tests/pagecopy.rs` | §1186 |
+| **D** | a blank page can be inserted, and it is inserted where it was asked for | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageinsert.rs` | `pdf.page.blank.insert` | `crates/craftkit-plugin-pdf/tests/pageinsert.rs` | §1187 |
+| **E** | pages of another document can be inserted, and they are inserted as pages of this one | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageimport.rs` | `pdf.pages.import` | `crates/craftkit-plugin-pdf/tests/pageimport.rs` | §1188 |
+| **F** | a link annotation is a thing the battery can add, read, change and remove | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/links.rs` | `pdf.links.add`, `pdf.links.list`, `pdf.links.edit`, `pdf.links.delete` | `crates/craftkit-plugin-pdf/tests/links.rs` | §1189 |
+| **G** | an optional-content layer can be switched on and off, and what the battery reads is what the document shows | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/layers.rs` | `pdf.layers.set` | `crates/craftkit-plugin-pdf/tests/layers.rs` | §1190 |
+| **H** | a comment can be given a status, locked, and answered | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/commentstatus.rs` | `pdf.comment.status`, `pdf.comment.lock`, `pdf.comment.reply` | `crates/craftkit-plugin-pdf/tests/commentstatus.rs` | §1191 |
+| **I** | a document can be checked for accessibility, and the check is a report | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/a11y.rs` | `pdf.a11y.check` | `crates/craftkit-plugin-pdf/tests/a11y.rs` | §1192 |
+| **J** | the XFDF the battery writes carries the comments as well as the field values | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/xfdf.rs` | `pdf.xfdf.export`, `pdf.xfdf.import` | `crates/craftkit-plugin-pdf/tests/xfdf.rs` | §1193 |
+| **K** | the preflight report says what the colours of the document are | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/preflightcolour.rs` | `pdf.preflight.colour` | `crates/craftkit-plugin-pdf/tests/preflightcolour.rs` | §1194 |
+| **L** | a page can be numbered, and the number is stamped on the page | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pagenumbers.rs` | `pdf.marks.number` | `crates/craftkit-plugin-pdf/tests/pagenumbers.rs` | §1195 |
+| **M** | the colours of the page content can be converted, and the conversion is written into the document | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/colourconvert.rs` | `pdf.colour.convert` | `crates/craftkit-plugin-pdf/tests/colourconvert.rs` | §1196 |
+| **N** | the images a page carries can be exported, and what is exported is what the page holds | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/imageexport.rs` | `pdf.images.export` | `crates/craftkit-plugin-pdf/tests/imageexport.rs` | §1197 |
+
+**The second wave: the whole upstream.**
+
+| arc | rule | from | to | module | command | test | section |
+|---|---|---|---|---|---|---|---|
+| **O** | the pages of a document can be extracted into files of their own, and each file holds the page it was made from | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/extract.rs` | `pdf.pages.extract` | `crates/craftkit-plugin-pdf/tests/extract.rs` | §1297 |
+| **P** | the text of a document can be replaced across its pages, and the replacement is written into the document | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/replace.rs` | `pdf.text.replace` | `crates/craftkit-plugin-pdf/tests/replace.rs` | §1298 |
+| **Q** | the scripts a document carries can be run, and what they write is the document's own | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/scripts.rs` | `pdf.scripts.run` | `crates/craftkit-plugin-pdf/tests/scripts.rs` | §1299 |
+| **R** | a document can be signed, and the signature is a thing the battery can read back | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/sign.rs` | `pdf.sign` | `crates/craftkit-plugin-pdf/tests/sign.rs` | §1300 |
+| **S** | the text of a page can be read as characters, and what is read is the characters on the page | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/ocr.rs` | `pdf.text.ocr` | `crates/craftkit-plugin-pdf/tests/ocr.rs` | §1301 |
+| **T** | a document can be exported to another document format, and what is exported holds the same content | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/export.rs` | `pdf.export` | `crates/craftkit-plugin-pdf/tests/export.rs` | §1302 |
+| **U** | a document can be optimized, and it is smaller afterwards without losing its content | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/optimize.rs` | `pdf.optimize` | `crates/craftkit-plugin-pdf/tests/optimize.rs` | §1303 |
+| **V** | pages can be placed on a sheet, several to a page, and the sheet is the page that is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/impose.rs` | `pdf.impose` | `crates/craftkit-plugin-pdf/tests/impose.rs` | §1304 |
+| **W** | a page can be enhanced — deskewed, denoised, binarized — and the enhanced page is what is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/enhance.rs` | `pdf.page.enhance` | `crates/craftkit-plugin-pdf/tests/enhance.rs` | §1305 |
+| **X** | a document can be auto-tagged, and the structure tree written is the tree the battery reads | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/autotag.rs` | `pdf.autotag` | `crates/craftkit-plugin-pdf/tests/autotag.rs` | §1306 |
+| **Y** | area, distance and perimeter on a page can be measured, and the answer is the same answer the tree gives elsewhere | `docs/plans/pdfcraft.md` | `craftkit-plugin-cad` | `src/measure.rs` | `cad.measure.area`, `cad.measure.distance`, `cad.measure.perimeter` | `crates/craftkit-plugin-cad/tests/measure.rs` | §1307 |
+
+The second wave is the rest of the upstream: the eleven capabilities the survey
+held back, with nothing held back any more. The survey's "later" verdicts were
+judgements about **size**, not about scope — the family is to be fully ported,
+and a rule that excluded one of these is changed so that it is not. One row the
+survey marked skip is in this wave too, and it lands in another crate: arc Y
+measures on a page, and the tree measures in its vector and CAD batteries, so
+the measurement is an arc of the cad battery and this plan says so.
 
 **Arc B carries two commands because reversing the page order is a reordering
 of the page order.** The survey lists moving pages and reversing them as two
 rows, and they are two rows; they are one arc because they are one rule — the
 page order is a thing the battery can write — and because they land in one
-module and one test. Every other arc is one survey row, one module, one
-command, one test.
+module and one test. Every other arc of the first wave is one survey row, one
+module, one command, one test.
 
-Nothing here lands in two crates, so no arc needs two rows. The writer
-(`craftkit-pdf-writer`) is not touched by this plan: every arc is a command
+In the first wave, nothing lands in two crates, so no arc needs two rows. The writer
+(`craftkit-pdf-writer`) is not touched by the first wave: every arc of it is a command
 the PDF battery runs over a document it already opens, and the bytes on disk
 are the writer's business. **Arc E is the one that could need it** — a page
 taken from another file is written by the writer — and if that turns out to
-be so, Arc E grows a second row and a second section, and §1187 stops being
-the last section of the plan's range.
+be so, Arc E grows a second row and a second section, and §1188 stops being
+the last section of the plan's range. The second wave asks more of the writer
+— arc O writes files of its own, and arc T writes another format — and each
+of those arcs will say what it needs.
 
 ## 3. The order, and what each arc ships
 
@@ -115,6 +143,17 @@ the last section of the plan's range.
 | L | the page numbers and the Bates stamps | medium — a stamp is content, and the numbering has to be stated as a rule |
 | M | the converted page content | large — the content stream is rewritten, and a wrong conversion is a wrong document |
 | N | the exported images | medium — the images are decoded and written out, and a decoder is a thing the battery does not have |
+| O | the extracted pages, each in a file of its own | large — a new file is a new document, and a page copied out of one is written by the writer |
+| P | the replaced text | large — the content streams are rewritten, and a wrong replacement is a wrong document |
+| Q | the scripts the document carries, run | large — a script engine is a new model, and what a script may write is a rule of its own |
+| R | the signed document | large — a signature is a new model: the key, the digest and the field that carries them |
+| S | the text of a page, read as characters | large — recognition is a new model, and what it reads is not the page's own text |
+| T | the export to another document format | large — another format is another model, and the mapping between the two is the work |
+| U | the optimized document | large — the document is rewritten, and the size that comes out is the size that was asked for |
+| V | the imposed sheet | large — the sheet is a new model, and the placement of the pages on it is the rule |
+| W | the enhanced page | large — deskew, denoise and binarize are three operations over a raster the battery does not have yet |
+| X | the auto-tagged document | large — the structure tree is written, and the tags are a model the battery only reads today |
+| Y | the measurement of a page | small — the facts are facts the tree already holds, and the answer is one the tree already gives |
 
 The order is the survey's order, and it is roughly the order of the surface:
 search and page management first, because they are what a caller asks for
@@ -128,6 +167,11 @@ this one has no invisible preparation: the first arc is already something an
 agent can call. The plan is one batch, and the arcs are ordered for review,
 not for dependency — with the exception of E, which waits on the open question
 in §6 about holding two documents at once.
+
+**The second wave follows the first, and it is the heavier half.** Arcs O
+through X are the models the tree does not have yet, so they are the arcs
+that carry the design; arc Y is the exception, because the measurement is the
+tree's own measurement and only the battery that owns it changes.
 
 ## 4. The tests
 
@@ -151,6 +195,17 @@ row.
 | L | the numbers stamped on the pages are the numbers that were asked for, and the stamp is content of the page |
 | M | a page converted to gray no longer carries rgb content; a converted page still renders the same shapes; a conversion that cannot be done is refused |
 | N | the images exported are the images the page holds, and the count matches; a page with no images exports nothing rather than failing |
+| O | a page extracted is a file that holds that page; a page range past the end of the document is refused, not clamped; the file that is written holds the content of the page it was made from |
+| P | the text replaced is the text that was found; a term that is nowhere is reported as no matches rather than a silent success; a document the replacement breaks is refused rather than written |
+| Q | the scripts that ran are the scripts the document carried; a document with no scripts says so; a script that fails is reported as a failure and the document is left as it was |
+| R | the signature is read back as it was written; a document that cannot be signed is refused rather than signed with nothing; the content that was signed is the content that is there afterwards |
+| S | the characters read are the characters on the page; a page with no image is reported as nothing to read rather than as empty text; text that cannot be read is reported as uncertain rather than as fact |
+| T | the exported document holds the content of the one it came from; a format that cannot hold the content is refused rather than written with the content dropped; the export is read back as a document |
+| U | the optimized document is smaller than it was; it still holds the same pages and the same text; an optimization that cannot be done is refused rather than silently skipped |
+| V | the pages are placed on the sheet in the order and the count that were asked for; a count that does not fit the sheet is refused; the sheet is read back as the placement that was written |
+| W | a deskewed page is straight; a denoised page carries less noise; a binarized page carries two tones; a page that cannot be enhanced is refused rather than written unchanged without saying so |
+| X | the structure tree written is the tree the battery reads; a tagged figure reads as tagged; a document that cannot be tagged is refused rather than left untagged |
+| Y | the area, the distance and the perimeter are the ones the page's geometry gives; a length that is not on the page is refused; the answer is the same answer the tree gives elsewhere |
 
 The **refusals** are the tests that matter. A page number past the end of the
 document, a link to a target that does not exist, and a colour conversion
@@ -159,24 +214,13 @@ not clamp* — and a comfortable port would disagree.
 
 ## 5. What it does not do
 
-**Later work.** The survey marked these as later, and this plan does not
-argue with it: extracting pages into new files; text replace; running a
-document's scripts; signing a document; OCR; export to other document
-formats; optimizing (reduce size); print imposition; page enhancement
-(deskew, denoise, binarize); and auto-tagging a structure tree. Each of them
-is a larger surface than the fourteen arcs above, several of them need a
-decision this plan does not make, and one of them — text replace — the survey
-called later on size rather than on design.
+**The upstream's rendering, viewer and application surfaces.** They are not
+rules about a document; they are a front end's own business, and the tree's
+front ends draw their own.
 
-**Out of scope.** Measuring area, distance and perimeter on a page is not
-ported: craftkit measures in its vector and CAD batteries, and a PDF battery
-that measured would be a second place the same answer lives. The survey
-marked this row skip, and the survey also said the verdict is the weakest row
-it wrote — see §6.
-
-**Not touched either.** The upstream's rendering, viewer and application
-surfaces are front-end concerns with no place in a battery, and they were
-deliberately not surveyed.
+That is the whole of what is refused. Every other capability the upstream has is
+in one of the two waves of §2 — the rows the survey held back are the second
+wave, and the row it marked skip is arc Y, which lands in the cad battery.
 
 ## 6. The open questions
 
@@ -206,3 +250,13 @@ questions this plan does not answer.
   battery.
 - **The upstream's PDF/X and Arlington validation and its linearization** are
   gaps in the upstream's own docs, so they are not candidates.
+
+**The second wave leaves the shape of its new models open.** The first wave
+adds commands over facts the tree already holds; the second wave adds models
+the tree does not have — the signed document, the recognised characters, the
+other document format, the imposed sheet, the enhanced raster, the written
+structure tree, the extracted file. What each of them is made of, what a
+caller may put into it and what comes back out of it are the questions this
+plan does not answer, and each arc will have to state its own model before it
+writes its command. The one exception is arc Y: the measurement is the tree's
+own measurement, so its shape is the cad battery's and not this plan's.

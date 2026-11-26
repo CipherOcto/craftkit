@@ -4631,6 +4631,7 @@ so.
 | **the tree's counts of its own bounds are the tree's** | **built.** The counted block holds every crate's caps, the gate checks it, and the claim table's numbers are read against the tree (§1180) | §1180 |
 | **the family is surveyed and planned, one plan per project** | **built.** Thirteen plans name the arcs that would bring the family's work into this tree's batteries, each arc a rule, a landing site and a reserved section, and nothing in them is built (§1181) | §1181 |
 | **the owner has taken the four questions the plans raised** | **built.** No release yet, the view and the options are in scope, the a2ui door may change, and the proof of concept is finished and out of scope: the plans are corrected to say so (§1182) | §1182 |
+| **the family is fully ported: every held-back capability is an arc** | **built.** The plans' second waves bring the 123 arcs the surveys held back — the later rows, the skip rows and the rules that excluded them — so the family is 236 arcs in all, and what is refused is short and named (§1183) | §1183 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74674,12 +74675,13 @@ bring its work into this tree, and says what it would not bring.
   this tree's battery, one row per capability, with the upstream's `path:line`
   and the battery's own state, and a verdict that is *port*, *later* or *out
   of scope*.
-- **One hundred and thirteen arcs, reserved as §1183 to §1295.** Every arc
-  names a **rule**, the crate and the file it lands in, the command it
-  carries, the test that proves it, and the README section it will hold. The
-  sections are reserved and empty, which is the honest state of work that
-  has not been done. *(§1182 moved the range by one, took back the two
-  sections the withdrawn plan held, and added three arcs.)*
+- **The plans' arcs, reserved as §1184 to §1419.** Every arc names a
+  **rule**, the crate and the file it lands in, the command it carries, the
+  test that proves it, and the README section it will hold. The sections are
+  reserved and empty, which is the honest state of work that has not been
+  done. *(§1182 moved the range by one, took back the two sections the
+  withdrawn plan held, and added three arcs; §1183 moved it again and added
+  the second waves — 236 arcs in all.)*
 - **The plans say what they will not do.** Each plan names the rows it holds
   back — a whole new model, a new dependency, another battery's work — with
   the reason, and each names what its survey could not read or decide.
@@ -74775,3 +74777,74 @@ README has no section for an arc that has not landed.
   choice each plan leaves open.
 - **The order across the plans is still a recommendation.** The owner decides
   what lands, and an arc lands when it is written, tested and green.
+
+## 1183. The family is fully ported: every held-back capability is an arc
+
+The owner has said the family is to be **fully ported** into this tree's
+batteries, and that any rule holding a capability back is to be changed so
+that it is not. The plans' second waves are that change: **123 arcs** that the
+surveys had marked *later* or *skip* are now arcs, in the battery that owns
+them.
+
+### What was built
+
+- **Twelve second waves, 123 new arcs, 236 arcs in all**, reserving §1184 to
+  §1419. Every plan now holds two waves: the survey's *port* rows, and the
+  rest of the upstream.
+- **A row that belongs to another battery is an arc in that battery.** The
+  shape paths land in the vector battery, the text in the text battery, the
+  media and the render in the film battery, the ink in the image battery, the
+  caret in the text battery, the paths in the vector battery, the drawings
+  in the cad battery, the transport in the film battery, and the shortcuts
+  and the zoom in the sdk — beside the one camera type the tree has.
+- **A row that needs a model is an arc that brings the model.** A solid
+  body, a face inside a path, a mesh gradient, a cell with a border, a table
+  style, a book, a flex layout, a macros model, an equation.
+- **A row that needs a dependency is an arc that names it.** The maths
+  engine, the colour management, the video encoder, the office formats, the
+  camera-raw containers — and the tree fetches nothing from the network: a
+  dictionary, a corpus or a price is a file on disk or it does not exist.
+- **The plans' own rules changed with them.** A plan's §0 no longer says
+  that every arc lands in one battery; a plan's §5 now names only what is
+  refused; and a plan's §1 no longer calls a held-back row "not an arc".
+
+### What is refused, and why
+
+The whole of it, gathered: **a front end's own surfaces** (the rendering,
+the viewer, the application windows, the page transitions), **a print
+surface** (the score printing), **a second container for the same thing**
+(the upstream's own design-file container), **a client for a vendor's
+service** (mail, cloud, presence, e-sign, the AI providers — the kit makes
+no outbound call and holds no credential, so it keeps the *model* those
+abstractions carry and not the client), and **what another project already
+owns** (the signing arc is the PDF plan's, the mesh and foreign containers
+are the craft-libs plan's, the seven refused components are the a2ui
+compatibility plan's). Each refusal is named in the plan that holds it, with
+its reason.
+
+### What it cost
+
+- **Twelve documents** and one index, no code, and no gate rule. The plans
+  are prose, and the gate has nothing to check in them yet.
+
+### What the port found
+
+- **The port is mostly models, not commands.** The first waves are commands
+  over facts the batteries already hold; the second waves are what a battery
+  *becomes* when it stops being a thin table of facts. The sound battery's
+  second wave is twenty-six arcs and most of them are a runtime model; the
+  page-layout battery's is twenty and most of them are a layout engine.
+- **Three quarters of the second waves are one plan's.** The audio project
+  carries the most, because its upstream is a whole workstation and its
+  battery is a document half of it.
+- **One plan could not be ported at all and was withdrawn** (§1182): the
+  vector project's proof of concept, whose work is finished.
+
+### What it does not settle
+
+- **The order is a recommendation, and the second waves are the heavy
+  half.** The owner decides what lands; an arc lands when it is written,
+  tested and green.
+- **The shapes of the new models are open**, and each plan says so in its
+  own §6: what a solid body is made of, what a saved view holds, what a cell
+  with a border is, and what a book is.

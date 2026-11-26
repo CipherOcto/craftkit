@@ -2,7 +2,7 @@
 
 The upstream is a set of document libraries written in Rust, and this plan is
 about the parts of it the `craftkit-plugin-prose` battery does not yet reach.
-It is twelve arcs, and it reserves README sections **§1197 to §1208** — one
+It is seventeen arcs, and it reserves README sections **§1198 to §1312** — one
 section per arc, in the order the arcs are written here.
 
 ## 0. The rule
@@ -49,8 +49,7 @@ facts that mark a run and the facts that change a run's width.
 The rows the survey marked **later** — right-to-left text direction, table
 styles and cell borders and cell shading, the mail-merge workflow, spelling
 and grammar proofing and a thesaurus, and reading and writing office document
-formats — are not arcs now. They are named in §5 with the reason each one
-waits.
+formats — are the second wave of arcs in §2.
 
 ## 2. The arcs
 
@@ -62,18 +61,18 @@ document the arcs come from, not the survey it follows.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | the recording of tracked changes can be switched on and off, and what the battery stores follows the switch | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/revisions.rs` | `prose.revision.record` | `crates/craftkit-plugin-prose/tests/revisionrecord.rs` | §1197 |
-| **B** | a range of text can carry a hyperlink, and the link is a thing the block can be read back for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/links.rs` | `prose.block.link.add` | `crates/craftkit-plugin-prose/tests/linkadd.rs` | §1198 |
-| **C** | a run carries the character facts that mark it — strike, super/subscript, caps, small caps, highlight and hidden — and each one is read back as it was set | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.run.format.extended` | `crates/craftkit-plugin-prose/tests/charextended.rs` | §1199 |
-| **D** | a run carries the character facts that change its width — character spacing and scale — and the width the battery reports is the width the facts give | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.run.spacing` | `crates/craftkit-plugin-prose/tests/charspacing.rs` | §1200 |
-| **E** | a cell can hold a table formula, and the formula is read back as the formula it is | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.formula` | `crates/craftkit-plugin-prose/tests/tableformula.rs` | §1201 |
-| **F** | a table can be sorted by a column, and the rows come back in the order the sort names | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.sort` | `crates/craftkit-plugin-prose/tests/tablesort.rs` | §1202 |
-| **G** | a paragraph's tab stops carry leaders, and a leader is drawn where the stop was asked for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/stops.rs` | `prose.block.stops.set` | `crates/craftkit-plugin-prose/tests/stopleaders.rs` | §1203 |
-| **H** | a paragraph can be given borders, and the borders are read back as they were written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/borders.rs` | `prose.block.paragraph.border` | `crates/craftkit-plugin-prose/tests/paragraphborder.rs` | §1204 |
-| **I** | a paragraph can be shaded, and the shading is read back as it was written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/background.rs` | `prose.block.paragraph.shading` | `crates/craftkit-plugin-prose/tests/paragraphshading.rs` | §1205 |
-| **J** | a page break and a column break can be placed, and the break is where it was asked for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/page.rs` | `prose.page.break` | `crates/craftkit-plugin-prose/tests/pagebreak.rs` | §1206 |
-| **K** | the first paragraph of a page can carry a drop cap, and the cap is a fact of the paragraph | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/paragraph.rs` | `prose.block.paragraph.dropcap` | `crates/craftkit-plugin-prose/tests/dropcap.rs` | §1207 |
-| **L** | a page can be numbered line by line, and the numbering starts and ends where it was asked to | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/pagenumbers.rs` | `prose.page.linenumber` | `crates/craftkit-plugin-prose/tests/linenumber.rs` | §1208 |
+| **A** | the recording of tracked changes can be switched on and off, and what the battery stores follows the switch | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/revisions.rs` | `prose.revision.record` | `crates/craftkit-plugin-prose/tests/revisionrecord.rs` | §1198 |
+| **B** | a range of text can carry a hyperlink, and the link is a thing the block can be read back for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/links.rs` | `prose.block.link.add` | `crates/craftkit-plugin-prose/tests/linkadd.rs` | §1199 |
+| **C** | a run carries the character facts that mark it — strike, super/subscript, caps, small caps, highlight and hidden — and each one is read back as it was set | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.run.format.extended` | `crates/craftkit-plugin-prose/tests/charextended.rs` | §1200 |
+| **D** | a run carries the character facts that change its width — character spacing and scale — and the width the battery reports is the width the facts give | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.run.spacing` | `crates/craftkit-plugin-prose/tests/charspacing.rs` | §1201 |
+| **E** | a cell can hold a table formula, and the formula is read back as the formula it is | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.formula` | `crates/craftkit-plugin-prose/tests/tableformula.rs` | §1202 |
+| **F** | a table can be sorted by a column, and the rows come back in the order the sort names | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.sort` | `crates/craftkit-plugin-prose/tests/tablesort.rs` | §1203 |
+| **G** | a paragraph's tab stops carry leaders, and a leader is drawn where the stop was asked for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/stops.rs` | `prose.block.stops.set` | `crates/craftkit-plugin-prose/tests/stopleaders.rs` | §1204 |
+| **H** | a paragraph can be given borders, and the borders are read back as they were written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/borders.rs` | `prose.block.paragraph.border` | `crates/craftkit-plugin-prose/tests/paragraphborder.rs` | §1205 |
+| **I** | a paragraph can be shaded, and the shading is read back as it was written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/background.rs` | `prose.block.paragraph.shading` | `crates/craftkit-plugin-prose/tests/paragraphshading.rs` | §1206 |
+| **J** | a page break and a column break can be placed, and the break is where it was asked for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/page.rs` | `prose.page.break` | `crates/craftkit-plugin-prose/tests/pagebreak.rs` | §1207 |
+| **K** | the first paragraph of a page can carry a drop cap, and the cap is a fact of the paragraph | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/paragraph.rs` | `prose.block.paragraph.dropcap` | `crates/craftkit-plugin-prose/tests/dropcap.rs` | §1208 |
+| **L** | a page can be numbered line by line, and the numbering starts and ends where it was asked to | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/pagenumbers.rs` | `prose.page.linenumber` | `crates/craftkit-plugin-prose/tests/linenumber.rs` | §1209 |
 
 **Two survey rows become two arcs each, and that is why there are twelve.**
 The survey's character-formatting row names two kinds of fact: the ones that
@@ -88,6 +87,27 @@ borders of a page and the background of a page in two places.
 **Every other arc is one survey row, one module, one command, one test.**
 Nothing here lands in two crates, so no arc needs two rows: the whole plan is
 in the prose battery.
+
+**The second wave: the whole upstream.**
+
+| arc | rule | from | to | module | command | test | section |
+|---|---|---|---|---|---|---|---|
+| **M** | the direction of a paragraph is a fact of the paragraph — left to right or right to left — and it is read back as it was set | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/direction.rs` | `prose.block.paragraph.direction` | `crates/craftkit-plugin-prose/tests/direction.rs` | §1308 |
+| **N** | a table carries a style, and a cell carries borders and a shading, and each of them is read back as it was written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.style`, `prose.cell.border`, `prose.cell.shading` | `crates/craftkit-plugin-prose/tests/tablestyle.rs` | §1309 |
+| **O** | the mail-merge workflow is a workflow: the recipients are chosen, the rules are written, and the merge is finished into a written document | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/merge.rs` | `prose.merge.recipients`, `prose.merge.rules`, `prose.merge.run` | `crates/craftkit-plugin-prose/tests/merge.rs` | §1310 |
+| **P** | the proofing rules say what is wrong with a word — spelling, grammar, and the thesaurus's answer for a word — and the dictionaries they need are a named dependency, not the battery's own words | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/proofing.rs` | `prose.proof.check`, `prose.thesaurus.lookup` | `crates/craftkit-plugin-prose/tests/proofing.rs` | §1311 |
+| **Q** | the office document formats are read and written through one door, and the readers and the writers themselves are the craft-libs plan's arcs (`docs/plans/craft-libs.md`) — the readers are a shared library, the commands are this battery's, and the same answer does not live in two places | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/formats.rs` | `prose.document.read`, `prose.document.write` | `crates/craftkit-plugin-prose/tests/formats.rs` | §1312 |
+
+**The second wave is the whole upstream.** Every capability the survey held
+back is in it, and the survey's "later" verdicts were judgements about size,
+not about scope: a row was called later because it changed the model rather
+than a command, and a model change is an arc like any other. Nothing the
+upstream's prose surface does is left out of this plan.
+
+**Arc Q does not carry the readers and the writers.** Those are the
+craft-libs plan's arcs (`docs/plans/craft-libs.md`); this arc is the battery's
+own commands that use them — the readers are a shared library, the commands are
+this battery's, and the same answer does not live in two places.
 
 ## 3. The order, and what each arc ships
 
@@ -105,12 +125,23 @@ in the prose battery.
 | J | the page and column breaks | medium — a break is a position in the flow, and the columns are a page fact the battery already holds |
 | K | the drop cap | medium — a cap belongs to a paragraph and to the page it sits on, so the two have to agree |
 | L | the line numbering down the page | medium — the count depends on the page's layout, and the battery does not lay a page out yet |
+| M | the direction of a paragraph | large — a direction is a decision about every paragraph, table and run, so it is a new model |
+| N | the table styles, the cell borders and the cell shading | large — a cell becomes a thing with a shape, so it is a new model |
+| O | the mail-merge workflow | medium — the recipients and the rules are facts the battery can hold, and the merge is finished through the writer |
+| P | the proofing and the thesaurus | medium — the rules are facts over the words of the document, and the dictionaries are a dependency the arc names |
+| Q | the reading and the writing of the office document formats | large — five formats, and the readers and the writers are the craft-libs plan's arcs |
 
 The order is the survey's order, and it is roughly the order of the surface:
 the two reader-without-setter rows first, because they are the half-capabilities
 the survey found; the character and table work next, because they are the
 middle of the battery's existing surface; and the page and paragraph work
 last, because they are the heaviest and the least often asked for.
+
+The second wave follows the first, and it is ordered the same way: the arcs
+that change the model come first — the direction of a paragraph, the shape of a
+cell — and the arcs that are commands over facts that exist come last, the
+proofing and the thesaurus. Arc Q is last of all, because it is the arc that
+waits on the craft-libs plan's readers and writers.
 
 **Nothing ships before Arc A.** Every arc from A on is a visible command and
 each stands on its own, so unlike a plan whose early arcs are refactors, this
@@ -137,6 +168,11 @@ habit. Each arc's test file is written in the same arc that adds the port row.
 | J | a page break is where it was asked for; a column break is where it was asked for; a break past the end of the flow is refused |
 | K | the drop cap is a fact of the paragraph it was set on; a drop cap on a paragraph that is not the first of its page is refused |
 | L | the numbering counts the lines it counts; the count starts where it was asked to start and ends where it was asked to end |
+| M | a paragraph set to right to left is read back as right to left; a paragraph set to left to right is read back as left to right; a direction that is not one of the two is refused |
+| N | the style, the borders and the shading are read back as they were written; a border with an impossible weight is refused; a shading with no colour is refused rather than read as no shading |
+| O | the recipients chosen are the recipients the merge used; the rules written are the rules the merge used; a merge with no recipients is refused; the merge writes a document, not a string |
+| P | a misspelled word is reported as misspelled; a word the dictionary does not hold is not reported as wrong; a thesaurus answer names the words it holds, and a word it does not hold is refused |
+| Q | a document written in a format is read back as the document it was; a file that is not in a format the battery knows is refused; a document the writer cannot write is refused, not written halfway |
 
 The **refusals** are the tests that matter. A formula naming a column that is
 not there, a stop past the margin, a drop cap on a paragraph that is not the
@@ -146,25 +182,17 @@ disagree.
 
 ## 5. What it does not do
 
-**Later work.** The survey marked these as later, and this plan does not argue
-with it. **Right-to-left text direction** is later because the survey found no
-direction fact anywhere in the battery, and a direction is not one field but a
-decision about every paragraph, every table and every run in the document —
-it is a port of the whole model, not of a command. **Table styles, cell
-borders and cell shading** are later because the battery's table model holds
-rows, columns, cells, a header flag and alt text only; giving a cell a border
-means a cell becomes a thing with a shape, and that is a change to the model
-before it is a change to the battery. **The mail-merge workflow** — choosing
-recipients, writing the rules, finishing the merge — is later because
-`prose.merge` fills merge fields and says the text of each row, and a workflow
-that ends in a written document is a document the battery has to be able to
-write, which is the next item on this list. **Spelling and grammar proofing,
-and a thesaurus** are later because a proofing tool needs a dictionary the
-tree does not carry and cannot fetch, and a thesaurus needs a corpus. **Reading
-and writing `.docx`** (and `.odt`, `.rtf`, `.md`, `.tex`) is later because it
-is a reader and a writer for another format, not a rule in the battery: the
-whole craftkit tree has no such reader or writer, and a format port is a
-project, not an arc.
+**Nothing in the upstream's prose surface is refused.** Every row the survey
+held back is an arc above: the direction of a paragraph, the table styles and
+the cell borders and the cell shading, the mail-merge workflow, the spelling
+and grammar proofing and the thesaurus, and the reading and the writing of the
+office document formats. The survey's "later" verdicts were judgements about
+size, not about scope, and this plan has turned them into arcs.
+
+**The proofing dictionaries and the thesaurus corpus are not the battery's to
+carry.** Arc P is the rule that says what is wrong with a word; the words
+themselves are a dependency the arc names, and the tree does not fetch them
+from the network. That is the shape of Arc P, and not a refusal.
 
 ## 6. The open questions
 
@@ -190,3 +218,11 @@ questions this plan does not answer.
   either table.** The upstream's file-format and layout parity documents were
   not read, so a capability listed only there is in neither the port rows nor
   the later rows of this plan.
+
+**The second wave leaves one shape open.** Three of its arcs change what the
+battery's model holds: a paragraph gains a direction, a cell gains a shape, and
+the merge gains a document it can finish into. The plan does not say what
+those models look like — only that each of them is a fact the battery holds and
+reads back, and that the direction and the cell's shape reach further than the
+paragraph and the cell that hold them. The shape is settled when the arc is
+written, and the arc's test is where the shape is held to.

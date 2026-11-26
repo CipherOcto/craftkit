@@ -729,14 +729,14 @@ comes to the tree cold:
 
 - **"The README's sections stop at §1180."** They did, and the **plans**
   reserve the ones after it: `docs/plans/` holds one plan per project in
-  the family tree, and between them they reserve **§1183 to §1295** for
-  **113 arcs** that have **not been built**. The reservation is a promise
+  the family tree, and between them they reserve **§1184 to §1419** for
+  **236 arcs** that have **not been built**. The reservation is a promise
   about numbering, not a claim that the work exists — the README has no
   such sections yet, and the port manifest has no rows for them either.
   A plan that is not worked becomes a plan that is wrong, and the
   numbering it holds is the thing to give up first. **One plan was
   withdrawn** — the vector project's proof of concept — and its two
-  sections went with it: §1271 and §1272 are the sound plan's first two
+  sections went with it: §1272 and §1273 are the sound plan's first two
   arcs, and a section that no plan holds is a section nobody will fill.
 
 When the README and the code disagree, the **code** is right, and this file

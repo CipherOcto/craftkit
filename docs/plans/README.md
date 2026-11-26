@@ -23,27 +23,36 @@ or decide (§6 of each plan).
 
 | plan | the upstream | the battery | arcs | README sections |
 |---|---|---|---|---|
-| [`craft-libs.md`](craft-libs.md) | the shared format and widget libraries | several — six new library crates and three batteries | 9 | §1252–§1260 |
-| [`pdfcraft.md`](pdfcraft.md) | the document-format project | `craftkit-plugin-pdf` | 14 | §1183–§1196 |
-| [`wordcraft.md`](wordcraft.md) | the prose project | `craftkit-plugin-prose` | 12 | §1197–§1208 |
-| [`effectcraft.md`](effectcraft.md) | the compositing project | `craftkit-plugin-fx` | 6 | §1209–§1214 |
-| [`cadcraft.md`](cadcraft.md) | the drawing project | `craftkit-plugin-cad` | 10 | §1215–§1224 |
-| [`vectorcraft.md`](vectorcraft.md) | the vector project | `craftkit-plugin-vector` | 9 | §1225–§1233 |
-| [`gridcraft.md`](gridcraft.md) | the spreadsheet project | `craftkit-plugin-grid` | 6 | §1234–§1239 |
-| [`artcraft.md`](artcraft.md) | the video-editor project | `craftkit-plugin-art` | 12 | §1240–§1251 |
-| [`solidcraft.md`](solidcraft.md) | the solid modeller | `craftkit-sdk` | 2 | §1261–§1262 |
-| [`a2ui-spec.md`](a2ui-spec.md) | the a2ui specification | `craftkit-a2ui`, `craftkit-plugin-a2ui`, `apps/craftkit-a2ui-server` | 8 | §1263–§1270 |
-| [`soundcraft.md`](soundcraft.md) | the audio project | `craftkit-plugin-sound` | 12 | §1271–§1282 |
-| [`designcraft.md`](designcraft.md) | the page-layout project | `craftkit-plugin-layout`, `craftkit-plugin-prose` | 13 | §1283–§1295 |
+| [`pdfcraft.md`](pdfcraft.md) | the document-format project | `craftkit-plugin-pdf`, and the cad battery for the measure | 25 | §1184–§1307 |
+| [`wordcraft.md`](wordcraft.md) | the prose project | `craftkit-plugin-prose` | 17 | §1198–§1312 |
+| [`effectcraft.md`](effectcraft.md) | the compositing project | `craftkit-plugin-fx`, the vector, text and film batteries, and the shared library | 19 | §1210–§1325 |
+| [`cadcraft.md`](cadcraft.md) | the drawing project | `craftkit-plugin-cad` | 15 | §1216–§1330 |
+| [`vectorcraft.md`](vectorcraft.md) | the vector project | `craftkit-plugin-vector` | 15 | §1226–§1336 |
+| [`gridcraft.md`](gridcraft.md) | the spreadsheet project | `craftkit-plugin-grid`, the vector and image batteries, and the shared library | 15 | §1235–§1345 |
+| [`artcraft.md`](artcraft.md) | the video-editor project | `craftkit-plugin-art`, and the image, film and vector batteries | 18 | §1241–§1351 |
+| [`craft-libs.md`](craft-libs.md) | the shared format and widget libraries | eight new library crates and the batteries that call them | 17 | §1253–§1359 |
+| [`solidcraft.md`](solidcraft.md) | the solid modeller | a new `craftkit-plugin-solid`, and the cad, image and sdk | 14 | §1262–§1371 |
+| [`a2ui-spec.md`](a2ui-spec.md) | the a2ui specification | `craftkit-a2ui`, `craftkit-plugin-a2ui`, `apps/craftkit-a2ui-server` | 10 | §1264–§1373 |
+| [`soundcraft.md`](soundcraft.md) | the audio project | `craftkit-plugin-sound`, the film battery and the sdk | 38 | §1272–§1399 |
+| [`designcraft.md`](designcraft.md) | the page-layout project | `craftkit-plugin-layout`, `craftkit-plugin-prose`, and the vector, image, text and pdf batteries | 33 | §1284–§1419 |
 
-**One hundred and thirteen arcs, one hundred and thirteen reserved sections**,
-from §1183 to §1295, with no gap and no repeat.
+**Two hundred and thirty-six arcs, two hundred and thirty-six reserved
+sections**, from §1184 to §1419, with no gap and no repeat.
+
+**Each plan holds two waves.** The **first wave** is the survey's *port*
+rows: the gaps that are commands over facts the batteries already hold. The
+**second wave** is the rest of the upstream — the rows the survey called
+*later* and the rows it called *skip* — and it is now **all of it**. The
+owner has said the family is to be fully ported, and any rule that held a
+capability back is changed so that it is not. A row that belongs to another
+battery is an arc **in** that battery, and a row that needs a model is an arc
+that brings the model.
 
 **One plan was withdrawn.** The vector project's proof of concept had a plan
 of two arcs — an importer and an exporter registry keyed by file extension.
 The owner has said that project's work is **finished** and that it is out of
-scope, so the plan is gone and its two sections are **not** reserved: §1271
-and §1272 are the sound plan's first two arcs, and no section anywhere points
+scope, so the plan is gone and its two sections are **not** reserved: §1272
+and §1273 are the sound plan's first two arcs, and no section anywhere points
 at a proof of concept that will not be worked.
 
 **One plan sits beside an older one.** `a2ui-spec.md` is about the
@@ -102,9 +111,18 @@ lands.
 | 11 | a2ui-spec | the specification's conformance work sits on top of the compatible surface, so it lands after that plan's arcs |
 | 12 | solidcraft | last on purpose: the solid model is a new battery, and it is the largest thing on the list |
 
+**The second waves come after the first.** Within every plan the order is
+the same: the first wave is the gaps that are commands over facts the
+batteries already hold, and the second wave is the rest of the upstream —
+the new models, the new dependencies, and the capabilities that moved to
+another battery. The second waves are the heavy half, and they are the half
+that changes what a battery *is*: a grid battery with a maths engine and a
+macros model, a layout battery with a flex layout and a book, a tree with a
+three-dimensional document in it.
+
 **What the order does not say.** It does not say that a battery's arcs land
 together, and it does not say that a plan's arcs land at all. The rule the
-tree already holds applies to each of the one hundred and thirteen arcs
+tree already holds applies to each of the two hundred and thirty-six arcs
 separately: an arc lands when it is written, tested and green.
 
 ---
@@ -128,27 +146,43 @@ breaks one of them is wrong:
 
 ---
 
-## What is not planned
+## What is refused
 
-Each plan's §5 names the rows it holds back, and the reason. Across the
-twelve plans the held-back work is of three kinds:
+Very little is refused now, and every refusal is named in the plan that holds
+it, with the reason. The whole of it, gathered:
 
-- **New models, not missing commands.** A parametric solid model, a table
-  style model, a direction on a paragraph, a mesh gradient, a media library,
-  a scripting language. These are batteries of their own, and a plan that
-  pretended otherwise would be a promise it cannot keep.
-- **New dependencies.** The office document formats, the layered image
-  format, the camera raw containers, the other audio codecs, the colour
-  management model.
-- **Another battery's work.** Media and rendering belong to the film battery,
-  paths belong to the vector battery, caret typing belongs to the text
-  battery, plugin discovery belongs to the plugin batteries.
+- **A front end's own surfaces.** The upstream's rendering, viewer and
+  application windows, and the page transitions: they are not rules about a
+  document. The tree's front ends draw their own.
+- **A print surface.** The score printing: the tree's answer to printing is
+  the PDF battery's write.
+- **A second container for the same thing.** The upstream's own design-file
+  container: craftkit has its own document format per battery.
+- **A client's for a vendor's service.** Mail, cloud, presence and chat,
+  e-sign and the AI-provider abstractions: the kit makes no outbound call
+  and holds no credential, so a client for somebody else's service would be
+  a client for nothing. What the tree keeps instead is the **model** those
+  abstractions carry — a message, a chat, a signature, a model's request —
+  and where a battery holds it, it is that battery's arc.
+- **What another project already owns.** Design-file signing is the PDF
+  plan's arc, the foreign design containers are the craft-libs plan's arcs,
+  the mesh containers are the craft-libs plan's arc, and the seven
+  basic-catalogue components are the a2ui compatibility plan's arcs. One
+  answer lives in one place, and a plan says where.
+
+**What is not refused.** Every other capability the family has is an arc in
+one of the twelve plans — 236 arcs in all — and the second wave of each plan
+is where the hard ones are: the models that do not exist yet (a solid body,
+a face inside a path, a mesh gradient, a cell with a border, a table style),
+the dependencies that must be added (the maths engine, the colour
+management, the video encoder, the office formats), and the capabilities
+that belong to another battery.
 
 ---
 
 ## The decisions the owner has taken
 
-Four questions were put to the owner with these plans, and four answers came
+Five questions were put to the owner with these plans, and five answers came
 back. They are recorded here because each one changed a plan.
 
 1. **No releases yet.** The tree has one workflow and it is CI. The open
@@ -171,3 +205,10 @@ back. They are recorded here because each one changed a plan.
 4. **The vector project's proof of concept is finished and out of scope.**
    Its plan is withdrawn, its two sections are not reserved, and nothing
    else in the plans waits on it.
+5. **The family is to be fully ported.** Every capability the family has is
+   in scope, and any rule that held one back is changed so that it is not.
+   The plans' **second waves** are that decision: 123 arcs that were held
+   back as "later" or "skip" and are now arcs, in the battery that owns
+   them. What is refused is now short, and each refusal is named with its
+   reason in the plan that holds it — the list is in "What is refused"
+   above.

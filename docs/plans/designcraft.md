@@ -2,15 +2,17 @@
 
 The upstream is a page-layout engine written in Rust, and this plan is about
 the parts of it that the `craftkit-plugin-layout` battery and the
-`craftkit-plugin-prose` battery do not yet reach. It is thirteen arcs, and it
-reserves README sections **§1283 to §1295** — one section per arc, in the
-order the arcs are written here.
+`craftkit-plugin-prose` battery do not yet reach. It is thirty-three arcs, and
+it reserves README sections **§1284 to §1419** — one section per arc, in the
+order the arcs are written here. The first wave is thirteen arcs and takes
+§1284 to §1296; the second wave is twenty arcs and takes §1400 to §1419.
 
 ## 0. The rule
 
-Every arc here adds a command to one of the two batteries, and every one of
-them is written the way the tree writes a command: a named rule, a typed
-parameter, and a test.
+Every arc here adds a command to the battery that owns the capability —
+the layout battery, the prose battery, and the batteries a row moved to — and
+every one of them is written the way the tree writes a command: a named rule,
+a typed parameter, and a test.
 
 ## 1. What the survey found
 
@@ -75,15 +77,16 @@ threading text frames, kerning, OpenType features, vertical writing, story
 direction, cell and table styles, colour swatches, composite fonts, annotation
 notes, conditional visibility, form fields, XML tagging, preflight as a rule
 set, multi-state objects, flex layout, anchored objects, a primary text frame,
-converting text to a table, and a book — is named with its reason in §5.
+converting text to a table, and a book — is the **second wave** of arcs, and
+every one of those rows is an arc in §2.
 
-**The out-of-scope rows** are the upstream's file formats, export and print
-surfaces; selection, undo, redo, copy and paste, which the core owns; the
-upstream's scripting, library, font and preference surfaces; ink separations;
-colour conversion, which the vector battery owns; paths, which the vector
-battery owns; caret-level typing, which the text battery owns; and the
-upstream's page transitions, which are a rendering surface. They are named
-with their reason in §5.
+**The out-of-scope rows** are the upstream's file formats, and the upstream's
+page transitions, which are a rendering surface. **Selection, undo, redo, copy
+and paste** are rows at parity, because the core owns them. Every other row
+the survey set aside — export, ink separations, colour conversion, paths,
+caret-level typing and the rest — is an arc of the second wave, and each one
+lands in the battery that owns the capability. The refusals and the parity
+rows are named with their reason in §5.
 
 ## 2. The arcs
 
@@ -95,19 +98,19 @@ document the arcs come from, not the survey it follows.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | a spread is duplicated into a new spread whose pages and items are copies, not the same nodes | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/pages.rs` | `layout.spread.duplicate` | `crates/craftkit-plugin-layout/tests/spreadduplicate.rs` | §1283 |
-| **B** | a page's own facts — the index it sits at in its spread and its width and height — may be changed after the fact, and an index outside the spread is refused | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/pages.rs` | `layout.page.insert`, `layout.page.set` | `crates/craftkit-plugin-layout/tests/pagefacts.rs` | §1284 |
-| **C** | a layer's own facts — its name, its colour, its copies and which one is active — are facts of the layer and may be changed | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/layers.rs` | `layout.layer.set`, `layout.layer.duplicate`, `layout.layer.active` | `crates/craftkit-plugin-layout/tests/layerfacts.rs` | §1285 |
-| **D** | the guides of a spread are readable, and a column guide is a guide on a page, so moving it is a guide move with a page | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/guides.rs` | `layout.guide.list`, `layout.page.guide.move` | `crates/craftkit-plugin-layout/tests/guidelist.rs` | §1286 |
-| **E** | an item's rectangle holds its position and its name is its own fact, and both may be changed after the item exists | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.move`, `layout.item.rename` | `crates/craftkit-plugin-layout/tests/itemfacts.rs` | §1287 |
-| **F** | aligning puts the items on one edge or one centre line of their common box, and distributing spaces them evenly between the first and the last | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/order.rs` | `layout.item.align`, `layout.item.distribute` | `crates/craftkit-plugin-layout/tests/itemplacement.rs` | §1288 |
-| **G** | swapping exchanges the two paint facts of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/paint.rs` | `layout.item.paint.swap` | `crates/craftkit-plugin-layout/tests/paintswap.rs` | §1289 |
-| **H** | stepping and repeating writes copies of the item along a direction and a count | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.repeat` | `crates/craftkit-plugin-layout/tests/itemrepeat.rs` | §1290 |
-| **I** | an item may say what it is, and the saying is a fact of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.alt` | `crates/craftkit-plugin-layout/tests/itemalt.rs` | §1291 |
-| **J** | a story's text and length are derived, and they are read rather than stored twice | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.story.get` | `crates/craftkit-plugin-layout/tests/storyget.rs` | §1292 |
-| **K** | a table's own measurements — a row's height, a column's width, and the even division of the space — are facts of the table | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.row.height`, `prose.table.column.width`, `prose.table.distribute` | `crates/craftkit-plugin-prose/tests/tablemeasure.rs` | §1293 |
-| **L** | placeholder text fills a frame so its length can be seen | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/paragraph.rs` | `prose.block.placeholder.fill` | `crates/craftkit-plugin-prose/tests/placeholder.rs` | §1294 |
-| **M** | the rulers, the zero point and the preferences are facts of the document, and the front end reads them | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/view.rs` | `layout.ruler.set`, `layout.view.zero.set`, `layout.preference.set` | `crates/craftkit-plugin-layout/tests/view.rs` | §1295 |
+| **A** | a spread is duplicated into a new spread whose pages and items are copies, not the same nodes | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/pages.rs` | `layout.spread.duplicate` | `crates/craftkit-plugin-layout/tests/spreadduplicate.rs` | §1284 |
+| **B** | a page's own facts — the index it sits at in its spread and its width and height — may be changed after the fact, and an index outside the spread is refused | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/pages.rs` | `layout.page.insert`, `layout.page.set` | `crates/craftkit-plugin-layout/tests/pagefacts.rs` | §1285 |
+| **C** | a layer's own facts — its name, its colour, its copies and which one is active — are facts of the layer and may be changed | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/layers.rs` | `layout.layer.set`, `layout.layer.duplicate`, `layout.layer.active` | `crates/craftkit-plugin-layout/tests/layerfacts.rs` | §1286 |
+| **D** | the guides of a spread are readable, and a column guide is a guide on a page, so moving it is a guide move with a page | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/guides.rs` | `layout.guide.list`, `layout.page.guide.move` | `crates/craftkit-plugin-layout/tests/guidelist.rs` | §1287 |
+| **E** | an item's rectangle holds its position and its name is its own fact, and both may be changed after the item exists | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.move`, `layout.item.rename` | `crates/craftkit-plugin-layout/tests/itemfacts.rs` | §1288 |
+| **F** | aligning puts the items on one edge or one centre line of their common box, and distributing spaces them evenly between the first and the last | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/order.rs` | `layout.item.align`, `layout.item.distribute` | `crates/craftkit-plugin-layout/tests/itemplacement.rs` | §1289 |
+| **G** | swapping exchanges the two paint facts of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/paint.rs` | `layout.item.paint.swap` | `crates/craftkit-plugin-layout/tests/paintswap.rs` | §1290 |
+| **H** | stepping and repeating writes copies of the item along a direction and a count | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.repeat` | `crates/craftkit-plugin-layout/tests/itemrepeat.rs` | §1291 |
+| **I** | an item may say what it is, and the saying is a fact of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.alt` | `crates/craftkit-plugin-layout/tests/itemalt.rs` | §1292 |
+| **J** | a story's text and length are derived, and they are read rather than stored twice | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.story.get` | `crates/craftkit-plugin-layout/tests/storyget.rs` | §1293 |
+| **K** | a table's own measurements — a row's height, a column's width, and the even division of the space — are facts of the table | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.row.height`, `prose.table.column.width`, `prose.table.distribute` | `crates/craftkit-plugin-prose/tests/tablemeasure.rs` | §1294 |
+| **L** | placeholder text fills a frame so its length can be seen | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/paragraph.rs` | `prose.block.placeholder.fill` | `crates/craftkit-plugin-prose/tests/placeholder.rs` | §1295 |
+| **M** | the rulers, the zero point and the preferences are facts of the document, and the front end reads them | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/view.rs` | `layout.ruler.set`, `layout.view.zero.set`, `layout.preference.set` | `crates/craftkit-plugin-layout/tests/view.rs` | §1296 |
 
 **The nineteen rows are grouped into twelve rules, and the grouping is by
 subject, not by command.** The spread's own facts are the duplication of a
@@ -141,6 +144,47 @@ table's measurements and the placeholder text, which that plan does not have.
 **Eleven arcs land in the layout battery and two in the prose battery.** An arc
 that lands in two crates would need two port rows, and none here does.
 
+**The second wave: the whole upstream.**
+
+| arc | rule | from | to | module | command | test | section |
+|---|---|---|---|---|---|---|---|
+| **N1** | a spread may have a parent spread, and a page of the parent may override the parent's own facts | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/parents.rs` | `layout.parent.set`, `layout.parent.override.set` | `crates/craftkit-plugin-layout/tests/parentoverrides.rs` | §1400 |
+| **N2** | a section is a range of pages that carries a number of its own | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/sections.rs` | `layout.section.add`, `layout.section.number.set` | `crates/craftkit-plugin-layout/tests/sections.rs` | §1401 |
+| **N3** | a layout may change with the page it is on, and the page says which layout it takes | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/layouts.rs` | `layout.alternate.set`, `layout.liquid.set` | `crates/craftkit-plugin-layout/tests/alternate.rs` | §1402 |
+| **N4** | the pages of a spread may be arranged by a rule that holds over whole spreads | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/shuffle.rs` | `layout.spread.shuffle.set` | `crates/craftkit-plugin-layout/tests/shufflespread.rs` | §1403 |
+| **N5** | an item's shear, its flip and its stack of transformations are facts of the item, and the stack may be cleared | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/transform.rs` | `layout.item.shear.set`, `layout.item.flip.set`, `layout.item.transform.clear` | `crates/craftkit-plugin-layout/tests/transforms.rs` | §1404 |
+| **N6** | the effects on an item — inner shadow, glow, bevel, satin and feathering — are facts of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/effects.rs` | `layout.item.inner.shadow.set`, `layout.item.glow.set`, `layout.item.bevel.set`, `layout.item.satin.set`, `layout.item.feather.set` | `crates/craftkit-plugin-layout/tests/effects.rs` | §1405 |
+| **N7** | the text in a frame may be wrapped in it, fitted to it, laid on a grid, and threaded from one frame to the next | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/frametext.rs` | `layout.frame.wrap.set`, `layout.frame.fit.set`, `layout.frame.grid.set`, `layout.frame.thread.set` | `crates/craftkit-plugin-layout/tests/frametext.rs` | §1406 |
+| **N8** | the typography of a run — its kerning, its font features, its vertical writing and its story direction — is a fact of the run | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/typography.rs` | `layout.text.kerning.set`, `layout.text.feature.set`, `layout.text.vertical.set`, `layout.text.direction.set` | `crates/craftkit-plugin-layout/tests/typography.rs` | §1407 |
+| **N9** | a cell's style and a table's style are named sets of facts that the table refers to | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/styles.rs` | `prose.table.style.set`, `prose.table.cell.style.set` | `crates/craftkit-plugin-prose/tests/tablestyles.rs` | §1408 |
+| **N10** | a colour swatch and a composite font are resources that the document refers to | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/swatches.rs` | `layout.swatch.add`, `layout.font.composite.add` | `crates/craftkit-plugin-layout/tests/swatches.rs` | §1409 |
+| **N11** | an annotation note is a note on the document, and a note may be split into parts | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/notes.rs` | `prose.note.add`, `prose.note.split` | `crates/craftkit-plugin-prose/tests/annotationnotes.rs` | §1410 |
+| **N12** | visibility, form fields, tagging, preflight rules and object states are rules the document holds and that are evaluated when they are read | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/rules.rs` | `layout.rule.visibility.add`, `layout.form.field.add`, `layout.tag.apply`, `layout.preflight.rule.add`, `layout.item.state.set` | `crates/craftkit-plugin-layout/tests/ruleset.rs` | §1411 |
+| **N13** | a frame may lay its children out by flex, an item may be anchored to a frame, and one text frame is the primary one | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/flex.rs` | `layout.frame.flex.set`, `layout.item.anchor.set`, `layout.frame.primary.set` | `crates/craftkit-plugin-layout/tests/flexanchor.rs` | §1412 |
+| **N14** | text may be converted into a table, and a document may be assembled into a book | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/convert.rs` | `layout.text.to.table`, `layout.book.build` | `crates/craftkit-plugin-layout/tests/texttotable.rs` | §1413 |
+| **N15** | a document may be exported to another format | `docs/plans/designcraft.md` | `craftkit-plugin-pdf` | `src/convert.rs` | `pdf.document.export` | `crates/craftkit-plugin-pdf/tests/documentexport.rs` | §1414 |
+| **N16** | ink may be separated into its separations | `docs/plans/designcraft.md` | `craftkit-plugin-image` | `src/separations.rs` | `image.ink.separate` | `crates/craftkit-plugin-image/tests/inkseparations.rs` | §1415 |
+| **N17** | the colour of a path may be converted between colour spaces | `docs/plans/designcraft.md` | `craftkit-plugin-vector` | `src/colour.rs` | `vector.colour.convert` | `crates/craftkit-plugin-vector/tests/colourconvert.rs` | §1416 |
+| **N18** | a path is a shape of its own, and the facts of a path are facts of the path | `docs/plans/designcraft.md` | `craftkit-plugin-vector` | `src/pathcreate.rs` | `vector.path.create`, `vector.path.set` | `crates/craftkit-plugin-vector/tests/paths.rs` | §1417 |
+| **N19** | text may be typed at the caret | `docs/plans/designcraft.md` | `craftkit-plugin-text` | `src/lib.rs` | `text.caret.type` | `crates/craftkit-plugin-text/tests/carettype.rs` | §1418 |
+| **N20** | a font the document refers to is a resource of the document, and a run's font is a fact of the run | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.font.add`, `prose.run.font.set` | `crates/craftkit-plugin-prose/tests/fonts.rs` | §1419 |
+
+**The second wave is the whole upstream.** The first wave took the gaps the
+survey could point at; this wave takes every capability the upstream has, so
+that nothing in it is left behind. **The survey's "later" verdicts were
+judgements about size and not about scope** — it said a thing was later
+because the model it wanted was a large one, and the owner has now decided
+that the large model is in scope.
+
+**A row that belongs to another battery is an arc in that battery.** The paths
+are the vector battery's, the ink is the image battery's, the caret typing is
+the text battery's, and the export is the PDF battery's — because the PDF
+battery writes files, and the reader and the writer for the format are the
+craft-libs plan's arcs. **None of them is dropped.** Twelve of the twenty
+arcs land in the layout battery, three in the prose battery, two in the
+vector battery, and one each in the PDF, image and text batteries. As in the
+first wave, no arc lands in two crates, so no arc needs two port rows.
+
 ## 3. The order, and what each arc ships
 
 | arc | ships | cost |
@@ -158,6 +202,26 @@ that lands in two crates would need two port rows, and none here does.
 | K | the table's measurements | medium — a height, a width, and an even division that is stated in one number |
 | L | the placeholder text | medium — the fill is chosen to a length, and the length has to be the one the frame asks for |
 | M | the rulers, the zero point and the preferences | small — three fields of the document that the front end reads and applies |
+| N1 | the parent spread and its per-page overrides | medium — a second level of spread, and an override that is resolved per page |
+| N2 | the sections and their numbers | medium — a range of pages is a new thing to hold, and a number of its own is a fact of it |
+| N3 | the alternate and liquid layouts | medium — a layout that depends on the page it is on is a derived fact |
+| N4 | the shuffled spread | medium — a rule over whole spreads, and the pages it moves |
+| N5 | the shear, the flip and the cleared transformations | medium — a transform stack on an item, and a way to empty it |
+| N6 | the inner shadow, the glow, the bevel, the satin and the feathering | medium — five per-item effects, each its own facts |
+| N7 | the wrap, the fit, the grid and the threading of text frames | large — a layout engine over a frame, and text that moves between frames |
+| N8 | the kerning, the font features, the vertical writing and the story direction | medium — four facts of a run, and the machinery under them |
+| N9 | the cell and table styles | medium — a named set of facts, and the table's reference to it |
+| N10 | the colour swatches and the composite fonts | medium — two kinds of resource, and the document's table of them |
+| N11 | the annotation notes and the split note | medium — a document-level note, and a way to divide it |
+| N12 | the visibility rules, the form fields, the tagging, the preflight rules and the object states | large — five kinds of rule held in the document and evaluated when they are read |
+| N13 | the flex layout, the anchored objects and the primary text frame | large — a layout engine over a frame, an anchoring relation, and one frame that is special |
+| N14 | the text turned into a table, and the book | medium — both rewrite the document's structure rather than a fact of one thing |
+| N15 | the export of a document to another format | medium — the format's reader and writer, which the craft-libs plan carries |
+| N16 | the ink separations | medium — a picture per separation, and the rules that divide the ink |
+| N17 | the colour conversion | small — a conversion between colour spaces, and the space it converts to |
+| N18 | the paths | medium — a path's own facts, and the geometry that holds them |
+| N19 | the caret-level typing | medium — the text of a frame written one caret position at a time |
+| N20 | the font resources and a run's font | medium — a resource the document holds, and the run that refers to it |
 
 The order is the order of the surface, from the outside in: the spread, the
 page, the layer, the guides, then the item — its own facts, its placement,
@@ -165,7 +229,7 @@ its paint, its repetition, its alt text — and then the two things that are
 read rather than written, the story and the table's measurements, with the
 placeholder text last because it depends on a frame and a length.
 
-**Arc M comes at the very end**, because it is about how the document is
+**Arc M comes at the very end of the first wave**, because it is about how the document is
 *looked at* and not about what it holds, and because the owner asked for it
 by name: the saved view and preference state belongs in the document, and the
 front end reads it and applies it.
@@ -196,6 +260,26 @@ row.
 | K | a row's height and a column's width are read back as they were set; the distribution says the even number it divided to, and the rows or columns are that even; a height or a width of zero or less is refused |
 | L | the frame is filled with text of the length that was asked for; a length of zero or less is refused; the fill does not change the frame's own facts |
 | M | the rulers, the zero point and the preference are read back as they were set; a preference the tree does not know is refused by name; the front end reads them and does not write them |
+| N1 | a page of a parent spread reads the parent's facts until it overrides them, and then reads its own; an override on a page that is not in the parent is refused |
+| N2 | a section holds the range of pages it was given, and the number it was given; a range that runs backwards is refused, not reordered |
+| N3 | the layout a page takes is the one that page says, and a page that says nothing takes the spread's; a layout the tree does not know is refused by name |
+| N4 | the pages of a shuffled spread are the pages the rule put in that order; a rule that names a page that is not in the spread is refused |
+| N5 | the shear and the flip are read back as they were set, and clearing the transformations leaves the item with none rather than with none written |
+| N6 | each of the five effects is read back as it was set; an item with no effect of that kind reports none, not an empty one |
+| N7 | the text in a wrapped frame is wrapped at the frame's width; the fitted text fits; the gridded frame puts the text on the grid; threaded text continues in the next frame; a frame with no text to thread is refused |
+| N8 | the kerning, the features, the vertical writing and the direction are read back as they were set; a feature the font does not have is refused by name |
+| N9 | a cell's style is the style it was given, and the style holds the facts it was declared with; a style the table does not have is refused by name |
+| N10 | a swatch and a composite font are read back as they were added, and the document refers to them by name; a second resource of the same name is refused |
+| N11 | a note is read back as it was written, and a split note gives the parts it was split into; splitting a note that has one part is refused |
+| N12 | a visibility rule that does not hold hides the item, and one that holds shows it; a form field is read back as it was added; a tag is applied to the item it names; a preflight rule reports the rule it breaks; a multi-state item reports the state it is in; a rule that names something that is not in the document is refused |
+| N13 | the children of a flex frame are placed as the flex rule says; an anchored item stays with the frame it is anchored to; the primary text frame is the one that was made primary, and only one is |
+| N14 | the converted table holds the text that was converted; the book holds the documents it was built from, in the order they were given; a text that cannot be converted is refused |
+| N15 | the exported document is the document that was exported, and the format it was exported to is the format that was asked for; a format the tree cannot write is refused by name |
+| N16 | the separations are the separations the ink divides into, and each is a picture of its own; ink with one colour does not divide into more than one separation |
+| N17 | the converted colour is the colour of the source under the target space, and a space the tree does not know is refused by name |
+| N18 | a path's points are the points it was given, and its facts are read back as they were set; a path with fewer than two points is refused |
+| N19 | the typed text is the text that was typed, and the caret is where it was typed at; typing at a caret that is not in the document is refused |
+| N20 | the font the document holds is the font it was added as, and a run's font is the font it was given; a run that refers to a font the document does not hold is refused by name |
 
 **The refusals** are the tests that matter. An index outside a spread, a
 size of zero, a page that has no such guide, a set of one item to align, a
@@ -204,67 +288,40 @@ house rule — *refuse, do not clamp* — and a comfortable port would disagree.
 
 ## 5. What it does not do
 
-**Later work.** These are named by the survey and are not arcs now.
+**Refused.** These are the only things this plan does not carry, and no arc
+touches them.
 
-- **The parent spread as an entity of its own** is later because the layout
-  battery's spread is a flat container, and an entity with its own per-page
-  overrides is a change to the model before it is a change to the battery.
-- **Section and chapter numbering** is later because a section is a range of
-  pages with a number of its own, and the tree has no such range.
-- **Alternate and liquid layouts** are later because a layout that changes
-  with the page it is on is a derived fact the tree does not compute.
-- **A shuffled spread** is later because it is an arrangement rule over
-  whole spreads, not a command about one spread.
-- **A shear, a flip, and clearing transformations** are later because the
-  tree's items carry a rotation and a rectangle, and a transform stack is a
-  third shape.
-- **Inner shadow, glow, bevel, satin and feathering** are later because the
-  layout battery's shadow and radius facts are page-level, and these are
-  per-item effects.
-- **Text wrap, fitting content to a frame, gridifying a frame and threading
-  text frames** are later because each is a layout engine over a frame, and
-  the tree has no frame layout yet.
-- **Kerning, OpenType features, vertical writing and story direction** are
-  later because they are typography machinery, and the upstream's colour,
-  typography and font machinery has no counterpart in any of the batteries.
-- **Cell and table styles** are later because a style is a named set of
-  facts, and the tree's tables hold rows, columns and cells.
-- **Colour swatches and composite fonts** are later because both are
-  resources a document refers to, and the tree has no resource table.
-- **Annotation notes** are later because a note that can be split is a
-  document-level editorial structure.
-- **Conditional visibility, form fields, XML tagging, preflight as a rule set
-  and multi-state objects** are later because each is a rule evaluated
-  somewhere other than at the moment of a command.
-- **Flex layout, anchored objects and a primary text frame** are later
-  because each is a structural relationship the tree's model does not have.
-- **Converting text to a table, and a book** are later because both rewrite
-  the document's structure rather than a fact of one thing.
+- **The upstream's own file formats** are refused because craftkit has its own
+  document format per battery, and a reader for another tool's private
+  container is a library the craft-libs plan names — where it is a design
+  container, `docs/plans/craft-libs.md` holds it, and it is not duplicated
+  here. Exporting a document is a different matter, and **Arc N15** carries
+  it.
+- **The page transitions** are refused because a transition is a rendering
+  surface, and the tree's front ends do not carry one.
 
-**Out of scope.** These are not this plan's to carry, and no arc touches
-them.
+**Parity.** One row is at parity, and it is named so that no arc mistakes it
+for a gap.
 
-- **The upstream's file formats, export and print surfaces** are out of
-  scope because they are a reader and a writer for another format, and the
-  craftkit tree has none.
-- **Selection, undo, redo, copy and paste** are out of scope because the
-  core owns them, and a battery that added its own would be a second path.
-- **The upstream's scripting, library and font surfaces** are out of scope
-  because they are a host application's furniture, not rules about a
-  document. The **preference** part of that row is not out of scope: the
-  owner has said the saved view and preference state belongs in the
-  document, and **Arc M** carries it.
-- **Ink separations** are out of scope because they are a print surface.
-- **Colour conversion** is out of scope because the vector battery owns it.
-- **Paths** are out of scope because the vector battery owns them.
-- **Caret-level typing** is out of scope because the text battery owns it.
-- **The upstream's page transitions** are out of scope because they are a
-  rendering surface, and this tree's front ends do not carry one.
+- **Selection, undo, redo, copy and paste** are at parity, because the core
+  owns them.
+
+Everything else that the survey set aside is now an arc above, and the
+second wave's table in §2 is the whole of it.
 
 ## 6. The open questions
 
 The survey wrote down what it could not read or decide, and those are the
 questions this plan does not answer.
+
+**The second wave leaves one thing open, and it is the shape of the new
+models.** The arcs in §2 say what each command does, but they do not say what
+a parent spread, a section, a transform stack, a frame layout, a named style,
+a resource, a rule set or a path is in the tree's model — what those things
+are made of, and where they live. Several of them are new kinds of thing in
+the layout battery's document, and the shape they take decides what the
+commands above can be. That is the question the first arc of the second wave
+has to answer.
 
 - **A capability marked absent may be there as data rather than as a
   command.** The survey was confined to the upstream's command directory, so
