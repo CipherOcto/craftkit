@@ -75,23 +75,26 @@ comparison — the facts, the moves, the edits — is what the ten arcs are.
 
 Each arc is three edits: a row in the port manifest, a row in the README's claim
 table, and a section in the README. The sections reserved for this plan are
-**§1272 through §1281**, one per arc, in the order below.
+**§1271 through §1282**, one per arc, in the order below.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **1** | a track's own facts are facts on the track: the phase, the input trim, the comment and the colour | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/track.rs` | `sound.track.phase`, `sound.track.trim`, `sound.track.comment`, `sound.track.color` | `crates/craftkit-plugin-sound/tests/track.rs` | §1272 |
-| **2** | bypassing is a flag on the insert, and not a removal of it | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/mixer.rs` | `sound.insert.bypass` | `crates/craftkit-plugin-sound/tests/insert.rs` | §1273 |
-| **3** | a send carries a surround pan the same way a track does | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/surround.rs` | `sound.send.surround` | `crates/craftkit-plugin-sound/tests/surround.rs` | §1274 |
-| **4** | a range has its own operations: clearing it, shifting it, nudging it | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/ranges.rs` | `sound.range.clear`, `sound.range.shift`, `sound.range.nudge` | `crates/craftkit-plugin-sound/tests/ranges.rs` | §1275 |
-| **5** | silence is a range with no material in it | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/time.rs` | `sound.time.insert.silence` | `crates/craftkit-plugin-sound/tests/silence.rs` | §1276 |
-| **6** | the material in the clipboard may be moved to another place in special ways | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/clipboard.rs` | `sound.clipboard.paste.merge`, `sound.playlist.copy.to` | `crates/craftkit-plugin-sound/tests/clipboard.rs` | §1277 |
-| **7** | a clip's own facts are facts on the clip: the colour, the capture, the group | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/clip.rs` | `sound.clip.color`, `sound.clip.capture`, `sound.clip.regroup` | `crates/craftkit-plugin-sound/tests/clip.rs` | §1278 |
-| **8** | the notes of a clip are rules over the notes | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/midi.rs` | `sound.clip.midi.note.split`, `sound.clip.midi.chords` | `crates/craftkit-plugin-sound/tests/midinotes.rs` | §1279 |
-| **9** | the session is read from outside: a file is imported, the session is written out, the media is checked, the document is inspected | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/session.rs` | `sound.source.import`, `sound.session.text`, `sound.health.read`, `sound.session.inspect` | `crates/craftkit-plugin-sound/tests/session.rs` | §1280 |
-| **10** | placing is a source, a track and a place, and the three parts are already commands | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/clip.rs` | `sound.clip.place` | `crates/craftkit-plugin-sound/tests/place.rs` | §1281 |
+| **1** | a track's own facts are facts on the track: the phase, the input trim, the comment and the colour | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/track.rs` | `sound.track.phase`, `sound.track.trim`, `sound.track.comment`, `sound.track.color` | `crates/craftkit-plugin-sound/tests/track.rs` | §1271 |
+| **2** | bypassing is a flag on the insert, and not a removal of it | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/mixer.rs` | `sound.insert.bypass` | `crates/craftkit-plugin-sound/tests/insert.rs` | §1272 |
+| **3** | a send carries a surround pan the same way a track does | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/surround.rs` | `sound.send.surround` | `crates/craftkit-plugin-sound/tests/surround.rs` | §1273 |
+| **4** | a range has its own operations: clearing it, shifting it, nudging it | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/ranges.rs` | `sound.range.clear`, `sound.range.shift`, `sound.range.nudge` | `crates/craftkit-plugin-sound/tests/ranges.rs` | §1274 |
+| **5** | silence is a range with no material in it | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/time.rs` | `sound.time.insert.silence` | `crates/craftkit-plugin-sound/tests/silence.rs` | §1275 |
+| **6** | the material in the clipboard may be moved to another place in special ways | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/clipboard.rs` | `sound.clipboard.paste.merge`, `sound.playlist.copy.to` | `crates/craftkit-plugin-sound/tests/clipboard.rs` | §1276 |
+| **7** | a clip's own facts are facts on the clip: the colour, the capture, the group | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/clip.rs` | `sound.clip.color`, `sound.clip.capture`, `sound.clip.regroup` | `crates/craftkit-plugin-sound/tests/clip.rs` | §1277 |
+| **8** | the notes of a clip are rules over the notes | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/midi.rs` | `sound.clip.midi.note.split`, `sound.clip.midi.chords` | `crates/craftkit-plugin-sound/tests/midinotes.rs` | §1278 |
+| **9** | the session is read from outside: a file is imported, the session is written out, the media is checked, the document is inspected | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/session.rs` | `sound.source.import`, `sound.session.text`, `sound.health.read`, `sound.session.inspect` | `crates/craftkit-plugin-sound/tests/session.rs` | §1279 |
+| **10** | placing is a source, a track and a place, and the three parts are already commands | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/clip.rs` | `sound.clip.place` | `crates/craftkit-plugin-sound/tests/place.rs` | §1280 |
+| **11** | what the ruler and the counter show is a fact of the session, and the session says it | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/view.rs` | `sound.ruler.set`, `sound.counter.set` | `crates/craftkit-plugin-sound/tests/view.rs` | §1281 |
+| **12** | the saved views and the window's own state are facts of the session: the column views, the clip display options, the scrolling mode, the solo mode and the keyboard focus | `docs/plans/soundcraft.md` | `craftkit-plugin-sound` | `src/session.rs` | `sound.view.save`, `sound.view.list`, `sound.session.options.set` | `crates/craftkit-plugin-sound/tests/views.rs` | §1282 |
 
-These arcs are ten because the survey's twenty-four gaps fall into ten groups
-by owner. The track's own facts are one arc, because the phase, the trim, the
+These arcs are twelve because the survey's twenty-four gaps fall into ten
+groups by owner, and the owner's decision about the view and the options adds
+two more. The track's own facts are one arc, because the phase, the trim, the
 comment and the colour are all facts about one track and each of them is a
 field the battery's track command already carries in one form. The insert's
 bypass is one arc on its own, because it is a flag on an insert and the
@@ -128,6 +131,15 @@ beside a group, a per-track playlist selection, and a file written out of a
 document that holds notes — and each is a model before it is a command. Ten arcs
 that land are worth more than fourteen that do not.
 
+**Arcs 11 and 12 came from the owner's word and not from the survey.** The
+survey read the ruler, the counter, the column views, the clip display
+options and the scrolling, solo and focus modes as a front end's business and
+held them back. The owner has said the saved view and option state belongs in
+the session, so they are arcs now: the ruler and the counter are one arc,
+because both are ways of showing a number of the timeline, and the saved views
+with the window's own state are one arc, because a saved view and the mode the
+window is in are both the session saying how it is to be looked at.
+
 ## 3. The order, and what each arc ships
 
 | arc | ships | cost |
@@ -142,6 +154,8 @@ that land are worth more than fourteen that do not.
 | 8 | the notes of a clip | medium — a split and a read of the chords |
 | 9 | the session read from outside | medium — a file reader, a text writer, a check and an inspect |
 | 10 | the placement of a source | small — a composition of three commands that already exist |
+| 11 | the ruler and the counter the session shows | small — two names for how a number is written |
+| 12 | the saved views and the window's own state | medium — a saved view is a set of facts that can be named, and the modes are fields of the session |
 
 The order follows the owners, from the top of the session downwards. The
 track's facts come first, because a track is what the other owners hang from,
@@ -160,8 +174,14 @@ clip, because a note lives in a MIDI clip.
 
 The session read from outside comes near the end, because it is a read of the
 whole document and it is worth reading once the document holds everything the
-arcs above put in it. The placement of a source comes last, because it is a
-composition of commands that already exist and nothing else depends on it.
+arcs above put in it. The placement of a source comes after it, because it is
+a composition of commands that already exist and nothing else depends on it.
+
+**The two view arcs come last of all**, because they are about how the
+document is *looked at* and not about what it holds. They are also the two
+arcs the owner asked for by name, so they are written down and priced, and
+what is left of the upstream's view family — the zoom, which is the camera's,
+and the keyboard shortcuts, which have no model here — is named in §5.
 
 ## 4. The tests
 
@@ -178,6 +198,8 @@ the arc it belongs to.
 - **8** — a split note makes two notes that meet at the split point; the chords of a clip are the notes that fall together; a note that is not there is refused.
 - **9** — an imported file becomes a source that is registered; the text written out holds the session's facts; a health check reports a missing file and changes nothing; an inspect answers with what the document holds and writes nothing.
 - **10** — a placed source sits at the place asked for, on the track asked for; a place that is not a place is refused.
+- **11** — the ruler and the counter are what was set; a format the battery does not know is refused by name.
+- **12** — a saved view is what was saved and is read back the same; a saved view that is not there is refused; the session's modes are what was set.
 
 ## 5. What it does not do
 
@@ -205,8 +227,21 @@ all: the transport and playback, because running a document is somebody else's
 business; undo, redo and selection, which the core owns; the cursor tools and
 the zoom, which the front end and the camera own; plugin discovery, which the
 plugin batteries own; pictures and video, which the film battery owns; saving
-and opening the session, which the kit owns; and the score printing, the
-keyboard shortcuts and the view preferences.
+and opening the session, which the kit owns; and the score printing.
+
+**The view and the options are in scope, by the owner's word.** The survey
+held the upstream's `view` and `options` families out of scope, on the tree's
+own rule that a front end reads the kit's state and never writes the
+document. The owner has said that the saved view and option state belongs in
+the session, and it is therefore **two more arcs** — the ruler and the counter
+(arc 11) and the saved views with the window's own state (arc 12). The house
+rule is not broken by this: the **fact** lives in the document and the battery
+owns it, and the front end still reads it and applies it. A front end that
+writes the fact is still refused by the gate.
+
+The rows that stay out of scope are the ones that are not saved state: the
+zoom, which is the camera's, and the keyboard shortcuts, which are a key
+mapping the kit has no model for.
 
 ## 6. The open questions
 
@@ -224,8 +259,12 @@ batteries it compared with are the film battery and the plugin batteries, and
 whether a row is a gap or somebody else's command is still open.
 
 The view and options families were classified out of scope on the tree's own
-rules, and if the owner wants saved view preferences in the document, several
-of those become ports.
+rules. **The owner has since said the saved view and option state belongs in
+the session**, so that question is closed: the ruler, the counter, the saved
+views, the clip display options and the scrolling, solo and focus modes are
+arcs 11 and 12. What is still open is the **shape**: a saved view is a set of
+facts under a name, and whether the battery stores one as a node of its own
+kind or as a map of fields is a design choice this plan does not settle.
 
 The edit-mode family was judged later rather than out of scope, and the
 survey is not certain of that judgement.

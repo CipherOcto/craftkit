@@ -49,22 +49,22 @@ here.
 
 Each arc is three edits: a row in the port manifest, a row in the README's claim
 table, and a section in the README. The sections reserved for this plan are
-**§1239 through §1250**, one per arc, in the order below.
+**§1240 through §1251**, one per arc, in the order below.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **1** | an element is duplicated on its own, animations and all | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/duplicate.rs` | `art.element.duplicate` | `crates/craftkit-plugin-art/tests/duplicate.rs` | §1239 |
-| **2** | an element is split at a point in time | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/split.rs` | `art.element.split` | `crates/craftkit-plugin-art/tests/split.rs` | §1240 |
-| **3** | a track can be muted, and muting is a flag on the track | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.mute` | `crates/craftkit-plugin-art/tests/track_mute.rs` | §1241 |
-| **4** | a track can be hidden, and hiding is a flag on the track | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.visibility` | `crates/craftkit-plugin-art/tests/track_visibility.rs` | §1242 |
-| **5** | a track can be removed, and removing it takes its elements with it | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.remove` | `crates/craftkit-plugin-art/tests/track_remove.rs` | §1243 |
-| **6** | a scene can be removed, not only added | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/scene.rs` | `art.scene.remove` | `crates/craftkit-plugin-art/tests/scene_remove.rs` | §1244 |
-| **7** | a scene carries its bookmarks, and a bookmark is toggled | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/scene.rs` | `art.scene.bookmark` | `crates/craftkit-plugin-art/tests/scene_bookmark.rs` | §1245 |
-| **8** | an element's effects are a stack, and the stack is edited | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/effects.rs` | `art.effect.add`, `art.effect.remove`, `art.effect.reorder`, `art.effect.toggle`, `art.effect.set` | `crates/craftkit-plugin-art/tests/effects.rs` | §1246 |
-| **9** | elements and keyframes are copied and pasted on the timeline | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/clipboard.rs` | `art.clipboard.copy`, `art.clipboard.paste` | `crates/craftkit-plugin-art/tests/clipboard.rs` | §1247 |
-| **10** | the composition has a canvas size, and the size is a setting | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/canvas.rs` | `art.canvas.size` | `crates/craftkit-plugin-art/tests/canvas.rs` | §1248 |
-| **11** | the project's settings are one record, and the record is edited | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/project.rs` | `art.project.settings` | `crates/craftkit-plugin-art/tests/project.rs` | §1249 |
-| **12** | what is drawn around the composition — the background and the guides — is a setting | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/background.rs` | `art.background.color`, `art.background.blur`, `art.guides.set` | `crates/craftkit-plugin-art/tests/background.rs` | §1250 |
+| **1** | an element is duplicated on its own, animations and all | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/duplicate.rs` | `art.element.duplicate` | `crates/craftkit-plugin-art/tests/duplicate.rs` | §1240 |
+| **2** | an element is split at a point in time | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/split.rs` | `art.element.split` | `crates/craftkit-plugin-art/tests/split.rs` | §1241 |
+| **3** | a track can be muted, and muting is a flag on the track | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.mute` | `crates/craftkit-plugin-art/tests/track_mute.rs` | §1242 |
+| **4** | a track can be hidden, and hiding is a flag on the track | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.visibility` | `crates/craftkit-plugin-art/tests/track_visibility.rs` | §1243 |
+| **5** | a track can be removed, and removing it takes its elements with it | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.remove` | `crates/craftkit-plugin-art/tests/track_remove.rs` | §1244 |
+| **6** | a scene can be removed, not only added | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/scene.rs` | `art.scene.remove` | `crates/craftkit-plugin-art/tests/scene_remove.rs` | §1245 |
+| **7** | a scene carries its bookmarks, and a bookmark is toggled | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/scene.rs` | `art.scene.bookmark` | `crates/craftkit-plugin-art/tests/scene_bookmark.rs` | §1246 |
+| **8** | an element's effects are a stack, and the stack is edited | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/effects.rs` | `art.effect.add`, `art.effect.remove`, `art.effect.reorder`, `art.effect.toggle`, `art.effect.set` | `crates/craftkit-plugin-art/tests/effects.rs` | §1247 |
+| **9** | elements and keyframes are copied and pasted on the timeline | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/clipboard.rs` | `art.clipboard.copy`, `art.clipboard.paste` | `crates/craftkit-plugin-art/tests/clipboard.rs` | §1248 |
+| **10** | the composition has a canvas size, and the size is a setting | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/canvas.rs` | `art.canvas.size` | `crates/craftkit-plugin-art/tests/canvas.rs` | §1249 |
+| **11** | the project's settings are one record, and the record is edited | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/project.rs` | `art.project.settings` | `crates/craftkit-plugin-art/tests/project.rs` | §1250 |
+| **12** | what is drawn around the composition — the background and the guides — is a setting | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/background.rs` | `art.background.color`, `art.background.blur`, `art.guides.set` | `crates/craftkit-plugin-art/tests/background.rs` | §1251 |
 
 These arcs are twelve because the survey marked nine capabilities PORT and three
 of them hold more than one command: the track row is mute, visibility and

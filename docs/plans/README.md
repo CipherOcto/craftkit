@@ -23,22 +23,28 @@ or decide (§6 of each plan).
 
 | plan | the upstream | the battery | arcs | README sections |
 |---|---|---|---|---|
-| [`craft-libs.md`](craft-libs.md) | the shared format and widget libraries | several — six new library crates and three batteries | 9 | §1251–§1259 |
-| [`pdfcraft.md`](pdfcraft.md) | the document-format project | `craftkit-plugin-pdf` | 14 | §1182–§1195 |
-| [`wordcraft.md`](wordcraft.md) | the prose project | `craftkit-plugin-prose` | 12 | §1196–§1207 |
-| [`effectcraft.md`](effectcraft.md) | the compositing project | `craftkit-plugin-fx` | 6 | §1208–§1213 |
-| [`cadcraft.md`](cadcraft.md) | the drawing project | `craftkit-plugin-cad` | 10 | §1214–§1223 |
-| [`vectorcraft.md`](vectorcraft.md) | the vector project | `craftkit-plugin-vector` | 9 | §1224–§1232 |
-| [`gridcraft.md`](gridcraft.md) | the spreadsheet project | `craftkit-plugin-grid` | 6 | §1233–§1238 |
-| [`artcraft.md`](artcraft.md) | the video-editor project | `craftkit-plugin-art` | 12 | §1239–§1250 |
-| [`solidcraft.md`](solidcraft.md) | the solid modeller | `craftkit-sdk` | 2 | §1260–§1261 |
-| [`a2ui-spec.md`](a2ui-spec.md) | the a2ui specification | `craftkit-a2ui`, `craftkit-plugin-a2ui`, `apps/craftkit-a2ui-server` | 8 | §1262–§1269 |
-| [`vectorcraft-poc.md`](vectorcraft-poc.md) | the vector project's proof of concept | `craftkit-sdk` | 2 | §1270–§1271 |
-| [`soundcraft.md`](soundcraft.md) | the audio project | `craftkit-plugin-sound` | 10 | §1272–§1281 |
-| [`designcraft.md`](designcraft.md) | the page-layout project | `craftkit-plugin-layout`, `craftkit-plugin-prose` | 12 | §1282–§1293 |
+| [`craft-libs.md`](craft-libs.md) | the shared format and widget libraries | several — six new library crates and three batteries | 9 | §1252–§1260 |
+| [`pdfcraft.md`](pdfcraft.md) | the document-format project | `craftkit-plugin-pdf` | 14 | §1183–§1196 |
+| [`wordcraft.md`](wordcraft.md) | the prose project | `craftkit-plugin-prose` | 12 | §1197–§1208 |
+| [`effectcraft.md`](effectcraft.md) | the compositing project | `craftkit-plugin-fx` | 6 | §1209–§1214 |
+| [`cadcraft.md`](cadcraft.md) | the drawing project | `craftkit-plugin-cad` | 10 | §1215–§1224 |
+| [`vectorcraft.md`](vectorcraft.md) | the vector project | `craftkit-plugin-vector` | 9 | §1225–§1233 |
+| [`gridcraft.md`](gridcraft.md) | the spreadsheet project | `craftkit-plugin-grid` | 6 | §1234–§1239 |
+| [`artcraft.md`](artcraft.md) | the video-editor project | `craftkit-plugin-art` | 12 | §1240–§1251 |
+| [`solidcraft.md`](solidcraft.md) | the solid modeller | `craftkit-sdk` | 2 | §1261–§1262 |
+| [`a2ui-spec.md`](a2ui-spec.md) | the a2ui specification | `craftkit-a2ui`, `craftkit-plugin-a2ui`, `apps/craftkit-a2ui-server` | 8 | §1263–§1270 |
+| [`soundcraft.md`](soundcraft.md) | the audio project | `craftkit-plugin-sound` | 12 | §1271–§1282 |
+| [`designcraft.md`](designcraft.md) | the page-layout project | `craftkit-plugin-layout`, `craftkit-plugin-prose` | 13 | §1283–§1295 |
 
-**One hundred and twelve arcs, one hundred and twelve reserved sections**, from §1182 to
-§1293, with no gap and no repeat.
+**One hundred and thirteen arcs, one hundred and thirteen reserved sections**,
+from §1183 to §1295, with no gap and no repeat.
+
+**One plan was withdrawn.** The vector project's proof of concept had a plan
+of two arcs — an importer and an exporter registry keyed by file extension.
+The owner has said that project's work is **finished** and that it is out of
+scope, so the plan is gone and its two sections are **not** reserved: §1271
+and §1272 are the sound plan's first two arcs, and no section anywhere points
+at a proof of concept that will not be worked.
 
 **One plan sits beside an older one.** `a2ui-spec.md` is about the
 **specification's** own conformance — its messages, its checks, its bindings —
@@ -92,15 +98,14 @@ lands.
 | 7 | cadcraft | the drawing battery's entity kinds are cheap to add, and the shape-changing ones are not |
 | 8 | vectorcraft | the vector battery's geometry is in good shape; what it lacks is what is laid on top of paths |
 | 9 | effectcraft | the compositing battery's gaps are small and well-defined — a mask's facts, a layer's timing, a tangent, an expression's errors |
-| 10 | soundcraft | the audio battery is nearly at parity; what is left is a track's own facts and a range's own operations |
+| 10 | soundcraft | the audio battery is nearly at parity; what is left is a track's own facts, a range's own operations and the session's own view |
 | 11 | a2ui-spec | the specification's conformance work sits on top of the compatible surface, so it lands after that plan's arcs |
-| 12 | vectorcraft-poc | the importer and exporter registries are small, and the window has no file dialogs yet to use them |
-| 13 | solidcraft | last on purpose: the solid model is a new battery, and it is the largest thing on the list |
+| 12 | solidcraft | last on purpose: the solid model is a new battery, and it is the largest thing on the list |
 
 **What the order does not say.** It does not say that a battery's arcs land
 together, and it does not say that a plan's arcs land at all. The rule the
-tree already holds applies to each of the one hundred and twelve arcs separately: an arc
-lands when it is written, tested and green.
+tree already holds applies to each of the one hundred and thirteen arcs
+separately: an arc lands when it is written, tested and green.
 
 ---
 
@@ -126,7 +131,7 @@ breaks one of them is wrong:
 ## What is not planned
 
 Each plan's §5 names the rows it holds back, and the reason. Across the
-thirteen plans the held-back work is of three kinds:
+twelve plans the held-back work is of three kinds:
 
 - **New models, not missing commands.** A parametric solid model, a table
   style model, a direction on a paragraph, a mesh gradient, a media library,
@@ -141,18 +146,28 @@ thirteen plans the held-back work is of three kinds:
 
 ---
 
-## The decisions that are the owner's
+## The decisions the owner has taken
 
-Three things in these plans are not the tree's to decide, and each plan says
-where it touches them:
+Four questions were put to the owner with these plans, and four answers came
+back. They are recorded here because each one changed a plan.
 
-1. **A release.** The tree has one workflow and no release; the trigger for
-   the open question in `KNOWN-GAPS.md` §5 is a release, and until then the
-   work lands as it lands.
-2. **The view preferences.** The sound survey classified the upstream's view
-   and options families as out of scope, on the tree's own rule that a front
-   end reads state and never writes the document. If saved view preferences
-   belong in the document, several of those rows become ports.
-3. **The extension of the plain-text door.** The a2ui specification's plan
-   touches the door's own message shapes, and the door is this tree's
-   contract with an agent — a change there is a change to the contract.
+1. **No releases yet.** The tree has one workflow and it is CI. The open
+   question in `KNOWN-GAPS.md` §8 — O10, the contracts — keeps its trigger:
+   the contracts are written when the tree has a **release** to write them
+   for, and there is no release to write them for now. Nothing else in the
+   plans waits on it.
+2. **The view and the options are in scope.** The saved view and option
+   state — the ruler, the counter, the saved views, the clip display
+   options, the scrolling, solo and focus modes, the rulers, the zero point
+   and the preferences — is a **fact of the document**, and the front end
+   reads it and applies it. This is three arcs the plans did not have: two
+   in the sound plan and one in the page-layout plan. The house rule is not
+   broken by it: the **fact** lives in the document, and a front end that
+   writes the fact is still refused by the gate.
+3. **The a2ui door may change.** The specification's plan touches the
+   door's own message shapes, and the owner has said that is allowed: the
+   door is this tree's contract with an agent, and the contract is the
+   owner's to change.
+4. **The vector project's proof of concept is finished and out of scope.**
+   Its plan is withdrawn, its two sections are not reserved, and nothing
+   else in the plans waits on it.

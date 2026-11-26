@@ -57,8 +57,8 @@ because both need a body to work on.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| A | a document is written down without being asked, and the write is whole or nothing | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/autosave.rs` | `doc.autosave.write` | `crates/craftkit-sdk/tests/autosave.rs` | §1260 |
-| B | the recoverable saves are listed, and each one is either kept or discarded | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/recovery.rs` | `doc.recovery.list` | `crates/craftkit-sdk/tests/recovery.rs` | §1261 |
+| A | a document is written down without being asked, and the write is whole or nothing | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/autosave.rs` | `doc.autosave.write` | `crates/craftkit-sdk/tests/autosave.rs` | §1261 |
+| B | the recoverable saves are listed, and each one is either kept or discarded | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/recovery.rs` | `doc.recovery.list` | `crates/craftkit-sdk/tests/recovery.rs` | §1262 |
 
 **These two arcs are the only thing this tree can take from a solid modeller
 today.** The upstream's autosave and its recovery list are properties of a

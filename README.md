@@ -4630,6 +4630,7 @@ so.
 | **the survey's question is answered and the stale notes are corrected** | **built.** The tree is meant to be driven by an agent, the survey's open question is answered, and the notes that had stopped being true are true again (§1179) | §1179 |
 | **the tree's counts of its own bounds are the tree's** | **built.** The counted block holds every crate's caps, the gate checks it, and the claim table's numbers are read against the tree (§1180) | §1180 |
 | **the family is surveyed and planned, one plan per project** | **built.** Thirteen plans name the arcs that would bring the family's work into this tree's batteries, each arc a rule, a landing site and a reserved section, and nothing in them is built (§1181) | §1181 |
+| **the owner has taken the four questions the plans raised** | **built.** No release yet, the view and the options are in scope, the a2ui door may change, and the proof of concept is finished and out of scope: the plans are corrected to say so (§1182) | §1182 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74665,17 +74666,20 @@ bring its work into this tree, and says what it would not bring.
 
 ### What was built
 
-- **Thirteen plans, one per project**, under `docs/plans/`, with an index
-  that names them all and gives the order across them. Each plan's first
+- **Twelve plans, one per project**, under `docs/plans/`, with an index
+  that names them all and gives the order across them. *(§1182 withdrew the
+  thirteenth: the vector project's proof of concept, whose work is
+  finished.)* Each plan's first
   section is a **survey**: the upstream's own command registry read against
   this tree's battery, one row per capability, with the upstream's `path:line`
   and the battery's own state, and a verdict that is *port*, *later* or *out
   of scope*.
-- **One hundred and twelve arcs, reserved as §1182 to §1293.** Every arc
+- **One hundred and thirteen arcs, reserved as §1183 to §1295.** Every arc
   names a **rule**, the crate and the file it lands in, the command it
   carries, the test that proves it, and the README section it will hold. The
   sections are reserved and empty, which is the honest state of work that
-  has not been done.
+  has not been done. *(§1182 moved the range by one, took back the two
+  sections the withdrawn plan held, and added three arcs.)*
 - **The plans say what they will not do.** Each plan names the rows it holds
   back — a whole new model, a new dependency, another battery's work — with
   the reason, and each names what its survey could not read or decide.
@@ -74684,7 +74688,11 @@ bring its work into this tree, and says what it would not bring.
   so a reader who finds a reserved number knows it is a promise and not a
   section.
 
-### What the survey found
+### What the port found
+
+The port here is a **survey**: the upstream's own command registry read
+against the battery it feeds, one row per capability, with the upstream's
+`path:line` and the battery's own state. What it found is this.
 
 - **The batteries are not thin.** The sound battery answers most of what its
   upstream asks, and the layout and prose batteries answer most of what the
@@ -74696,11 +74704,12 @@ bring its work into this tree, and says what it would not bring.
   the other audio codecs, the colour-management model) and other batteries'
   work (media, rendering, paths, caret typing). Only the first kind is
   really a battery.
-- **One upstream cannot be built here.** The vector project's proof of
-  concept points at a checkout that does not exist on this machine and says
-  of itself that it proves no real rendering, no path geometry and no stable
-  plugin interface. It is read as a catalogue of patterns this tree has
-  already absorbed, and one of its rows is an arc.
+- **One upstream cannot be built here, and it is out of scope.** The vector
+  project's proof of concept points at a checkout that does not exist on this
+  machine and says of itself that it proves no real rendering, no path
+  geometry and no stable plugin interface. It is read as a catalogue of
+  patterns this tree has already absorbed; the owner has since said that
+  project's work is finished, so its plan is withdrawn (§1182).
 
 ### What it cost
 
@@ -74716,3 +74725,53 @@ bring its work into this tree, and says what it would not bring.
   saved view preferences belong in the document, and whether the a2ui door's
   message shapes may change — the door is this tree's contract with an
   agent.
+
+## 1182. The owner has taken the four questions the plans raised
+
+The plans asked four questions, and the owner answered all four. This arc
+corrects the plans to the answers, withdraws the one plan that is no longer
+wanted, and records what each answer means for the work.
+
+### What was built
+
+- **The view and the options are in scope**, and three arcs appeared. The
+  saved view and option state — the ruler, the counter, the saved views, the
+  clip display options, the scrolling, solo and focus modes in the audio
+  battery, and the rulers, the zero point and the preferences in the
+  page-layout battery — is a **fact of the document**. The front end reads
+  it and applies it, and the house rule still holds: a front end that
+  **writes** the fact is refused by the gate.
+- **The vector project's proof of concept is finished and out of scope**, so
+  its plan is **withdrawn**. The two sections it had reserved are the sound
+  plan's first two arcs, and no section anywhere points at work that will
+  not be done.
+- **The a2ui door may change.** The specification's plan touches the door's
+  own message shapes, and the door is this tree's contract with an agent. The
+  owner has said the contract is the owner's to change, so those arcs are not
+  held for a decision about it.
+- **There are no releases yet**, and O10 keeps its trigger. The contracts
+  are written when the tree has a release to write them for; there is no
+  release, so the question is not open for a decision — it is open for a day.
+
+### What the port found
+
+**Nothing was ported.** This arc is prose about the plans, and the tree's
+code did not change. What the four answers found were three arcs the plans
+were missing, one plan that should not exist, and two questions that were
+never the tree's to answer. The port manifest has no rows for them and the
+README has no section for an arc that has not landed.
+
+### What it cost
+
+- **Three arcs, one withdrawn plan, one range moved by one**, and the notes
+  that say so: the plans' index, the two plans that changed, the a2ui plan's
+  open questions, `KNOWN-GAPS.md` §7 and §8, and this README. No code.
+
+### What it does not settle
+
+- **What a preference is.** The sound plan's view arcs and the page-layout
+  plan's arc agree that the saved state belongs in the document; whether a
+  saved view is a node of its own kind or a map of named fields is a design
+  choice each plan leaves open.
+- **The order across the plans is still a recommendation.** The owner decides
+  what lands, and an arc lands when it is written, tested and green.

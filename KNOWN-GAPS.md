@@ -727,14 +727,17 @@ comes to the tree cold:
   README's counted block, which the gate checks (§1180). The row was
   corrected in place; the history of the claim is not in the README.
 
-- **"The README's sections stop at §1180."** They do, and the **plans**
+- **"The README's sections stop at §1180."** They did, and the **plans**
   reserve the ones after it: `docs/plans/` holds one plan per project in
-  the family tree, and between them they reserve **§1181 to §1292** for
-  **112 arcs** that have **not been built**. The reservation is a promise
+  the family tree, and between them they reserve **§1183 to §1295** for
+  **113 arcs** that have **not been built**. The reservation is a promise
   about numbering, not a claim that the work exists — the README has no
   such sections yet, and the port manifest has no rows for them either.
   A plan that is not worked becomes a plan that is wrong, and the
-  numbering it holds is the thing to give up first.
+  numbering it holds is the thing to give up first. **One plan was
+  withdrawn** — the vector project's proof of concept — and its two
+  sections went with it: §1271 and §1272 are the sound plan's first two
+  arcs, and a section that no plan holds is a section nobody will fill.
 
 When the README and the code disagree, the **code** is right, and this file
 records the difference rather than the README's history.
@@ -807,4 +810,6 @@ disagrees knows what to argue with:
   from a hundred and thirty to a hundred and thirty-five. The **trigger**
   is a release, and the tree has no release: there is one workflow in the
   tree and it is CI. So the first step is a release workflow, and the
-  contracts follow it.
+  contracts follow it. **The owner has been asked and has said there are no
+  releases yet**, so the trigger stands and nothing waits on it: the
+  question is not open for a decision, it is open for a day.

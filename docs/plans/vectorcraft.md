@@ -50,19 +50,19 @@ model in one arc would be a different kind of arc from the nine here.
 
 Each arc is three edits: a row in the port manifest, a row in the README's claim
 table, and a section in the README. The sections reserved for this plan are
-**§1224 through §1232**, one per arc, in the order below.
+**§1225 through §1233**, one per arc, in the order below.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **1** | a clipping mask is a node on the document, not a flag on a shape | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/mask.rs` | `vector.mask.clip` | `crates/craftkit-plugin-vector/tests/mask.rs` | §1224 |
-| **2** | the pathfinder takes a whole selection, not two paths | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/pathops.rs` | `vector.pathops.selection` | `crates/craftkit-plugin-vector/tests/pathops.rs` | §1225 |
-| **3** | a path can be duplicated on its own, not only as a by-product | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/duplicate.rs` | `vector.path.duplicate` | `crates/craftkit-plugin-vector/tests/duplicate.rs` | §1226 |
-| **4** | objects align to one another, not to the origin | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/align.rs` | `vector.align.objects` | `crates/craftkit-plugin-vector/tests/align.rs` | §1227 |
-| **5** | objects distribute along a span, evenly | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/distribute.rs` | `vector.distribute.objects` | `crates/craftkit-plugin-vector/tests/distribute.rs` | §1228 |
-| **6** | a transform is about a point: rotate, reflect and shear | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/transform.rs` | `vector.transform.rotate`, `vector.transform.reflect`, `vector.transform.shear` | `crates/craftkit-plugin-vector/tests/transform.rs` | §1229 |
-| **7** | a symbol is a reusable instance, and the instance is what is on the canvas | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/symbols.rs` | `vector.symbol.instance` | `crates/craftkit-plugin-vector/tests/symbols.rs` | §1230 |
-| **8** | a stroke may carry arrowheads at its ends | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/arrowheads.rs` | `vector.stroke.arrowheads` | `crates/craftkit-plugin-vector/tests/arrowheads.rs` | §1231 |
-| **9** | the battery exports PDF as well as SVG and EPS | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/pdf.rs` | `vector.export.pdf` | `crates/craftkit-plugin-vector/tests/pdf.rs` | §1232 |
+| **1** | a clipping mask is a node on the document, not a flag on a shape | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/mask.rs` | `vector.mask.clip` | `crates/craftkit-plugin-vector/tests/mask.rs` | §1225 |
+| **2** | the pathfinder takes a whole selection, not two paths | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/pathops.rs` | `vector.pathops.selection` | `crates/craftkit-plugin-vector/tests/pathops.rs` | §1226 |
+| **3** | a path can be duplicated on its own, not only as a by-product | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/duplicate.rs` | `vector.path.duplicate` | `crates/craftkit-plugin-vector/tests/duplicate.rs` | §1227 |
+| **4** | objects align to one another, not to the origin | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/align.rs` | `vector.align.objects` | `crates/craftkit-plugin-vector/tests/align.rs` | §1228 |
+| **5** | objects distribute along a span, evenly | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/distribute.rs` | `vector.distribute.objects` | `crates/craftkit-plugin-vector/tests/distribute.rs` | §1229 |
+| **6** | a transform is about a point: rotate, reflect and shear | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/transform.rs` | `vector.transform.rotate`, `vector.transform.reflect`, `vector.transform.shear` | `crates/craftkit-plugin-vector/tests/transform.rs` | §1230 |
+| **7** | a symbol is a reusable instance, and the instance is what is on the canvas | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/symbols.rs` | `vector.symbol.instance` | `crates/craftkit-plugin-vector/tests/symbols.rs` | §1231 |
+| **8** | a stroke may carry arrowheads at its ends | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/arrowheads.rs` | `vector.stroke.arrowheads` | `crates/craftkit-plugin-vector/tests/arrowheads.rs` | §1232 |
+| **9** | the battery exports PDF as well as SVG and EPS | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/pdf.rs` | `vector.export.pdf` | `crates/craftkit-plugin-vector/tests/pdf.rs` | §1233 |
 
 These arcs are nine because the survey marked nine capabilities PORT, and each
 one is a command with a test and a section. Arc 2 is the one that changes an

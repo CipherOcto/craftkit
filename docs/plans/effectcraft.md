@@ -4,7 +4,7 @@ This plan is about the upstream — a motion-graphics engine whose commands are
 the reference for this tree's **fx battery**. It names the gaps between what
 that upstream offers and what `craftkit-plugin-fx` holds today, and it turns
 the four gaps the survey called **PORT** into **six arcs**. Those arcs reserve
-**README sections §1208 to §1213**, one section each, in the order they are
+**README sections §1209 to §1214**, one section each, in the order they are
 written here.
 
 ## 0. The rule
@@ -60,19 +60,19 @@ plan at all.
 
 Each arc is three edits and no more: a row in the port manifest, a row in the
 README's claim table, and a section in the README. The README sections this
-plan reserves are **§1208, §1209, §1210, §1211, §1212 and §1213** — six
+plan reserves are **§1209, §1210, §1211, §1212, §1213 and §1214** — six
 sections, one per arc, in the order below, with no gap and no repeat. The
 port manifest's rows take this document as their `from`, because this plan is
 the document the arcs come from.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | a layer carries an in point and an out point | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/layer_time.rs` | `fx.layer.inout` | `crates/craftkit-plugin-fx/tests/layer_time.rs` | §1208 |
-| **B** | a layer's in and out points are stretched, reversed or frozen | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/time_ops.rs` | `fx.layer.time.stretch`, `fx.layer.time.reverse`, `fx.layer.time.freeze` | `crates/craftkit-plugin-fx/tests/layer_time.rs` | §1209 |
-| **C** | a mask's feather and its expansion are written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/masks.rs` | `fx.mask.feather`, `fx.mask.expansion` | `crates/craftkit-plugin-fx/tests/masks.rs` | §1210 |
-| **D** | a mask's opacity is written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/masks.rs` | `fx.mask.opacity` | `crates/craftkit-plugin-fx/tests/masks.rs` | §1211 |
-| **E** | a keyframe's spatial tangents are written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/spatial.rs` | `fx.keyframe.tangent` | `crates/craftkit-plugin-fx/tests/spatial.rs` | §1212 |
-| **F** | an expression's errors are a report a user can read | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/expressions.rs` | `fx.prop.expression.report` | `crates/craftkit-plugin-fx/tests/expressions.rs` | §1213 |
+| **A** | a layer carries an in point and an out point | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/layer_time.rs` | `fx.layer.inout` | `crates/craftkit-plugin-fx/tests/layer_time.rs` | §1209 |
+| **B** | a layer's in and out points are stretched, reversed or frozen | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/time_ops.rs` | `fx.layer.time.stretch`, `fx.layer.time.reverse`, `fx.layer.time.freeze` | `crates/craftkit-plugin-fx/tests/layer_time.rs` | §1210 |
+| **C** | a mask's feather and its expansion are written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/masks.rs` | `fx.mask.feather`, `fx.mask.expansion` | `crates/craftkit-plugin-fx/tests/masks.rs` | §1211 |
+| **D** | a mask's opacity is written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/masks.rs` | `fx.mask.opacity` | `crates/craftkit-plugin-fx/tests/masks.rs` | §1212 |
+| **E** | a keyframe's spatial tangents are written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/spatial.rs` | `fx.keyframe.tangent` | `crates/craftkit-plugin-fx/tests/spatial.rs` | §1213 |
+| **F** | an expression's errors are a report a user can read | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/expressions.rs` | `fx.prop.expression.report` | `crates/craftkit-plugin-fx/tests/expressions.rs` | §1214 |
 
 The survey's four **PORT** rows become six arcs because two of them are two
 things. The layer-timing row is a row and a set of operations on that row:

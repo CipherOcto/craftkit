@@ -51,15 +51,15 @@ collaboration, and neither is this tree's business.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | TIFF is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-tiff` | `src/lib.rs` | `craftkit-tiff::Tiff::read` | `crates/craftkit-tiff/tests/tiff.rs` | §1251 |
-| **B** | WebP is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-webp` | `src/lib.rs` | `craftkit-webp::WebP::read` | `crates/craftkit-webp/tests/webp.rs` | §1252 |
-| **C** | every mesh container is read into one neutral mesh model | `docs/plans/craft-libs.md` | `craftkit-mesh` | `src/lib.rs` | `craftkit-mesh::Mesh::read` | `crates/craftkit-mesh/tests/mesh.rs` | §1253 |
-| **D** | the legacy binary workbook is read by the grid battery | `docs/plans/craft-libs.md` | `craftkit-plugin-grid` | `src/xls.rs` | `grid.workbook.import.xls` | `crates/craftkit-plugin-grid/tests/xls.rs` | §1254 |
-| **E** | a metafile is read and written into one neutral vector picture | `docs/plans/craft-libs.md` | `craftkit-metafile` | `src/lib.rs` | `craftkit-metafile::Metafile::read` | `crates/craftkit-metafile/tests/metafile.rs` | §1255 |
-| **F** | the machine-output languages are written by the vector battery | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/machine_output.rs` | `vector.machine.output.export` | `crates/craftkit-plugin-vector/tests/machine_output.rs` | §1256 |
-| **G** | the settings file is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-settings` | `src/lib.rs` | `craftkit-settings::Settings::save` | `crates/craftkit-settings/tests/settings.rs` | §1257 |
-| **H** | a file is replaced atomically, or not at all | `docs/plans/craft-libs.md` | `craftkit-atomic` | `src/lib.rs` | `craftkit-atomic::replace` | `crates/craftkit-atomic/tests/atomic.rs` | §1258 |
-| **I** | an EPS file is interpreted, not only written | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/eps.rs` | `vector.eps.import` | `crates/craftkit-plugin-vector/tests/eps.rs` | §1259 |
+| **A** | TIFF is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-tiff` | `src/lib.rs` | `craftkit-tiff::Tiff::read` | `crates/craftkit-tiff/tests/tiff.rs` | §1252 |
+| **B** | WebP is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-webp` | `src/lib.rs` | `craftkit-webp::WebP::read` | `crates/craftkit-webp/tests/webp.rs` | §1253 |
+| **C** | every mesh container is read into one neutral mesh model | `docs/plans/craft-libs.md` | `craftkit-mesh` | `src/lib.rs` | `craftkit-mesh::Mesh::read` | `crates/craftkit-mesh/tests/mesh.rs` | §1254 |
+| **D** | the legacy binary workbook is read by the grid battery | `docs/plans/craft-libs.md` | `craftkit-plugin-grid` | `src/xls.rs` | `grid.workbook.import.xls` | `crates/craftkit-plugin-grid/tests/xls.rs` | §1255 |
+| **E** | a metafile is read and written into one neutral vector picture | `docs/plans/craft-libs.md` | `craftkit-metafile` | `src/lib.rs` | `craftkit-metafile::Metafile::read` | `crates/craftkit-metafile/tests/metafile.rs` | §1256 |
+| **F** | the machine-output languages are written by the vector battery | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/machine_output.rs` | `vector.machine.output.export` | `crates/craftkit-plugin-vector/tests/machine_output.rs` | §1257 |
+| **G** | the settings file is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-settings` | `src/lib.rs` | `craftkit-settings::Settings::save` | `crates/craftkit-settings/tests/settings.rs` | §1258 |
+| **H** | a file is replaced atomically, or not at all | `docs/plans/craft-libs.md` | `craftkit-atomic` | `src/lib.rs` | `craftkit-atomic::replace` | `crates/craftkit-atomic/tests/atomic.rs` | §1259 |
+| **I** | an EPS file is interpreted, not only written | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/eps.rs` | `vector.eps.import` | `crates/craftkit-plugin-vector/tests/eps.rs` | §1260 |
 
 **Six of the nine arcs land in new shared library crates** — `craftkit-tiff`,
 `craftkit-webp`, `craftkit-mesh`, `craftkit-metafile`, `craftkit-settings` and
@@ -73,7 +73,7 @@ the workspace `Cargo.toml`, the row in the layer table, and the row in
 `docs/architecture.md`. A crate that is not in the layer table is a finding, so
 an arc that added a crate and forgot those edits would not build.
 
-The arcs reserve **§1251–§1259** of the README, one section per arc, in
+The arcs reserve **§1252–§1260** of the README, one section per arc, in
 order.
 
 The arcs are in the survey's order, and they are deliberately not one

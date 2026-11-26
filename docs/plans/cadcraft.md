@@ -3,7 +3,7 @@
 The upstream is a drawing engine whose commands cover entities, dimensions,
 modification, regions, tables and export. It feeds the `craftkit-plugin-cad`
 battery, the one battery in this tree that draws. This plan names **ten arcs**,
-one per gap the survey found, and reserves README sections **§1214 to §1223**,
+one per gap the survey found, and reserves README sections **§1215 to §1224**,
 one section per arc, in the order the arcs are written here.
 
 ## 0. The rule
@@ -45,16 +45,16 @@ They are named in §5 and are not arcs of this plan.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| A | a dimension carries a kind, and only length is the default | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/dimensions.rs` | `cad.dimension.add` | `crates/craftkit-plugin-cad/tests/dimensions.rs` | §1214 |
-| B | a block carries attributes, and an attribute has a value | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/groups.rs` | `cad.block.attribute.add` | `crates/craftkit-plugin-cad/tests/blocks.rs` | §1215 |
-| C | a rectangle is a drawn entity with its own geometry | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/curves.rs` | `cad.entity.rect.add` | `crates/craftkit-plugin-cad/tests/curves.rs` | §1216 |
-| D | a polygon is a drawn entity with its own geometry | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/polygons.rs` | `cad.entity.polygon.add` | `crates/craftkit-plugin-cad/tests/polygons.rs` | §1217 |
-| E | a spline is a drawn entity with its own geometry | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/splines.rs` | `cad.entity.spline.add` | `crates/craftkit-plugin-cad/tests/splines.rs` | §1218 |
-| F | a curve is trimmed or extended by a command, never by editing its geometry | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/modify.rs` | `cad.entity.trim` | `crates/craftkit-plugin-cad/tests/modify.rs` | §1219 |
-| G | a curve is offset by a command, and the offset is the requested distance | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/offset.rs` | `cad.entity.offset` | `crates/craftkit-plugin-cad/tests/offset.rs` | §1220 |
-| H | regions are combined by a command, and the result is a region | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/regions.rs` | `cad.region.boolean` | `crates/craftkit-plugin-cad/tests/regions.rs` | §1221 |
-| I | a table has columns, and a column is inserted and removed like a row | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/tables.rs` | `cad.table.insert.column` | `crates/craftkit-plugin-cad/tests/tables.rs` | §1222 |
-| J | a drawing is written as a PDF by the battery's own export door | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/pdfexport.rs` | `cad.export.pdf` | `crates/craftkit-plugin-cad/tests/pdfexport.rs` | §1223 |
+| A | a dimension carries a kind, and only length is the default | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/dimensions.rs` | `cad.dimension.add` | `crates/craftkit-plugin-cad/tests/dimensions.rs` | §1215 |
+| B | a block carries attributes, and an attribute has a value | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/groups.rs` | `cad.block.attribute.add` | `crates/craftkit-plugin-cad/tests/blocks.rs` | §1216 |
+| C | a rectangle is a drawn entity with its own geometry | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/curves.rs` | `cad.entity.rect.add` | `crates/craftkit-plugin-cad/tests/curves.rs` | §1217 |
+| D | a polygon is a drawn entity with its own geometry | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/polygons.rs` | `cad.entity.polygon.add` | `crates/craftkit-plugin-cad/tests/polygons.rs` | §1218 |
+| E | a spline is a drawn entity with its own geometry | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/splines.rs` | `cad.entity.spline.add` | `crates/craftkit-plugin-cad/tests/splines.rs` | §1219 |
+| F | a curve is trimmed or extended by a command, never by editing its geometry | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/modify.rs` | `cad.entity.trim` | `crates/craftkit-plugin-cad/tests/modify.rs` | §1220 |
+| G | a curve is offset by a command, and the offset is the requested distance | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/offset.rs` | `cad.entity.offset` | `crates/craftkit-plugin-cad/tests/offset.rs` | §1221 |
+| H | regions are combined by a command, and the result is a region | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/regions.rs` | `cad.region.boolean` | `crates/craftkit-plugin-cad/tests/regions.rs` | §1222 |
+| I | a table has columns, and a column is inserted and removed like a row | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/tables.rs` | `cad.table.insert.column` | `crates/craftkit-plugin-cad/tests/tables.rs` | §1223 |
+| J | a drawing is written as a PDF by the battery's own export door | `docs/plans/cadcraft.md` | `craftkit-plugin-cad` | `src/pdfexport.rs` | `cad.export.pdf` | `crates/craftkit-plugin-cad/tests/pdfexport.rs` | §1224 |
 
 These ten are the gaps the survey found and called **PORT**, and they are the
 ones a drawing user meets first: the entities that cannot be drawn, the

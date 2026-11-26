@@ -2,8 +2,8 @@
 
 The upstream is a page-layout engine written in Rust, and this plan is about
 the parts of it that the `craftkit-plugin-layout` battery and the
-`craftkit-plugin-prose` battery do not yet reach. It is twelve arcs, and it
-reserves README sections **§1282 to §1293** — one section per arc, in the
+`craftkit-plugin-prose` battery do not yet reach. It is thirteen arcs, and it
+reserves README sections **§1283 to §1295** — one section per arc, in the
 order the arcs are written here.
 
 ## 0. The rule
@@ -95,18 +95,19 @@ document the arcs come from, not the survey it follows.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | a spread is duplicated into a new spread whose pages and items are copies, not the same nodes | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/pages.rs` | `layout.spread.duplicate` | `crates/craftkit-plugin-layout/tests/spreadduplicate.rs` | §1282 |
-| **B** | a page's own facts — the index it sits at in its spread and its width and height — may be changed after the fact, and an index outside the spread is refused | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/pages.rs` | `layout.page.insert`, `layout.page.set` | `crates/craftkit-plugin-layout/tests/pagefacts.rs` | §1283 |
-| **C** | a layer's own facts — its name, its colour, its copies and which one is active — are facts of the layer and may be changed | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/layers.rs` | `layout.layer.set`, `layout.layer.duplicate`, `layout.layer.active` | `crates/craftkit-plugin-layout/tests/layerfacts.rs` | §1284 |
-| **D** | the guides of a spread are readable, and a column guide is a guide on a page, so moving it is a guide move with a page | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/guides.rs` | `layout.guide.list`, `layout.page.guide.move` | `crates/craftkit-plugin-layout/tests/guidelist.rs` | §1285 |
-| **E** | an item's rectangle holds its position and its name is its own fact, and both may be changed after the item exists | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.move`, `layout.item.rename` | `crates/craftkit-plugin-layout/tests/itemfacts.rs` | §1286 |
-| **F** | aligning puts the items on one edge or one centre line of their common box, and distributing spaces them evenly between the first and the last | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/order.rs` | `layout.item.align`, `layout.item.distribute` | `crates/craftkit-plugin-layout/tests/itemplacement.rs` | §1287 |
-| **G** | swapping exchanges the two paint facts of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/paint.rs` | `layout.item.paint.swap` | `crates/craftkit-plugin-layout/tests/paintswap.rs` | §1288 |
-| **H** | stepping and repeating writes copies of the item along a direction and a count | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.repeat` | `crates/craftkit-plugin-layout/tests/itemrepeat.rs` | §1289 |
-| **I** | an item may say what it is, and the saying is a fact of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.alt` | `crates/craftkit-plugin-layout/tests/itemalt.rs` | §1290 |
-| **J** | a story's text and length are derived, and they are read rather than stored twice | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.story.get` | `crates/craftkit-plugin-layout/tests/storyget.rs` | §1291 |
-| **K** | a table's own measurements — a row's height, a column's width, and the even division of the space — are facts of the table | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.row.height`, `prose.table.column.width`, `prose.table.distribute` | `crates/craftkit-plugin-prose/tests/tablemeasure.rs` | §1292 |
-| **L** | placeholder text fills a frame so its length can be seen | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/paragraph.rs` | `prose.block.placeholder.fill` | `crates/craftkit-plugin-prose/tests/placeholder.rs` | §1293 |
+| **A** | a spread is duplicated into a new spread whose pages and items are copies, not the same nodes | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/pages.rs` | `layout.spread.duplicate` | `crates/craftkit-plugin-layout/tests/spreadduplicate.rs` | §1283 |
+| **B** | a page's own facts — the index it sits at in its spread and its width and height — may be changed after the fact, and an index outside the spread is refused | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/pages.rs` | `layout.page.insert`, `layout.page.set` | `crates/craftkit-plugin-layout/tests/pagefacts.rs` | §1284 |
+| **C** | a layer's own facts — its name, its colour, its copies and which one is active — are facts of the layer and may be changed | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/layers.rs` | `layout.layer.set`, `layout.layer.duplicate`, `layout.layer.active` | `crates/craftkit-plugin-layout/tests/layerfacts.rs` | §1285 |
+| **D** | the guides of a spread are readable, and a column guide is a guide on a page, so moving it is a guide move with a page | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/guides.rs` | `layout.guide.list`, `layout.page.guide.move` | `crates/craftkit-plugin-layout/tests/guidelist.rs` | §1286 |
+| **E** | an item's rectangle holds its position and its name is its own fact, and both may be changed after the item exists | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.move`, `layout.item.rename` | `crates/craftkit-plugin-layout/tests/itemfacts.rs` | §1287 |
+| **F** | aligning puts the items on one edge or one centre line of their common box, and distributing spaces them evenly between the first and the last | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/order.rs` | `layout.item.align`, `layout.item.distribute` | `crates/craftkit-plugin-layout/tests/itemplacement.rs` | §1288 |
+| **G** | swapping exchanges the two paint facts of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/paint.rs` | `layout.item.paint.swap` | `crates/craftkit-plugin-layout/tests/paintswap.rs` | §1289 |
+| **H** | stepping and repeating writes copies of the item along a direction and a count | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.repeat` | `crates/craftkit-plugin-layout/tests/itemrepeat.rs` | §1290 |
+| **I** | an item may say what it is, and the saying is a fact of the item | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.item.alt` | `crates/craftkit-plugin-layout/tests/itemalt.rs` | §1291 |
+| **J** | a story's text and length are derived, and they are read rather than stored twice | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/items.rs` | `layout.story.get` | `crates/craftkit-plugin-layout/tests/storyget.rs` | §1292 |
+| **K** | a table's own measurements — a row's height, a column's width, and the even division of the space — are facts of the table | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.row.height`, `prose.table.column.width`, `prose.table.distribute` | `crates/craftkit-plugin-prose/tests/tablemeasure.rs` | §1293 |
+| **L** | placeholder text fills a frame so its length can be seen | `docs/plans/designcraft.md` | `craftkit-plugin-prose` | `src/paragraph.rs` | `prose.block.placeholder.fill` | `crates/craftkit-plugin-prose/tests/placeholder.rs` | §1294 |
+| **M** | the rulers, the zero point and the preferences are facts of the document, and the front end reads them | `docs/plans/designcraft.md` | `craftkit-plugin-layout` | `src/view.rs` | `layout.ruler.set`, `layout.view.zero.set`, `layout.preference.set` | `crates/craftkit-plugin-layout/tests/view.rs` | §1295 |
 
 **The nineteen rows are grouped into twelve rules, and the grouping is by
 subject, not by command.** The spread's own facts are the duplication of a
@@ -134,10 +135,10 @@ plan does not repeat them.** The prose battery's plan at
 (`prose.run.format`, extended), the **link on a run** (`prose.block.link.add`),
 the **tab stops of a paragraph** (`prose.block.stops.set`) and the **sort of a
 table** (`prose.table.sort`). None of those four is an arc here, and none of
-the twelve arcs above touches the same ground: this plan's prose work is the
+the thirteen arcs above touches the same ground: this plan's prose work is the
 table's measurements and the placeholder text, which that plan does not have.
 
-**Ten arcs land in the layout battery and two in the prose battery.** An arc
+**Eleven arcs land in the layout battery and two in the prose battery.** An arc
 that lands in two crates would need two port rows, and none here does.
 
 ## 3. The order, and what each arc ships
@@ -156,12 +157,18 @@ that lands in two crates would need two port rows, and none here does.
 | J | the read story | small — the text and the length are derived already, and the command only reads them |
 | K | the table's measurements | medium — a height, a width, and an even division that is stated in one number |
 | L | the placeholder text | medium — the fill is chosen to a length, and the length has to be the one the frame asks for |
+| M | the rulers, the zero point and the preferences | small — three fields of the document that the front end reads and applies |
 
 The order is the order of the surface, from the outside in: the spread, the
 page, the layer, the guides, then the item — its own facts, its placement,
 its paint, its repetition, its alt text — and then the two things that are
 read rather than written, the story and the table's measurements, with the
 placeholder text last because it depends on a frame and a length.
+
+**Arc M comes at the very end**, because it is about how the document is
+*looked at* and not about what it holds, and because the owner asked for it
+by name: the saved view and preference state belongs in the document, and the
+front end reads it and applies it.
 
 **Nothing ships before Arc A**, and every arc from A on is a visible command
 that stands on its own. There is no invisible preparation in this plan, so
@@ -188,6 +195,7 @@ row.
 | J | the story's text and length are the ones the node derives, and the same story read twice gives the same answer |
 | K | a row's height and a column's width are read back as they were set; the distribution says the even number it divided to, and the rows or columns are that even; a height or a width of zero or less is refused |
 | L | the frame is filled with text of the length that was asked for; a length of zero or less is refused; the fill does not change the frame's own facts |
+| M | the rulers, the zero point and the preference are read back as they were set; a preference the tree does not know is refused by name; the front end reads them and does not write them |
 
 **The refusals** are the tests that matter. An index outside a spread, a
 size of zero, a page that has no such guide, a set of one item to align, a
@@ -241,9 +249,11 @@ them.
   craftkit tree has none.
 - **Selection, undo, redo, copy and paste** are out of scope because the
   core owns them, and a battery that added its own would be a second path.
-- **The upstream's scripting, library, font and preference surfaces** are out
-  of scope because they are a host application's furniture, not rules about
-  a document.
+- **The upstream's scripting, library and font surfaces** are out of scope
+  because they are a host application's furniture, not rules about a
+  document. The **preference** part of that row is not out of scope: the
+  owner has said the saved view and preference state belongs in the
+  document, and **Arc M** carries it.
 - **Ink separations** are out of scope because they are a print surface.
 - **Colour conversion** is out of scope because the vector battery owns it.
 - **Paths** are out of scope because the vector battery owns them.
@@ -276,3 +286,8 @@ questions this plan does not answer.
   reading of the grid battery's cell model against the prose battery's.
 - **The survey did not audit the art, image, audio and shape batteries**, so
   "absent" here means absent from the batteries it was asked about.
+- **What a preference is, is not settled.** The owner has brought the view
+  and preference state into scope, and the survey's row names the upstream's
+  preference surface without reading it. What would settle it is a reading of
+  the upstream's preference list, and the answer decides whether Arc M is
+  three fields or a table of named preferences.

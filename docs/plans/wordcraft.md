@@ -2,7 +2,7 @@
 
 The upstream is a set of document libraries written in Rust, and this plan is
 about the parts of it the `craftkit-plugin-prose` battery does not yet reach.
-It is twelve arcs, and it reserves README sections **§1196 to §1207** — one
+It is twelve arcs, and it reserves README sections **§1197 to §1208** — one
 section per arc, in the order the arcs are written here.
 
 ## 0. The rule
@@ -62,18 +62,18 @@ document the arcs come from, not the survey it follows.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | the recording of tracked changes can be switched on and off, and what the battery stores follows the switch | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/revisions.rs` | `prose.revision.record` | `crates/craftkit-plugin-prose/tests/revisionrecord.rs` | §1196 |
-| **B** | a range of text can carry a hyperlink, and the link is a thing the block can be read back for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/links.rs` | `prose.block.link.add` | `crates/craftkit-plugin-prose/tests/linkadd.rs` | §1197 |
-| **C** | a run carries the character facts that mark it — strike, super/subscript, caps, small caps, highlight and hidden — and each one is read back as it was set | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.run.format.extended` | `crates/craftkit-plugin-prose/tests/charextended.rs` | §1198 |
-| **D** | a run carries the character facts that change its width — character spacing and scale — and the width the battery reports is the width the facts give | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.run.spacing` | `crates/craftkit-plugin-prose/tests/charspacing.rs` | §1199 |
-| **E** | a cell can hold a table formula, and the formula is read back as the formula it is | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.formula` | `crates/craftkit-plugin-prose/tests/tableformula.rs` | §1200 |
-| **F** | a table can be sorted by a column, and the rows come back in the order the sort names | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.sort` | `crates/craftkit-plugin-prose/tests/tablesort.rs` | §1201 |
-| **G** | a paragraph's tab stops carry leaders, and a leader is drawn where the stop was asked for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/stops.rs` | `prose.block.stops.set` | `crates/craftkit-plugin-prose/tests/stopleaders.rs` | §1202 |
-| **H** | a paragraph can be given borders, and the borders are read back as they were written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/borders.rs` | `prose.block.paragraph.border` | `crates/craftkit-plugin-prose/tests/paragraphborder.rs` | §1203 |
-| **I** | a paragraph can be shaded, and the shading is read back as it was written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/background.rs` | `prose.block.paragraph.shading` | `crates/craftkit-plugin-prose/tests/paragraphshading.rs` | §1204 |
-| **J** | a page break and a column break can be placed, and the break is where it was asked for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/page.rs` | `prose.page.break` | `crates/craftkit-plugin-prose/tests/pagebreak.rs` | §1205 |
-| **K** | the first paragraph of a page can carry a drop cap, and the cap is a fact of the paragraph | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/paragraph.rs` | `prose.block.paragraph.dropcap` | `crates/craftkit-plugin-prose/tests/dropcap.rs` | §1206 |
-| **L** | a page can be numbered line by line, and the numbering starts and ends where it was asked to | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/pagenumbers.rs` | `prose.page.linenumber` | `crates/craftkit-plugin-prose/tests/linenumber.rs` | §1207 |
+| **A** | the recording of tracked changes can be switched on and off, and what the battery stores follows the switch | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/revisions.rs` | `prose.revision.record` | `crates/craftkit-plugin-prose/tests/revisionrecord.rs` | §1197 |
+| **B** | a range of text can carry a hyperlink, and the link is a thing the block can be read back for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/links.rs` | `prose.block.link.add` | `crates/craftkit-plugin-prose/tests/linkadd.rs` | §1198 |
+| **C** | a run carries the character facts that mark it — strike, super/subscript, caps, small caps, highlight and hidden — and each one is read back as it was set | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.run.format.extended` | `crates/craftkit-plugin-prose/tests/charextended.rs` | §1199 |
+| **D** | a run carries the character facts that change its width — character spacing and scale — and the width the battery reports is the width the facts give | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/characters.rs` | `prose.run.spacing` | `crates/craftkit-plugin-prose/tests/charspacing.rs` | §1200 |
+| **E** | a cell can hold a table formula, and the formula is read back as the formula it is | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.formula` | `crates/craftkit-plugin-prose/tests/tableformula.rs` | §1201 |
+| **F** | a table can be sorted by a column, and the rows come back in the order the sort names | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/tables.rs` | `prose.table.sort` | `crates/craftkit-plugin-prose/tests/tablesort.rs` | §1202 |
+| **G** | a paragraph's tab stops carry leaders, and a leader is drawn where the stop was asked for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/stops.rs` | `prose.block.stops.set` | `crates/craftkit-plugin-prose/tests/stopleaders.rs` | §1203 |
+| **H** | a paragraph can be given borders, and the borders are read back as they were written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/borders.rs` | `prose.block.paragraph.border` | `crates/craftkit-plugin-prose/tests/paragraphborder.rs` | §1204 |
+| **I** | a paragraph can be shaded, and the shading is read back as it was written | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/background.rs` | `prose.block.paragraph.shading` | `crates/craftkit-plugin-prose/tests/paragraphshading.rs` | §1205 |
+| **J** | a page break and a column break can be placed, and the break is where it was asked for | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/page.rs` | `prose.page.break` | `crates/craftkit-plugin-prose/tests/pagebreak.rs` | §1206 |
+| **K** | the first paragraph of a page can carry a drop cap, and the cap is a fact of the paragraph | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/paragraph.rs` | `prose.block.paragraph.dropcap` | `crates/craftkit-plugin-prose/tests/dropcap.rs` | §1207 |
+| **L** | a page can be numbered line by line, and the numbering starts and ends where it was asked to | `docs/plans/wordcraft.md` | `craftkit-plugin-prose` | `src/pagenumbers.rs` | `prose.page.linenumber` | `crates/craftkit-plugin-prose/tests/linenumber.rs` | §1208 |
 
 **Two survey rows become two arcs each, and that is why there are twelve.**
 The survey's character-formatting row names two kinds of fact: the ones that

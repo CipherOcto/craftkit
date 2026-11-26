@@ -38,14 +38,14 @@ The SKIP row is out of scope altogether: shapes, WordArt, text boxes and ink dra
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | a chart kind is a value the battery names, not a drawing the battery draws | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/charts.rs` | `grid.chart.set` | `crates/craftkit-plugin-grid/tests/charts.rs` | §1233 |
-| **B** | a summary is a named aggregate over a pivot's values | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/pivot.rs` | `grid.pivot.set` | `crates/craftkit-plugin-grid/tests/pivot.rs` | §1234 |
-| **C** | a table's look is a style the document carries | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/table.rs` | `grid.table.style` | `crates/craftkit-plugin-grid/tests/table.rs` | §1235 |
-| **D** | changing a chart's design is a command on the chart | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/chart.rs` | `grid.chart.design` | `crates/craftkit-plugin-grid/tests/charts.rs` | §1236 |
-| **E** | a validation list is searched before it is picked | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/validation.rs` | `grid.validation.list` | `crates/craftkit-plugin-grid/tests/validation.rs` | §1237 |
-| **F** | a view is a saved arrangement of the sheet | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/views.rs` | `grid.view.split` | `crates/craftkit-plugin-grid/tests/views.rs` | §1238 |
+| **A** | a chart kind is a value the battery names, not a drawing the battery draws | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/charts.rs` | `grid.chart.set` | `crates/craftkit-plugin-grid/tests/charts.rs` | §1234 |
+| **B** | a summary is a named aggregate over a pivot's values | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/pivot.rs` | `grid.pivot.set` | `crates/craftkit-plugin-grid/tests/pivot.rs` | §1235 |
+| **C** | a table's look is a style the document carries | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/table.rs` | `grid.table.style` | `crates/craftkit-plugin-grid/tests/table.rs` | §1236 |
+| **D** | changing a chart's design is a command on the chart | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/chart.rs` | `grid.chart.design` | `crates/craftkit-plugin-grid/tests/charts.rs` | §1237 |
+| **E** | a validation list is searched before it is picked | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/validation.rs` | `grid.validation.list` | `crates/craftkit-plugin-grid/tests/validation.rs` | §1238 |
+| **F** | a view is a saved arrangement of the sheet | `docs/plans/gridcraft.md` | `craftkit-plugin-grid` | `src/views.rs` | `grid.view.split` | `crates/craftkit-plugin-grid/tests/views.rs` | §1239 |
 
-Each arc is three edits and no more: a row in the port manifest (`xtask/src/ports.rs`), a claim row in the README, and a section in the README, whose sections are **§1233–§1238** in this order. The test file named in a row is written in the same arc that adds the row, and the rows name the files the arc will create.
+Each arc is three edits and no more: a row in the port manifest (`xtask/src/ports.rs`), a claim row in the README, and a section in the README, whose sections are **§1234–§1239** in this order. The test file named in a row is written in the same arc that adds the row, and the rows name the files the arc will create.
 
 ## 3. The order, and what each arc ships
 

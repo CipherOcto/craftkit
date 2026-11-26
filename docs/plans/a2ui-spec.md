@@ -54,19 +54,19 @@ The verdicts are the survey's, and they are the reason this plan exists: the
 ## 2. The arcs
 
 An arc is three edits: a row in the port manifest, a row in the README's claim
-table, and a README section. This plan reserves **§1262–§1269** — eight
+table, and a README section. This plan reserves **§1263–§1270** — eight
 sections, one per arc, in the order below.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | a data-model update replaces the value at a path, and nothing else in the model changes | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/model.rs` | `craftkit-a2ui::model::set` | `crates/craftkit-a2ui/tests/model.rs` | §1262 |
-| **B** | a renderer function call carries its nested `callFunction`, its `catalogId` and its `functionCallId` | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/functions.rs` | `craftkit-a2ui::functions::declaration` | `crates/craftkit-a2ui/tests/functions.rs` | §1263 |
-| **C** | the check rules are evaluated, and a failing check disables its control | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/checks.rs` | `craftkit-a2ui::checks::evaluate` | `crates/craftkit-a2ui/tests/checks.rs` | §1264 |
-| **D** | typing writes the user's input into the local model, at the bound path | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/bindings.rs` | `craftkit-a2ui::bindings::write` | `crates/craftkit-a2ui/tests/bindings.rs` | §1265 |
-| **E** | every renderer-side call is answered with a `rendererFunctionResponse` | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.component.invoke` | `apps/craftkit-a2ui-server/tests/protocol.rs` | §1266 |
-| **F** | `metadata.extensions` is carried through, not refused | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.create` | `apps/craftkit-a2ui-server/tests/door.rs` | §1267 |
-| **G** | a fault in a surface is sent to the agent as an `error` message | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.apply` | `apps/craftkit-a2ui-server/tests/stream.rs` | §1268 |
-| **H** | a template child list is generated from a data-model path, and `@index` names the item | `docs/plans/a2ui-spec.md` | `craftkit-plugin-a2ui` | `src/tree.rs` | `a2ui.surface.apply` | `crates/craftkit-plugin-a2ui/tests/tree.rs` | §1269 |
+| **A** | a data-model update replaces the value at a path, and nothing else in the model changes | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/model.rs` | `craftkit-a2ui::model::set` | `crates/craftkit-a2ui/tests/model.rs` | §1263 |
+| **B** | a renderer function call carries its nested `callFunction`, its `catalogId` and its `functionCallId` | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/functions.rs` | `craftkit-a2ui::functions::declaration` | `crates/craftkit-a2ui/tests/functions.rs` | §1264 |
+| **C** | the check rules are evaluated, and a failing check disables its control | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/checks.rs` | `craftkit-a2ui::checks::evaluate` | `crates/craftkit-a2ui/tests/checks.rs` | §1265 |
+| **D** | typing writes the user's input into the local model, at the bound path | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/bindings.rs` | `craftkit-a2ui::bindings::write` | `crates/craftkit-a2ui/tests/bindings.rs` | §1266 |
+| **E** | every renderer-side call is answered with a `rendererFunctionResponse` | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.component.invoke` | `apps/craftkit-a2ui-server/tests/protocol.rs` | §1267 |
+| **F** | `metadata.extensions` is carried through, not refused | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.create` | `apps/craftkit-a2ui-server/tests/door.rs` | §1268 |
+| **G** | a fault in a surface is sent to the agent as an `error` message | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.apply` | `apps/craftkit-a2ui-server/tests/stream.rs` | §1269 |
+| **H** | a template child list is generated from a data-model path, and `@index` names the item | `docs/plans/a2ui-spec.md` | `craftkit-plugin-a2ui` | `src/tree.rs` | `a2ui.surface.apply` | `crates/craftkit-plugin-a2ui/tests/tree.rs` | §1270 |
 
 **Four arcs land in the layer and four in the door.** Arcs A, B, C and D are
 the layer's own work: the model, the function table, the check rules and the
@@ -143,6 +143,16 @@ only. It does not add a component, does not change the catalogue's shape, does
 not add a door, and does not touch a front end.
 
 ## 6. The open questions
+
+**The owner has allowed the door to change.** This plan touches the door's
+own message shapes — the `updateDataModel` path, the `callRendererFunction`
+envelope, the `rendererFunctionResponse` and the surface `error` message —
+and the door is this tree's contract with an agent. The owner has said that
+the contract may change, so the arcs below are not held for a decision about
+the contract. What is still open is the **shape**: whether the door keeps
+JSON-RPC as its transport and carries the protocol's messages inside it, or
+answers in the protocol's messages directly, is a design choice this plan
+does not settle.
 
 **The specification's conformance suite and its per-language SDK directories
 were not read.** Recent upstream commits in either may have a protocol-level
