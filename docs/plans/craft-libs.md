@@ -4,7 +4,7 @@ The upstream is a large collection of format crates; this tree reads and writes 
 small fraction of those formats today. This plan names the capabilities worth
 porting, the arcs that would port them, and the order the arcs would come in.
 
-The plan holds **seventeen arcs** and reserves **§1253 to §1359** of the README:
+The plan holds **seventeen arcs** and reserves **§1254 to §1360** of the README:
 nine arcs for the first wave and eight for the second, and the second wave is
 the whole upstream.
 
@@ -56,28 +56,28 @@ collaboration, and neither is this tree's business.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | TIFF is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-tiff` | `src/lib.rs` | `craftkit-tiff::Tiff::read` | `crates/craftkit-tiff/tests/tiff.rs` | §1253 |
-| **B** | WebP is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-webp` | `src/lib.rs` | `craftkit-webp::WebP::read` | `crates/craftkit-webp/tests/webp.rs` | §1254 |
-| **C** | every mesh container is read into one neutral mesh model | `docs/plans/craft-libs.md` | `craftkit-mesh` | `src/lib.rs` | `craftkit-mesh::Mesh::read` | `crates/craftkit-mesh/tests/mesh.rs` | §1255 |
-| **D** | the legacy binary workbook is read by the grid battery | `docs/plans/craft-libs.md` | `craftkit-plugin-grid` | `src/xls.rs` | `grid.workbook.import.xls` | `crates/craftkit-plugin-grid/tests/xls.rs` | §1256 |
-| **E** | a metafile is read and written into one neutral vector picture | `docs/plans/craft-libs.md` | `craftkit-metafile` | `src/lib.rs` | `craftkit-metafile::Metafile::read` | `crates/craftkit-metafile/tests/metafile.rs` | §1257 |
-| **F** | the machine-output languages are written by the vector battery | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/machine_output.rs` | `vector.machine.output.export` | `crates/craftkit-plugin-vector/tests/machine_output.rs` | §1258 |
-| **G** | the settings file is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-settings` | `src/lib.rs` | `craftkit-settings::Settings::save` | `crates/craftkit-settings/tests/settings.rs` | §1259 |
-| **H** | a file is replaced atomically, or not at all | `docs/plans/craft-libs.md` | `craftkit-atomic` | `src/lib.rs` | `craftkit-atomic::replace` | `crates/craftkit-atomic/tests/atomic.rs` | §1260 |
-| **I** | an EPS file is interpreted, not only written | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/eps.rs` | `vector.eps.import` | `crates/craftkit-plugin-vector/tests/eps.rs` | §1261 |
+| **A** | TIFF is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-tiff` | `src/lib.rs` | `craftkit-tiff::Tiff::read` | `crates/craftkit-tiff/tests/tiff.rs` | §1254 |
+| **B** | WebP is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-webp` | `src/lib.rs` | `craftkit-webp::WebP::read` | `crates/craftkit-webp/tests/webp.rs` | §1255 |
+| **C** | every mesh container is read into one neutral mesh model | `docs/plans/craft-libs.md` | `craftkit-mesh` | `src/lib.rs` | `craftkit-mesh::Mesh::read` | `crates/craftkit-mesh/tests/mesh.rs` | §1256 |
+| **D** | the legacy binary workbook is read by the grid battery | `docs/plans/craft-libs.md` | `craftkit-plugin-grid` | `src/xls.rs` | `grid.workbook.import.xls` | `crates/craftkit-plugin-grid/tests/xls.rs` | §1257 |
+| **E** | a metafile is read and written into one neutral vector picture | `docs/plans/craft-libs.md` | `craftkit-metafile` | `src/lib.rs` | `craftkit-metafile::Metafile::read` | `crates/craftkit-metafile/tests/metafile.rs` | §1258 |
+| **F** | the machine-output languages are written by the vector battery | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/machine_output.rs` | `vector.machine.output.export` | `crates/craftkit-plugin-vector/tests/machine_output.rs` | §1259 |
+| **G** | the settings file is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-settings` | `src/lib.rs` | `craftkit-settings::Settings::save` | `crates/craftkit-settings/tests/settings.rs` | §1260 |
+| **H** | a file is replaced atomically, or not at all | `docs/plans/craft-libs.md` | `craftkit-atomic` | `src/lib.rs` | `craftkit-atomic::replace` | `crates/craftkit-atomic/tests/atomic.rs` | §1261 |
+| **I** | an EPS file is interpreted, not only written | `docs/plans/craft-libs.md` | `craftkit-plugin-vector` | `src/eps.rs` | `vector.eps.import` | `crates/craftkit-plugin-vector/tests/eps.rs` | §1262 |
 
 **The second wave: the whole upstream.**
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **J** | the OpenDocument workbook is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-ods` | `src/lib.rs` | `ods.workbook.read` | `crates/craftkit-ods/tests/ods.rs` | §1352 |
-| **K** | the word-processing document and its model are one shared library, and the battery's own commands over it are the word plan's arc | `docs/plans/craft-libs.md` | `craftkit-word` | `src/lib.rs` | `word.document.read` | `crates/craftkit-word/tests/word.rs` | §1353 |
-| **L** | the layered image format is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-psd` | `src/lib.rs` | `psd.image.read` | `crates/craftkit-psd/tests/psd.rs` | §1354 |
-| **M** | the camera raw containers are read into one neutral raw image | `docs/plans/craft-libs.md` | `craftkit-raw` | `src/lib.rs` | `raw.image.read` | `crates/craftkit-raw/tests/raw.rs` | §1355 |
-| **N** | the other audio codecs are read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-audio` | `src/lib.rs` | `audio.codec.read` | `crates/craftkit-audio/tests/audio.rs` | §1356 |
-| **O** | every colour in the tree is a colour in a space, and this arc is what says which space | `docs/plans/craft-libs.md` | `craftkit-cms` | `src/lib.rs` | `cms.profile.read` | `crates/craftkit-cms/tests/cms.rs` | §1357 |
-| **P** | other tools' native design containers are read by one shared library | `docs/plans/craft-libs.md` | `craftkit-foreign` | `src/lib.rs` | `foreign.container.read` | `crates/craftkit-foreign/tests/foreign.rs` | §1358 |
-| **Q** | the widgets the tree's own front ends draw are drawn once and shared, in code, with no image and no font file anywhere | `docs/plans/craft-libs.md` | `craftkit-ui` | `src/lib.rs` | `ui.widget.draw` | `crates/craftkit-ui/tests/ui.rs` | §1359 |
+| **J** | the OpenDocument workbook is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-ods` | `src/lib.rs` | `ods.workbook.read` | `crates/craftkit-ods/tests/ods.rs` | §1353 |
+| **K** | the word-processing document and its model are one shared library, and the battery's own commands over it are the word plan's arc | `docs/plans/craft-libs.md` | `craftkit-word` | `src/lib.rs` | `word.document.read` | `crates/craftkit-word/tests/word.rs` | §1354 |
+| **L** | the layered image format is read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-psd` | `src/lib.rs` | `psd.image.read` | `crates/craftkit-psd/tests/psd.rs` | §1355 |
+| **M** | the camera raw containers are read into one neutral raw image | `docs/plans/craft-libs.md` | `craftkit-raw` | `src/lib.rs` | `raw.image.read` | `crates/craftkit-raw/tests/raw.rs` | §1356 |
+| **N** | the other audio codecs are read and written by one shared library | `docs/plans/craft-libs.md` | `craftkit-audio` | `src/lib.rs` | `audio.codec.read` | `crates/craftkit-audio/tests/audio.rs` | §1357 |
+| **O** | every colour in the tree is a colour in a space, and this arc is what says which space | `docs/plans/craft-libs.md` | `craftkit-cms` | `src/lib.rs` | `cms.profile.read` | `crates/craftkit-cms/tests/cms.rs` | §1358 |
+| **P** | other tools' native design containers are read by one shared library | `docs/plans/craft-libs.md` | `craftkit-foreign` | `src/lib.rs` | `foreign.container.read` | `crates/craftkit-foreign/tests/foreign.rs` | §1359 |
+| **Q** | the widgets the tree's own front ends draw are drawn once and shared, in code, with no image and no font file anywhere | `docs/plans/craft-libs.md` | `craftkit-ui` | `src/lib.rs` | `ui.widget.draw` | `crates/craftkit-ui/tests/ui.rs` | §1360 |
 
 The second wave is the rest of the upstream, and it is **eight arcs**, one for
 each row the survey rated LATER. The survey's "later" verdicts were judgements
@@ -117,8 +117,8 @@ the workspace `Cargo.toml`, the row in the layer table, and the row in
 `docs/architecture.md`. A crate that is not in the layer table is a finding, so
 an arc that added a crate and forgot those edits would not build.
 
-The arcs reserve **§1253–§1261** of the README, one section per arc, in
-order, and the second wave reserves **§1352–§1359**, one section per arc, in
+The arcs reserve **§1254–§1262** of the README, one section per arc, in
+order, and the second wave reserves **§1353–§1360**, one section per arc, in
 order.
 
 The arcs are in the survey's order, and they are deliberately not one

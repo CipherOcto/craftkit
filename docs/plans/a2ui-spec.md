@@ -8,8 +8,8 @@ plan for the compatible surface, and it does not replace it. The two meet at
 the **door** — `apps/craftkit-a2ui-server` — and at the **layer** —
 `crates/craftkit-a2ui` and `crates/craftkit-plugin-a2ui` — and nothing else.
 Nothing in this file says that any of it exists today: every arc below is
-future work. The plan holds **ten arcs** — the first wave in §1264–§1271 and
-the second wave in §1372–§1373 — and reserves **§1264 to §1373**.
+future work. The plan holds **ten arcs** — the first wave in §1265–§1272 and
+the second wave in §1373–§1374 — and reserves **§1265 to §1374**.
 
 ## 0. The rule
 
@@ -56,20 +56,20 @@ purpose.
 ## 2. The arcs
 
 An arc is three edits: a row in the port manifest, a row in the README's claim
-table, and a README section. This plan reserves **§1264–§1271** — eight
-sections, one per arc, in the order below — and **§1372–§1373** for the second
+table, and a README section. This plan reserves **§1265–§1272** — eight
+sections, one per arc, in the order below — and **§1373–§1374** for the second
 wave that follows the first table.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | a data-model update replaces the value at a path, and nothing else in the model changes | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/model.rs` | `craftkit-a2ui::model::set` | `crates/craftkit-a2ui/tests/model.rs` | §1264 |
-| **B** | a renderer function call carries its nested `callFunction`, its `catalogId` and its `functionCallId` | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/functions.rs` | `craftkit-a2ui::functions::declaration` | `crates/craftkit-a2ui/tests/functions.rs` | §1265 |
-| **C** | the check rules are evaluated, and a failing check disables its control | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/checks.rs` | `craftkit-a2ui::checks::evaluate` | `crates/craftkit-a2ui/tests/checks.rs` | §1266 |
-| **D** | typing writes the user's input into the local model, at the bound path | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/bindings.rs` | `craftkit-a2ui::bindings::write` | `crates/craftkit-a2ui/tests/bindings.rs` | §1267 |
-| **E** | every renderer-side call is answered with a `rendererFunctionResponse` | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.component.invoke` | `apps/craftkit-a2ui-server/tests/protocol.rs` | §1268 |
-| **F** | `metadata.extensions` is carried through, not refused | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.create` | `apps/craftkit-a2ui-server/tests/door.rs` | §1269 |
-| **G** | a fault in a surface is sent to the agent as an `error` message | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.apply` | `apps/craftkit-a2ui-server/tests/stream.rs` | §1270 |
-| **H** | a template child list is generated from a data-model path, and `@index` names the item | `docs/plans/a2ui-spec.md` | `craftkit-plugin-a2ui` | `src/tree.rs` | `a2ui.surface.apply` | `crates/craftkit-plugin-a2ui/tests/tree.rs` | §1271 |
+| **A** | a data-model update replaces the value at a path, and nothing else in the model changes | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/model.rs` | `craftkit-a2ui::model::set` | `crates/craftkit-a2ui/tests/model.rs` | §1265 |
+| **B** | a renderer function call carries its nested `callFunction`, its `catalogId` and its `functionCallId` | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/functions.rs` | `craftkit-a2ui::functions::declaration` | `crates/craftkit-a2ui/tests/functions.rs` | §1266 |
+| **C** | the check rules are evaluated, and a failing check disables its control | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/checks.rs` | `craftkit-a2ui::checks::evaluate` | `crates/craftkit-a2ui/tests/checks.rs` | §1267 |
+| **D** | typing writes the user's input into the local model, at the bound path | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/bindings.rs` | `craftkit-a2ui::bindings::write` | `crates/craftkit-a2ui/tests/bindings.rs` | §1268 |
+| **E** | every renderer-side call is answered with a `rendererFunctionResponse` | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.component.invoke` | `apps/craftkit-a2ui-server/tests/protocol.rs` | §1269 |
+| **F** | `metadata.extensions` is carried through, not refused | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.create` | `apps/craftkit-a2ui-server/tests/door.rs` | §1270 |
+| **G** | a fault in a surface is sent to the agent as an `error` message | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.surface.apply` | `apps/craftkit-a2ui-server/tests/stream.rs` | §1271 |
+| **H** | a template child list is generated from a data-model path, and `@index` names the item | `docs/plans/a2ui-spec.md` | `craftkit-plugin-a2ui` | `src/tree.rs` | `a2ui.surface.apply` | `crates/craftkit-plugin-a2ui/tests/tree.rs` | §1272 |
 
 **Four arcs land in the layer and four in the door.** Arcs A, B, C and D are
 the layer's own work: the model, the function table, the check rules and the
@@ -82,9 +82,9 @@ described.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **I** | a name that does not fit the specification's identifier rules is refused by name, and a refusal is an error and not a renamed thing | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/names.rs` | `a2ui.name.check` | `crates/craftkit-a2ui/tests/names.rs` | §1372 |
-| **I** | the door applies the identifier rules to every name an agent supplies | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.name.apply` | `apps/craftkit-a2ui-server/tests/names.rs` | §1372 |
-| **J** | the catalogue says what may hold what, and the tree's own parent rules are replaced by the catalogue's table rather than kept beside it | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/catalog.rs` | `a2ui.catalog.parents` | `crates/craftkit-a2ui/tests/parents.rs` | §1373 |
+| **I** | a name that does not fit the specification's identifier rules is refused by name, and a refusal is an error and not a renamed thing | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/names.rs` | `a2ui.name.check` | `crates/craftkit-a2ui/tests/names.rs` | §1373 |
+| **I** | the door applies the identifier rules to every name an agent supplies | `docs/plans/a2ui-spec.md` | `apps/craftkit-a2ui-server` | `src/lib.rs` | `a2ui.name.apply` | `apps/craftkit-a2ui-server/tests/names.rs` | §1373 |
+| **J** | the catalogue says what may hold what, and the tree's own parent rules are replaced by the catalogue's table rather than kept beside it | `docs/plans/a2ui-spec.md` | `craftkit-a2ui` | `src/catalog.rs` | `a2ui.catalog.parents` | `crates/craftkit-a2ui/tests/parents.rs` | §1374 |
 
 **What the second wave is.** The first wave carries the specification's
 **messages** — what a renderer is told and what it answers. The second wave

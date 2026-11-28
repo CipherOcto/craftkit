@@ -23,21 +23,21 @@ or decide (§6 of each plan).
 
 | plan | the upstream | the battery | arcs | README sections |
 |---|---|---|---|---|
-| [`pdfcraft.md`](pdfcraft.md) | the document-format project | `craftkit-plugin-pdf`, and the cad battery for the measure | 25 | §1184–§1307 |
-| [`wordcraft.md`](wordcraft.md) | the prose project | `craftkit-plugin-prose` | 17 | §1198–§1312 |
-| [`effectcraft.md`](effectcraft.md) | the compositing project | `craftkit-plugin-fx`, the vector, text and film batteries, and the shared library | 19 | §1210–§1325 |
-| [`cadcraft.md`](cadcraft.md) | the drawing project | `craftkit-plugin-cad` | 15 | §1216–§1330 |
-| [`vectorcraft.md`](vectorcraft.md) | the vector project | `craftkit-plugin-vector` | 15 | §1226–§1336 |
-| [`gridcraft.md`](gridcraft.md) | the spreadsheet project | `craftkit-plugin-grid`, the vector and image batteries, and the shared library | 15 | §1235–§1345 |
-| [`artcraft.md`](artcraft.md) | the video-editor project | `craftkit-plugin-art`, and the image, film and vector batteries | 18 | §1241–§1351 |
-| [`craft-libs.md`](craft-libs.md) | the shared format and widget libraries | eight new library crates and the batteries that call them | 17 | §1253–§1359 |
-| [`solidcraft.md`](solidcraft.md) | the solid modeller | a new `craftkit-plugin-solid`, and the cad, image and sdk | 14 | §1262–§1371 |
-| [`a2ui-spec.md`](a2ui-spec.md) | the a2ui specification | `craftkit-a2ui`, `craftkit-plugin-a2ui`, `apps/craftkit-a2ui-server` | 10 | §1264–§1373 |
-| [`soundcraft.md`](soundcraft.md) | the audio project | `craftkit-plugin-sound`, the film battery and the sdk | 38 | §1272–§1399 |
-| [`designcraft.md`](designcraft.md) | the page-layout project | `craftkit-plugin-layout`, `craftkit-plugin-prose`, and the vector, image, text and pdf batteries | 33 | §1284–§1419 |
+| [`pdfcraft.md`](pdfcraft.md) | the document-format project | `craftkit-plugin-pdf`, and the cad battery for the measure | 25 | §1185–§1308 |
+| [`wordcraft.md`](wordcraft.md) | the prose project | `craftkit-plugin-prose` | 17 | §1199–§1313 |
+| [`effectcraft.md`](effectcraft.md) | the compositing project | `craftkit-plugin-fx`, the vector, text and film batteries, and the shared library | 19 | §1211–§1326 |
+| [`cadcraft.md`](cadcraft.md) | the drawing project | `craftkit-plugin-cad` | 15 | §1217–§1331 |
+| [`vectorcraft.md`](vectorcraft.md) | the vector project | `craftkit-plugin-vector` | 15 | §1227–§1337 |
+| [`gridcraft.md`](gridcraft.md) | the spreadsheet project | `craftkit-plugin-grid`, the vector and image batteries, and the shared library | 15 | §1236–§1346 |
+| [`artcraft.md`](artcraft.md) | the video-editor project | `craftkit-plugin-art`, and the image, film and vector batteries | 18 | §1242–§1352 |
+| [`craft-libs.md`](craft-libs.md) | the shared format and widget libraries | eight new library crates and the batteries that call them | 17 | §1254–§1360 |
+| [`solidcraft.md`](solidcraft.md) | the solid modeller | a new `craftkit-plugin-solid`, and the cad, image and sdk | 14 | §1263–§1372 |
+| [`a2ui-spec.md`](a2ui-spec.md) | the a2ui specification | `craftkit-a2ui`, `craftkit-plugin-a2ui`, `apps/craftkit-a2ui-server` | 10 | §1265–§1374 |
+| [`soundcraft.md`](soundcraft.md) | the audio project | `craftkit-plugin-sound`, the film battery and the sdk | 38 | §1273–§1400 |
+| [`designcraft.md`](designcraft.md) | the page-layout project | `craftkit-plugin-layout`, `craftkit-plugin-prose`, and the vector, image, text and pdf batteries | 33 | §1285–§1420 |
 
 **Two hundred and thirty-six arcs, two hundred and thirty-six reserved
-sections**, from §1184 to §1419, with no gap and no repeat.
+sections**, from §1185 to §1420, with no gap and no repeat.
 
 **Each plan holds two waves.** The **first wave** is the survey's *port*
 rows: the gaps that are commands over facts the batteries already hold. The
@@ -51,8 +51,8 @@ that brings the model.
 **One plan was withdrawn.** The vector project's proof of concept had a plan
 of two arcs — an importer and an exporter registry keyed by file extension.
 The owner has said that project's work is **finished** and that it is out of
-scope, so the plan is gone and its two sections are **not** reserved: §1272
-and §1273 are the sound plan's first two arcs, and no section anywhere points
+scope, so the plan is gone and its two sections are **not** reserved: §1273
+and §1274 are the sound plan's first two arcs, and no section anywhere points
 at a proof of concept that will not be worked.
 
 **One plan sits beside an older one.** `a2ui-spec.md` is about the

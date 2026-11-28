@@ -4632,6 +4632,7 @@ so.
 | **the family is surveyed and planned, one plan per project** | **built.** Thirteen plans name the arcs that would bring the family's work into this tree's batteries, each arc a rule, a landing site and a reserved section, and nothing in them is built (§1181) | §1181 |
 | **the owner has taken the four questions the plans raised** | **built.** No release yet, the view and the options are in scope, the a2ui door may change, and the proof of concept is finished and out of scope: the plans are corrected to say so (§1182) | §1182 |
 | **the family is fully ported: every held-back capability is an arc** | **built.** The plans' second waves bring the 123 arcs the surveys held back — the later rows, the skip rows and the rules that excluded them — so the family is 236 arcs in all, and what is refused is short and named (§1183) | §1183 |
+| **the agent-UI protocol is surveyed against the doors** | **built.** An open event protocol was read against this tree's four doors, and seven patterns were named as worth taking: a version on the control door, a change as a patch, a cancelled question, an undeclared capability, the request's order, a fixture that names its kill, and a pinned fixture listing (§1184) | §1184 |
 
 ### The list of things that are honestly not there: empty
 
@@ -74675,13 +74676,14 @@ bring its work into this tree, and says what it would not bring.
   this tree's battery, one row per capability, with the upstream's `path:line`
   and the battery's own state, and a verdict that is *port*, *later* or *out
   of scope*.
-- **The plans' arcs, reserved as §1184 to §1419.** Every arc names a
+- **The plans' arcs, reserved as §1185 to §1420.** Every arc names a
   **rule**, the crate and the file it lands in, the command it carries, the
   test that proves it, and the README section it will hold. The sections are
   reserved and empty, which is the honest state of work that has not been
   done. *(§1182 moved the range by one, took back the two sections the
   withdrawn plan held, and added three arcs; §1183 moved it again and added
-  the second waves — 236 arcs in all.)*
+  the second waves — 236 arcs in all; §1184 moved it once more, for this
+  survey's own section.)*
 - **The plans say what they will not do.** Each plan names the rows it holds
   back — a whole new model, a new dependency, another battery's work — with
   the reason, and each names what its survey could not read or decide.
@@ -74848,3 +74850,69 @@ its reason.
 - **The shapes of the new models are open**, and each plan says so in its
   own §6: what a solid body is made of, what a saved view holds, what a cell
   with a border is, and what a book is.
+
+## 1184. The agent-UI protocol is surveyed against the doors
+
+An open, event-based protocol for agents and user-facing applications was
+read against **this tree's doors**, and the patterns that would make the
+architecture better were named — seven to port, some to keep, and the rest
+to skip with a reason.
+
+### What was built
+
+- **The survey**, `docs/survey-ag-ui.md`: the upstream's surface in one
+  table with a `path:line` for every claim, this tree's doors and seams in
+  another, and **twenty-one patterns** judged one by one — **port**,
+  **later** or **skip** — with the rule each would be, in this tree's words.
+- **Seven patterns worth taking**, each a small change to a door or to the
+  SDK: the control door says **what version it is**; a **change is a patch**
+  against the document as it was, with a resync rule; a **dropped question
+  is a cancelled question**; an **absent capability is undeclared**, not
+  unsupported; the request's **order is written down** — decode, make
+  compatible, check, run; every protocol fixture **names the change that
+  would make it fail**; and the fixture **listing is pinned** so a
+  disappearing fixture is a diff.
+- **A trust statement for the doors.** What comes in over a door is
+  untrusted input: bounded before it is read, typed before it is run, and
+  never trusted because it came from an agent. The tree had the two trust
+  boundaries and a posture on the model call, and no statement about the
+  door.
+
+### What the port found
+
+The port here is a **survey**: the upstream's patterns read against this
+tree's doors, and each one re-derived in this tree's words. What it found is
+this.
+
+- **The tree is ahead in the places that are hardest.** The upstream's
+  human-in-the-loop ends a run and carries the answer in the next one; this
+  tree's command **keeps waiting** and is restarted with the answer, having
+  changed nothing (`crates/craftkit-sdk/src/resume.rs:1`). The upstream's
+  state is a blob the agent owns; this tree's document is typed nodes and
+  the agent's power is the registry. The upstream keeps two tool lists;
+  this tree has one vocabulary.
+- **The upstream's conformance discipline is the cheapest thing it has.** A
+  fixture that names the change that would make it fail, and a pinned
+  listing, are two sentences of rule and two files — and the tree's own
+  gate already believes both.
+- **The one real gap is the wire.** Every door in this tree answers once.
+  The upstream's shape is one request and a stream of events, and whether
+  this tree needs progress or a handle it can ask about is a decision about
+  the doors, not about the protocol.
+
+### What it cost
+
+- **One document** and this section: the survey, the twenty-one judged
+  patterns, and the seven rules that would carry them. No code, no gate
+  rule, and no section reserved for any of the seven.
+
+### What it does not settle
+
+- **No plan, and no section reserved.** A pattern worth taking becomes a
+  plan in `docs/plans/`, the way everything else in this tree does. The
+  plans' reserved range moved by one for this section: **§1185 to §1420**.
+- **Four questions are open**: whether a run should answer with a stream;
+  whether the control channel's `ui.*` methods are the tree's "the
+  application offers the agent a tool"; whether a patch over typed nodes is
+  the right delta; and what a subagent would be in a tree that has plugins
+  and a registry and no notion of a run inside a run.

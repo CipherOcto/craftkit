@@ -4,7 +4,7 @@ The upstream is a parametric solid modeller: its document is a three-dimensional
 model that a feature timeline rebuilds whenever a parameter changes. The family
 is **fully ported**: every capability the upstream has is in scope, and any rule
 that would have excluded one is changed so that it is not. This plan holds
-**14 arcs** and reserves **§1262 to §1371**.
+**14 arcs** and reserves **§1263 to §1372**.
 
 The first wave is the autosave and the recovery list — the two arcs a tree
 without a three-dimensional model can honestly carry today. The second wave is
@@ -65,8 +65,8 @@ body exists, because both need a body to work on.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| A | a document is written down without being asked, and the write is whole or nothing | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/autosave.rs` | `doc.autosave.write` | `crates/craftkit-sdk/tests/autosave.rs` | §1262 |
-| B | the recoverable saves are listed, and each one is either kept or discarded | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/recovery.rs` | `doc.recovery.list` | `crates/craftkit-sdk/tests/recovery.rs` | §1263 |
+| A | a document is written down without being asked, and the write is whole or nothing | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/autosave.rs` | `doc.autosave.write` | `crates/craftkit-sdk/tests/autosave.rs` | §1263 |
+| B | the recoverable saves are listed, and each one is either kept or discarded | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/recovery.rs` | `doc.recovery.list` | `crates/craftkit-sdk/tests/recovery.rs` | §1264 |
 
 **These two arcs are the only thing this tree can take from a solid modeller
 today.** The upstream's autosave and its recovery list are properties of a
@@ -93,19 +93,19 @@ written and lets it be kept or discarded.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| C | a body is the result of a list of features, rebuilt from that list and not stored as a shape | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/body.rs` | `solid.body.rebuild` | `crates/craftkit-plugin-solid/tests/body.rs` | §1360 |
-| D | a sketch profile's constraints are solved, and the geometry moves to satisfy them | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/sketch.rs` | `solid.sketch.solve` | `crates/craftkit-plugin-solid/tests/sketch.rs` | §1361 |
-| E | a parameter carries its unit, and a configuration is a set of parameters applied in order | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/params.rs` | `solid.config.evaluate` | `crates/craftkit-plugin-solid/tests/params.rs` | §1362 |
-| F | a body is written as STEP and read back as STEP | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/step.rs` | `solid.step.import`, `solid.step.export` | `crates/craftkit-plugin-solid/tests/step.rs` | §1363 |
-| G | a body is written as IGES 5.3 and read back as IGES 5.3 | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/iges.rs` | `solid.iges.import`, `solid.iges.export` | `crates/craftkit-plugin-solid/tests/iges.rs` | §1364 |
-| H | the mesh containers are read into one neutral mesh model, and the solid battery reads that model | `docs/plans/solidcraft.md` | `craftkit-mesh` | `src/lib.rs` | `mesh.container.read` | `crates/craftkit-mesh/tests/mesh.rs` | §1365 |
-| H | a closed mesh is turned back into a body that a feature list can rebuild | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/kernel.rs` | `solid.mesh.reconstruct` | `crates/craftkit-plugin-solid/tests/kernel.rs` | §1365 |
-| I | an assembly is a list of occurrences of components, and it carries its joints, its studies, its contacts, its interference and its mass properties | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/assembly.rs` | `solid.assembly.build` | `crates/craftkit-plugin-solid/tests/assembly.rs` | §1366 |
-| J | a sheet is folded and unfolded, and the flat pattern carries its bend table and its outline | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/sheet.rs` | `solid.sheet.unfold` | `crates/craftkit-plugin-solid/tests/sheet.rs` | §1367 |
-| K | a drawing is a projection of a body onto a sheet, and the cad battery holds the drawing, the dimension and the table | `docs/plans/solidcraft.md` | `craftkit-plugin-cad` | `src/projection.rs` | `solid.drawing.project` | `crates/craftkit-plugin-cad/tests/projection.rs` | §1368 |
-| L | a render workspace is a scene and a light over a body, and a picture is the image battery's | `docs/plans/solidcraft.md` | `craftkit-plugin-image` | `src/render.rs` | `image.render.export` | `crates/craftkit-plugin-image/tests/render.rs` | §1369 |
-| M | a six-degree camera is beside the planar one, and both are one camera type with its own caps | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/camera.rs` | `camera.sixdof.orbit` | `crates/craftkit-sdk/tests/camera.rs` | §1370 |
-| N | a board file is read into the cad battery's board | `docs/plans/solidcraft.md` | `craftkit-plugin-cad` | `src/board.rs` | `cad.board.import` | `crates/craftkit-plugin-cad/tests/board.rs` | §1371 |
+| C | a body is the result of a list of features, rebuilt from that list and not stored as a shape | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/body.rs` | `solid.body.rebuild` | `crates/craftkit-plugin-solid/tests/body.rs` | §1361 |
+| D | a sketch profile's constraints are solved, and the geometry moves to satisfy them | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/sketch.rs` | `solid.sketch.solve` | `crates/craftkit-plugin-solid/tests/sketch.rs` | §1362 |
+| E | a parameter carries its unit, and a configuration is a set of parameters applied in order | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/params.rs` | `solid.config.evaluate` | `crates/craftkit-plugin-solid/tests/params.rs` | §1363 |
+| F | a body is written as STEP and read back as STEP | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/step.rs` | `solid.step.import`, `solid.step.export` | `crates/craftkit-plugin-solid/tests/step.rs` | §1364 |
+| G | a body is written as IGES 5.3 and read back as IGES 5.3 | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/iges.rs` | `solid.iges.import`, `solid.iges.export` | `crates/craftkit-plugin-solid/tests/iges.rs` | §1365 |
+| H | the mesh containers are read into one neutral mesh model, and the solid battery reads that model | `docs/plans/solidcraft.md` | `craftkit-mesh` | `src/lib.rs` | `mesh.container.read` | `crates/craftkit-mesh/tests/mesh.rs` | §1366 |
+| H | a closed mesh is turned back into a body that a feature list can rebuild | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/kernel.rs` | `solid.mesh.reconstruct` | `crates/craftkit-plugin-solid/tests/kernel.rs` | §1366 |
+| I | an assembly is a list of occurrences of components, and it carries its joints, its studies, its contacts, its interference and its mass properties | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/assembly.rs` | `solid.assembly.build` | `crates/craftkit-plugin-solid/tests/assembly.rs` | §1367 |
+| J | a sheet is folded and unfolded, and the flat pattern carries its bend table and its outline | `docs/plans/solidcraft.md` | `craftkit-plugin-solid` | `src/sheet.rs` | `solid.sheet.unfold` | `crates/craftkit-plugin-solid/tests/sheet.rs` | §1368 |
+| K | a drawing is a projection of a body onto a sheet, and the cad battery holds the drawing, the dimension and the table | `docs/plans/solidcraft.md` | `craftkit-plugin-cad` | `src/projection.rs` | `solid.drawing.project` | `crates/craftkit-plugin-cad/tests/projection.rs` | §1369 |
+| L | a render workspace is a scene and a light over a body, and a picture is the image battery's | `docs/plans/solidcraft.md` | `craftkit-plugin-image` | `src/render.rs` | `image.render.export` | `crates/craftkit-plugin-image/tests/render.rs` | §1370 |
+| M | a six-degree camera is beside the planar one, and both are one camera type with its own caps | `docs/plans/solidcraft.md` | `craftkit-sdk` | `src/camera.rs` | `camera.sixdof.orbit` | `crates/craftkit-sdk/tests/camera.rs` | §1371 |
+| N | a board file is read into the cad battery's board | `docs/plans/solidcraft.md` | `craftkit-plugin-cad` | `src/board.rs` | `cad.board.import` | `crates/craftkit-plugin-cad/tests/board.rs` | §1372 |
 
 **The second wave is the whole upstream, and it is a second wave because it
 needs a document the tree does not have.** The first wave's two arcs are a

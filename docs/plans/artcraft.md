@@ -2,7 +2,7 @@
 
 This plan is a survey of one upstream tree against the art battery, written
 before any of it is built. It names eighteen arcs of future work, in order, in
-the sections §1241 through §1351, and says plainly what the upstream has that
+the sections §1242 through §1352, and says plainly what the upstream has that
 the battery does not.
 
 ## 0. The rule
@@ -52,24 +52,24 @@ them is an arc of the second wave in §2, in the battery that owns it.
 
 Each arc is three edits: a row in the port manifest, a row in the README's claim
 table, and a section in the README. The sections reserved for this plan are
-**§1241 through §1351**, one per arc, in the order below.
+**§1242 through §1352**, one per arc, in the order below.
 
 The first wave is the survey's PORT rows.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **1** | an element is duplicated on its own, animations and all | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/duplicate.rs` | `art.element.duplicate` | `crates/craftkit-plugin-art/tests/duplicate.rs` | §1241 |
-| **2** | an element is split at a point in time | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/split.rs` | `art.element.split` | `crates/craftkit-plugin-art/tests/split.rs` | §1242 |
-| **3** | a track can be muted, and muting is a flag on the track | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.mute` | `crates/craftkit-plugin-art/tests/track_mute.rs` | §1243 |
-| **4** | a track can be hidden, and hiding is a flag on the track | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.visibility` | `crates/craftkit-plugin-art/tests/track_visibility.rs` | §1244 |
-| **5** | a track can be removed, and removing it takes its elements with it | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.remove` | `crates/craftkit-plugin-art/tests/track_remove.rs` | §1245 |
-| **6** | a scene can be removed, not only added | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/scene.rs` | `art.scene.remove` | `crates/craftkit-plugin-art/tests/scene_remove.rs` | §1246 |
-| **7** | a scene carries its bookmarks, and a bookmark is toggled | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/scene.rs` | `art.scene.bookmark` | `crates/craftkit-plugin-art/tests/scene_bookmark.rs` | §1247 |
-| **8** | an element's effects are a stack, and the stack is edited | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/effects.rs` | `art.effect.add`, `art.effect.remove`, `art.effect.reorder`, `art.effect.toggle`, `art.effect.set` | `crates/craftkit-plugin-art/tests/effects.rs` | §1248 |
-| **9** | elements and keyframes are copied and pasted on the timeline | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/clipboard.rs` | `art.clipboard.copy`, `art.clipboard.paste` | `crates/craftkit-plugin-art/tests/clipboard.rs` | §1249 |
-| **10** | the composition has a canvas size, and the size is a setting | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/canvas.rs` | `art.canvas.size` | `crates/craftkit-plugin-art/tests/canvas.rs` | §1250 |
-| **11** | the project's settings are one record, and the record is edited | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/project.rs` | `art.project.settings` | `crates/craftkit-plugin-art/tests/project.rs` | §1251 |
-| **12** | what is drawn around the composition — the background and the guides — is a setting | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/background.rs` | `art.background.color`, `art.background.blur`, `art.guides.set` | `crates/craftkit-plugin-art/tests/background.rs` | §1252 |
+| **1** | an element is duplicated on its own, animations and all | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/duplicate.rs` | `art.element.duplicate` | `crates/craftkit-plugin-art/tests/duplicate.rs` | §1242 |
+| **2** | an element is split at a point in time | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/split.rs` | `art.element.split` | `crates/craftkit-plugin-art/tests/split.rs` | §1243 |
+| **3** | a track can be muted, and muting is a flag on the track | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.mute` | `crates/craftkit-plugin-art/tests/track_mute.rs` | §1244 |
+| **4** | a track can be hidden, and hiding is a flag on the track | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.visibility` | `crates/craftkit-plugin-art/tests/track_visibility.rs` | §1245 |
+| **5** | a track can be removed, and removing it takes its elements with it | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/track.rs` | `art.track.remove` | `crates/craftkit-plugin-art/tests/track_remove.rs` | §1246 |
+| **6** | a scene can be removed, not only added | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/scene.rs` | `art.scene.remove` | `crates/craftkit-plugin-art/tests/scene_remove.rs` | §1247 |
+| **7** | a scene carries its bookmarks, and a bookmark is toggled | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/scene.rs` | `art.scene.bookmark` | `crates/craftkit-plugin-art/tests/scene_bookmark.rs` | §1248 |
+| **8** | an element's effects are a stack, and the stack is edited | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/effects.rs` | `art.effect.add`, `art.effect.remove`, `art.effect.reorder`, `art.effect.toggle`, `art.effect.set` | `crates/craftkit-plugin-art/tests/effects.rs` | §1249 |
+| **9** | elements and keyframes are copied and pasted on the timeline | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/clipboard.rs` | `art.clipboard.copy`, `art.clipboard.paste` | `crates/craftkit-plugin-art/tests/clipboard.rs` | §1250 |
+| **10** | the composition has a canvas size, and the size is a setting | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/canvas.rs` | `art.canvas.size` | `crates/craftkit-plugin-art/tests/canvas.rs` | §1251 |
+| **11** | the project's settings are one record, and the record is edited | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/project.rs` | `art.project.settings` | `crates/craftkit-plugin-art/tests/project.rs` | §1252 |
+| **12** | what is drawn around the composition — the background and the guides — is a setting | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/background.rs` | `art.background.color`, `art.background.blur`, `art.guides.set` | `crates/craftkit-plugin-art/tests/background.rs` | §1253 |
 
 These arcs are twelve because the survey marked nine capabilities PORT and three
 of them hold more than one command: the track row is mute, visibility and
@@ -87,16 +87,16 @@ The first wave is the table above.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **13** | the media library is a list of assets, and an asset is added and removed | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/media.rs` | `art.media.add`, `art.media.remove` | `crates/craftkit-plugin-art/tests/media.rs` | §1346 |
-| **14** | an animatable parameter takes a keyframe, and a keyframe can be moved and removed | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/keyframes.rs` | `art.keyframe.upsert`, `art.keyframe.retime`, `art.keyframe.remove` | `crates/craftkit-plugin-art/tests/keyframes.rs` | §1347 |
-| **15** | an element carries a mask, and the mask has points, an inversion, a feather and a size | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/masks.rs` | `art.mask.point`, `art.mask.invert`, `art.mask.feather`, `art.mask.size` | `crates/craftkit-plugin-art/tests/masks.rs` | §1348 |
-| **16** | the composition is exported to a video file, and the file's format and quality are asked for | `docs/plans/artcraft.md` | `craftkit-plugin-film` | `src/export.rs` | `film.export.video` | `crates/craftkit-plugin-film/tests/export.rs` | §1349 |
-| **17** | a generation carries per-model parameters, and a price table the kit carries as data gives the estimate before generating | `docs/plans/artcraft.md` | `craftkit-sdk` | `src/prices.rs` | `craftkit-sdk::prices::ModelPrice` | `crates/craftkit-sdk/tests/prices.rs` | §1350 |
-| **17** | the estimate is computed from that table, and a model the table has no price for is refused by name | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/generate.rs` | `art.generate.parameters`, `art.generate.estimate` | `crates/craftkit-plugin-art/tests/generate.rs` | §1350 |
-| **18** | a background is removed from a picture, and a watermark is removed from a picture | `docs/plans/artcraft.md` | `craftkit-plugin-image` | `src/edit.rs` | `image.background.remove`, `image.watermark.remove` | `crates/craftkit-plugin-image/tests/edit.rs` | §1351 |
-| **18** | a frame is taken out of a video, and the frame is a picture | `docs/plans/artcraft.md` | `craftkit-plugin-film` | `src/frames.rs` | `film.frame.extract` | `crates/craftkit-plugin-film/tests/frames.rs` | §1351 |
-| **18** | the drawing canvas is a front end over the vector commands that already exist, and it adds no command of its own | `docs/plans/artcraft.md` | `craftkit-plugin-vector` | `src/canvas.rs` | `vector.path.create`, `vector.path.freehand` — the commands the page drives | `crates/craftkit-plugin-vector/tests/canvas.rs` | §1351 |
-| **18** | the image-to-3D mesh, the storyboard and the moodboard pages are front ends over the art commands that already exist, and they add no command of their own | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/pages.rs` | `art.generate`, `art.scene.add` — the commands the pages drive | `crates/craftkit-plugin-art/tests/pages.rs` | §1351 |
+| **13** | the media library is a list of assets, and an asset is added and removed | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/media.rs` | `art.media.add`, `art.media.remove` | `crates/craftkit-plugin-art/tests/media.rs` | §1347 |
+| **14** | an animatable parameter takes a keyframe, and a keyframe can be moved and removed | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/keyframes.rs` | `art.keyframe.upsert`, `art.keyframe.retime`, `art.keyframe.remove` | `crates/craftkit-plugin-art/tests/keyframes.rs` | §1348 |
+| **15** | an element carries a mask, and the mask has points, an inversion, a feather and a size | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/masks.rs` | `art.mask.point`, `art.mask.invert`, `art.mask.feather`, `art.mask.size` | `crates/craftkit-plugin-art/tests/masks.rs` | §1349 |
+| **16** | the composition is exported to a video file, and the file's format and quality are asked for | `docs/plans/artcraft.md` | `craftkit-plugin-film` | `src/export.rs` | `film.export.video` | `crates/craftkit-plugin-film/tests/export.rs` | §1350 |
+| **17** | a generation carries per-model parameters, and a price table the kit carries as data gives the estimate before generating | `docs/plans/artcraft.md` | `craftkit-sdk` | `src/prices.rs` | `craftkit-sdk::prices::ModelPrice` | `crates/craftkit-sdk/tests/prices.rs` | §1351 |
+| **17** | the estimate is computed from that table, and a model the table has no price for is refused by name | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/generate.rs` | `art.generate.parameters`, `art.generate.estimate` | `crates/craftkit-plugin-art/tests/generate.rs` | §1351 |
+| **18** | a background is removed from a picture, and a watermark is removed from a picture | `docs/plans/artcraft.md` | `craftkit-plugin-image` | `src/edit.rs` | `image.background.remove`, `image.watermark.remove` | `crates/craftkit-plugin-image/tests/edit.rs` | §1352 |
+| **18** | a frame is taken out of a video, and the frame is a picture | `docs/plans/artcraft.md` | `craftkit-plugin-film` | `src/frames.rs` | `film.frame.extract` | `crates/craftkit-plugin-film/tests/frames.rs` | §1352 |
+| **18** | the drawing canvas is a front end over the vector commands that already exist, and it adds no command of its own | `docs/plans/artcraft.md` | `craftkit-plugin-vector` | `src/canvas.rs` | `vector.path.create`, `vector.path.freehand` — the commands the page drives | `crates/craftkit-plugin-vector/tests/canvas.rs` | §1352 |
+| **18** | the image-to-3D mesh, the storyboard and the moodboard pages are front ends over the art commands that already exist, and they add no command of their own | `docs/plans/artcraft.md` | `craftkit-plugin-art` | `src/pages.rs` | `art.generate`, `art.scene.add` — the commands the pages drive | `crates/craftkit-plugin-art/tests/pages.rs` | §1352 |
 
 The second wave is the rest of the upstream: the six rows the survey held back,
 and the pages it skipped. The survey's LATER verdicts were judgements about

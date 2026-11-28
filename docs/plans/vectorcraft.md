@@ -3,7 +3,7 @@
 This plan is a survey of one upstream tree against the vector battery, written
 before any of it is built. It names fifteen arcs of future work, in two waves,
 and says plainly what the upstream has that the battery does not. The sections
-reserved for this plan are **§1226 through §1336**.
+reserved for this plan are **§1227 through §1337**.
 
 ## 0. The rule
 
@@ -54,19 +54,19 @@ of the second wave, whose rule says what the model is.
 
 Each arc is three edits: a row in the port manifest, a row in the README's claim
 table, and a section in the README. The sections reserved for this plan are
-**§1226 through §1336**, one per arc, in the order below.
+**§1227 through §1337**, one per arc, in the order below.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **1** | a clipping mask is a node on the document, not a flag on a shape | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/mask.rs` | `vector.mask.clip` | `crates/craftkit-plugin-vector/tests/mask.rs` | §1226 |
-| **2** | the pathfinder takes a whole selection, not two paths | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/pathops.rs` | `vector.pathops.selection` | `crates/craftkit-plugin-vector/tests/pathops.rs` | §1227 |
-| **3** | a path can be duplicated on its own, not only as a by-product | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/duplicate.rs` | `vector.path.duplicate` | `crates/craftkit-plugin-vector/tests/duplicate.rs` | §1228 |
-| **4** | objects align to one another, not to the origin | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/align.rs` | `vector.align.objects` | `crates/craftkit-plugin-vector/tests/align.rs` | §1229 |
-| **5** | objects distribute along a span, evenly | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/distribute.rs` | `vector.distribute.objects` | `crates/craftkit-plugin-vector/tests/distribute.rs` | §1230 |
-| **6** | a transform is about a point: rotate, reflect and shear | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/transform.rs` | `vector.transform.rotate`, `vector.transform.reflect`, `vector.transform.shear` | `crates/craftkit-plugin-vector/tests/transform.rs` | §1231 |
-| **7** | a symbol is a reusable instance, and the instance is what is on the canvas | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/symbols.rs` | `vector.symbol.instance` | `crates/craftkit-plugin-vector/tests/symbols.rs` | §1232 |
-| **8** | a stroke may carry arrowheads at its ends | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/arrowheads.rs` | `vector.stroke.arrowheads` | `crates/craftkit-plugin-vector/tests/arrowheads.rs` | §1233 |
-| **9** | the battery exports PDF as well as SVG and EPS | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/pdf.rs` | `vector.export.pdf` | `crates/craftkit-plugin-vector/tests/pdf.rs` | §1234 |
+| **1** | a clipping mask is a node on the document, not a flag on a shape | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/mask.rs` | `vector.mask.clip` | `crates/craftkit-plugin-vector/tests/mask.rs` | §1227 |
+| **2** | the pathfinder takes a whole selection, not two paths | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/pathops.rs` | `vector.pathops.selection` | `crates/craftkit-plugin-vector/tests/pathops.rs` | §1228 |
+| **3** | a path can be duplicated on its own, not only as a by-product | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/duplicate.rs` | `vector.path.duplicate` | `crates/craftkit-plugin-vector/tests/duplicate.rs` | §1229 |
+| **4** | objects align to one another, not to the origin | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/align.rs` | `vector.align.objects` | `crates/craftkit-plugin-vector/tests/align.rs` | §1230 |
+| **5** | objects distribute along a span, evenly | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/distribute.rs` | `vector.distribute.objects` | `crates/craftkit-plugin-vector/tests/distribute.rs` | §1231 |
+| **6** | a transform is about a point: rotate, reflect and shear | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/transform.rs` | `vector.transform.rotate`, `vector.transform.reflect`, `vector.transform.shear` | `crates/craftkit-plugin-vector/tests/transform.rs` | §1232 |
+| **7** | a symbol is a reusable instance, and the instance is what is on the canvas | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/symbols.rs` | `vector.symbol.instance` | `crates/craftkit-plugin-vector/tests/symbols.rs` | §1233 |
+| **8** | a stroke may carry arrowheads at its ends | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/arrowheads.rs` | `vector.stroke.arrowheads` | `crates/craftkit-plugin-vector/tests/arrowheads.rs` | §1234 |
+| **9** | the battery exports PDF as well as SVG and EPS | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/pdf.rs` | `vector.export.pdf` | `crates/craftkit-plugin-vector/tests/pdf.rs` | §1235 |
 
 These arcs are nine because the survey marked nine capabilities PORT, and each
 one is a command with a test and a section. Arc 2 is the one that changes an
@@ -80,12 +80,12 @@ sharing one model.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **10** | a path's faces are painted, and each face carries its own fill | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/livepaint.rs` | `vector.paint.live` | `crates/craftkit-plugin-vector/tests/livepaint.rs` | §1331 |
-| **11** | a picture is traced into paths, and the picture is read, not copied | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/imagetrace.rs` | `vector.trace.image` | `crates/craftkit-plugin-vector/tests/imagetrace.rs` | §1332 |
-| **12** | a gradient is a mesh, and the mesh is a node of its own | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/gradientmesh.rs` | `vector.fill.gradientmesh` | `crates/craftkit-plugin-vector/tests/gradientmesh.rs` | §1333 |
-| **13** | a fill may name other objects, and the named objects are the tile | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/patterns.rs` | `vector.fill.pattern` | `crates/craftkit-plugin-vector/tests/patterns.rs` | §1334 |
-| **14** | the document may be cut into slices, and each slice is written out on its own | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/slices.rs` | `vector.export.slices` | `crates/craftkit-plugin-vector/tests/slices.rs` | §1335 |
-| **15** | a shape is bent through a mesh, and the mesh does the bending | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/envelope.rs` | `vector.transform.envelope` | `crates/craftkit-plugin-vector/tests/envelope.rs` | §1336 |
+| **10** | a path's faces are painted, and each face carries its own fill | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/livepaint.rs` | `vector.paint.live` | `crates/craftkit-plugin-vector/tests/livepaint.rs` | §1332 |
+| **11** | a picture is traced into paths, and the picture is read, not copied | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/imagetrace.rs` | `vector.trace.image` | `crates/craftkit-plugin-vector/tests/imagetrace.rs` | §1333 |
+| **12** | a gradient is a mesh, and the mesh is a node of its own | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/gradientmesh.rs` | `vector.fill.gradientmesh` | `crates/craftkit-plugin-vector/tests/gradientmesh.rs` | §1334 |
+| **13** | a fill may name other objects, and the named objects are the tile | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/patterns.rs` | `vector.fill.pattern` | `crates/craftkit-plugin-vector/tests/patterns.rs` | §1335 |
+| **14** | the document may be cut into slices, and each slice is written out on its own | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/slices.rs` | `vector.export.slices` | `crates/craftkit-plugin-vector/tests/slices.rs` | §1336 |
+| **15** | a shape is bent through a mesh, and the mesh does the bending | `docs/plans/vectorcraft.md` | `craftkit-plugin-vector` | `src/envelope.rs` | `vector.transform.envelope` | `crates/craftkit-plugin-vector/tests/envelope.rs` | §1337 |
 
 The second wave is the whole upstream: every capability the survey found is an
 arc, and nothing is held back. The survey's "later" verdicts were judgements

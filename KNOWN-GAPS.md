@@ -729,7 +729,7 @@ comes to the tree cold:
 
 - **"The README's sections stop at §1180."** They did, and the **plans**
   reserve the ones after it: `docs/plans/` holds one plan per project in
-  the family tree, and between them they reserve **§1184 to §1419** for
+  the family tree, and between them they reserve **§1185 to §1420** for
   **236 arcs** that have **not been built**. The reservation is a promise
   about numbering, not a claim that the work exists — the README has no
   such sections yet, and the port manifest has no rows for them either.

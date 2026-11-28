@@ -6,7 +6,7 @@ that upstream offers and what `craftkit-plugin-fx` holds today, and it turns
 the four gaps the survey called **PORT** into **six arcs**, and — in a **second
 wave** — every capability the upstream holds back as **later** or **skipped**,
 into **thirteen more arcs**. The plan holds **19 arcs**, and they reserve
-**README sections §1210 to §1325**, one section each, in the order they are
+**README sections §1211 to §1326**, one section each, in the order they are
 written here.
 
 ## 0. The rule
@@ -63,20 +63,20 @@ that owns them.
 
 Each arc is three edits and no more: a row in the port manifest, a row in the
 README's claim table, and a section in the README. The README sections this
-plan reserves are **§1210, §1211, §1212, §1213, §1214 and §1215** — six
+plan reserves are **§1211, §1212, §1213, §1214, §1215 and §1216** — six
 sections, one per arc, in the order below, with no gap and no repeat — and the
-second wave's **§1313 to §1325**, thirteen more, one per arc, in the order
+second wave's **§1314 to §1326**, thirteen more, one per arc, in the order
 they are written below. The port manifest's rows take this document as their
 `from`, because this plan is the document the arcs come from.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | a layer carries an in point and an out point | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/layer_time.rs` | `fx.layer.inout` | `crates/craftkit-plugin-fx/tests/layer_time.rs` | §1210 |
-| **B** | a layer's in and out points are stretched, reversed or frozen | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/time_ops.rs` | `fx.layer.time.stretch`, `fx.layer.time.reverse`, `fx.layer.time.freeze` | `crates/craftkit-plugin-fx/tests/layer_time.rs` | §1211 |
-| **C** | a mask's feather and its expansion are written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/masks.rs` | `fx.mask.feather`, `fx.mask.expansion` | `crates/craftkit-plugin-fx/tests/masks.rs` | §1212 |
-| **D** | a mask's opacity is written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/masks.rs` | `fx.mask.opacity` | `crates/craftkit-plugin-fx/tests/masks.rs` | §1213 |
-| **E** | a keyframe's spatial tangents are written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/spatial.rs` | `fx.keyframe.tangent` | `crates/craftkit-plugin-fx/tests/spatial.rs` | §1214 |
-| **F** | an expression's errors are a report a user can read | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/expressions.rs` | `fx.prop.expression.report` | `crates/craftkit-plugin-fx/tests/expressions.rs` | §1215 |
+| **A** | a layer carries an in point and an out point | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/layer_time.rs` | `fx.layer.inout` | `crates/craftkit-plugin-fx/tests/layer_time.rs` | §1211 |
+| **B** | a layer's in and out points are stretched, reversed or frozen | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/time_ops.rs` | `fx.layer.time.stretch`, `fx.layer.time.reverse`, `fx.layer.time.freeze` | `crates/craftkit-plugin-fx/tests/layer_time.rs` | §1212 |
+| **C** | a mask's feather and its expansion are written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/masks.rs` | `fx.mask.feather`, `fx.mask.expansion` | `crates/craftkit-plugin-fx/tests/masks.rs` | §1213 |
+| **D** | a mask's opacity is written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/masks.rs` | `fx.mask.opacity` | `crates/craftkit-plugin-fx/tests/masks.rs` | §1214 |
+| **E** | a keyframe's spatial tangents are written down | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/spatial.rs` | `fx.keyframe.tangent` | `crates/craftkit-plugin-fx/tests/spatial.rs` | §1215 |
+| **F** | an expression's errors are a report a user can read | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/expressions.rs` | `fx.prop.expression.report` | `crates/craftkit-plugin-fx/tests/expressions.rs` | §1216 |
 
 The survey's four **PORT** rows become six arcs because two of them are two
 things. The layer-timing row is a row and a set of operations on that row:
@@ -91,22 +91,22 @@ errors — are one rule each and stay one arc.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **G** | an effect is a catalogue entry with its parameters, kinds and defaults | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/catalog.rs` | `fx.effect.catalog` | `crates/craftkit-plugin-fx/tests/catalog.rs` | §1313 |
-| **H** | a layer carries a style group — drop shadow, glow, bevel and emboss, satin, stroke, overlays — and the composition carries the global light | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/styles.rs` | `fx.layer.style`, `fx.style.light` | `crates/craftkit-plugin-fx/tests/styles.rs` | §1314 |
-| **I** | a layer may be three-dimensional, and the composition may carry cameras and lights | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/three_d.rs` | `fx.layer.three_d`, `fx.camera.create`, `fx.light.create` | `crates/craftkit-plugin-fx/tests/three_d.rs` | §1315 |
-| **J** | the paths of a shape are read and written in the vector battery | `docs/plans/effectcraft.md` | `craftkit-plugin-vector` | `src/paths.rs` | `vector.path.trim`, `vector.path.repeat`, `vector.path.round`, `vector.path.offset`, `vector.stroke.gradient` | `crates/craftkit-plugin-vector/tests/paths.rs` | §1316 |
-| **J** | a shape layer is a layer whose content is a path | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/shapes.rs` | `fx.layer.shape` | `crates/craftkit-plugin-fx/tests/shapes.rs` | §1316 |
-| **K** | a range selector is a range of a text run | `docs/plans/effectcraft.md` | `craftkit-plugin-text` | `src/selector.rs` | `text.range.selector` | `crates/craftkit-plugin-text/tests/selector.rs` | §1317 |
-| **K** | a text layer is a layer whose content is text, and it carries text animators | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/text.rs` | `fx.layer.text`, `fx.layer.text.animator` | `crates/craftkit-plugin-fx/tests/text.rs` | §1317 |
-| **L** | one layer may be the matte of another | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/matte.rs` | `fx.layer.matte` | `crates/craftkit-plugin-fx/tests/matte.rs` | §1318 |
-| **M** | an expression is written in a script language, not in the battery's arithmetic | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/script.rs` | `fx.prop.expression.script` | `crates/craftkit-plugin-fx/tests/script.rs` | §1319 |
-| **N** | the reader and the writer of the format are a shared library, and the battery's commands use it | `docs/plans/effectcraft.md` | `craftkit-lottie` | `src/lib.rs` | `lottie.read`, `lottie.write` | `crates/craftkit-lottie/tests/lottie.rs` | §1320 |
-| **N** | a composition may be read from and written to the format | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/lottie.rs` | `fx.lottie.import`, `fx.lottie.export` | `crates/craftkit-plugin-fx/tests/lottie.rs` | §1320 |
-| **O** | a region may be brushed, segmented, and used as an object matte | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/roto.rs` | `fx.roto.brush`, `fx.roto.segment`, `fx.matte.object` | `crates/craftkit-plugin-fx/tests/roto.rs` | §1321 |
-| **P** | a composition may be tracked and stabilised | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/track.rs` | `fx.track.analysis`, `fx.track.stabilise` | `crates/craftkit-plugin-fx/tests/track.rs` | §1322 |
-| **Q** | a composition may hold footage, image sequences and audio | `docs/plans/effectcraft.md` | `craftkit-plugin-film` | `src/media.rs` | `film.media.footage`, `film.media.sequence`, `film.media.audio` | `crates/craftkit-plugin-film/tests/media.rs` | §1323 |
-| **R** | a render may be queued, and its settings, output modules and encoders are named by the tree's own rasteriser | `docs/plans/effectcraft.md` | `craftkit-plugin-film` | `src/render.rs` | `film.render.queue`, `film.render.settings`, `film.render.output` | `crates/craftkit-plugin-film/tests/render.rs` | §1324 |
-| **S** | a plug-in's own state is kept in the composition | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/plugin_state.rs` | `fx.plugin.state` | `crates/craftkit-plugin-fx/tests/plugin_state.rs` | §1325 |
+| **G** | an effect is a catalogue entry with its parameters, kinds and defaults | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/catalog.rs` | `fx.effect.catalog` | `crates/craftkit-plugin-fx/tests/catalog.rs` | §1314 |
+| **H** | a layer carries a style group — drop shadow, glow, bevel and emboss, satin, stroke, overlays — and the composition carries the global light | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/styles.rs` | `fx.layer.style`, `fx.style.light` | `crates/craftkit-plugin-fx/tests/styles.rs` | §1315 |
+| **I** | a layer may be three-dimensional, and the composition may carry cameras and lights | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/three_d.rs` | `fx.layer.three_d`, `fx.camera.create`, `fx.light.create` | `crates/craftkit-plugin-fx/tests/three_d.rs` | §1316 |
+| **J** | the paths of a shape are read and written in the vector battery | `docs/plans/effectcraft.md` | `craftkit-plugin-vector` | `src/paths.rs` | `vector.path.trim`, `vector.path.repeat`, `vector.path.round`, `vector.path.offset`, `vector.stroke.gradient` | `crates/craftkit-plugin-vector/tests/paths.rs` | §1317 |
+| **J** | a shape layer is a layer whose content is a path | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/shapes.rs` | `fx.layer.shape` | `crates/craftkit-plugin-fx/tests/shapes.rs` | §1317 |
+| **K** | a range selector is a range of a text run | `docs/plans/effectcraft.md` | `craftkit-plugin-text` | `src/selector.rs` | `text.range.selector` | `crates/craftkit-plugin-text/tests/selector.rs` | §1318 |
+| **K** | a text layer is a layer whose content is text, and it carries text animators | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/text.rs` | `fx.layer.text`, `fx.layer.text.animator` | `crates/craftkit-plugin-fx/tests/text.rs` | §1318 |
+| **L** | one layer may be the matte of another | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/matte.rs` | `fx.layer.matte` | `crates/craftkit-plugin-fx/tests/matte.rs` | §1319 |
+| **M** | an expression is written in a script language, not in the battery's arithmetic | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/script.rs` | `fx.prop.expression.script` | `crates/craftkit-plugin-fx/tests/script.rs` | §1320 |
+| **N** | the reader and the writer of the format are a shared library, and the battery's commands use it | `docs/plans/effectcraft.md` | `craftkit-lottie` | `src/lib.rs` | `lottie.read`, `lottie.write` | `crates/craftkit-lottie/tests/lottie.rs` | §1321 |
+| **N** | a composition may be read from and written to the format | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/lottie.rs` | `fx.lottie.import`, `fx.lottie.export` | `crates/craftkit-plugin-fx/tests/lottie.rs` | §1321 |
+| **O** | a region may be brushed, segmented, and used as an object matte | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/roto.rs` | `fx.roto.brush`, `fx.roto.segment`, `fx.matte.object` | `crates/craftkit-plugin-fx/tests/roto.rs` | §1322 |
+| **P** | a composition may be tracked and stabilised | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/track.rs` | `fx.track.analysis`, `fx.track.stabilise` | `crates/craftkit-plugin-fx/tests/track.rs` | §1323 |
+| **Q** | a composition may hold footage, image sequences and audio | `docs/plans/effectcraft.md` | `craftkit-plugin-film` | `src/media.rs` | `film.media.footage`, `film.media.sequence`, `film.media.audio` | `crates/craftkit-plugin-film/tests/media.rs` | §1324 |
+| **R** | a render may be queued, and its settings, output modules and encoders are named by the tree's own rasteriser | `docs/plans/effectcraft.md` | `craftkit-plugin-film` | `src/render.rs` | `film.render.queue`, `film.render.settings`, `film.render.output` | `crates/craftkit-plugin-film/tests/render.rs` | §1325 |
+| **S** | a plug-in's own state is kept in the composition | `docs/plans/effectcraft.md` | `craftkit-plugin-fx` | `src/plugin_state.rs` | `fx.plugin.state` | `crates/craftkit-plugin-fx/tests/plugin_state.rs` | §1326 |
 
 The second wave is the whole upstream: every row the survey held back — the
 **later** rows and the **skipped** rows alike — is an arc above, and nothing in

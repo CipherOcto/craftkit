@@ -2,7 +2,7 @@
 
 The upstream is a set of PDF libraries written in Rust, and this plan is about
 the parts of it the `craftkit-plugin-pdf` battery does not yet reach. It is
-twenty-five arcs, and it reserves README sections **§1184 to §1307** — one
+twenty-five arcs, and it reserves README sections **§1185 to §1308** — one
 section per arc, in the order the arcs are written here.
 
 ## 0. The rule
@@ -69,36 +69,36 @@ document the arcs come from, not the survey it follows.
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **A** | the document can be searched, and the search answers with the pages it matched on | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/find.rs` | `pdf.find.text` | `crates/craftkit-plugin-pdf/tests/find.rs` | §1184 |
-| **B** | a page can be moved, and the page order it lands in is the order that is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageorder.rs` | `pdf.pages.move`, `pdf.pages.reverse` | `crates/craftkit-plugin-pdf/tests/pageorder.rs` | §1185 |
-| **C** | a page can be duplicated, and the copy is a page of the document, not a reference to one | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pagecopy.rs` | `pdf.pages.duplicate` | `crates/craftkit-plugin-pdf/tests/pagecopy.rs` | §1186 |
-| **D** | a blank page can be inserted, and it is inserted where it was asked for | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageinsert.rs` | `pdf.page.blank.insert` | `crates/craftkit-plugin-pdf/tests/pageinsert.rs` | §1187 |
-| **E** | pages of another document can be inserted, and they are inserted as pages of this one | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageimport.rs` | `pdf.pages.import` | `crates/craftkit-plugin-pdf/tests/pageimport.rs` | §1188 |
-| **F** | a link annotation is a thing the battery can add, read, change and remove | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/links.rs` | `pdf.links.add`, `pdf.links.list`, `pdf.links.edit`, `pdf.links.delete` | `crates/craftkit-plugin-pdf/tests/links.rs` | §1189 |
-| **G** | an optional-content layer can be switched on and off, and what the battery reads is what the document shows | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/layers.rs` | `pdf.layers.set` | `crates/craftkit-plugin-pdf/tests/layers.rs` | §1190 |
-| **H** | a comment can be given a status, locked, and answered | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/commentstatus.rs` | `pdf.comment.status`, `pdf.comment.lock`, `pdf.comment.reply` | `crates/craftkit-plugin-pdf/tests/commentstatus.rs` | §1191 |
-| **I** | a document can be checked for accessibility, and the check is a report | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/a11y.rs` | `pdf.a11y.check` | `crates/craftkit-plugin-pdf/tests/a11y.rs` | §1192 |
-| **J** | the XFDF the battery writes carries the comments as well as the field values | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/xfdf.rs` | `pdf.xfdf.export`, `pdf.xfdf.import` | `crates/craftkit-plugin-pdf/tests/xfdf.rs` | §1193 |
-| **K** | the preflight report says what the colours of the document are | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/preflightcolour.rs` | `pdf.preflight.colour` | `crates/craftkit-plugin-pdf/tests/preflightcolour.rs` | §1194 |
-| **L** | a page can be numbered, and the number is stamped on the page | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pagenumbers.rs` | `pdf.marks.number` | `crates/craftkit-plugin-pdf/tests/pagenumbers.rs` | §1195 |
-| **M** | the colours of the page content can be converted, and the conversion is written into the document | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/colourconvert.rs` | `pdf.colour.convert` | `crates/craftkit-plugin-pdf/tests/colourconvert.rs` | §1196 |
-| **N** | the images a page carries can be exported, and what is exported is what the page holds | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/imageexport.rs` | `pdf.images.export` | `crates/craftkit-plugin-pdf/tests/imageexport.rs` | §1197 |
+| **A** | the document can be searched, and the search answers with the pages it matched on | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/find.rs` | `pdf.find.text` | `crates/craftkit-plugin-pdf/tests/find.rs` | §1185 |
+| **B** | a page can be moved, and the page order it lands in is the order that is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageorder.rs` | `pdf.pages.move`, `pdf.pages.reverse` | `crates/craftkit-plugin-pdf/tests/pageorder.rs` | §1186 |
+| **C** | a page can be duplicated, and the copy is a page of the document, not a reference to one | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pagecopy.rs` | `pdf.pages.duplicate` | `crates/craftkit-plugin-pdf/tests/pagecopy.rs` | §1187 |
+| **D** | a blank page can be inserted, and it is inserted where it was asked for | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageinsert.rs` | `pdf.page.blank.insert` | `crates/craftkit-plugin-pdf/tests/pageinsert.rs` | §1188 |
+| **E** | pages of another document can be inserted, and they are inserted as pages of this one | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pageimport.rs` | `pdf.pages.import` | `crates/craftkit-plugin-pdf/tests/pageimport.rs` | §1189 |
+| **F** | a link annotation is a thing the battery can add, read, change and remove | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/links.rs` | `pdf.links.add`, `pdf.links.list`, `pdf.links.edit`, `pdf.links.delete` | `crates/craftkit-plugin-pdf/tests/links.rs` | §1190 |
+| **G** | an optional-content layer can be switched on and off, and what the battery reads is what the document shows | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/layers.rs` | `pdf.layers.set` | `crates/craftkit-plugin-pdf/tests/layers.rs` | §1191 |
+| **H** | a comment can be given a status, locked, and answered | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/commentstatus.rs` | `pdf.comment.status`, `pdf.comment.lock`, `pdf.comment.reply` | `crates/craftkit-plugin-pdf/tests/commentstatus.rs` | §1192 |
+| **I** | a document can be checked for accessibility, and the check is a report | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/a11y.rs` | `pdf.a11y.check` | `crates/craftkit-plugin-pdf/tests/a11y.rs` | §1193 |
+| **J** | the XFDF the battery writes carries the comments as well as the field values | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/xfdf.rs` | `pdf.xfdf.export`, `pdf.xfdf.import` | `crates/craftkit-plugin-pdf/tests/xfdf.rs` | §1194 |
+| **K** | the preflight report says what the colours of the document are | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/preflightcolour.rs` | `pdf.preflight.colour` | `crates/craftkit-plugin-pdf/tests/preflightcolour.rs` | §1195 |
+| **L** | a page can be numbered, and the number is stamped on the page | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/pagenumbers.rs` | `pdf.marks.number` | `crates/craftkit-plugin-pdf/tests/pagenumbers.rs` | §1196 |
+| **M** | the colours of the page content can be converted, and the conversion is written into the document | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/colourconvert.rs` | `pdf.colour.convert` | `crates/craftkit-plugin-pdf/tests/colourconvert.rs` | §1197 |
+| **N** | the images a page carries can be exported, and what is exported is what the page holds | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/imageexport.rs` | `pdf.images.export` | `crates/craftkit-plugin-pdf/tests/imageexport.rs` | §1198 |
 
 **The second wave: the whole upstream.**
 
 | arc | rule | from | to | module | command | test | section |
 |---|---|---|---|---|---|---|---|
-| **O** | the pages of a document can be extracted into files of their own, and each file holds the page it was made from | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/extract.rs` | `pdf.pages.extract` | `crates/craftkit-plugin-pdf/tests/extract.rs` | §1297 |
-| **P** | the text of a document can be replaced across its pages, and the replacement is written into the document | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/replace.rs` | `pdf.text.replace` | `crates/craftkit-plugin-pdf/tests/replace.rs` | §1298 |
-| **Q** | the scripts a document carries can be run, and what they write is the document's own | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/scripts.rs` | `pdf.scripts.run` | `crates/craftkit-plugin-pdf/tests/scripts.rs` | §1299 |
-| **R** | a document can be signed, and the signature is a thing the battery can read back | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/sign.rs` | `pdf.sign` | `crates/craftkit-plugin-pdf/tests/sign.rs` | §1300 |
-| **S** | the text of a page can be read as characters, and what is read is the characters on the page | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/ocr.rs` | `pdf.text.ocr` | `crates/craftkit-plugin-pdf/tests/ocr.rs` | §1301 |
-| **T** | a document can be exported to another document format, and what is exported holds the same content | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/export.rs` | `pdf.export` | `crates/craftkit-plugin-pdf/tests/export.rs` | §1302 |
-| **U** | a document can be optimized, and it is smaller afterwards without losing its content | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/optimize.rs` | `pdf.optimize` | `crates/craftkit-plugin-pdf/tests/optimize.rs` | §1303 |
-| **V** | pages can be placed on a sheet, several to a page, and the sheet is the page that is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/impose.rs` | `pdf.impose` | `crates/craftkit-plugin-pdf/tests/impose.rs` | §1304 |
-| **W** | a page can be enhanced — deskewed, denoised, binarized — and the enhanced page is what is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/enhance.rs` | `pdf.page.enhance` | `crates/craftkit-plugin-pdf/tests/enhance.rs` | §1305 |
-| **X** | a document can be auto-tagged, and the structure tree written is the tree the battery reads | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/autotag.rs` | `pdf.autotag` | `crates/craftkit-plugin-pdf/tests/autotag.rs` | §1306 |
-| **Y** | area, distance and perimeter on a page can be measured, and the answer is the same answer the tree gives elsewhere | `docs/plans/pdfcraft.md` | `craftkit-plugin-cad` | `src/measure.rs` | `cad.measure.area`, `cad.measure.distance`, `cad.measure.perimeter` | `crates/craftkit-plugin-cad/tests/measure.rs` | §1307 |
+| **O** | the pages of a document can be extracted into files of their own, and each file holds the page it was made from | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/extract.rs` | `pdf.pages.extract` | `crates/craftkit-plugin-pdf/tests/extract.rs` | §1298 |
+| **P** | the text of a document can be replaced across its pages, and the replacement is written into the document | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/replace.rs` | `pdf.text.replace` | `crates/craftkit-plugin-pdf/tests/replace.rs` | §1299 |
+| **Q** | the scripts a document carries can be run, and what they write is the document's own | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/scripts.rs` | `pdf.scripts.run` | `crates/craftkit-plugin-pdf/tests/scripts.rs` | §1300 |
+| **R** | a document can be signed, and the signature is a thing the battery can read back | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/sign.rs` | `pdf.sign` | `crates/craftkit-plugin-pdf/tests/sign.rs` | §1301 |
+| **S** | the text of a page can be read as characters, and what is read is the characters on the page | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/ocr.rs` | `pdf.text.ocr` | `crates/craftkit-plugin-pdf/tests/ocr.rs` | §1302 |
+| **T** | a document can be exported to another document format, and what is exported holds the same content | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/export.rs` | `pdf.export` | `crates/craftkit-plugin-pdf/tests/export.rs` | §1303 |
+| **U** | a document can be optimized, and it is smaller afterwards without losing its content | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/optimize.rs` | `pdf.optimize` | `crates/craftkit-plugin-pdf/tests/optimize.rs` | §1304 |
+| **V** | pages can be placed on a sheet, several to a page, and the sheet is the page that is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/impose.rs` | `pdf.impose` | `crates/craftkit-plugin-pdf/tests/impose.rs` | §1305 |
+| **W** | a page can be enhanced — deskewed, denoised, binarized — and the enhanced page is what is written | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/enhance.rs` | `pdf.page.enhance` | `crates/craftkit-plugin-pdf/tests/enhance.rs` | §1306 |
+| **X** | a document can be auto-tagged, and the structure tree written is the tree the battery reads | `docs/plans/pdfcraft.md` | `craftkit-plugin-pdf` | `src/autotag.rs` | `pdf.autotag` | `crates/craftkit-plugin-pdf/tests/autotag.rs` | §1307 |
+| **Y** | area, distance and perimeter on a page can be measured, and the answer is the same answer the tree gives elsewhere | `docs/plans/pdfcraft.md` | `craftkit-plugin-cad` | `src/measure.rs` | `cad.measure.area`, `cad.measure.distance`, `cad.measure.perimeter` | `crates/craftkit-plugin-cad/tests/measure.rs` | §1308 |
 
 The second wave is the rest of the upstream: the eleven capabilities the survey
 held back, with nothing held back any more. The survey's "later" verdicts were
@@ -120,7 +120,7 @@ In the first wave, nothing lands in two crates, so no arc needs two rows. The wr
 the PDF battery runs over a document it already opens, and the bytes on disk
 are the writer's business. **Arc E is the one that could need it** — a page
 taken from another file is written by the writer — and if that turns out to
-be so, Arc E grows a second row and a second section, and §1188 stops being
+be so, Arc E grows a second row and a second section, and §1189 stops being
 the last section of the plan's range. The second wave asks more of the writer
 — arc O writes files of its own, and arc T writes another format — and each
 of those arcs will say what it needs.
